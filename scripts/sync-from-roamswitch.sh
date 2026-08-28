@@ -31,10 +31,25 @@ CORE=(AppLanguage TrustedNetwork GatewayFingerprint WiFiSecurityMonitor \
       ARPSpoofMonitor ListeningPortMonitor PortSecurityAuditor SecurityHealthChecker \
       LinkSafetyAuditor RoamSwitchKnowledgeBase MCPResponseFormatting MCPProtocol)
 
+# App test files that only exercise types present in this repo. Their
+# `@testable import RoamSwitch` is rewritten to this package's module name.
+# (Tests for app-only guards — PortAnomalyGuard, RansomwareCanaryGuard, etc. —
+# are intentionally not mirrored.) StdioSmokeTests.swift is specific to this
+# repo and is not touched by the sync.
+TESTS=(LinkSafetyAuditorTests MCPKnowledgeBaseTests MCPProtocolTests \
+       MCPResponseFormattingTests ARPSpoofMonitorTests)
+
+TDST="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/Tests/roamswitch-mcpTests"
+
 for f in "${CORE[@]}"; do
   { printf '%s\n' "$HEADER"; cat "$SRC/RoamSwitch/$f.swift"; } > "$DST/$f.swift"
 done
 { printf '%s\n' "$HEADER"; cat "$SRC/RoamSwitchMCPServer/main.swift"; } > "$DST/main.swift"
 
-echo "Synced ${#CORE[@]}+1 files from RoamSwitch $VER (build $BUILD)."
-echo "Next: swift build -c release && git commit -am 'Sync from RoamSwitch $VER' && git tag v$VER"
+for f in "${TESTS[@]}"; do
+  { printf '// Mirrored from RoamSwitchTests/ — RoamSwitch %s (build %s). Do not edit here; see SYNC.md.\n\n' "$VER" "$BUILD"
+    sed 's/@testable import RoamSwitch/@testable import roamswitch_mcp/' "$SRC/RoamSwitchTests/$f.swift"; } > "$TDST/$f.swift"
+done
+
+echo "Synced ${#CORE[@]}+1 source files and ${#TESTS[@]} test files from RoamSwitch $VER (build $BUILD)."
+echo "Next: swift test && git commit -am 'Sync from RoamSwitch $VER' && git tag v$VER"

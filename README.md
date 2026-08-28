@@ -23,6 +23,7 @@ block traffic, no license or payment code, no UI. Just the code that *observes* 
 | Phishing / homograph / URL safety (offline) | `LinkSafetyAuditor.swift` |
 | Bundled knowledge base (`get_app_help`) | `RoamSwitchKnowledgeBase.swift` |
 | Localization plumbing | `AppLanguage.swift` |
+| Tests | `Tests/roamswitch-mcpTests/` — mirrored unit tests + `StdioSmokeTests.swift` |
 
 ## Tools exposed (`tools/list`)
 
@@ -53,6 +54,13 @@ printf '%s\n' \
   '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
   '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
   | ./.build/release/roamswitch-mcp
+```
+
+Tests (mirrored from the app's suite, plus an end-to-end stdio test that also
+feeds the read loop hostile input):
+
+```sh
+swift test
 ```
 
 ### Use from an MCP client

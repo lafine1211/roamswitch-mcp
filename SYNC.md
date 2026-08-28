@@ -35,6 +35,23 @@ All files live in `Sources/roamswitch-mcp/`.
 This is exactly the source set the app compiles into its `RoamSwitchMCPServer` target
 (see `project.yml` in the app repo).
 
+### Tests
+
+`Tests/roamswitch-mcpTests/` mirrors the app test files whose subjects live in this repo, with
+`@testable import RoamSwitch` rewritten to `@testable import roamswitch_mcp`:
+
+| This repo | RoamSwitch app repo |
+| --- | --- |
+| `LinkSafetyAuditorTests.swift` | `RoamSwitchTests/LinkSafetyAuditorTests.swift` |
+| `MCPKnowledgeBaseTests.swift` | `RoamSwitchTests/MCPKnowledgeBaseTests.swift` |
+| `MCPProtocolTests.swift` | `RoamSwitchTests/MCPProtocolTests.swift` |
+| `MCPResponseFormattingTests.swift` | `RoamSwitchTests/MCPResponseFormattingTests.swift` |
+| `ARPSpoofMonitorTests.swift` | `RoamSwitchTests/ARPSpoofMonitorTests.swift` |
+| `StdioSmokeTests.swift` | **not mirrored** — specific to this repo (drives the built binary over stdio) |
+
+App tests for guards that are not in this repo (`PortAnomalyGuardTests`, `RansomwareCanaryGuardTests`,
+`WebMailDownloadGuardTests`, `DNSThreatGuardTests`, `DangerousPortExposureTests`) are not mirrored.
+
 ## Rules
 
 1. **Never hand-edit `Sources/roamswitch-mcp/*.swift`.** Change the app instead.

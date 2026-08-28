@@ -8,6 +8,11 @@ let package = Package(
         .executableTarget(
             name: "roamswitch-mcp",
             path: "Sources/roamswitch-mcp"
-        )
+        ),
+        .testTarget(
+            name: "roamswitch-mcpTests",
+            dependencies: ["roamswitch-mcp"],
+            path: "Tests/roamswitch-mcpTests"
+        ),
     ]
 )
