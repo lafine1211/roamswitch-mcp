@@ -35,6 +35,16 @@ All files live in `Sources/roamswitch-mcp/`.
 This is exactly the source set the app compiles into its `RoamSwitchMCPServer` target
 (see `project.yml` in the app repo).
 
+`main.swift` here matches its counterpart in the app repo:
+`RoamSwitchMCPServer/main.swift` (the stdin→stdout pump) and
+`RoamSwitchMCPServer/MCPServer.swift` (the pure parse/dispatch).
+
+> Between RoamSwitch releases this mirror can be **ahead** of the last shipped
+> build — it follows the app's `main`. The per-file header names the release it
+> was cut from; anything newer than that ships in the next build. As of this
+> writing the hardening in `MCPServer.handleLine` (nesting-depth pre-scan) is
+> ahead of 1.4.5 and ships in the next RoamSwitch build.
+
 ### Tests
 
 `Tests/roamswitch-mcpTests/` mirrors the app test files whose subjects live in this repo, with
