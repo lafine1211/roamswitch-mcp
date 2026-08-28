@@ -31,13 +31,15 @@ All files live in `Sources/roamswitch-mcp/`.
 | `RoamSwitchKnowledgeBase.swift` | `RoamSwitch/RoamSwitchKnowledgeBase.swift` |
 | `MCPResponseFormatting.swift` | `RoamSwitch/MCPResponseFormatting.swift` |
 | `MCPProtocol.swift` | `RoamSwitch/MCPProtocol.swift` |
+| `MCPServer.swift` | `RoamSwitch/MCPServer.swift` |
 
 This is exactly the source set the app compiles into its `RoamSwitchMCPServer` target
 (see `project.yml` in the app repo).
 
-`main.swift` here matches its counterpart in the app repo:
-`RoamSwitchMCPServer/main.swift` (the stdin→stdout pump) and
-`RoamSwitchMCPServer/MCPServer.swift` (the pure parse/dispatch).
+`MCPServer.swift` (the pure parse/dispatch) lives in `RoamSwitch/`, compiled into both
+the app and the `RoamSwitchMCPServer` targets, so the app's own test suite can reach it
+via `@testable import RoamSwitch`. Only `main.swift` (the stdin→stdout pump) is
+`RoamSwitchMCPServer/`-only.
 
 > Between RoamSwitch releases this mirror can be **ahead** of the last publicly
 > distributed build — it follows the app's `main` and is tagged with the
@@ -55,7 +57,10 @@ This is exactly the source set the app compiles into its `RoamSwitchMCPServer` t
 | `MCPProtocolTests.swift` | `RoamSwitchTests/MCPProtocolTests.swift` |
 | `MCPResponseFormattingTests.swift` | `RoamSwitchTests/MCPResponseFormattingTests.swift` |
 | `ARPSpoofMonitorTests.swift` | `RoamSwitchTests/ARPSpoofMonitorTests.swift` |
+| `MCPServerRobustnessTests.swift` | `RoamSwitchTests/MCPServerRobustnessTests.swift` |
+| `ParserRobustnessTests.swift` | `RoamSwitchTests/ParserRobustnessTests.swift` |
 | `StdioSmokeTests.swift` | **not mirrored** — specific to this repo (drives the built binary over stdio) |
+| `MutationFuzzTests.swift` | **not mirrored** — specific to this repo |
 
 App tests for guards that are not in this repo (`PortAnomalyGuardTests`, `RansomwareCanaryGuardTests`,
 `WebMailDownloadGuardTests`, `DNSThreatGuardTests`, `DangerousPortExposureTests`) are not mirrored.

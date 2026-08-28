@@ -27,9 +27,11 @@ read -r -d '' HEADER <<EOF || true
 EOF
 
 # The source set the app's RoamSwitchMCPServer target compiles (project.yml).
+# `MCPServer.swift` lives in RoamSwitch/ (shared with the app target, so the
+# in-app test suite can reach it) — only `main.swift` is MCPServer-target-only.
 CORE=(AppLanguage TrustedNetwork GatewayFingerprint WiFiSecurityMonitor \
       ARPSpoofMonitor ListeningPortMonitor PortSecurityAuditor SecurityHealthChecker \
-      LinkSafetyAuditor RoamSwitchKnowledgeBase MCPResponseFormatting MCPProtocol)
+      LinkSafetyAuditor RoamSwitchKnowledgeBase MCPResponseFormatting MCPProtocol MCPServer)
 
 # App test files that only exercise types present in this repo. Their
 # `@testable import RoamSwitch` is rewritten to this package's module name.
@@ -44,7 +46,7 @@ TDST="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/Tests/roamswitch-mcpTests
 for f in "${CORE[@]}"; do
   { printf '%s\n' "$HEADER"; cat "$SRC/RoamSwitch/$f.swift"; } > "$DST/$f.swift"
 done
-for f in main MCPServer; do
+for f in main; do
   { printf '%s\n' "$HEADER"; cat "$SRC/RoamSwitchMCPServer/$f.swift"; } > "$DST/$f.swift"
 done
 
@@ -53,5 +55,5 @@ for f in "${TESTS[@]}"; do
     sed 's/@testable import RoamSwitch/@testable import roamswitch_mcp/' "$SRC/RoamSwitchTests/$f.swift"; } > "$TDST/$f.swift"
 done
 
-echo "Synced $((${#CORE[@]}+2)) source files and ${#TESTS[@]} test files from RoamSwitch $VER (build $BUILD)."
+echo "Synced $((${#CORE[@]}+1)) source files and ${#TESTS[@]} test files from RoamSwitch $VER (build $BUILD)."
 echo "Next: swift test && git commit -am 'Sync from RoamSwitch $VER' && git tag v$VER"

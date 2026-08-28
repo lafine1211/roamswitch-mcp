@@ -152,7 +152,7 @@ public struct RoamSwitchKnowledgeBase: Sendable {
                 • 自動隔離 (Pro): 有効時、攻撃を検知した瞬間にPFパケットフィルタを緊急ロックダウンに切り替え、通信を即座に遮断（エアギャップ隔離）してデータ流出を阻止。
                 • 誤検知対応: メッシュWi-FiのAP切り替え等による誤検知時は、ポート・診断画面やメニューからいつでも解除可能。
                 """,
-                recommendation: "公衆Wi-Fiやコワーキングスペースを頻繁に利用する場合は、設定で「ARPスプーフィング自動遮断 (Pro)」を有効化しておくことを強く推奨します。",
+                recommendation: "「ARPスプーフィング自動遮断 (Pro)」はPro有効化時に既定でオンです。ルーター再起動やメッシュWi-FiのAP切り替えで誤発動した場合は、緊急画面から安全を確認して解除してください。",
                 tags: ["arp", "spoofing", "mitm", "eavesdropping", "gateway", "mac", "airgap", "pro"]
             ),
             KnowledgeItem(
@@ -163,7 +163,7 @@ public struct RoamSwitchKnowledgeBase: Sendable {
                 details: """
                 • リスニングポート監査: `lsof -iTCP -sTCP:LISTEN -n -P` で待機ポートを抽出。`0.0.0.0` (全公開) か `127.0.0.1` (localhost限定) かを判定。
                 • 危険サービス検査: 認証なしで公開されがちなRedis (6379), MongoDB (27017), Memcached (11211), Elasticsearch (9200), VNC (5900) などを検知し警告。
-                • 未知ポート自動遮断 (Pro): 過去に確認されていない新しいポートが突然0.0.0.0で開いた際、PFアンカー `com.tetsuharu.roamswitch.port_anomaly` で外部アクセスのみ自動ブロック。
+                • 未知ポート自動遮断 (Pro): 過去に確認されていない新しい実行体が突然0.0.0.0でリッスンを開始した際、`PFRulesetCoordinator` 経由でpfに外部アクセス遮断ルールを追加（localhostは素通し）。Pro有効化時に既定でオン。macOS標準のシステムデーモン（rapportd等、Handoffの中身）は対象外。誤検知時は通知の「許可する」ボタンまたは「外部公開ポート」画面で恒久的に解除可能。
                 • 開発サーバー外部隔離: Vite, Next.js, Flask, Docker等がLAN内に露出した際、ワンクリックで外部通信を遮断しローカル専用に封鎖。
                 """,
                 recommendation: "Web開発時はローカルサーバーを `127.0.0.1` にバインドして起動してください（例: `npm run dev -- -H 127.0.0.1`）。",
@@ -362,14 +362,15 @@ public struct RoamSwitchKnowledgeBase: Sendable {
                 title: "🚪 Port Anomaly Detected / 新しい外部公開ポートが検出されました",
                 summary: "これまで確認されていない新しいTCPポートが `0.0.0.0` (全公開) でバインドされ、外部ネットワークに露出した際のアラート。",
                 details: """
-                • 発生原因: 開発用Webサーバー（Next.js, Vite, Python, Docker）の起動、またはバックドア/不正アプリの待機開始。
-                • 自動防御: 「未知ポート自動遮断 (Pro)」が有効な場合、該当ポートへの外部アクセスをPFパケットフィルタで即座に遮断。
+                • 発生原因: 開発用Webサーバー（Next.js, Vite, Python, Docker）の起動、LAN受信アプリ（LocalSend, Syncthing等）のガード有効化後の起動、またはバックドア/不正アプリの待機開始。
+                • 自動防御: 「未知ポート自動遮断 (Pro)」が有効な場合、該当ポートへの外部アクセスをpfパケットフィルタで即座に遮断（Macからの利用・localhostは影響なし）。macOS標準のシステムデーモンは対象外。
                 """,
                 recommendation: """
                 【即時対処手順】
                 1. メニューの「外部公開ポート」または `get_exposed_ports` ツールでプロセス名（PID）とポート番号を確認してください。
-                2. 自身の開発サーバーの場合は、`127.0.0.1` バインドに変更して再起動してください。
-                3. 身に覚えのない不審なプロセスの場合は、プロセスを終了し、セキュリティ診断とウイルススキャンを実行してください。
+                2. 自身の開発サーバーやLAN受信アプリ（LocalSend等）の場合は、通知バナーの「許可する」ボタン、または「外部公開ポート」画面の当該項目で解除してください。以降は恒久的に許可されます。
+                3. 開発サーバーは `127.0.0.1` バインドに変更して再起動するのが安全です。
+                4. 身に覚えのない不審なプロセスの場合は、そのまま遮断させたうえでプロセスを終了し、セキュリティ診断とウイルススキャンを実行してください。
                 """,
                 tags: ["alert", "port", "anomaly", "exposed", "0.0.0.0", "devserver"]
             ),
