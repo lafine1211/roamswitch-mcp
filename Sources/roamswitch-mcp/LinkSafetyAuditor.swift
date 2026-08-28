@@ -234,7 +234,10 @@ public final class LinkSafetyAuditor {
     private func isIPAddress(_ host: String) -> Bool {
         let parts = host.split(separator: ".")
         if parts.count == 4 {
-            return parts.allSatisfy { Int($0) != nil && (0...255).contains(Int($0)!) }
+            return parts.allSatisfy { part in
+                guard let n = Int(part) else { return false }
+                return (0...255).contains(n)
+            }
         }
         return host.contains(":") // IPv6
     }

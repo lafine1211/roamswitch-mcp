@@ -59,11 +59,13 @@ printf '%s\n' \
   | ./.build/release/roamswitch-mcp
 ```
 
-Tests (mirrored from the app's suite, plus an end-to-end stdio test that also
-feeds the read loop hostile input):
+Tests — mirrored unit tests, an end-to-end stdio test, adversarial-input tests
+for the JSON-RPC parser and the `lsof`/`arp` parsers, and mutation fuzzing.
+See [`SECURITY_TESTING.md`](./SECURITY_TESTING.md).
 
 ```sh
 swift test
+FUZZ_ITERATIONS=200000 swift test --filter MutationFuzzTests   # longer fuzz run
 ```
 
 ### Use from an MCP client

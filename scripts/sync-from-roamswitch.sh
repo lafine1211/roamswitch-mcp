@@ -37,19 +37,21 @@ CORE=(AppLanguage TrustedNetwork GatewayFingerprint WiFiSecurityMonitor \
 # are intentionally not mirrored.) StdioSmokeTests.swift is specific to this
 # repo and is not touched by the sync.
 TESTS=(LinkSafetyAuditorTests MCPKnowledgeBaseTests MCPProtocolTests \
-       MCPResponseFormattingTests ARPSpoofMonitorTests)
+       MCPResponseFormattingTests ARPSpoofMonitorTests MCPServerRobustnessTests ParserRobustnessTests)
 
 TDST="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/Tests/roamswitch-mcpTests"
 
 for f in "${CORE[@]}"; do
   { printf '%s\n' "$HEADER"; cat "$SRC/RoamSwitch/$f.swift"; } > "$DST/$f.swift"
 done
-{ printf '%s\n' "$HEADER"; cat "$SRC/RoamSwitchMCPServer/main.swift"; } > "$DST/main.swift"
+for f in main MCPServer; do
+  { printf '%s\n' "$HEADER"; cat "$SRC/RoamSwitchMCPServer/$f.swift"; } > "$DST/$f.swift"
+done
 
 for f in "${TESTS[@]}"; do
   { printf '// Mirrored from RoamSwitchTests/ — RoamSwitch %s (build %s). Do not edit here; see SYNC.md.\n\n' "$VER" "$BUILD"
     sed 's/@testable import RoamSwitch/@testable import roamswitch_mcp/' "$SRC/RoamSwitchTests/$f.swift"; } > "$TDST/$f.swift"
 done
 
-echo "Synced ${#CORE[@]}+1 source files and ${#TESTS[@]} test files from RoamSwitch $VER (build $BUILD)."
+echo "Synced $((${#CORE[@]}+2)) source files and ${#TESTS[@]} test files from RoamSwitch $VER (build $BUILD)."
 echo "Next: swift test && git commit -am 'Sync from RoamSwitch $VER' && git tag v$VER"

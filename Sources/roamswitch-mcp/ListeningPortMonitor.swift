@@ -58,7 +58,9 @@ final class ListeningPortMonitor {
         }
     }
 
-    private func parseLsofOutput(_ output: String) -> [ListeningPortInfo] {
+    /// Parses `lsof -iTCP -sTCP:LISTEN -n -P` output. `internal` (not `private`)
+    /// so the adversarial-input tests can feed it crafted text directly.
+    func parseLsofOutput(_ output: String) -> [ListeningPortInfo] {
         var seenIDs: Set<String> = []
         var results: [ListeningPortInfo] = []
         let lines = output.components(separatedBy: .newlines)
