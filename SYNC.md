@@ -39,11 +39,9 @@ This is exactly the source set the app compiles into its `RoamSwitchMCPServer` t
 `RoamSwitchMCPServer/main.swift` (the stdin→stdout pump) and
 `RoamSwitchMCPServer/MCPServer.swift` (the pure parse/dispatch).
 
-> Between RoamSwitch releases this mirror can be **ahead** of the last shipped
-> build — it follows the app's `main`. The per-file header names the release it
-> was cut from; anything newer than that ships in the next build. As of this
-> writing the hardening in `MCPServer.handleLine` (nesting-depth pre-scan) is
-> ahead of 1.4.5 and ships in the next RoamSwitch build.
+> Between RoamSwitch releases this mirror can be **ahead** of the last publicly
+> distributed build — it follows the app's `main` and is tagged with the
+> version in the source tree. The per-file header names that version.
 
 ### Tests
 
