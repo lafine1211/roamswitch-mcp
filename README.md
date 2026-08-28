@@ -1,5 +1,8 @@
 # roamswitch-mcp
 
+[![CI](https://github.com/lafine1211/roamswitch-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/lafine1211/roamswitch-mcp/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 The **read-only [MCP](https://modelcontextprotocol.io) server and the detection logic** behind
 [RoamSwitch](https://lafine.net) — a macOS menu-bar app that automatically defends your Mac's
 network boundary — published so you can read exactly what it computes and what it exposes to an
