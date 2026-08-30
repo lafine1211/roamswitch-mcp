@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.5.1 (build 24).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.5.2 (build 25).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -251,6 +251,32 @@ public struct RoamSwitchKnowledgeBase: Sendable {
                 """,
                 recommendation: "メールやチャットで届いた不審なリンクは、直接クリックせずに「リンク安全性診断」またはMCPの `audit_url_safety` で検査してください。",
                 tags: ["link", "url", "phishing", "homograph", "punycode", "zerotelemetry", "audit"]
+            ),
+            KnowledgeItem(
+                id: "feat_secret_leak_auditor",
+                topic: "feature",
+                title: "APIキー / シークレット誤送信防止（クリップボード保護）",
+                summary: "クリップボード内のテキストを完全ローカル（Zero Telemetry）で正規表現スキャンし、OpenAI、Anthropic、GitHub、AWS等のAPIキーを検知してWebやチャットへの誤貼り付けを防ぎます。",
+                details: """
+                • 検知対象キー: OpenAI (`sk-...`), Anthropic (`sk-ant-...`), GitHub (`ghp_...`), AWS Access Key (`AKIA...`), HuggingFace (`hf_...`), Google AI (`AIza...`), SSH/RSA秘密鍵, Slackトークン。
+                • 完全ローカル完結: クリップボードの内容は外部へ一切送信されず、生データもメモリに保持しません。
+                • 即時サニタイズ: 検知時にメニューバーからワンクリックでクリップボードを消去（クリア）可能。
+                """,
+                recommendation: "APIキーやシークレットをコピーした後は、AIチャットやWebフォームに貼り付ける前にワンクリックでクリップボードをクリアしてください。",
+                tags: ["secret", "apikey", "clipboard", "openai", "anthropic", "github", "aws", "zerotelemetry"]
+            ),
+            KnowledgeItem(
+                id: "feat_ai_model_guard",
+                topic: "feature",
+                title: "危険なAIモデル形式（Pickle / PyTorch）ダウンロード保護",
+                summary: "HuggingFaceやCivitaiからダウンロードされたモデルファイル（.pkl, .pickle, .pt）のデシリアライズ脆弱性・任意コード実行リスクを検知し、安全なSafeTensors / GGUF形式の利用を推奨します。",
+                details: """
+                • 高リスク形式検知: PythonのPickle機構（任意コード実行の危険性）を含む `.pkl` / `.pickle` / `.pt` ファイルをダウンロード時に自動識別。
+                • 安全形式推奨: 改ざんや任意コード実行の危険がない `.safetensors` や `.gguf` 形式への移行をガイダンス。
+                • ClamAV自動スキャン: Web/Mailダウンロード保護ガードと連携し、ウイルス・マルウェアのシグネチャ検査を自動実行。
+                """,
+                recommendation: "出所不明なPickle / PyTorch形式のモデルファイルは直接ロードせず、SafeTensors形式のモデルを利用してください。",
+                tags: ["ai", "model", "pickle", "safetensors", "gguf", "pytorch", "huggingface", "malware"]
             ),
             KnowledgeItem(
                 id: "feat_security_health_checker",
