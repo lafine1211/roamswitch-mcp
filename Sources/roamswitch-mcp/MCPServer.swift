@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.5.2 (build 25).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.5.3 (build 26).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -272,7 +272,7 @@ enum MCPServer {
         ],
         [
             "name": "get_exposed_ports",
-            "description": "Lists every TCP port currently listening on this Mac and, for each one exposed beyond localhost, runs RoamSwitch's port security audit (binding exposure, known-dangerous-service database, HTTP/CORS/security-header probe) with a risk level and fix recommendation. Use this to answer 'what's exposed on my network' or 'is anything listening that shouldn't be'.",
+            "description": "Lists every TCP port currently listening on this Mac and, for each one exposed beyond localhost (including databases, dev servers, and local AI inference servers like Ollama:11434, LM Studio:1234, Gradio:7860, vLLM:8000), runs RoamSwitch's port security audit with risk levels and fix recommendations. Use this to answer 'what's exposed on my network' or 'is anything listening that shouldn't be'.",
             "inputSchema": [
                 "type": "object",
                 "properties": [
@@ -285,7 +285,7 @@ enum MCPServer {
         ],
         [
             "name": "get_guard_status",
-            "description": "Reports whether RoamSwitch's optional Pro-tier auto-response guards (port anomaly auto-block, ARP spoofing auto-containment, USB storage auto-eject, Bluetooth guard, Web/Mail download guard, DNS threat guard) are turned on in Settings, plus the currently active security level and trusted-network status. Use this to answer 'are my automatic protections turned on'.",
+            "description": "Reports whether RoamSwitch's optional Pro-tier auto-response guards (port anomaly auto-block, ARP spoofing auto-containment, USB storage auto-eject, Bluetooth guard, Web/Mail download guard with AI Pickle model protection, DNS threat guard) are turned on in Settings, plus the currently active security level and trusted-network status. Use this to answer 'are my automatic protections turned on'.",
             "inputSchema": ["type": "object", "properties": [String: Any]()],
         ],
         [
@@ -304,13 +304,13 @@ enum MCPServer {
         ],
         [
             "name": "get_app_help",
-            "description": "Searches RoamSwitch's complete, authoritative knowledge base covering all features (PF packet filter, ARP spoofing, USB storage guard, dev server isolation, ClamAV quarantine, DNS threat guard, ransomware canary, Bluetooth guard), settings guides, troubleshooting, and advice for displayed alert banners or error messages. Use this to answer 'how does feature X work', 'what does this notification/alert mean', 'what should I do about message Y', or 'how do I configure Z'.",
+            "description": "Searches RoamSwitch's complete, authoritative knowledge base covering all features (PF packet filter, ARP spoofing, USB storage guard, dev/AI server isolation, ClamAV quarantine, Pickle model download guard, secret leak prevention, DNS threat guard, ransomware canary, Bluetooth guard), settings guides, troubleshooting, and advice for displayed alert banners or error messages. Use this to answer 'how does feature X work', 'what does this notification/alert mean', 'what should I do about message Y', or 'how do I configure Z'.",
             "inputSchema": [
                 "type": "object",
                 "properties": [
                     "query": [
                         "type": "string",
-                        "description": "Natural language query, error message substring, alert text, or keyword to search (e.g. 'ARP', 'USB', 'canary', 'Helper not connected', '127.0.0.1', 'ClamAV').",
+                        "description": "Natural language query, error message substring, alert text, or keyword to search (e.g. 'ARP', 'USB', 'canary', 'Ollama', 'API key', 'Pickle', 'Helper not connected', '127.0.0.1', 'ClamAV').",
                     ],
                     "topic": [
                         "type": "string",
