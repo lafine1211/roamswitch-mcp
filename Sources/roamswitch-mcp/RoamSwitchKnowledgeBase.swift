@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.5.0 (build 23).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.5.1 (build 24).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -162,12 +162,12 @@ public struct RoamSwitchKnowledgeBase: Sendable {
                 summary: "リスニング中の全TCPポートを監視し、0.0.0.0で不用意にLANへ晒されたポートの検知、未知ポートの自動遮断、開発サーバーのワンクリック127.0.0.1隔離を行います。",
                 details: """
                 • リスニングポート監査: `lsof -iTCP -sTCP:LISTEN -n -P` で待機ポートを抽出。`0.0.0.0` (全公開) か `127.0.0.1` (localhost限定) かを判定。
-                • 危険サービス検査: 認証なしで公開されがちなRedis (6379), MongoDB (27017), Memcached (11211), Elasticsearch (9200), VNC (5900) などを検知し警告。
+                • 危険サービス検査: 認証なしで公開されがちなRedis (6379), MongoDB (27017), Memcached (11211), Elasticsearch (9200), VNC (5900) に加え、ローカルAI/LLMサーバー（Ollama: 11434, LM Studio: 1234, Gradio/WebUI: 7860, vLLM: 8000）などを検知し警告。
                 • 未知ポート自動遮断 (Pro): 過去に確認されていない新しい実行体が突然0.0.0.0でリッスンを開始した際、`PFRulesetCoordinator` 経由でpfに外部アクセス遮断ルールを追加（localhostは素通し）。Pro有効化時に既定でオン。macOS標準のシステムデーモン（rapportd等、Handoffの中身）は対象外。誤検知時は通知の「許可する」ボタンまたは「外部公開ポート」画面で恒久的に解除可能。
-                • 開発サーバー外部隔離: Vite, Next.js, Flask, Docker等がLAN内に露出した際、ワンクリックで外部通信を遮断しローカル専用に封鎖。
+                • 開発サーバー外部隔離: Vite, Next.js, Flask, DockerやローカルLLMサーバー等がLAN内に露出した際、ワンクリックで外部通信を遮断しローカル専用に封鎖。
                 """,
-                recommendation: "Web開発時はローカルサーバーを `127.0.0.1` にバインドして起動してください（例: `npm run dev -- -H 127.0.0.1`）。",
-                tags: ["port", "devserver", "0.0.0.0", "localhost", "redis", "mongodb", "lsof", "pro"]
+                recommendation: "Web開発時やローカルLLM実行時はサーバーを `127.0.0.1` (localhost) にバインドして起動してください（例: `OLLAMA_HOST=127.0.0.1 ollama serve`, `npm run dev -- -H 127.0.0.1`）。",
+                tags: ["port", "devserver", "0.0.0.0", "localhost", "redis", "mongodb", "ollama", "lmstudio", "ai", "llm", "lsof", "pro"]
             ),
             KnowledgeItem(
                 id: "feat_usb_storage_guard",

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.5.0 (build 23).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.5.1 (build 24).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -123,6 +123,10 @@ final class PortSecurityAuditor {
         9300: "Elasticsearch",
         2375: "Docker",
         11211: "Memcached",
+        11434: "Ollama",
+        1234: "LM Studio",
+        7860: "Gradio",
+        8000: "vLLM",
     ]
 
     // MARK: - Known Ports Database
@@ -131,6 +135,34 @@ final class PortSecurityAuditor {
         let riskLevel: PortSecurityRiskLevel = (isGlobal && !isFirewallBlocking) ? .critical : .warning
 
         switch port {
+        case 11434:
+            return PortAuditFinding(
+                title: loc("Ollama ローカルLLM API 露出リスク"),
+                riskLevel: riskLevel,
+                description: loc("Ollamaはデフォルトで未認証のHTTP APIを提供します。外部露出時に同一ネットワークから勝手にAIモデルを実行・ダウンロード・削除される危険があります。"),
+                recommendation: loc("環境変数 OLLAMA_HOST=127.0.0.1 を指定して起動するか、RoamSwitchのファイアウォールで外部遮断してください。")
+            )
+        case 1234:
+            return PortAuditFinding(
+                title: loc("LM Studio ローカル推論サーバー露出リスク"),
+                riskLevel: riskLevel,
+                description: loc("LM Studioのローカルサーバー機能が外部公開されており、未認証でAPI呼び出しや推論リソースを不正利用される恐れがあります。"),
+                recommendation: loc("LM StudioのDeveloper設定でローカルネットワーク共有をオフにし、localhost (127.0.0.1) 限定に設定してください。")
+            )
+        case 7860:
+            return PortAuditFinding(
+                title: loc("Gradio / AI WebUI 露出リスク"),
+                riskLevel: riskLevel,
+                description: loc("GradioやAI WebUIが外部公開されており、未認証で推論実行やファイル操作を行われる危険があります。"),
+                recommendation: loc("起動オプションで --share や 0.0.0.0 バインドを控え、127.0.0.1 限定にするか認証を有効にしてください。")
+            )
+        case 8000:
+            return PortAuditFinding(
+                title: loc("vLLM / ローカルAI推論エンドポイント露出リスク"),
+                riskLevel: riskLevel,
+                description: loc("vLLM等の推論サーバーが未認証で外部公開されている場合、GPUリソースの不正利用や機密プロンプトの盗聴リスクがあります。"),
+                recommendation: loc("--host 127.0.0.1 を指定して起動するか、APIキー認証を有効にしてください。")
+            )
         case 6379:
             return PortAuditFinding(
                 title: loc("Redis キャッシュ/データベース露出リスク"),
