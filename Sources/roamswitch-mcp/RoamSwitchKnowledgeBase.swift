@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.6.4 (build 37).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.7.0 (build 38).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -168,6 +168,21 @@ public struct RoamSwitchKnowledgeBase: Sendable {
                 """,
                 recommendation: "Web開発時やローカルLLM実行時はサーバーを `127.0.0.1` (localhost) にバインドして起動してください（例: `OLLAMA_HOST=127.0.0.1 ollama serve`, `npm run dev -- -H 127.0.0.1`）。",
                 tags: ["port", "devserver", "0.0.0.0", "localhost", "redis", "mongodb", "ollama", "lmstudio", "ai", "llm", "lsof", "pro"]
+            ),
+            KnowledgeItem(
+                id: "feat_usb_keyboard_guard",
+                topic: "feature",
+                title: "不正USB / BadUSB 物理キーボード承認ガード",
+                summary: "未知のUSBキーボードや改造USBケーブル（Rubber Ducky / O.MG Cable等）接続時にキーストロークを遮断し、承認されるまでコマンド注入を防止します。",
+                details: """
+                • IOHIDManager常時監視: 新規HIDキーボードデバイス（UsagePage 0x01, Usage 0x06）の物理ポート接続をリアルタイム検知。
+                • CGEventTapキーストローク遮断: 未登録・未承認のキーボードからのキーストローク入力を即座に破棄（ドロップ）し、悪意ある自動スクリプト実行を阻止。
+                • 内蔵キーボード自動保護: MacBook内蔵キーボードは自動認識・許可され、作業を妨げません。
+                • 最前面承認モーダル: 接続時に承認ダイアログを表示し、ユーザー自身が「信頼して許可」した場合のみ入力を有効化。
+                • OSアクセサリ保護連携: Apple Silicon Macの「アクセサリの接続を許可」設定との二重防御を提供。
+                """,
+                recommendation: "「不正USB / BadUSB物理ポートガード (Pro)」を有効化し、信頼できる外付けキーボードのみを許可リストに登録してください。",
+                tags: ["badusb", "usb", "keyboard", "hid", "rubberducky", "omgcable", "pro", "injection"]
             ),
             KnowledgeItem(
                 id: "feat_usb_storage_guard",

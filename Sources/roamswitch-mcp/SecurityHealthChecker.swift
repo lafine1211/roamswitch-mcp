@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.6.4 (build 37).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.7.0 (build 38).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -270,6 +270,52 @@ final class SecurityHealthChecker {
             detail: loc("Safariの詐欺Webサイト警告機能およびRoamSwitchリンク安全性診断により、巧妙なフィッシングURLやUnicode偽装ドメインを遮断・解析します。"),
             recommendation: isSafariFraudActive ? loc("ブラウザおよびリンク保護は万全です。") : loc("Safari > 設定 > セキュリティから「詐欺Webサイト警告」をオンにしてください。"),
             settingsURL: nil
+        ))
+
+        // MARK: - 5. Physical Port & Device Defense (物理ポート・デバイス防御)
+        let isUSBKeyboardEnabled = UserDefaults.standard.bool(forKey: "RoamSwitch.USBKeyboardGuardEnabled")
+        let isUSBStorageEnabled = UserDefaults.standard.bool(forKey: "RoamSwitch.USBStorageGuardEnabled")
+        let isBadUSBGuardActive = isUSBKeyboardEnabled || isUSBStorageEnabled
+        let badUSBStatusStr: String = {
+            if isUSBKeyboardEnabled && isUSBStorageEnabled {
+                return loc("全保護有効 (キーボード & ストレージ)")
+            } else if isUSBKeyboardEnabled {
+                return loc("BadUSBキーボード保護有効")
+            } else if isUSBStorageEnabled {
+                return loc("USBストレージ保護有効")
+            } else {
+                return loc("停止中 (手動無効化)")
+            }
+        }()
+
+        items.append(SecurityAuditItem(
+            category: loc("物理ポート・デバイス防御"),
+            title: loc("不正USB / BadUSB 物理ポートガード"),
+            isPassed: isBadUSBGuardActive,
+            statusText: badUSBStatusStr,
+            detail: loc("未承認のキーボード・改造USBケーブル（O.MG / Rubber Ducky）からの自動キーストローク注入や、不正な外部ストレージのデータ持ち出しを水際で遮断します。"),
+            recommendation: isBadUSBGuardActive ? loc("物理ポートの防御は万全です。") : loc("メニューバーのUSB設定より、不正USB / BadUSB物理ポートガードを有効化してください。"),
+            settingsURL: nil
+        ))
+
+        // Check Apple Silicon / macOS Accessory Protection
+        let isAppleSilicon: Bool = {
+            var size = 0
+            sysctlbyname("hw.optional.arm64", nil, &size, nil, 0)
+            var val: Int32 = 0
+            sysctlbyname("hw.optional.arm64", &val, &size, nil, 0)
+            return val == 1
+        }()
+
+        items.append(SecurityAuditItem(
+            category: loc("物理ポート・デバイス防御"),
+            title: loc("macOS アクセサリ接続保護"),
+            isPassed: true,
+            statusText: isAppleSilicon ? loc("有効 (ハードウェア保護中)") : loc("対象外 (Intel Mac)"),
+            detail: loc("新しいUSB/Thunderboltアクセサリが接続された際、Macがロックされている場合はデータ通信をOSハードウェア層で未然に遮断します。"),
+            recommendation: loc("システム設定 > プライバシーとセキュリティ > アクセサリの接続を許可 が適切に設定されていることを推奨します。"),
+            settingsURL: "x-apple.systempreferences:com.apple.preference.security",
+            isApplicable: isAppleSilicon
         ))
 
         // Score & Grade Calculation — excludes not-applicable items (see

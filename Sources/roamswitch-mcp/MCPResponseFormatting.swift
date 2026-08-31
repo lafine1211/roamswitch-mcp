@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.6.4 (build 37).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.7.0 (build 38).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -78,6 +78,7 @@ public enum MCPResponseFormatting {
 
     static let portAnomalyGuardKey = "RoamSwitch.PortAnomalyGuardEnabled"
     static let arpSpoofAutoContainmentKey = "RoamSwitch.ARPSpoofAutoContainmentEnabled"
+    static let usbKeyboardGuardKey = "RoamSwitch.USBKeyboardGuardEnabled"
     static let usbStorageGuardKey = "RoamSwitch.USBStorageGuardEnabled"
     static let bluetoothGuardKey = "RoamSwitch.BluetoothGuardEnabled"
     static let webMailDownloadGuardKey = "RoamSwitch.WebMailDownloadGuardEnabled"
@@ -200,6 +201,7 @@ public enum MCPResponseFormatting {
             guards: [
                 MCPGuardEntryPayload(key: "portAnomalyGuard", enabledInSettings: defaults.bool(forKey: portAnomalyGuardKey)),
                 MCPGuardEntryPayload(key: "arpSpoofAutoContainment", enabledInSettings: defaults.bool(forKey: arpSpoofAutoContainmentKey)),
+                MCPGuardEntryPayload(key: "usbKeyboardGuard", enabledInSettings: defaults.bool(forKey: usbKeyboardGuardKey)),
                 MCPGuardEntryPayload(key: "usbStorageGuard", enabledInSettings: defaults.bool(forKey: usbStorageGuardKey)),
                 MCPGuardEntryPayload(key: "bluetoothGuard", enabledInSettings: defaults.bool(forKey: bluetoothGuardKey)),
                 MCPGuardEntryPayload(key: "webMailDownloadGuard", enabledInSettings: defaults.object(forKey: webMailDownloadGuardKey) == nil ? true : defaults.bool(forKey: webMailDownloadGuardKey)),
