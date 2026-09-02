@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.7.1 (build 41). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.7.2 (build 42). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -63,5 +63,28 @@ final class LinkSafetyAuditorTests: XCTestCase {
 
         XCTAssertEqual(report.riskLevel, .dangerous)
         XCTAssertEqual(report.score, 0)
+    }
+
+    // MARK: - LinkGuardVerdict (mirrors roamswitch-core::link_guard::Verdict)
+
+    func testVerdict_brandHomograph_isBlock() {
+        let report = LinkSafetyAuditor.shared.analyzeURL("https://xn--pple-43d.com")
+        XCTAssertEqual(report.verdict, .block)
+    }
+
+    func testVerdict_brandImpersonation_isWarnNotBlock() {
+        let report = LinkSafetyAuditor.shared.analyzeURL("https://apple.com.account-verify.xyz/login")
+        XCTAssertEqual(report.verdict, .warn)
+    }
+
+    func testVerdict_cleanURL_isAllow() {
+        let report = LinkSafetyAuditor.shared.analyzeURL("https://www.google.com/search?q=test")
+        XCTAssertEqual(report.verdict, .allow)
+    }
+
+    func testLinkGuardMode_persistsAndReads() {
+        // The enum used by LinkGuardManager / the menu picker.
+        XCTAssertEqual(LinkGuardMode(rawValue: "block"), .block)
+        XCTAssertEqual(LinkGuardMode.allCases.count, 3)
     }
 }

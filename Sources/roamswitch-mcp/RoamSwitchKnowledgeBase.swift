@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.7.1 (build 41).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.7.2 (build 42).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -266,6 +266,22 @@ public struct RoamSwitchKnowledgeBase: Sendable {
                 """,
                 recommendation: "メールやチャットで届いた不審なリンクは、直接クリックせずに「リンク安全性診断」またはMCPの `audit_url_safety` で検査してください。",
                 tags: ["link", "url", "phishing", "homograph", "punycode", "zerotelemetry", "audit"]
+            ),
+            KnowledgeItem(
+                id: "feat_passive_link_guard",
+                topic: "feature",
+                title: "リンク保護（フィッシング接続の自動遮断） (Pro)",
+                summary: "既知の詐欺サイト一覧とブランド偽装ドメイン判定に基づき、フィッシング／詐欺サイトへの接続を端末側で自動遮断します（Network Extension の申請は不要な /etc/hosts シンクホール方式）。macOS 1.7.2 以降は標準で「自動ブロック」。",
+                details: """
+                • 動作: 特権ヘルパーが `/etc/hosts` の管理セクションに対象ドメインを `0.0.0.0` で追記し、DNS キャッシュをフラッシュ。接続はブラウザ／アプリを問わず遮断されます。
+                • 3モード: 「オフ」＝セクション削除。「警告のみ（遮断しない）」＝フィードは読み込むが hosts は書き換えない。「明らかな詐欺サイトは自動でブロック（推奨）」＝フィード掲載・ブランドホモグラフを遮断。メニューバーの「リンク保護」で切替。
+                • 判定エンジンは Linux 版と共通。遮断対象は「脅威フィード掲載」または「ブランド名のホモグラフ偽装」の明確なケースのみ。それ以外は警告に留めます。
+                • 脅威フィード: 1日1回、受信専用の署名付き取得（送信なし・識別子なし）。フィード専用 Ed25519 鍵で検証（本体アップデートの Sparkle 鍵とは別鍵）。「自動更新」オフで外部通信ゼロ、同梱シード（約280件）＋ホモグラフ検知のみで動作。
+                • 非 Pro: モードは保存されるが `/etc/hosts` は変更されません（Pro 有効化で遮断が有効に）。
+                • 誤遮断時: 通知またはメニューからドメインを「許可」（5分間 or 恒久）。
+                """,
+                recommendation: "標準の「自動ブロック」を推奨します。社内ツール等が誤って遮断された場合はメニューの「許可リスト」に追加してください。外部通信を一切させたくない場合は「自動更新」をオフにしても、ホモグラフ検知と同梱シードで基本的な保護は維持されます。",
+                tags: ["link", "linkguard", "phishing", "homograph", "hosts", "sinkhole", "feed", "pro", "receive-only"]
             ),
             KnowledgeItem(
                 id: "feat_secret_leak_auditor",

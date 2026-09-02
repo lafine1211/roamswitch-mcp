@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.7.1 (build 41).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.7.2 (build 42).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -42,6 +42,60 @@ public struct LinkAuditReport: Equatable {
     public let riskLevel: LinkRiskLevel
     public let riskFactors: [LinkRiskFactor]
     public let isHTTPS: Bool
+}
+
+/// Enforcement decision for the passive link guard — mirrors
+/// `roamswitch-core::link_guard::Verdict` on Linux. `riskLevel` is for display;
+/// this is what an interception layer would actually do.
+public enum LinkGuardVerdict: String, Codable, Equatable {
+    case allow, warn, block
+
+    public var label: String {
+        switch self {
+        case .allow: return loc("リンク保護では問題として扱いません")
+        case .warn: return loc("リンク保護なら警告を表示します")
+        case .block: return loc("リンク保護ならこのサイトへの接続を遮断します")
+        }
+    }
+
+    public var icon: String {
+        switch self {
+        case .allow: return "✓"
+        case .warn: return "⚠️"
+        case .block: return "🚫"
+        }
+    }
+}
+
+/// The user-selectable link-guard mode (menu picker + `LinkGuardManager`).
+/// Lives here, not in `LinkGuardManager.swift`, so the roamswitch-mcp mirror and
+/// its tests compile without that file's AppKit/Combine dependencies.
+/// `off` removes the managed `/etc/hosts` section; `warn` loads the feed but
+/// does not sinkhole; `block` sinkholes (Linux parity, the 1.7.2 default).
+public enum LinkGuardMode: String, CaseIterable, Codable {
+    case off, warn, block
+
+    public var displayName: String {
+        switch self {
+        case .off: return loc("オフ")
+        case .warn: return loc("警告のみ (遮断しない)")
+        case .block: return loc("明らかな詐欺サイトは自動でブロック (推奨)")
+        }
+    }
+}
+
+public extension LinkAuditReport {
+    /// Only a Unicode/Punycode **homograph** host is ever `.block` from
+    /// heuristics alone (matching Linux: feed hit OR brand homograph).
+    /// Brand-in-subdomain impersonation, high-risk TLDs, etc. are `.warn`.
+    var verdict: LinkGuardVerdict {
+        let homograph = riskFactors.contains {
+            $0.isSevere && ($0.title.contains("ホモグラフ") || $0.title.lowercased().contains("homograph"))
+        }
+        if homograph { return .block }
+        if riskLevel == .dangerous || riskLevel == .caution || score < 60 { return .warn }
+        return .allow
+    }
 }
 
 public final class LinkSafetyAuditor {
