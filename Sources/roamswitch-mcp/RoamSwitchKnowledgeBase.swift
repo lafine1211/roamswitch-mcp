@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.7.0 (build 38).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.7.1 (build 41).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -487,14 +487,15 @@ public struct RoamSwitchKnowledgeBase: Sendable {
                 title: "⚠️ Helper Not Connected / ヘルパー未接続",
                 summary: "RoamSwitchの特権ヘルパーツール（`RoamSwitchHelper`）とのXPC通信が確立できない際のエラー警告。",
                 details: """
-                • 発生原因: macOSアップデート等でLaunchDaemonが停止したか、「ログイン項目と機能拡張」でバックグラウンド実行がオフになっている。
+                • 発生原因: macOSアップデート等でLaunchDaemonが停止したか、「ログイン項目と機能拡張」でバックグラウンド実行がオフになっている。RoamSwitch本体が「アプリケーション」フォルダの外（ダウンロードフォルダやディスクイメージ内など）にある場合、macOSの仕様上ヘルパーを登録できません。
                 • 影響: ファイアウォール切替やデーモン停止などの特権操作が制限されます。
                 """,
                 recommendation: """
                 【修復手順】
-                1. ターミナルで `sudo killall RoamSwitchHelper` を実行してヘルパーを再起動してください。
-                2. 「システム設定」>「一般」>「ログイン項目とApp機能拡張」を開き、「RoamSwitchHelper」が許可されているか確認してください。
-                3. 改善しない場合は、RoamSwitchアプリを再起動し、ヘルパーの再インストールを許可してください。
+                1. メニューバーのRoamSwitchアイコンをクリックし、「⚠️ ヘルパーを承認する…」があれば選択してください（設定画面が開きます）。
+                2. 「システム設定」>「一般」>「ログイン項目とApp機能拡張」を開き、「バックグラウンドでの実行を許可」の一覧で「RoamSwitchHelper」をオンにしてください。
+                3. RoamSwitchが「アプリケーション」フォルダに入っているか確認してください。入っていない場合は移動してから開き直してください。
+                4. 改善しない場合は、ターミナルで `sudo killall RoamSwitchHelper` を実行し、RoamSwitchアプリを再起動してヘルパーの再インストールを許可してください。
                 """,
                 tags: ["alert", "helper", "xpc", "error", "troubleshooting"]
             ),
