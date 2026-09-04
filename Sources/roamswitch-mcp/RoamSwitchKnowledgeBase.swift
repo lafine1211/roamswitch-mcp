@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.7.6 (build 46).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.8.0 (build 47).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -149,11 +149,43 @@ public struct RoamSwitchKnowledgeBase: Sendable {
                 summary: "同一Wi-Fi内の攻撃者がルーターになりすまして通信を盗聴・改ざんするARPスプーフィング（中間者攻撃 / MITM）をリアルタイム検知し、自動遮断します。",
                 details: """
                 • 動作原理: 定期的にローカルARPテーブルを監視し、デフォルトゲートウェイのIPアドレスに対応するMACアドレスの急変や不審な重複エントリを検知。
-                • 自動隔離 (Pro): 有効時、攻撃を検知した瞬間にPFパケットフィルタを緊急ロックダウンに切り替え、通信を即座に遮断（エアギャップ隔離）してデータ流出を阻止。
-                • 誤検知対応: メッシュWi-FiのAP切り替え等による誤検知時は、ポート・診断画面やメニューからいつでも解除可能。
+                • 検知時の挙動 (1.7.5〜): ロックダウン中は即座に全遮断（エアギャップ隔離）。バランス／信頼済みネットワークでは通知のみで、ユーザーがメニューの「今すぐ全遮断する」から手動発動。ルーター再起動やアクセスポイント切り替えでの誤発動、攻撃者が偽ARP 1つで通信を止めさせる事態を防ぐため。
+                • 位置づけ: これは「検知したら人間より速く切る」事後策です。未然防止は `feat_gateway_arp_lock`（予防固定）と `feat_vpn_tunnel`（暗号化トンネル）が担います。
                 """,
-                recommendation: "「ARPスプーフィング自動遮断 (Pro)」はPro有効化時に既定でオンです。ルーター再起動やメッシュWi-FiのAP切り替えで誤発動した場合は、緊急画面から安全を確認して解除してください。",
-                tags: ["arp", "spoofing", "mitm", "eavesdropping", "gateway", "mac", "airgap", "pro"]
+                recommendation: "検知は既定でオンです。より強い中間者攻撃対策が必要なら VPN トンネル（feat_vpn_tunnel）、追加インフラ無しの予防なら ARP/NDP 固定（feat_gateway_arp_lock）を有効化してください。",
+                tags: ["arp", "spoofing", "mitm", "eavesdropping", "gateway", "mac", "airgap", "pro", "notify-first"]
+            ),
+            KnowledgeItem(
+                id: "feat_vpn_tunnel",
+                topic: "feature",
+                title: "VPN トンネル（WireGuard / Tailscale・キルスイッチ付き） (Pro)",
+                summary: "未信頼ネットワークで暗号化トンネルを自動接続し、中間者攻撃を無効化します。バックエンドは WireGuard（設定ファイル）または Tailscale（Exit Node）から選択。L2（ARP/NDP）の完全性に依存しない、中間者攻撃対策の本命。1.7.6 以降、1.8.0 でバックエンド選択。Network Extension エンタイトルメント不要。",
+                details: """
+                • バックエンド選択: 「ポート・デバイス監視」→「VPN トンネル」→「バックエンド」で WireGuard か Tailscale を選ぶ。選んだ方だけが動作。
+                • WireGuard: Homebrew の `wireguard-tools`（`brew install wireguard-tools`）が必要。WireGuard 設定ファイル（`.conf`）を読み込む。設定ファイルは**ユーザーが用意**（Mullvad・IVPN・Proton VPN、自前サーバー、勤務先支給）。RoamSwitch は VPN サーバーを提供しない。
+                • WireGuard キルスイッチ: pf `block drop all` に「lo / トンネル IF / 固定エンドポイント IP への UDP ハンドシェイク / DHCP / ICMP」だけの pass。トンネルが死んでいる間は平文が一切漏れない。
+                • Tailscale（1.8.0〜）: 既に Tailscale を使っている人向け。RoamSwitch は `tailscale up`/ログイン/導入はしない。`tailscale status` を読み `tailscale set --exit-node=<ノード>` を実行するだけ。**Exit Node 必須**（全通信をそこ経由に）。オフライン時は自動解除。
+                • Tailscale は **CLI 版（standalone）推奨**: `brew install tailscale` → `sudo tailscaled install-system-daemon` → `sudo tailscale up`。CLI が `/opt/homebrew/bin/tailscale` か `/usr/local/bin/tailscale` にあれば RoamSwitch がヘルパー（root）経由で確実に制御できる。**App Store 版（GUI）はアプリ外から `tailscale set` を実行できない**ため、その場合は Tailscale アプリで Exit Node を選び、RoamSwitch は状態表示とキルスイッチのみ担当。
+                • Tailscale キルスイッチ（**既定オフ・オプトイン**）: pf `block drop all` に「lo / Tailscale の utunN / CGNAT 100.64.0.0/10 / DNS / STUN 3478 / 41641 / DERP tcp 443 / DHCP / ICMP」の pass。WireGuard より緩く「漏れにくい」止まり。環境によっては Tailscale 自身の接続を切ることがあるため任意。
+                • 自動適用: 未信頼ネットワークでトンネル/Exit Node を up、信頼済みで down。
+                • ライセンス失効時: トンネル・Exit Node・キルスイッチは自動解除。
+                """,
+                recommendation: "カフェや公衆 Wi-Fi を頻繁に使うなら最も効果的です。Tailscale を既に使っているなら CLI 版（`brew install tailscale` + `sudo tailscaled install-system-daemon`）を入れて Tailscale バックエンド + Exit Node を選ぶのが手軽。そうでなければ `brew install wireguard-tools` + VPN プロバイダーの `.conf` で WireGuard。フルトンネル推奨。",
+                tags: ["vpn", "wireguard", "tailscale", "exit-node", "mitm", "killswitch", "tunnel", "pf", "untrusted-network", "pro", "homebrew"]
+            ),
+            KnowledgeItem(
+                id: "feat_gateway_arp_lock",
+                topic: "feature",
+                title: "ゲートウェイ ARP/NDP 固定（予防） (Pro)",
+                summary: "未信頼ネットワークに接続した時点で、ゲートウェイ・IPv6 ルーター・同一リンク上の DNS サーバーの MAC アドレスを近隣キャッシュに固定（permanent）し、ARP/NDP スプーフィングによる中間者攻撃を未然に防ぎます。1.7.5 以降。追加インフラ不要。",
+                details: """
+                • 動作: 「ポート・デバイス監視」→「未信頼ネットワークでゲートウェイの ARP/NDP を固定（予防）」で有効化。接続時に `route` / `scutil --dns` / `arp -n` / `ndp -an` から対象の現在の MAC を収集し、ヘルパーが `arp -s` / `ndp -s` で permanent エントリ化。
+                • 範囲: 固定するのは上記 3 種のエントリのみ。信頼済み（オープン）ネットワークでは固定しない。ネットワーク変更ごとに一度解除して再固定。
+                • 限界（TOFU）: 「最初に観測した MAC を信頼する」方式のため、接続前から攻撃者が居座っていた場合は偽の MAC を固定しうる。この前提を置きたくない場合は VPN トンネル（feat_vpn_tunnel）を使う。
+                • 永続化: 固定中の IP→MAC 集合は `/Library/Application Support/RoamSwitch/gateway_arp_lock.json` に保存。
+                """,
+                recommendation: "VPN の用意が難しい場合の軽量な中間者攻撃対策として有効です。VPN トンネルと併用も可能（VPN が本命、こちらは補助）。",
+                tags: ["arp", "ndp", "mitm", "gateway", "tofu", "neighbor-cache", "untrusted-network", "pro", "preventive"]
             ),
             KnowledgeItem(
                 id: "feat_port_anomaly_guard",
