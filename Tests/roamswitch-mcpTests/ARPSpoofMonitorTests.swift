@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.8.1 (build 48). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.8.2 (build 49). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
