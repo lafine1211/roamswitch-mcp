@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.8.3 (build 50).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.8.4 (build 51).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -232,7 +232,18 @@ final class PortSecurityAuditor {
         var responseHeaders: [String: String]? = nil
         var findings: [PortAuditFinding] = []
 
-        let task = URLSession.shared.dataTask(with: request) { _, response, _ in
+        // Ephemeral session: zero cookie leakage, zero shared cache, strictly isolated audit probe
+        let config = URLSessionConfiguration.ephemeral
+        config.httpShouldSetCookies = false
+        config.httpCookieAcceptPolicy = .never
+        config.urlCache = nil
+        config.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        config.timeoutIntervalForRequest = 1.2
+        config.timeoutIntervalForResource = 1.5
+        let session = URLSession(configuration: config)
+        defer { session.invalidateAndCancel() }
+
+        let task = session.dataTask(with: request) { _, response, _ in
             if let http = response as? HTTPURLResponse {
                 var headerMap: [String: String] = [:]
                 for (k, v) in http.allHeaderFields {
