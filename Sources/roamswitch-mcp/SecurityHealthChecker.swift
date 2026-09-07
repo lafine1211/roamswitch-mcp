@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.8.6 (build 53).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.8.7 (build 54).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -88,7 +88,16 @@ final class SecurityHealthChecker {
         wifiInfo: WiFiInfo,
         arpStatus: ARPMonitorStatus,
         listeningPorts: [ListeningPortInfo],
-        activeSecurityLevel: SecurityLevel
+        activeSecurityLevel: SecurityLevel,
+        /// `nil` = not yet checked (e.g. helper not connected yet) — kept out
+        /// of the score rather than counted as a pass or a fail. See
+        /// `HelperTool.auditSudoNopasswd` (root-only `/etc/sudoers`).
+        sudoAuditIsHardened: Bool? = nil,
+        sudoAuditDetail: String? = nil,
+        /// `GatewayARPLockManager.shared.isEnabled` — passed in rather than
+        /// read here so this stays a pure function of its inputs, matching
+        /// the other pre-fetched parameters.
+        gatewayARPLockEnabled: Bool = false
     ) -> ComprehensiveSecurityReport {
         let health = checkHealth()
         var items: [SecurityAuditItem] = []
@@ -196,6 +205,53 @@ final class SecurityHealthChecker {
             detail: loc("同一LAN内の悪意ある端末がルーターになりすまして通信を盗聴・改ざんする中間者攻撃（MitM）を監視します。"),
             recommendation: isARPPassed ? loc("中間者攻撃の兆候はありません。") : loc("直ちにネットワークから切断し、信頼できる接続に変更してください。"),
             settingsURL: nil
+        ))
+
+        items.append(SecurityAuditItem(
+            category: loc("ネットワーク防御"),
+            title: loc("ゲートウェイ ARP 固定 (予防的MITM対策)"),
+            isPassed: gatewayARPLockEnabled,
+            statusText: gatewayARPLockEnabled ? loc("有効 (ゲートウェイMACを固定中)") : loc("無効"),
+            detail: loc("カフェ等の未信頼ネットワーク接続時、ルーターのMACアドレスをARPテーブルに静的固定し、ARPスプーフィングによる中間者攻撃を検知ではなく未然に防止します。"),
+            recommendation: gatewayARPLockEnabled ? loc("予防的なMITM対策が有効です。") : loc("未信頼ネットワークを頻繁に使う場合は、メニューバーからゲートウェイARP固定を有効化してください。"),
+            settingsURL: nil
+        ))
+
+        // MARK: - 2.5. Authentication & Access Control (認証・アクセス制御)
+        let isRemoteLoginEnabled = checkRemoteLoginEnabled()
+        let sshHardened = sshConfigIsHardened()
+        items.append(SecurityAuditItem(
+            category: loc("認証・アクセス制御"),
+            title: loc("SSH リモートログイン設定"),
+            isPassed: !isRemoteLoginEnabled || (sshHardened ?? false),
+            statusText: !isRemoteLoginEnabled
+                ? loc("リモートログイン無効 (対象外)")
+                : ((sshHardened ?? false) ? loc("有効・強化済み") : loc("⚠️ 有効・設定に改善余地あり")),
+            detail: loc("リモートログイン（SSH）が有効な場合、rootログイン禁止・鍵認証必須（パスワード認証拒否）になっているかを`/etc/ssh/sshd_config`から確認します。"),
+            recommendation: !isRemoteLoginEnabled
+                ? loc("リモートログインは無効です。")
+                : ((sshHardened ?? false)
+                    ? loc("設定は万全です。")
+                    : loc("`/etc/ssh/sshd_config`で`PermitRootLogin no`・`PasswordAuthentication no`（鍵認証必須）を設定してください。")),
+            settingsURL: "x-apple.systempreferences:com.apple.preferences.sharing",
+            isApplicable: isRemoteLoginEnabled
+        ))
+
+        let sudoAudit = sudoAuditIsHardened
+        items.append(SecurityAuditItem(
+            category: loc("認証・アクセス制御"),
+            title: loc("Sudo 権限昇格設定 (NOPASSWD監査)"),
+            isPassed: sudoAudit ?? true,
+            statusText: sudoAudit == nil
+                ? loc("未確認 (ヘルパー接続待ち)")
+                : (sudoAudit == true ? loc("安全 (NOPASSWD設定なし)") : loc("⚠️ NOPASSWD設定を検出")),
+            detail: (sudoAuditDetail.map { loc("パスワード無しでsudo実行を許可する`NOPASSWD`設定が見つかりました:\n") + $0 })
+                ?? loc("`/etc/sudoers`・`/etc/sudoers.d/`にパスワード無しでroot権限昇格を許可する`NOPASSWD`設定が無いかを監査します。悪意あるインストーラーやマルウェアがこの設定を悪用すると、パスワード入力なしに任意のroot操作が可能になります。"),
+            recommendation: sudoAudit == false
+                ? loc("心当たりのない`NOPASSWD`設定があれば、`sudo visudo`で削除してください。")
+                : loc("設定は万全です。"),
+            settingsURL: nil,
+            isApplicable: sudoAudit != nil
         ))
 
         // MARK: - 3. Services & Ports (サービス・ポート露出)
@@ -370,6 +426,43 @@ final class SecurityHealthChecker {
     private func checkXProtect() -> Bool {
         let path = "/Library/Apple/System/Library/CoreServices/XProtect.bundle"
         return FileManager.default.fileExists(atPath: path)
+    }
+
+    /// Whether Remote Login (sshd) is currently registered with launchd —
+    /// `launchctl print` on an unloaded system service returns a "Could not
+    /// find service" error rather than job info, which is the signal used
+    /// here (no sudo needed to query launchd's own job table).
+    private func checkRemoteLoginEnabled() -> Bool {
+        let output = runCommand(path: "/bin/launchctl", arguments: ["print", "system/com.openssh.sshd"])
+        return !output.isEmpty && !output.lowercased().contains("could not find")
+    }
+
+    /// `/etc/ssh/sshd_config` is world-readable (0644) on macOS, unlike
+    /// `/etc/sudoers` — no helper round-trip needed. `nil` if the file can't
+    /// be read at all.
+    private func sshConfigIsHardened() -> Bool? {
+        guard let contents = try? String(contentsOfFile: "/etc/ssh/sshd_config", encoding: .utf8) else {
+            return nil
+        }
+        var permitRootLogin: String?
+        var passwordAuthentication: String?
+        for rawLine in contents.split(separator: "\n") {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            guard !line.isEmpty, !line.hasPrefix("#") else { continue }
+            let lower = line.lowercased()
+            if lower.hasPrefix("permitrootlogin") {
+                permitRootLogin = lower
+            } else if lower.hasPrefix("passwordauthentication") {
+                passwordAuthentication = lower
+            }
+        }
+        // Root login must be explicitly disabled or password-restricted —
+        // OpenSSH's own default ("prohibit-password") is left commented out
+        // in Apple's shipped config, so an absent directive can't be assumed
+        // safe. Password auth must be explicitly turned off (key-only).
+        let rootLoginBlocked = permitRootLogin.map { $0.contains("no") || $0.contains("prohibit-password") } ?? false
+        let passwordAuthOff = passwordAuthentication?.contains("no") ?? false
+        return rootLoginBlocked && passwordAuthOff
     }
 
     private func runCommand(path: String, arguments: [String]) -> String {
