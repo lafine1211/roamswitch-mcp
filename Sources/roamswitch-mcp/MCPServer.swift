@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.8.8 (build 55).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.0 (build 57).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -27,6 +27,30 @@ private let arpMonitor = ARPSpoofMonitor()
 // domain by suite name so guard toggles and trusted-network state read
 // what the app actually has configured.
 private let sharedDefaults = UserDefaults(suiteName: "com.tetsuharu.RoamSwitch") ?? .standard
+
+/// `RoamSwitchMCPServer` is a bare Mach-O executable embedded at
+/// `RoamSwitch.app/Contents/MacOS/RoamSwitchMCPServer` — it has no real
+/// `Contents/Info.plist` of its own next to it (unlike a regular `.app`),
+/// so `Bundle.main.infoDictionary` resolves to nothing there and
+/// `CFBundleShortVersionString` is never found. This climbs from the
+/// running executable's own path to the nearest ancestor directory ending
+/// in `.app` and reads that bundle's real Info.plist instead — the exact
+/// same problem/fix as `AppLanguage.resourceBundle`'s `.lproj` lookup.
+/// Falls back to `1.0.0` only when run standalone outside any `.app`
+/// (e.g. a raw DerivedData build during local testing).
+private let mcpServerVersion: String = {
+    var dir = Bundle.main.executableURL?.deletingLastPathComponent()
+    for _ in 0..<8 {
+        guard let candidate = dir else { break }
+        if candidate.pathExtension == "app",
+           let appBundle = Bundle(url: candidate),
+           let version = appBundle.infoDictionary?["CFBundleShortVersionString"] as? String {
+            return version
+        }
+        dir = candidate.pathComponents.count > 1 ? candidate.deletingLastPathComponent() : nil
+    }
+    return "1.0.0"
+}()
 
 enum MCPServer {
 
@@ -108,7 +132,7 @@ enum MCPServer {
                     "tools": [String: Any](),
                     "resources": [String: Any](),
                 ],
-                "serverInfo": ["name": "RoamSwitch Security Advisor", "version": "1.0.0"],
+                "serverInfo": ["name": "RoamSwitch Security Advisor", "version": mcpServerVersion],
                 "instructions": "Read-only, fully local (no network calls) access to RoamSwitch's Mac security diagnostics, comprehensive feature specifications, alert message advice, and operational guides. Use 'get_app_help' or read 'roamswitch://docs/...' resources for in-depth documentation. Cannot change security level, isolate ports, or eject devices.",
             ])]
 
@@ -153,10 +177,24 @@ enum MCPServer {
                 return [result(id: id, callGetExposedPorts(arguments: arguments))]
             case "get_guard_status":
                 return [result(id: id, callGetGuardStatus())]
+            case "run_active_vuln_scan":
+                return [result(id: id, callRunActiveVulnScan())]
+            case "run_package_cve_scan":
+                return [result(id: id, callRunPackageCveScan())]
+            case "run_package_cve_scan_languages":
+                return [result(id: id, callRunPackageCveScanLanguages(arguments: arguments))]
             case "audit_url_safety":
                 return [result(id: id, callAuditURLSafety(arguments: arguments))]
             case "get_app_help":
                 return [result(id: id, callGetAppHelp(arguments: arguments))]
+            case "audit_secrets":
+                return [result(id: id, callAuditSecrets(arguments: arguments))]
+            case "audit_security_logs":
+                return [result(id: id, callAuditSecurityLogs(arguments: arguments))]
+            case "get_quarantine_status":
+                return [result(id: id, callGetQuarantineStatus())]
+            case "get_canary_status":
+                return [result(id: id, callGetCanaryStatus())]
             default:
                 return [error(id: id, code: -32602, message: "Unknown tool: \(name)")]
             }
@@ -240,6 +278,194 @@ enum MCPServer {
         return textContentResult(payload)
     }
 
+    /// Phase 2/3 of the active-vulnerability-verification roadmap (see
+    /// `ActiveVulnScan.swift`). Unlike every other tool in this file, this one actually
+    /// sends network requests — gated on the `ActiveVulnScan.enabledDefaultsKey` opt-in,
+    /// read from `sharedDefaults` (the app-group suite) rather than `UserDefaults
+    /// .standard`, since this MCP server runs as a separate process/bundle from the main
+    /// app that owns the Settings toggle — the same cross-process reasoning already
+    /// applied to every other guard-enabled flag in this file (see `sharedDefaults`
+    /// usage above).
+    private static func callRunActiveVulnScan() -> [String: Any] {
+        guard sharedDefaults.bool(forKey: ActiveVulnScan.enabledDefaultsKey) else {
+            let payload = MCPActiveVulnScanResultPayload(
+                enabled: false,
+                scannedTargetCount: 0,
+                findings: [],
+                message: loc("実証型脆弱性診断は既定で無効です。設定タブの「実証型脆弱性診断」をオンにしてから実行してください。")
+            )
+            return textContentResult(payload)
+        }
+
+        let ports = ListeningPortMonitor.shared.scanListeningPorts()
+        let findings = ActiveVulnScan.runScan(ports: ports)
+        let targetCount = ports.filter { port in
+            !ServiceSignatures.match(processName: port.processName, executablePath: port.executablePath).isEmpty
+                || PortSecurityAuditor.isKnownDevServerPort(port.port)
+        }.count
+
+        let payload = MCPActiveVulnScanResultPayload(
+            enabled: true,
+            scannedTargetCount: targetCount,
+            findings: findings.map {
+                MCPActiveVulnScanFindingPayload(
+                    port: $0.port,
+                    processName: $0.processName,
+                    title: $0.title,
+                    description: $0.description,
+                    recommendation: $0.recommendation
+                )
+            },
+            message: "Scan complete."
+        )
+        return textContentResult(payload)
+    }
+
+    /// UNLIKE `run_active_vuln_scan`, this sends no network requests at all —
+    /// a pure local inventory read (`brew list --versions` + a local JSON
+    /// file), so there is no opt-in flag to check here.
+    private static func callRunPackageCveScan() -> [String: Any] {
+        let map = PackageCveScan.loadCVEMap()
+        let findings = map.entries.isEmpty ? [] : PackageCveScan.runScan()
+        let payload = MCPPackageCveScanResultPayload(
+            mapInstalled: !map.entries.isEmpty,
+            mapVersion: map.mapVersion,
+            findings: findings.map {
+                MCPPackageCveFindingPayload(
+                    cveId: $0.cveId,
+                    package: $0.package,
+                    installedVersion: $0.installedVersion,
+                    cvssScore: $0.cvssScore,
+                    fixedVersion: $0.fixedVersion,
+                    summary: $0.summary,
+                    confidence: $0.confidence
+                )
+            }
+        )
+        return textContentResult(payload)
+    }
+
+    /// SENDS NO NETWORK REQUESTS AT ALL — reads only local files. Takes the
+    /// caller-supplied `watchedFolders` argument directly (no persisted
+    /// state read here) — mirrors the Linux MCP tool
+    /// `run_package_cve_scan_languages` exactly.
+    private static func callRunPackageCveScanLanguages(arguments: [String: Any]) -> [String: Any] {
+        let folders = (arguments["watchedFolders"] as? [Any])?.compactMap { $0 as? String } ?? []
+        let findings = PackageCveScanLanguages.runScan(watchedFolders: folders)
+        let payload = MCPPackageCveScanLanguagesResultPayload(
+            scannedFolderCount: folders.count,
+            findings: findings.map {
+                MCPPackageCveLanguageFindingPayload(
+                    ecosystem: $0.ecosystem,
+                    cveId: $0.cveId,
+                    package: $0.package,
+                    installedVersion: $0.installedVersion,
+                    cvssScore: $0.cvssScore,
+                    fixedVersion: $0.fixedVersion,
+                    summary: $0.summary
+                )
+            }
+        )
+        return textContentResult(payload)
+    }
+
+    /// SENDS NO NETWORK REQUESTS AT ALL — reads only local text/files.
+    private static func callAuditSecrets(arguments: [String: Any]) -> [String: Any] {
+        let findings: [SecretLeakScanning.SecretFinding]
+        if let pathStr = arguments["path"] as? String {
+            var isDir: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: pathStr, isDirectory: &isDir) else {
+                return textContentResult(["error": "path not found: \(pathStr)"], isError: true)
+            }
+            if isDir.boolValue {
+                findings = SecretLeakScanning.auditDirectory(at: URL(fileURLWithPath: pathStr))
+            } else {
+                let text = (try? String(contentsOfFile: pathStr, encoding: .utf8)) ?? ""
+                findings = SecretLeakScanning.auditText(text, filePath: pathStr)
+            }
+        } else if let text = arguments["text"] as? String {
+            findings = SecretLeakScanning.auditText(text)
+        } else {
+            return textContentResult(["error": "Provide either 'text' or 'path'"], isError: true)
+        }
+
+        let payload = MCPAuditSecretsResultPayload(
+            findings: findings.map {
+                MCPSecretFindingPayload(
+                    type: $0.type.rawValue,
+                    lineNumber: $0.lineNumber,
+                    masked: $0.masked,
+                    entropy: $0.entropy,
+                    filePath: $0.filePath
+                )
+            }
+        )
+        return textContentResult(payload)
+    }
+
+    /// SENDS NO NETWORK REQUESTS AT ALL — reads only local system logs via
+    /// `/usr/bin/log show`. Uses `performAuditSync` (not the completion-
+    /// handler `performAudit`, which dispatches its result via
+    /// `DispatchQueue.main.async` — this process's `while readLine()` main
+    /// loop never pumps `RunLoop.main`, so that would deadlock).
+    private static func callAuditSecurityLogs(arguments: [String: Any]) -> [String: Any] {
+        let hours = (arguments["hours"] as? Int) ?? 24
+        let report = SecurityLogAuditor.shared.performAuditSync(timeWindowHours: hours)
+        let iso = ISO8601DateFormatter()
+        let payload = MCPSecurityLogAuditPayload(
+            timeWindowHours: report.timeWindowHours,
+            totalEvents: report.totalEvents,
+            sudoFailures: report.sudoFailures,
+            sshAttempts: report.sshAttempts,
+            gatekeeperBlocks: report.gatekeeperBlocks,
+            xprotectDetections: report.xprotectDetections,
+            isClean: report.isClean,
+            events: report.events.map {
+                MCPSecurityLogEventPayload(
+                    timestamp: iso.string(from: $0.timestamp),
+                    process: $0.process,
+                    category: $0.category.rawValue,
+                    severity: $0.severity.rawValue,
+                    message: $0.message
+                )
+            }
+        )
+        return textContentResult(payload)
+    }
+
+    /// SENDS NO NETWORK REQUESTS AT ALL — reads only a local metadata file.
+    private static func callGetQuarantineStatus() -> [String: Any] {
+        let qm = QuarantineManager.shared
+        let iso = ISO8601DateFormatter()
+        let payload = MCPQuarantineStatusPayload(
+            quarantineDirectory: qm.quarantineDirectory,
+            files: qm.listQuarantinedFiles().map {
+                MCPQuarantinedFilePayload(
+                    originalPath: $0.originalPath,
+                    quarantinedPath: $0.quarantinedPath,
+                    threatName: $0.threatName,
+                    quarantinedAt: iso.string(from: $0.quarantinedAt),
+                    fileSize: $0.fileSize
+                )
+            }
+        )
+        return textContentResult(payload)
+    }
+
+    /// SENDS NO NETWORK REQUESTS AT ALL — reads local UserDefaults + disk
+    /// state only. See `CanaryStatusReader`'s doc comment for why incident
+    /// history isn't included.
+    private static func callGetCanaryStatus() -> [String: Any] {
+        let status = CanaryStatusReader.currentStatus(defaults: sharedDefaults)
+        let payload = MCPCanaryStatusPayload(
+            isEnabled: status.isEnabled,
+            monitoredFilesCount: status.monitoredFilesCount,
+            expectedFilesCount: status.expectedFilesCount,
+            recentIncidentsAvailable: false
+        )
+        return textContentResult(payload)
+    }
+
     private static func callGetGuardStatus() -> [String: Any] {
         let mac = GatewayFingerprint.currentGatewayMACAddress()
         let payload = MCPResponseFormatting.makeGuardStatusPayload(gatewayMAC: mac, defaults: sharedDefaults)
@@ -282,6 +508,71 @@ enum MCPServer {
                     ],
                 ],
             ],
+        ],
+        [
+            "name": "run_active_vuln_scan",
+            "description": "UNLIKE EVERY OTHER TOOL ABOVE, THIS SENDS NETWORK REQUESTS. Three check families, all non-destructive, read-only, 127.0.0.1-only, single request with a short timeout, never touching another host: (1) known unauthenticated-by-default services already detected on this host — Redis, Memcached, MongoDB — verified with a protocol-appropriate probe (e.g. Redis PING); (2) generic checks against any detected local dev-server port — CORS misconfiguration (arbitrary Origin reflected with credentials allowed), path traversal (reading /etc/passwd via ../ to prove insufficient path validation), and open redirect (a handful of common parameter names like redirect/url/next tried against the root path, flagged only if the server actually redirects to our unregistered probe domain); (3) known-CVE version matching — when a Redis or Memcached instance is confirmed unauthenticated in (1), its version is read via a further non-destructive query (Redis INFO / Memcached stats) and checked against a small table of known CVEs (e.g. CVE-2022-24834 for Redis, CVE-2018-1000115 for Memcached) by version range only, never by sending an actual exploit payload. Disabled by default: requires the 'Active Vulnerability Verification' toggle enabled in RoamSwitch Settings, and refuses to run otherwise.",
+            "inputSchema": ["type": "object", "properties": [String: Any]()],
+        ],
+        [
+            "name": "run_package_cve_scan",
+            "description": "UNLIKE run_active_vuln_scan, THIS SENDS NO NETWORK REQUESTS AT ALL. Enumerates installed Homebrew formulae (via `brew list --versions`) and checks each against a purely local, mechanically-generated known-CVE map pulled from NVD's real CVE API for a hand-curated formula\u{2192}CPE allowlist (real CVSS scores, real version ranges — never fabricated). Findings carry a `confidence` field: \"confirmed\" (the formula\u{2192}CPE mapping was individually hand-verified) or \"gray\" (an exact-keyword CPE match that was never hand-verified — treat as a possible false positive). The embedded baseline ships as a deliberately empty seed; until the daily updater installs real data, this reports mapInstalled: false and no findings, rather than fabricating results. No opt-in flag to check and nothing to confirm: a pure local inventory read has nothing to send anywhere.",
+            "inputSchema": ["type": "object", "properties": [String: Any]()],
+        ],
+        [
+            "name": "run_package_cve_scan_languages",
+            "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only local files. Scans the given project folders for known dependency lockfiles (package-lock.json, requirements.txt, Pipfile.lock, poetry.lock, Cargo.lock, Gemfile.lock, composer.lock, go.sum, pom.xml) and checks each pinned dependency against a purely local, mechanically-generated known-CVE map per ecosystem (npm, PyPI, crates.io, RubyGems, Packagist, Go, Maven — CVSS >= 7.0, no recency cutoff, refreshed daily). Each ecosystem's embedded baseline ships as a deliberately empty seed; until the daily updater installs real data, no findings are reported for that ecosystem rather than fabricating results. Only a directly-pinned version counts as a match (e.g. an exact requirements.txt `==` pin, or a resolved lockfile entry) — an unpinned version range is never guessed at.",
+            "inputSchema": [
+                "type": "object",
+                "properties": [
+                    "watchedFolders": [
+                        "type": "array",
+                        "items": ["type": "string"],
+                        "description": "Absolute paths to project folders to scan for lockfiles.",
+                    ],
+                ],
+                "required": ["watchedFolders"],
+            ],
+        ],
+        [
+            "name": "audit_secrets",
+            "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only local text/files. Scans for exposed API keys (OpenAI, Anthropic, GitHub, AWS, HuggingFace, Google AI/Gemini, Slack, Stripe) and SSH/RSA private keys with masking, using regex plus Shannon entropy scoring. Pass either 'text' (a snippet) or 'path' (a file, or a directory to scan recursively).",
+            "inputSchema": [
+                "type": "object",
+                "properties": [
+                    "text": [
+                        "type": "string",
+                        "description": "Text or code snippet to audit for secret leaks.",
+                    ],
+                    "path": [
+                        "type": "string",
+                        "description": "Absolute path to a file or directory to audit instead of 'text'. A directory is scanned recursively.",
+                    ],
+                ],
+            ],
+        ],
+        [
+            "name": "audit_security_logs",
+            "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only this Mac's own Unified Logging via `/usr/bin/log show`. Audits recent security-relevant log events (sudo failures, SSH connections, Gatekeeper blocks, XProtect detections, login/auth) over a time window and returns summary counts plus the individual events. Use this to answer 'has anything suspicious happened on this Mac recently'.",
+            "inputSchema": [
+                "type": "object",
+                "properties": [
+                    "hours": [
+                        "type": "integer",
+                        "description": "Time window in hours to audit. Defaults to 24.",
+                    ],
+                ],
+            ],
+        ],
+        [
+            "name": "get_quarantine_status",
+            "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only a local metadata file. Returns the malware quarantine vault's contents: each quarantined file's original path, the threat name ClamAV detected, when it was quarantined, and its size. Files are moved here (never deleted) by the Web/Mail download guard and on-demand ClamAV scans.",
+            "inputSchema": ["type": "object", "properties": [String: Any]()],
+        ],
+        [
+            "name": "get_canary_status",
+            "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only local UserDefaults and disk state. Returns whether the Ransomware Canary Guard (Pro) is enabled and how many of its decoy bait files currently exist on disk (out of the expected set). Does NOT include recent-incident history: that only lives in the main RoamSwitch app process's memory and is never persisted to disk, so a separate MCP server process cannot read it — `recentIncidentsAvailable` is always false, not an empty-means-clean signal.",
+            "inputSchema": ["type": "object", "properties": [String: Any]()],
         ],
         [
             "name": "get_guard_status",

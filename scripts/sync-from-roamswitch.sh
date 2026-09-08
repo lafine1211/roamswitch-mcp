@@ -30,8 +30,11 @@ EOF
 # `MCPServer.swift` lives in RoamSwitch/ (shared with the app target, so the
 # in-app test suite can reach it) — only `main.swift` is MCPServer-target-only.
 CORE=(AppLanguage TrustedNetwork GatewayFingerprint WiFiSecurityMonitor \
-      ARPSpoofMonitor ListeningPortMonitor PortSecurityAuditor SecurityHealthChecker \
-      LinkSafetyAuditor RoamSwitchKnowledgeBase MCPResponseFormatting MCPProtocol MCPServer)
+      ARPSpoofMonitor ListeningPortMonitor PortSecurityAuditor ServiceSignatures \
+      ActiveVulnScan ActiveVulnCveMapData SecurityHealthChecker \
+      LinkSafetyAuditor RoamSwitchKnowledgeBase MCPResponseFormatting MCPProtocol MCPServer \
+      PackageCveScan PackageCveMapData PackageCveScanLanguages PackageCveMapLanguagesData \
+      SecretLeakScanning SecurityLogAuditor QuarantineManager CanaryStatusReader)
 
 # App test files that only exercise types present in this repo. Their
 # `@testable import RoamSwitch` is rewritten to this package's module name.

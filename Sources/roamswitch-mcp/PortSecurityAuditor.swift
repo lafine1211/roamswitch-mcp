@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.8.8 (build 55).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.0 (build 57).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -79,6 +79,19 @@ final class PortSecurityAuditor {
                 findings.append(knownRisk)
             }
 
+            // 2b. Process-identity signature fallback: catches a known service
+            // (Redis/MongoDB/dockerd/etc.) remapped to a non-standard port, which
+            // the port-number-only check above would silently miss. Skipped for
+            // ports already covered above to avoid a duplicate finding for the
+            // common case. See ServiceSignatures.swift.
+            findings.append(contentsOf: self.checkServiceSignatures(
+                processName: portInfo.processName,
+                executablePath: portInfo.executablePath,
+                port: portInfo.port,
+                isGlobal: portInfo.isGloballyExposed,
+                isFirewallBlocking: isFirewallBlocking
+            ))
+
             // 3. HTTP / CORS / Security Header Probe (for HTTP-like ports)
             let (headers, httpFindings) = self.probeHTTPService(port: portInfo.port)
             findings.append(contentsOf: httpFindings)
@@ -128,6 +141,14 @@ final class PortSecurityAuditor {
         7860: "Gradio",
         8000: "vLLM",
     ]
+
+    /// Common local dev-server ports — the target set for `ActiveVulnScan`'s Phase 3
+    /// checks (CORS misconfiguration / path traversal), which are endpoint-agnostic and
+    /// so apply to any of these rather than a specific known service. Mirrors the Linux
+    /// client's `PortScanner::is_known_dev_server_port`.
+    static func isKnownDevServerPort(_ port: Int) -> Bool {
+        [3000, 3001, 4200, 5000, 5173, 5174, 8000, 8080, 8081, 8888, 11434, 1234, 7860].contains(port)
+    }
 
     // MARK: - Known Ports Database
 
@@ -214,6 +235,34 @@ final class PortSecurityAuditor {
             )
         default:
             return nil
+        }
+    }
+
+    // MARK: - Process-Identity Signature Fallback
+
+    /// Ports already covered by `checkKnownDangerousPort`'s port-number
+    /// switch, for the known services this module also has a signature for.
+    /// Excluded here so a service on its conventional port isn't reported
+    /// twice.
+    private static let knownSignaturePorts: Set<Int> = [6379, 27017, 2375, 11211]
+
+    private func checkServiceSignatures(
+        processName: String,
+        executablePath: String?,
+        port: Int,
+        isGlobal: Bool,
+        isFirewallBlocking: Bool
+    ) -> [PortAuditFinding] {
+        guard !Self.knownSignaturePorts.contains(port) else { return [] }
+
+        let riskLevel: PortSecurityRiskLevel = (isGlobal && !isFirewallBlocking) ? .critical : .warning
+        return ServiceSignatures.match(processName: processName, executablePath: executablePath).map { signature in
+            PortAuditFinding(
+                title: signature.title,
+                riskLevel: riskLevel,
+                description: signature.description,
+                recommendation: signature.recommendation
+            )
         }
     }
 

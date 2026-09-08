@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.8.8 (build 55).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.0 (build 57).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -40,9 +40,22 @@ enum AppLanguage: String, CaseIterable, Identifiable {
 
     private static let selectedLangKey = "RoamSwitch.appLanguage"
 
+    /// `suiteName` equal to the main app's own bundle ID (`com.tetsuharu.RoamSwitch`)
+    /// resolves to the exact same preferences domain as `UserDefaults.standard` when
+    /// read from the main app itself, but — unlike `.standard` — is also readable from
+    /// `RoamSwitchMCPServer`, a separate process under its own bundle ID
+    /// (`com.tetsuharu.RoamSwitch.MCPServer`). Without this, the MCP server could never
+    /// see the language the user picked in the app's own settings and every `loc(_:)`
+    /// call there (including this file's own `activeBundle`) silently fell back to the
+    /// OS system locale instead — same cross-process pitfall already fixed for
+    /// `ActiveVulnScan.isEnabled` (see `MCPServer.swift`'s `sharedDefaults`). No data
+    /// migration needed: existing values written via `.standard` from the main app are
+    /// already sitting in this exact same domain.
+    private static let sharedDefaults = UserDefaults(suiteName: "com.tetsuharu.RoamSwitch") ?? .standard
+
     static var current: AppLanguage {
         get {
-            guard let raw = UserDefaults.standard.string(forKey: selectedLangKey),
+            guard let raw = sharedDefaults.string(forKey: selectedLangKey),
                   let lang = AppLanguage(rawValue: raw) else {
                 return .system
             }
@@ -50,10 +63,13 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         }
         set {
             if newValue == .system {
-                UserDefaults.standard.removeObject(forKey: selectedLangKey)
+                sharedDefaults.removeObject(forKey: selectedLangKey)
                 UserDefaults.standard.removeObject(forKey: "AppleLanguages")
             } else {
-                UserDefaults.standard.set(newValue.rawValue, forKey: selectedLangKey)
+                sharedDefaults.set(newValue.rawValue, forKey: selectedLangKey)
+                // AppKit's own locale-selection key — only meaningful for (and only
+                // read by) the process that sets it, so this one stays process-local
+                // on `.standard` rather than moving to the shared suite.
                 UserDefaults.standard.set([newValue.rawValue], forKey: "AppleLanguages")
             }
             NotificationCenter.default.post(name: .languageDidChange, object: nil)
@@ -76,13 +92,38 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         return "ja"
     }
 
+    /// `RoamSwitchMCPServer` is a bare Mach-O executable embedded at
+    /// `RoamSwitch.app/Contents/MacOS/RoamSwitchMCPServer` — it has no `.app` bundle
+    /// of its own, so `Bundle.main` there carries none of the compiled
+    /// `Localizable.xcstrings` `.lproj` resources (they live in the *enclosing* app's
+    /// `Contents/Resources`), and every `loc(_:)` call from that process silently fell
+    /// back to the raw (Japanese) key regardless of the user's language setting. This
+    /// climbs from the running executable's own path to the nearest ancestor
+    /// directory ending in `.app` and returns a `Bundle` for that instead, which does
+    /// have the real resources. For the main app itself, `Bundle.main` already has
+    /// them directly, so this is a no-op there (the loop below never runs).
+    private static var resourceBundle: Bundle {
+        if Bundle.main.path(forResource: "ja", ofType: "lproj") != nil {
+            return Bundle.main
+        }
+        var dir = Bundle.main.executableURL?.deletingLastPathComponent()
+        for _ in 0..<8 {
+            guard let candidate = dir else { break }
+            if candidate.pathExtension == "app", let appBundle = Bundle(url: candidate) {
+                return appBundle
+            }
+            dir = candidate.pathComponents.count > 1 ? candidate.deletingLastPathComponent() : nil
+        }
+        return Bundle.main
+    }
+
     static var activeBundle: Bundle {
         let code = activeLocaleCode
-        if let path = Bundle.main.path(forResource: code, ofType: "lproj"),
+        if let path = resourceBundle.path(forResource: code, ofType: "lproj"),
            let bundle = Bundle(path: path) {
             return bundle
         }
-        return Bundle.main
+        return resourceBundle
     }
 }
 

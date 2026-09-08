@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.8.8 (build 55).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.0 (build 57).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -47,9 +47,111 @@ public struct MCPPortPayload: Codable, Equatable {
     public let httpHeaders: [String: String]?
 }
 
+public struct MCPActiveVulnScanFindingPayload: Codable, Equatable {
+    public let port: Int
+    public let processName: String
+    public let title: String
+    public let description: String
+    public let recommendation: String
+}
+
+public struct MCPActiveVulnScanResultPayload: Codable, Equatable {
+    public let enabled: Bool
+    public let scannedTargetCount: Int
+    public let findings: [MCPActiveVulnScanFindingPayload]
+    public let message: String
+}
+
+public struct MCPPackageCveFindingPayload: Codable, Equatable {
+    public let cveId: String
+    public let package: String
+    public let installedVersion: String
+    public let cvssScore: Double
+    public let fixedVersion: String
+    public let summary: String
+    public let confidence: String
+}
+
+public struct MCPPackageCveScanResultPayload: Codable, Equatable {
+    public let mapInstalled: Bool
+    public let mapVersion: String
+    public let findings: [MCPPackageCveFindingPayload]
+}
+
+public struct MCPPackageCveLanguageFindingPayload: Codable, Equatable {
+    public let ecosystem: String
+    public let cveId: String
+    public let package: String
+    public let installedVersion: String
+    public let cvssScore: Double
+    public let fixedVersion: String
+    public let summary: String
+}
+
+public struct MCPPackageCveScanLanguagesResultPayload: Codable, Equatable {
+    public let scannedFolderCount: Int
+    public let findings: [MCPPackageCveLanguageFindingPayload]
+}
+
 public struct MCPExposedPortsPayload: Codable, Equatable {
     public let isFirewallShielded: Bool
     public let ports: [MCPPortPayload]
+}
+
+public struct MCPSecretFindingPayload: Codable, Equatable {
+    public let type: String
+    public let lineNumber: Int
+    public let masked: String
+    public let entropy: Double
+    public let filePath: String?
+}
+
+public struct MCPAuditSecretsResultPayload: Codable, Equatable {
+    public let findings: [MCPSecretFindingPayload]
+}
+
+public struct MCPSecurityLogEventPayload: Codable, Equatable {
+    public let timestamp: String
+    public let process: String
+    public let category: String
+    public let severity: String
+    public let message: String
+}
+
+public struct MCPSecurityLogAuditPayload: Codable, Equatable {
+    public let timeWindowHours: Int
+    public let totalEvents: Int
+    public let sudoFailures: Int
+    public let sshAttempts: Int
+    public let gatekeeperBlocks: Int
+    public let xprotectDetections: Int
+    public let isClean: Bool
+    public let events: [MCPSecurityLogEventPayload]
+}
+
+public struct MCPQuarantinedFilePayload: Codable, Equatable {
+    public let originalPath: String
+    public let quarantinedPath: String
+    public let threatName: String
+    public let quarantinedAt: String
+    public let fileSize: Int64
+}
+
+public struct MCPQuarantineStatusPayload: Codable, Equatable {
+    public let quarantineDirectory: String
+    public let files: [MCPQuarantinedFilePayload]
+}
+
+/// `recentIncidentsAvailable` is always `false`: incident history
+/// (`RansomwareCanaryGuard.recentIncidents`) lives only in the running main
+/// app's memory, never persisted to disk, so a separate MCP server process
+/// cannot read it — reporting an empty array instead would misleadingly
+/// read as "confirmed no incidents" rather than "not queryable from here".
+public struct MCPCanaryStatusPayload: Codable, Equatable {
+    public let isEnabled: Bool
+    public let monitoredFilesCount: Int
+    public let expectedFilesCount: Int
+    public let recentIncidentsAvailable: Bool
 }
 
 public struct MCPGuardEntryPayload: Codable, Equatable {

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.8.8 (build 55).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.0 (build 57).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -329,6 +329,34 @@ public struct RoamSwitchKnowledgeBase: Sendable {
                 tags: ["secret", "apikey", "clipboard", "openai", "anthropic", "github", "aws", "zerotelemetry"]
             ),
             KnowledgeItem(
+                id: "feat_secret_leak_audit_tool",
+                topic: "feature",
+                title: "機密情報・APIキー漏洩監査ツール（貼り付け診断 & フォルダ一括スキャン） (1.8.4〜、1.8.9 でフォルダスキャン対応)",
+                summary: "メニューバー →「マルウェア対策」→「機密情報・APIキー漏洩監査」。テキストを貼り付けての即時診断に加え、1.8.9からはフォルダ単位の再帰スキャンにも対応した、オンデマンドの手動監査ツールです。クリップボード監視（feat_secret_leak_auditor）とは別機能で、対象を自分で選んで能動的に監査します。",
+                details: """
+                • テキスト診断: テキストを貼り付けると `SecretLeakAuditor` が即座に走査し、行番号・マスク済み文字列・種別ごとの推奨対応を表示。
+                • フォルダスキャン（1.8.9〜）: 「フォルダを選択してスキャン」から、ソースコードのチェックアウト先などディレクトリを丸ごと再帰的に監査（`auditDirectory(at:)`）。`.git`・`node_modules`・`target`・`vendor`・`dist`・`build`・`__pycache__`・`venv` は自動除外、2MB超・バイナリ判定ファイルもスキップ。
+                • 権限プロンプトの説明（1.8.9〜）: デスクトップ/ダウンロード等の保護フォルダを選ぶと、macOSのアクセス許可プロンプトが出る前に「なぜこのアクセスが必要か」「Zero Telemetryである」ことを説明する初回のみのダイアログを表示。不審なアプリと誤解されるのを防ぐ。
+                • 完全ローカル: 処理は別スレッドで実行されUIをブロックしない。外部への送信は一切発生しない。
+                """,
+                recommendation: "リポジトリのチェックアウト直後や、AIチャットにコードを貼り付ける前の一括チェックに使ってください。",
+                tags: ["secret", "apikey", "folder-scan", "audit", "zerotelemetry", "tcc", "permission"]
+            ),
+            KnowledgeItem(
+                id: "feat_docker_event_guard",
+                topic: "feature",
+                title: "Dockerリスク検知ガード (1.8.9〜、Pro・既定オフ)",
+                summary: "メニューバー →「マルウェア対策」→「Dockerの特権コンテナ・docker.sockマウントを検知」。--privileged起動やdocker.sockのバインドマウントなど、コンテナ脱出につながり得るリスクの高いDocker設定を新規起動の瞬間に検知して通知します。",
+                details: """
+                • 動作: `DockerEventGuard` が20秒ごとに `docker ps -q` で軽量ポーリングし、前回との差分（新規起動コンテナ）だけを `docker inspect --format` で詳細確認。Linux版と同一の判定書式（`DOCKER_INSPECT_RISK_FORMAT`）を使い、両OSで同じ条件を検知。
+                • 通知のみ: 検知しても自動遮断は行わない。リスクの高い「設定」であって確認された侵害ではないため（監視エージェントを意図的にprivilegedで動かす等の正当用途もある）。
+                • 既定オフの理由: Dockerを使わないユーザーが大半のため、Proライセンスでも既定はOFF。
+                • シミュレーション: メニューの「Dockerリスク検知のシミュレーション（動作確認）」からDockerを使わずに通知経路をテスト可能。
+                """,
+                recommendation: "Dockerを開発で使うPro契約者は、コンテナ脱出リスクの早期発見のため有効化を推奨します。",
+                tags: ["docker", "container", "privileged", "docker.sock", "container-escape", "pro", "notify-only"]
+            ),
+            KnowledgeItem(
                 id: "feat_ai_model_guard",
                 topic: "feature",
                 title: "危険なAIモデル形式（Pickle / PyTorch）ダウンロード保護",
@@ -399,6 +427,79 @@ public struct RoamSwitchKnowledgeBase: Sendable {
                 """,
                 recommendation: "高度な自動防護機能や自律巡回を利用したい場合は、Pro版へのアップグレードをご検討ください。",
                 tags: ["license", "pro", "ed25519", "activation", "devices"]
+            ),
+            KnowledgeItem(
+                id: "feat_package_cve_scan",
+                topic: "feature",
+                title: "パッケージCVE照合 (Homebrew + npm/PyPI/crates.io等7エコシステム) (Zero Telemetry)",
+                summary: "インストール済みのHomebrewパッケージと、指定したプロジェクトフォルダ内の依存関係ロックファイルを、ローカルに保持した既知CVEマップと突き合わせます。ネットワーク接続は一切行いません。",
+                details: """
+                • Homebrewスキャン: `brew list --versions` で列挙した各パッケージを、NVDの実CVE APIから生成したformula→CPE対応表と突き合わせ。findingには `confidence` フィールドが付き、「confirmed」（手動検証済みの対応表）と「gray」（未検証のCPEキーワード一致、誤検知の可能性ありと明記）を区別。
+                • 依存関係スキャン（開発者向け・任意）: 追加したプロジェクトフォルダ内のロックファイル（package-lock.json / requirements.txt / Pipfile.lock / poetry.lock / Cargo.lock / Gemfile.lock / composer.lock / go.sum / pom.xml）を解析し、npm・PyPI・crates.io・RubyGems・Packagist・Go・Mavenの7エコシステムの既知CVEマップ（OSV.dev由来、CVSS 7.0以上）と突き合わせ。
+                • データ配信: 各マップは組み込み時は意図的に空のシードで、`PackageCveMapUpdater` が日次で署名済みマニフェストから実データを取得（受信専用・識別子なし）。日次配信が未実行またはOFFの間は「未取得」と表示され、何も検出しない。
+                • MCPツール: `run_package_cve_scan`（Homebrew）と `run_package_cve_scan_languages`（依存関係、`watchedFolders` 引数）の2種。
+                • 完全ローカル完結: パッケージ列挙・バージョン比較・CVE照合すべて端末内で完結し、スキャン自体はネットワーク接続を一切行わない。
+                """,
+                recommendation: "メニューの「📦 パッケージCVE照合 (Homebrew)…」から実行できます。開発中プロジェクトの依存関係も確認したい場合は「依存関係」タブでプロジェクトフォルダを追加してください。",
+                tags: ["cve", "homebrew", "npm", "pypi", "crates.io", "rubygems", "packagist", "go", "maven", "zerotelemetry", "mcp"]
+            ),
+            KnowledgeItem(
+                id: "feat_active_vuln_scan",
+                topic: "feature",
+                title: "実証型脆弱性診断（能動的到達確認） — 既定オフ",
+                summary: "127.0.0.1上で検出されたサービスに対し、認証なしで実際に応答するかを最小限の読み取り専用プローブで確認します。既定でオフ・明示的なオプトインが必要です。",
+                details: """
+                • 対象は127.0.0.1のみ: `ListeningPortMonitor` が検出したこのMac自身のポートのみを対象とし、他ホストへは一切送信しない。
+                • 既知サービスの無認証確認: Redis（PING）・Memcached（stats）・MongoDB（listDatabases、isMaster/helloハンドシェイクは意図的に不使用）に対し、単発・短タイムアウトの非破壊プローブを送信し、認証なしで応答するかを確認。
+                • 汎用開発サーバー診断: 検出されたローカル開発サーバーポートに対し、CORS誤設定（Origin反射+資格情報許可）・パストラバーサル（`../`での`/etc/passwd`読み取り試行）・オープンリダイレクトを診断。
+                • 既知CVEバージョン照合: Redis/Memcachedが無認証確認された場合、そのバージョンを追加の非破壊クエリで取得し、既知CVE（例: Redis CVE-2022-24834、Memcached CVE-2018-1000115）のバージョン範囲とのみ照合。実際のエクスプロイトペイロードは一切送信しない。
+                • オプトイン: `UserDefaults` の `RoamSwitch.ActiveVulnScanEnabled` が明示的にtrueでない限り実行されない。
+                """,
+                recommendation: "自分のMac上で動かしている開発用サーバー（Redis・Docker・ローカルLLM等）が本当に無認証で到達可能かを確認したい場合に有効化してください。他ホストへの診断は行いません。",
+                tags: ["vulnerability", "redis", "memcached", "mongodb", "cors", "cve", "opt-in", "mcp"]
+            ),
+            KnowledgeItem(
+                id: "feat_clickfix_guard",
+                topic: "feature",
+                title: "ClickFix対策 — 不審なTerminalコマンド検知時に自動遮断 (Pro・既定オフ)",
+                summary: "偽CAPTCHA/エラー画面がユーザー自身にコマンドを貼り付けさせて実行させる「ClickFix」手口を、シェル履歴から検知し、検知時にネットワークを緊急遮断します。",
+                details: """
+                • 検知対象: `~/.zsh_history` / `~/.bash_history` を監視し、①`StaticSignatureScanner` と共有するリバースシェル一発コマンドのパターン、②base64デコード結果をシェルや`osascript`に直接パイプする二重迂回パターン、の2種類のみを検知（正規のインストーラーが使う単純な`curl | bash`は意図的に対象外）。
+                • 事後対応の理由: 検知時点でコマンドは既に実行済みだが、多段階ペイロード（二段目のダウンロード・リバースシェル接続・認証情報の持ち出し等）が進行中であれば、即座のネットワーク遮断で被害拡大を止められる。
+                • Gatekeeperをすり抜ける理由: ユーザー自身の正規シェルが入力通りに実行しているだけなので、プロセス自体には不審な点がなく、コード署名検証では検知できない。
+                • 既定オフ: 他の自律遮断ガードと異なり、ネットワーク自動遮断という強い反応を伴う比較的新しいヒューリスティックのため、既定では無効。
+                """,
+                recommendation: "偽エラーページや偽CAPTCHAに騙されてTerminalにコマンドを貼り付けてしまうリスクに備えたい場合は、有効化を検討してください。",
+                tags: ["clickfix", "social-engineering", "terminal", "shell-history", "airgap", "pro", "opt-in"]
+            ),
+            KnowledgeItem(
+                id: "feat_persistence_monitor_guard",
+                topic: "feature",
+                title: "永続化（LaunchAgent/LaunchDaemon）監視",
+                summary: "新規のLaunchAgent/LaunchDaemonインストールをリアルタイム監視し、生のシェル/スクリプトインタープリタを直接起動する不審な設定を検知・通知します。",
+                details: """
+                • 監視対象: `~/Library/LaunchAgents`・`/Library/LaunchAgents`・`/Library/LaunchDaemons` をFSEventsで常時監視（デバウンス約1.5秒）。
+                • 検知ロジック: マルウェアは正規署名済みの`/bin/bash`や`/usr/bin/osascript`自体にコードを埋め込まず「スクリプトとして」実行させるため、インタープリタ自身の署名確認では検知できない。そのため、生インタープリタを直接起動するLaunchAgent/Daemonはインタープリタの署名に関わらず一律で検知対象とし、スクリプト引数を`StaticSignatureScanner`にも通して追加シグナルとする。
+                • 検知のみ（ブロックしない）: EndpointSecurityの`ES_EVENT_TYPE_AUTH_CREATE`エンタイトルメントを取得していないため、plistの書き込み自体は止められない。書き込みから約1.5秒以内に検知し、正規かどうかを判定して通知する設計。
+                • 既定オン: 新規インストール直後から有効。
+                """,
+                recommendation: "見慣れないLaunchAgent/Daemonの通知が来た場合は、内容を確認し不審であれば削除してください。正規のアプリのインストーラーによるものであれば無視して構いません。",
+                tags: ["persistence", "launchagent", "launchdaemon", "fsevents", "malware", "detection-only"]
+            ),
+            KnowledgeItem(
+                id: "feat_runtime_threat_containment",
+                topic: "feature",
+                title: "XProtectのマルウェア検知に連動した自動ネットワーク遮断 (Pro・既定オフ)",
+                summary: "Apple純正のXProtect / XProtect Remediatorが実際にマルウェアを検知（有罪判定）した瞬間、ネットワークを緊急全遮断します。Gatekeeperのブロック（未署名アプリの実行阻止等）だけでは発動しません。",
+                details: """
+                • 信号源: `/usr/bin/log stream --predicate ... --style ndjson` の長時間ストリーム購読（ポーリングではなくブロッキング待機のためアイドル時のCPU負荷はほぼゼロ）でXProtect関連のシステムログを監視。
+                • Gatekeeperとの違い: 未署名アプリの起動阻止など、開発者が自分のビルドを実行する際にも日常的に発生するGatekeeperブロックは通知のみに留め、誤検知によるロックダウンを避ける。XProtectがマルウェアを実際に有罪判定した場合のみ「critical」として扱い、自動遮断する。
+                • 位置づけ: `PortAnomalyGuard`（新規プロセス⇔新規公開ポートのヒューリスティック、狭い範囲でそのポートのみ隔離）や`RansomwareCanaryGuard`（おとりファイルのふるまい検知）とは別の独立した信号源。Apple自身のマルウェアエンジンが実際に検知した、という高信頼度シグナルに反応する。
+                • 分類ロジック共有: 手動実行の「Macセキュリティログ監査」と同じ`SecurityLogAuditor.parseNdjsonLine`を使うため、両者は常に同じ基準でイベントを分類する。
+                • 既定オフ: 他の自律遮断ガード同様にオプトイン。
+                """,
+                recommendation: "Apple純正のマルウェア対策と連動した自動防御を追加したい場合に有効化してください。開発者が未署名の自作アプリを頻繁に実行する環境でも、Gatekeeperブロックだけでは誤発動しません。",
+                tags: ["xprotect", "runtime-threat", "airgap", "malware", "log-stream", "pro", "opt-in"]
             ),
         ]
     }
