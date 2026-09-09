@@ -41,6 +41,8 @@ All files live in `Sources/roamswitch-mcp/`.
 | `LogTemplateAnalyzer.swift` | `RoamSwitch/LogTemplateAnalyzer.swift` |
 | `QuarantineManager.swift` | `RoamSwitch/QuarantineManager.swift` |
 | `CanaryStatusReader.swift` | `RoamSwitch/CanaryStatusReader.swift` |
+| `PortAnomalyStatusReader.swift` | `RoamSwitch/PortAnomalyStatusReader.swift` |
+| `RuntimeThreatStatusReader.swift` | `RoamSwitch/RuntimeThreatStatusReader.swift` |
 
 This is exactly the source set the app compiles into its `RoamSwitchMCPServer` target
 (see `project.yml` in the app repo).
