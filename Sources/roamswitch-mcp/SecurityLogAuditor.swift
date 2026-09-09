@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.4 (build 61).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.5 (build 62).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -109,7 +109,7 @@ final class SecurityLogAuditor {
 
         let baseline = LogTemplateAnalyzer.loadBaseline()
         let (anomalies, updatedKnown) = LogTemplateAnalyzer.analyze(
-            messages: events.map(\.message),
+            messages: events.filter { !Self.isKnownBenignNoise($0) }.map(\.message),
             knownTemplates: baseline.known,
             baselineCaptured: baseline.captured
         )
@@ -178,6 +178,25 @@ final class SecurityLogAuditor {
         // Sort descending by timestamp
         results.sort { $0.timestamp > $1.timestamp }
         return results
+    }
+
+    /// Known-benign noise, excluded from `LogTemplateAnalyzer`'s
+    /// frequency-spike/new-pattern scoring — mirrors
+    /// `is_known_benign_apparmor_denial` / `is_known_benign_suspend_masked_noise`
+    /// in roamswitch-linux's `log_auditor.rs`, which had no equivalent here
+    /// until this gap was flagged by the 2026-09-10 Linux false-positive audit.
+    ///
+    /// A `.gatekeeper` event that `parseNdjsonLine` classified `.info` is a
+    /// *successful* syspolicyd assessment, not a denial — `deny`/`block`/`reject`
+    /// keywords already route to `.warning` above and are never touched here,
+    /// no matter how many occur. Every binary a package manager (Homebrew,
+    /// MacPorts, ...) installs or replaces triggers one of these successful
+    /// assessments, so a single `brew upgrade` touching dozens of formulae can
+    /// legitimately burst near-identical assessment lines in
+    /// `com.apple.security.syspolicy` — the same shape as the Linux snapd/
+    /// suspend-loop false positives, just not yet observed in the wild here.
+    static func isKnownBenignNoise(_ event: SecurityLogEvent) -> Bool {
+        event.category == .gatekeeper && event.severity == .info
     }
 
     /// Not `private`: `RuntimeThreatContainmentManager` shares this exact

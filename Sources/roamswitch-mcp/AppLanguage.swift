@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.4 (build 61).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.5 (build 62).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -124,13 +124,28 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     // into a multi-second-to-frozen UI hang. Keyed by locale code, not
     // invalidated: a given code always resolves to the same on-disk bundle for
     // the life of the process, so stale entries aren't possible.
+    //
+    // `loc(_:)` is called from background queues too (e.g. `PortSecurityAuditor`'s
+    // completion handler) as well as the main thread, so this cache must be
+    // synchronized: a plain, unguarded `[String: Bundle]` mutated from two
+    // threads at once corrupts Swift's Dictionary storage — observed in
+    // practice as a crash inside the Dictionary setter with an unrelated
+    // "-[__NSCFNumber count]: unrecognized selector" exception (classic
+    // symptom of concurrent-mutation heap corruption, not an actual NSNumber
+    // bug). The lock is held only around the dictionary access itself, not
+    // the `Bundle(path:)` construction, so a rare concurrent cache-miss on
+    // the same locale just redoes that (idempotent, harmless) work once.
+    private static let activeBundleCacheLock = NSLock()
     private static var activeBundleCache: [String: Bundle] = [:]
 
     static var activeBundle: Bundle {
         let code = activeLocaleCode
-        if let cached = activeBundleCache[code] {
-            return cached
-        }
+
+        activeBundleCacheLock.lock()
+        let cached = activeBundleCache[code]
+        activeBundleCacheLock.unlock()
+        if let cached { return cached }
+
         let resolved: Bundle
         if let path = resourceBundle.path(forResource: code, ofType: "lproj"),
            let bundle = Bundle(path: path) {
@@ -138,7 +153,10 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         } else {
             resolved = resourceBundle
         }
+
+        activeBundleCacheLock.lock()
         activeBundleCache[code] = resolved
+        activeBundleCacheLock.unlock()
         return resolved
     }
 }

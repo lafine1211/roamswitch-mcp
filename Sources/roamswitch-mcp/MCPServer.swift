@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.4 (build 61).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.5 (build 62).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -235,7 +235,7 @@ enum MCPServer {
         let ip = GatewayFingerprint.currentGatewayIPAddress()
         let mac = GatewayFingerprint.currentGatewayMACAddress()
         let wifi = WiFiSecurityMonitor.shared.checkCurrentWiFi()
-        let arp = arpMonitor.inspectGateway(currentIP: ip, currentMAC: mac)
+        let arp = arpMonitor.inspectGateway(currentIP: ip, currentMAC: mac, currentSSID: wifi.ssid)
         let ports = ListeningPortMonitor.shared.scanListeningPorts()
         let level = MCPResponseFormatting.resolveActiveSecurityLevel(gatewayMAC: mac, defaults: sharedDefaults)
         let report = SecurityHealthChecker.shared.generateComprehensiveReport(
