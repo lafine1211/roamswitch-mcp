@@ -1,12 +1,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.2 (build 59).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.3 (build 60).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
 // ─────────────────────────────────────────────────────────────────────────────
 import Foundation
 
-public enum LogEventCategory: String, CaseIterable, Identifiable {
+public enum LogEventCategory: String, CaseIterable, Identifiable, Codable {
     case all
     case sudo
     case ssh
@@ -39,7 +39,7 @@ public enum LogEventCategory: String, CaseIterable, Identifiable {
     }
 }
 
-public enum LogEventSeverity: String {
+public enum LogEventSeverity: String, Codable {
     case info
     case warning
     case critical
@@ -53,7 +53,7 @@ public enum LogEventSeverity: String {
     }
 }
 
-public struct SecurityLogEvent: Identifiable, Equatable {
+public struct SecurityLogEvent: Identifiable, Equatable, Codable {
     public let id = UUID()
     public let timestamp: Date
     public let process: String

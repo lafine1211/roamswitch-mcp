@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.2 (build 59).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.3 (build 60).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -152,16 +152,61 @@ public struct MCPQuarantineStatusPayload: Codable, Equatable {
     public let files: [MCPQuarantinedFilePayload]
 }
 
-/// `recentIncidentsAvailable` is always `false`: incident history
-/// (`RansomwareCanaryGuard.recentIncidents`) lives only in the running main
-/// app's memory, never persisted to disk, so a separate MCP server process
-/// cannot read it — reporting an empty array instead would misleadingly
-/// read as "confirmed no incidents" rather than "not queryable from here".
+public struct MCPCanaryIncidentPayload: Codable, Equatable {
+    public let timestamp: String
+    public let fileName: String
+    public let detectedAction: String
+    public let suspectedProcess: String?
+    public let affectedFilePaths: [String]
+}
+
+/// `recentIncidentsAvailable` used to be hardcoded `false`: incident history
+/// (`RansomwareCanaryGuard.recentIncidents`) only ever lived in the running
+/// main app's memory, never persisted to disk, so a separate MCP server
+/// process couldn't read it. `RansomwareCanaryGuard` now also persists a
+/// capped incident log to the shared UserDefaults suite
+/// (`CanaryStatusReader.persistedIncidents(defaults:)`), so this is `true`
+/// whenever the guard has ever run, and `recentIncidents` carries the
+/// actual history.
 public struct MCPCanaryStatusPayload: Codable, Equatable {
     public let isEnabled: Bool
     public let monitoredFilesCount: Int
     public let expectedFilesCount: Int
     public let recentIncidentsAvailable: Bool
+    public let recentIncidents: [MCPCanaryIncidentPayload]
+}
+
+public struct MCPPortAnomalyIncidentPayload: Codable, Equatable {
+    public let timestamp: String
+    public let port: Int
+    public let processName: String
+    public let pid: Int
+    public let executablePath: String?
+}
+
+public struct MCPPortAnomalyIncidentsPayload: Codable, Equatable {
+    public let isEnabled: Bool
+    public let baselineCaptured: Bool
+    public let autoIsolatedPorts: [Int]
+    public let incidents: [MCPPortAnomalyIncidentPayload]
+}
+
+public struct MCPRuntimeThreatIncidentPayload: Codable, Equatable {
+    public let timestamp: String
+    public let process: String
+    public let category: String
+    public let severity: String
+    public let message: String
+}
+
+/// Mac equivalent of the Linux eBPF Runtime Guard's status/incident MCP
+/// tool — scoped to a single latest incident, not a history array, matching
+/// `RuntimeThreatContainmentManager`'s own single-`lastIncident` design.
+public struct MCPRuntimeThreatStatusPayload: Codable, Equatable {
+    public let isEnabled: Bool
+    public let isIsolated: Bool
+    public let lastContainmentDate: String?
+    public let lastIncident: MCPRuntimeThreatIncidentPayload?
 }
 
 public struct MCPGuardEntryPayload: Codable, Equatable {
@@ -195,6 +240,7 @@ public enum MCPResponseFormatting {
     static let bluetoothGuardKey = "RoamSwitch.BluetoothGuardEnabled"
     static let webMailDownloadGuardKey = "RoamSwitch.WebMailDownloadGuardEnabled"
     static let dnsThreatGuardKey = "RoamSwitch.DNSThreatGuardEnabled"
+    static let runtimeThreatContainmentKey = "RoamSwitch.RuntimeThreatContainmentEnabled"
 
     // MARK: get_security_report
 
@@ -319,6 +365,7 @@ public enum MCPResponseFormatting {
                 MCPGuardEntryPayload(key: "bluetoothGuard", enabledInSettings: defaults.bool(forKey: bluetoothGuardKey)),
                 MCPGuardEntryPayload(key: "webMailDownloadGuard", enabledInSettings: defaults.object(forKey: webMailDownloadGuardKey) == nil ? true : defaults.bool(forKey: webMailDownloadGuardKey)),
                 MCPGuardEntryPayload(key: "dnsThreatGuard", enabledInSettings: defaults.object(forKey: dnsThreatGuardKey) == nil ? true : defaults.bool(forKey: dnsThreatGuardKey)),
+                MCPGuardEntryPayload(key: "runtimeThreatContainment", enabledInSettings: defaults.bool(forKey: runtimeThreatContainmentKey)),
             ],
             caveats: [
                 loc("各ガードの実際の有効性はRoamSwitch Pro版のライセンス状態にも依存しますが、このツールは別プロセスのためライセンス状態を正確に確認できません。上記はSettingsのトグル状態のみを示しています。")

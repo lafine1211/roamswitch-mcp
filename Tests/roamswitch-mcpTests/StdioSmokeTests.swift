@@ -61,7 +61,8 @@ final class StdioSmokeTests: XCTestCase {
                         "audit_url_safety", "get_app_help", "run_active_vuln_scan",
                         "run_package_cve_scan", "run_package_cve_scan_languages",
                         "audit_secrets", "audit_security_logs", "get_quarantine_status",
-                        "get_canary_status"])
+                        "get_canary_status", "get_port_anomaly_incidents",
+                        "get_runtime_threat_status"])
     }
 
     func testAuditURLSafety_flagsPhishing_offline() throws {

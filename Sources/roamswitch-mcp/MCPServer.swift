@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.2 (build 59).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.3 (build 60).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -195,6 +195,10 @@ enum MCPServer {
                 return [result(id: id, callGetQuarantineStatus())]
             case "get_canary_status":
                 return [result(id: id, callGetCanaryStatus())]
+            case "get_port_anomaly_incidents":
+                return [result(id: id, callGetPortAnomalyIncidents())]
+            case "get_runtime_threat_status":
+                return [result(id: id, callGetRuntimeThreatStatus())]
             default:
                 return [error(id: id, code: -32602, message: "Unknown tool: \(name)")]
             }
@@ -462,15 +466,77 @@ enum MCPServer {
     }
 
     /// SENDS NO NETWORK REQUESTS AT ALL — reads local UserDefaults + disk
-    /// state only. See `CanaryStatusReader`'s doc comment for why incident
-    /// history isn't included.
+    /// state only.
     private static func callGetCanaryStatus() -> [String: Any] {
         let status = CanaryStatusReader.currentStatus(defaults: sharedDefaults)
+        let incidents = CanaryStatusReader.persistedIncidents(defaults: sharedDefaults)
+        let iso = ISO8601DateFormatter()
         let payload = MCPCanaryStatusPayload(
             isEnabled: status.isEnabled,
             monitoredFilesCount: status.monitoredFilesCount,
             expectedFilesCount: status.expectedFilesCount,
-            recentIncidentsAvailable: false
+            recentIncidentsAvailable: !incidents.isEmpty,
+            recentIncidents: incidents.map {
+                MCPCanaryIncidentPayload(
+                    timestamp: iso.string(from: $0.timestamp),
+                    fileName: $0.fileName,
+                    detectedAction: $0.detectedAction,
+                    suspectedProcess: $0.suspectedProcess,
+                    affectedFilePaths: $0.affectedFilePaths
+                )
+            }
+        )
+        return textContentResult(payload)
+    }
+
+    /// SENDS NO NETWORK REQUESTS AT ALL — reads local UserDefaults state
+    /// only. `PortAnomalyGuard` is Pro-only, but the read itself doesn't
+    /// gate on license status — an unlicensed install simply has an empty,
+    /// disabled history, same as any other guard's status tool.
+    private static func callGetPortAnomalyIncidents() -> [String: Any] {
+        let status = PortAnomalyStatusReader.currentStatus(defaults: sharedDefaults)
+        let incidents = PortAnomalyStatusReader.persistedIncidents(defaults: sharedDefaults)
+        let iso = ISO8601DateFormatter()
+        let payload = MCPPortAnomalyIncidentsPayload(
+            isEnabled: status.isEnabled,
+            baselineCaptured: status.baselineCaptured,
+            autoIsolatedPorts: status.autoIsolatedPorts,
+            incidents: incidents.map {
+                MCPPortAnomalyIncidentPayload(
+                    timestamp: iso.string(from: $0.timestamp),
+                    port: $0.port,
+                    processName: $0.processName,
+                    pid: $0.pid,
+                    executablePath: $0.executablePath
+                )
+            }
+        )
+        return textContentResult(payload)
+    }
+
+    /// SENDS NO NETWORK REQUESTS AT ALL — reads local UserDefaults state
+    /// only. Mac equivalent of the Linux eBPF Runtime Guard's incident tool
+    /// — Apple XProtect's own malware engine convicting a file is the
+    /// trigger, not raw exec interception (this app has no EndpointSecurity
+    /// entitlement). Air-Gap network isolation, when active, is itself the
+    /// reason a cloud-AI MCP client would be unreachable — this tool is
+    /// meant to be queried by a *local* LLM during exactly that cutoff.
+    private static func callGetRuntimeThreatStatus() -> [String: Any] {
+        let status = RuntimeThreatStatusReader.currentStatus(defaults: sharedDefaults)
+        let iso = ISO8601DateFormatter()
+        let payload = MCPRuntimeThreatStatusPayload(
+            isEnabled: status.isEnabled,
+            isIsolated: status.isIsolated,
+            lastContainmentDate: status.lastContainmentDate.map { iso.string(from: $0) },
+            lastIncident: status.lastIncident.map {
+                MCPRuntimeThreatIncidentPayload(
+                    timestamp: iso.string(from: $0.timestamp),
+                    process: $0.process,
+                    category: $0.category.rawValue,
+                    severity: $0.severity.rawValue,
+                    message: $0.message
+                )
+            }
         )
         return textContentResult(payload)
     }
@@ -580,12 +646,22 @@ enum MCPServer {
         ],
         [
             "name": "get_canary_status",
-            "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only local UserDefaults and disk state. Returns whether the Ransomware Canary Guard (Pro) is enabled and how many of its decoy bait files currently exist on disk (out of the expected set). Does NOT include recent-incident history: that only lives in the main RoamSwitch app process's memory and is never persisted to disk, so a separate MCP server process cannot read it — `recentIncidentsAvailable` is always false, not an empty-means-clean signal.",
+            "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only local UserDefaults and disk state. Returns whether the Ransomware Canary Guard (Pro) is enabled, how many of its decoy bait files currently exist on disk (out of the expected set), and up to the 50 most recent detected incidents (each with timestamp, bait file name, detected action such as deletion/rename/tampering, suspected process if known, and any real user files that may also have been touched). Use this to answer 'has ransomware-like activity been detected on this Mac' — including during an Air-Gap network cutoff, since it reads local state only.",
+            "inputSchema": ["type": "object", "properties": [String: Any]()],
+        ],
+        [
+            "name": "get_port_anomaly_incidents",
+            "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only local UserDefaults state. Returns whether the Port Anomaly Guard (Pro) is enabled, whether it has captured its baseline of known listening executables yet, which ports are currently auto-isolated from the LAN, and up to the 50 most recent detected incidents (each with timestamp, port, process name, PID, and executable path) — i.e. previously-unseen executables that suddenly started listening on an externally-exposed port and were auto-blocked. Use this to answer 'what triggered a port auto-block' or to triage a possible backdoor/C2 listener, including during an Air-Gap network cutoff.",
+            "inputSchema": ["type": "object", "properties": [String: Any]()],
+        ],
+        [
+            "name": "get_runtime_threat_status",
+            "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only local UserDefaults state. Returns whether the Runtime Threat Containment guard (Pro) is enabled, whether this Mac is currently network-isolated (Air-Gapped) because of it, and the single most recent malware incident that triggered containment (timestamp, source process, category, severity, and Apple's detection message) — this guard fires when Apple's own XProtect malware engine actually convicts a file, and automatically air-gaps the network to limit damage. If an Air-Gap is currently active, this is one of the first tools to check to understand why — including from a local LLM during the network cutoff itself, since cloud AI clients are also severed at that point.",
             "inputSchema": ["type": "object", "properties": [String: Any]()],
         ],
         [
             "name": "get_guard_status",
-            "description": "Reports whether RoamSwitch's optional Pro-tier auto-response guards (port anomaly auto-block, ARP spoofing auto-containment, USB storage auto-eject, Bluetooth guard, Web/Mail download guard with AI Pickle model protection, DNS threat guard) are turned on in Settings, plus the currently active security level and trusted-network status. Use this to answer 'are my automatic protections turned on'.",
+            "description": "Reports whether RoamSwitch's optional Pro-tier auto-response guards (port anomaly auto-block, ARP spoofing auto-containment, USB keyboard/storage auto-eject, Bluetooth guard, Web/Mail download guard with AI Pickle model protection, DNS threat guard, runtime threat containment / XProtect Air-Gap) are turned on in Settings, plus the currently active security level and trusted-network status. Use this to answer 'are my automatic protections turned on'.",
             "inputSchema": ["type": "object", "properties": [String: Any]()],
         ],
         [

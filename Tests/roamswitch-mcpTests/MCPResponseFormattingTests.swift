@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.9.2 (build 59). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.9.3 (build 60). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -93,7 +93,7 @@ final class MCPResponseFormattingTests: XCTestCase {
         defaults.set(false, forKey: MCPResponseFormatting.dnsThreatGuardKey)
         let payload = MCPResponseFormatting.makeGuardStatusPayload(gatewayMAC: nil, defaults: defaults)
 
-        XCTAssertEqual(payload.guards.count, 7)
+        XCTAssertEqual(payload.guards.count, 8)
         XCTAssertTrue(payload.guards.allSatisfy { !$0.enabledInSettings })
         XCTAssertFalse(payload.caveats.isEmpty)
     }
