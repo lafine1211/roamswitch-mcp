@@ -32,6 +32,15 @@ All files live in `Sources/roamswitch-mcp/`.
 | `MCPResponseFormatting.swift` | `RoamSwitch/MCPResponseFormatting.swift` |
 | `MCPProtocol.swift` | `RoamSwitch/MCPProtocol.swift` |
 | `MCPServer.swift` | `RoamSwitch/MCPServer.swift` |
+| `PackageCveScan.swift` | `RoamSwitch/PackageCveScan.swift` |
+| `PackageCveMapData.swift` | `RoamSwitch/PackageCveMapData.swift` |
+| `PackageCveScanLanguages.swift` | `RoamSwitch/PackageCveScanLanguages.swift` |
+| `PackageCveMapLanguagesData.swift` | `RoamSwitch/PackageCveMapLanguagesData.swift` |
+| `SecretLeakScanning.swift` | `RoamSwitch/SecretLeakScanning.swift` |
+| `SecurityLogAuditor.swift` | `RoamSwitch/SecurityLogAuditor.swift` |
+| `LogTemplateAnalyzer.swift` | `RoamSwitch/LogTemplateAnalyzer.swift` |
+| `QuarantineManager.swift` | `RoamSwitch/QuarantineManager.swift` |
+| `CanaryStatusReader.swift` | `RoamSwitch/CanaryStatusReader.swift` |
 
 This is exactly the source set the app compiles into its `RoamSwitchMCPServer` target
 (see `project.yml` in the app repo).

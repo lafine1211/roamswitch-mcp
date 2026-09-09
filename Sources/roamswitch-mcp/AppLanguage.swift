@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.1 (build 58).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.2 (build 59).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -117,13 +117,29 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         return Bundle.main
     }
 
+    // `Bundle(path:)` re-parses Info.plist and rescans resources on every call —
+    // cheap once, but `loc(_:)` (below) is called per-row in views like
+    // SecurityLogAuditView's event list, where thousands of rows each call it
+    // several times; without this cache that reconstruction cost multiplies
+    // into a multi-second-to-frozen UI hang. Keyed by locale code, not
+    // invalidated: a given code always resolves to the same on-disk bundle for
+    // the life of the process, so stale entries aren't possible.
+    private static var activeBundleCache: [String: Bundle] = [:]
+
     static var activeBundle: Bundle {
         let code = activeLocaleCode
+        if let cached = activeBundleCache[code] {
+            return cached
+        }
+        let resolved: Bundle
         if let path = resourceBundle.path(forResource: code, ofType: "lproj"),
            let bundle = Bundle(path: path) {
-            return bundle
+            resolved = bundle
+        } else {
+            resolved = resourceBundle
         }
-        return resourceBundle
+        activeBundleCache[code] = resolved
+        return resolved
     }
 }
 

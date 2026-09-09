@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.1 (build 58).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.2 (build 59).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -182,6 +182,28 @@ public enum SecretLeakScanning {
             results.append(contentsOf: auditText(text, filePath: url.path))
         }
         return results
+    }
+
+    /// Scans arbitrary text and returns a copy with every detected secret
+    /// replaced by its masked form (`maskSecret`). Unlike `auditText`, this
+    /// returns the redacted text itself rather than a findings list, for
+    /// callers that hand raw text to an external party — e.g. copying a log
+    /// audit report to the clipboard for the user to paste into an AI chat.
+    public static func redact(_ text: String) -> String {
+        var result = text
+        for (pattern, _) in patterns {
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+            let range = NSRange(result.startIndex..<result.endIndex, in: result)
+            let matches = regex.matches(in: result, options: [], range: range)
+            // Replace back-to-front so earlier matches' ranges stay valid
+            // against `result` as later ones are rewritten.
+            for match in matches.reversed() {
+                guard let matchRange = Range(match.range, in: result) else { continue }
+                let matched = String(result[matchRange])
+                result.replaceSubrange(matchRange, with: maskSecret(matched))
+            }
+        }
+        return result
     }
 
     private static func maskSecret(_ secret: String) -> String {

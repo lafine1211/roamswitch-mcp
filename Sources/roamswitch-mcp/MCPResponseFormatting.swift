@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.1 (build 58).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.2 (build 59).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -26,6 +26,7 @@ public struct MCPSecurityReportPayload: Codable, Equatable {
     public let passedChecks: Int
     public let items: [MCPSecurityAuditItemPayload]
     public let caveats: [String]
+    public let timestamp: String
 }
 
 public struct MCPPortFindingPayload: Codable, Equatable {
@@ -118,6 +119,14 @@ public struct MCPSecurityLogEventPayload: Codable, Equatable {
     public let message: String
 }
 
+public struct MCPTemplateAnomalyPayload: Codable, Equatable {
+    public let template: String
+    public let example: String
+    public let count: Int
+    public let zScore: Double
+    public let isNew: Bool
+}
+
 public struct MCPSecurityLogAuditPayload: Codable, Equatable {
     public let timeWindowHours: Int
     public let totalEvents: Int
@@ -127,6 +136,7 @@ public struct MCPSecurityLogAuditPayload: Codable, Equatable {
     public let xprotectDetections: Int
     public let isClean: Bool
     public let events: [MCPSecurityLogEventPayload]
+    public let templateAnomalies: [MCPTemplateAnomalyPayload]
 }
 
 public struct MCPQuarantinedFilePayload: Codable, Equatable {
@@ -219,7 +229,8 @@ public enum MCPResponseFormatting {
                     isApplicable: $0.isApplicable
                 )
             },
-            caveats: caveats
+            caveats: caveats,
+            timestamp: ISO8601DateFormatter().string(from: report.timestamp)
         )
     }
 

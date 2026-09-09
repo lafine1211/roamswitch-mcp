@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.1 (build 58).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.2 (build 59).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -71,6 +71,7 @@ public struct SecurityLogAuditReport: Equatable {
     public let gatekeeperBlocks: Int
     public let xprotectDetections: Int
     public let events: [SecurityLogEvent]
+    public let templateAnomalies: [LogTemplateAnomaly]
 
     public var isClean: Bool {
         sudoFailures == 0 && gatekeeperBlocks == 0 && xprotectDetections == 0
@@ -106,6 +107,14 @@ final class SecurityLogAuditor {
         let gkBlocks = events.filter { $0.category == .gatekeeper && $0.severity != .info }.count
         let xpCount = events.filter { $0.category == .xprotect && $0.severity != .info }.count
 
+        let baseline = LogTemplateAnalyzer.loadBaseline()
+        let (anomalies, updatedKnown) = LogTemplateAnalyzer.analyze(
+            messages: events.map(\.message),
+            knownTemplates: baseline.known,
+            baselineCaptured: baseline.captured
+        )
+        LogTemplateAnalyzer.saveBaseline(known: updatedKnown)
+
         return SecurityLogAuditReport(
             auditDate: Date(),
             timeWindowHours: timeWindowHours,
@@ -114,7 +123,8 @@ final class SecurityLogAuditor {
             sshAttempts: sshCount,
             gatekeeperBlocks: gkBlocks,
             xprotectDetections: xpCount,
-            events: events
+            events: events,
+            templateAnomalies: anomalies
         )
     }
 
@@ -245,12 +255,17 @@ final class SecurityLogAuditor {
             return nil
         }
 
+        // Redacted here — the single construction site for every
+        // SecurityLogEvent — so the GUI table, the AI-consultation prompt,
+        // the "copy report" clipboard flow, and the MCP JSON payload all see
+        // a masked `message` with no separate redaction pass needed at each
+        // of those call sites.
         return SecurityLogEvent(
             timestamp: date,
             process: procName,
             category: category,
             severity: severity,
-            message: msg
+            message: SecretLeakScanning.redact(msg)
         )
     }
 }
