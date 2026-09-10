@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.8 (build 65).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.9 (build 66).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -195,6 +195,8 @@ enum MCPServer {
                 return [result(id: id, callGetQuarantineStatus())]
             case "get_canary_status":
                 return [result(id: id, callGetCanaryStatus())]
+            case "get_notification_history":
+                return [result(id: id, callGetNotificationHistory())]
             case "get_port_anomaly_incidents":
                 return [result(id: id, callGetPortAnomalyIncidents())]
             case "get_runtime_threat_status":
@@ -465,6 +467,11 @@ enum MCPServer {
         return textContentResult(payload)
     }
 
+    /// SENDS NO NETWORK REQUESTS AT ALL — reads local UserDefaults only.
+    private static func callGetNotificationHistory() -> [String: Any] {
+        textContentResult(MCPNotificationHistoryPayload(notifications: NotificationHistory.load()))
+    }
+
     /// SENDS NO NETWORK REQUESTS AT ALL — reads local UserDefaults + disk
     /// state only.
     private static func callGetCanaryStatus() -> [String: Any] {
@@ -642,6 +649,11 @@ enum MCPServer {
         [
             "name": "get_quarantine_status",
             "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only a local metadata file. Returns the malware quarantine vault's contents: each quarantined file's original path, the threat name ClamAV detected, when it was quarantined, and its size. Files are moved here (never deleted) by the Web/Mail download guard and on-demand ClamAV scans.",
+            "inputSchema": ["type": "object", "properties": [String: Any]()],
+        ],
+        [
+            "name": "get_notification_history",
+            "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only local UserDefaults state. Returns every notification RoamSwitch has sent over the past 7 days (timestamp, title, body), most recent first — real-time threat alerts (sendThreatAlert, e.g. the ClickFix clipboard guard, secret-leak detection, canary/port-anomaly/runtime-threat incidents) and Link Guard connection events. Use this to review what fired while the user wasn't watching, instead of relying on them to transcribe a live banner.",
             "inputSchema": ["type": "object", "properties": [String: Any]()],
         ],
         [

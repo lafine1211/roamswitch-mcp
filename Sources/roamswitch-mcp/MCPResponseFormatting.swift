@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.8 (build 65).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.9 (build 66).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -174,6 +174,15 @@ public struct MCPCanaryStatusPayload: Codable, Equatable {
     public let expectedFilesCount: Int
     public let recentIncidentsAvailable: Bool
     public let recentIncidents: [MCPCanaryIncidentPayload]
+}
+
+/// The history of notifications RoamSwitch has sent over the past 7 days,
+/// most recent first — `NotificationHistoryEntry` mirrors
+/// `roamswitch_core::notification_history::NotificationHistoryEntry` in the
+/// Linux edition, and this wrapper matches that edition's MCP tool response
+/// shape (`{"notifications": [...]}`).
+public struct MCPNotificationHistoryPayload: Codable, Equatable {
+    public let notifications: [NotificationHistoryEntry]
 }
 
 public struct MCPPortAnomalyIncidentPayload: Codable, Equatable {

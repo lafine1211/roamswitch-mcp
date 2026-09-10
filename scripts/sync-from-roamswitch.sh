@@ -35,7 +35,7 @@ CORE=(AppLanguage TrustedNetwork GatewayFingerprint WiFiSecurityMonitor \
       LinkSafetyAuditor RoamSwitchKnowledgeBase MCPResponseFormatting MCPProtocol MCPServer \
       PackageCveScan PackageCveMapData PackageCveScanLanguages PackageCveMapLanguagesData \
       SecretLeakScanning SecurityLogAuditor LogTemplateAnalyzer QuarantineManager CanaryStatusReader \
-      PortAnomalyStatusReader RuntimeThreatStatusReader)
+      PortAnomalyStatusReader RuntimeThreatStatusReader NotificationHistory)
 
 # App test files that only exercise types present in this repo. Their
 # `@testable import RoamSwitch` is rewritten to this package's module name.
