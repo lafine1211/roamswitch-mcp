@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.19 (build 76).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.21 (build 78).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -60,6 +60,23 @@ public struct SecurityLogEvent: Identifiable, Equatable, Codable {
     public let category: LogEventCategory
     public let severity: LogEventSeverity
     public let message: String
+    /// The unified log `subsystem` field (e.g. `"com.apple.wallpaper"`) —
+    /// set by the logging process itself, not attacker-influenced content,
+    /// same provenance argument as `process`. Kept alongside `message`
+    /// (rather than folded into it) so `isKnownBenignNoise` can exclude an
+    /// entire Apple-owned subsystem structurally instead of enumerating its
+    /// individual message text. Defaults to `""` for the handful of
+    /// synthetic/test events that have no real unified-log entry behind them.
+    public let subsystem: String
+
+    public init(timestamp: Date, process: String, category: LogEventCategory, severity: LogEventSeverity, message: String, subsystem: String = "") {
+        self.timestamp = timestamp
+        self.process = process
+        self.category = category
+        self.severity = severity
+        self.message = message
+        self.subsystem = subsystem
+    }
 }
 
 public struct SecurityLogAuditReport: Equatable {
@@ -229,7 +246,80 @@ final class SecurityLogAuditor {
             || isKnownBenignPasteboardConnectionNoise(event.message)
             || isKnownBenignCoreAudioHalNoise(event.message)
             || isKnownBenignApplicationCoalitionStateNoise(event.message)
+            || isKnownBenignAppleRenderingFrameworkNoise(event.subsystem)
+            || isKnownBenignSleepWakePowerNoise(event.message, subsystem: event.subsystem)
+            || isKnownBenignLockscreenStatusWidgetNoise(event.message, subsystem: event.subsystem)
     }
+
+    /// Known-benign sleep/wake/display-power lifecycle tracing —
+    /// `com.apple.loginwindow.logging` is *not* a safe subsystem to exclude
+    /// wholesale (it also carries `LWAuthServiceManager`/`LWDefaultScreenLockUI`,
+    /// which are exactly the authentication/unlock-domain classes that must
+    /// stay fully monitored), so this is scoped to a bounded set of specific
+    /// power-lifecycle function-name prefixes plus the `ScreenSaverDaemon`
+    /// class (idle-timer scheduling, not authentication — distinct from the
+    /// screen-lock UI classes). Found 2026-09-11 live: `SleepWakeCallback_
+    /// block_invoke` and a `ScreenSaverDaemon`-adjacent battery/Wi-Fi widget
+    /// trace (see `isKnownBenignLockscreenStatusWidgetNoise`) were 3 of 10
+    /// "new pattern" hits in one alert, both purely internal power-state
+    /// bookkeeping.
+    private static let benignPowerLifecyclePrefixes: [String] = [
+        "SleepWakeCallback", "RegisterSleepWakeCallback",
+        "LWDisplayDidWakeCallback", "LWDisplayWillSleepCallback",
+        "PMDisplaySleepIsBlocked", "determineWakeIntervals", "logWakeIntervals",
+        "-[ScreenSaverDaemon ",
+    ]
+    private static func isKnownBenignSleepWakePowerNoise(_ message: String, subsystem: String) -> Bool {
+        guard subsystem == "com.apple.loginwindow.logging" else { return false }
+        return benignPowerLifecyclePrefixes.contains { message.hasPrefix($0) }
+    }
+
+    /// Known-benign lock-screen status-bar widget lifecycle tracing (the
+    /// Wi-Fi/Battery icons shown on the lock screen): loginwindow logs
+    /// `"<numeric id>: <Class> <method> <pointer?>"` for each of these
+    /// widgets' view-lifecycle events (`viewDidLoad`, `pause`, `_resume`,
+    /// `dealloc`, `_updateStatus`, ...) — the same generic, non-security
+    /// widget-lifecycle tracing convention `isKnownBenignApplicationCoalitionStateNoise`
+    /// already excludes for `Application`/`ApplicationManager`, just a
+    /// numeric-ID-prefixed variant instead of `-[Class selector:]`. Content
+    /// is limited to class/method names and pointers — no network name,
+    /// battery percentage, or other security-relevant detail is present.
+    /// Scoped to `com.apple.loginwindow`'s `dflt` category, where a live
+    /// 6-hour sample on this Mac was *entirely* this pattern. Found
+    /// 2026-09-11 live: "150766294: Battery pause 0xbb1346120".
+    private static let lockscreenStatusWidgetRegex = try! NSRegularExpression(pattern: #"^\d+: (WiFi|Battery|Status|UIController) "#)
+    private static func isKnownBenignLockscreenStatusWidgetNoise(_ message: String, subsystem: String) -> Bool {
+        guard subsystem == "com.apple.loginwindow" else { return false }
+        let range = NSRange(message.startIndex..., in: message)
+        return lockscreenStatusWidgetRegex.firstMatch(in: message, range: range) != nil
+    }
+
+    /// Known-benign rendering-framework internal diagnostics, excluded by
+    /// `subsystem` identity rather than by message text — the unified log's
+    /// `subsystem` field is set by the logging process itself, the same
+    /// forgery-resistance property `process` has, so this is a provenance
+    /// check, not a keyword guess. `loginwindow` hosts the lock-screen/
+    /// wallpaper rendering pipeline, which drives three purely-graphical
+    /// Apple frameworks with zero security semantics at any frequency:
+    /// `com.apple.wallpaper` (wallpaper crossfade, logs an incrementing
+    /// "Release Assertion N" per frame), `com.apple.coreanimation`
+    /// ("CAMetalLayer ignoring invalid setDrawableSize ..." while a
+    /// transitional layer is momentarily zero-sized), and
+    /// `com.apple.avatarkit` (Memoji/wallpaper avatar rendering, "Error
+    /// while writing subdiv data: <private>"). Found 2026-09-11 live on this
+    /// Mac: a single wallpaper transition burst ~10-15 of these lines within
+    /// the same millisecond, all flagged as a frequency spike even though
+    /// the digit-masking fix already collapsed each into one template —
+    /// three unrelated message shapes from one non-security cause, exactly
+    /// the case a subsystem-identity rule handles in one place instead of
+    /// enumerating each message text individually.
+    private static func isKnownBenignAppleRenderingFrameworkNoise(_ subsystem: String) -> Bool {
+        benignRenderingSubsystems.contains(subsystem)
+    }
+
+    private static let benignRenderingSubsystems: Set<String> = [
+        "com.apple.wallpaper", "com.apple.coreanimation", "com.apple.avatarkit",
+    ]
 
     /// Excludes *every* method-trace line loginwindow logs from its own
     /// `Application`/`ApplicationManager` objects, regardless of selector —
@@ -335,6 +425,7 @@ final class SecurityLogAuditor {
         let procName = URL(fileURLWithPath: process).lastPathComponent
         let msg = json["eventMessage"] as? String ?? ""
         guard !msg.isEmpty else { return nil }
+        let subsystem = json["subsystem"] as? String ?? ""
 
         let timestampStr = json["timestamp"] as? String ?? ""
         let date: Date = {
@@ -406,7 +497,8 @@ final class SecurityLogAuditor {
             process: procName,
             category: category,
             severity: severity,
-            message: SecretLeakScanning.redact(msg)
+            message: SecretLeakScanning.redact(msg),
+            subsystem: subsystem
         )
     }
 }
