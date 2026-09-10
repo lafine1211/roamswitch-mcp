@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.14 (build 71).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.15 (build 72).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -226,6 +226,18 @@ final class SecurityLogAuditor {
         (event.category == .gatekeeper && event.severity == .info)
             || isKnownBenignFirstResponderKvoNoise(event.message)
             || isKnownBenignLoginLogoutRelaunchNoise(event.message)
+            || isKnownBenignPasteboardConnectionNoise(event.message)
+    }
+
+    /// Known-benign pasteboard-server hiccup: `CFPasteboardRef` logs
+    /// "Failed to set up ... Connection invalid" whenever the system
+    /// pasteboard server (`pboard`) is momentarily unavailable — common
+    /// right after wake, a fast-user-switch, or an app launching before
+    /// the server has finished restarting. Routine macOS plumbing chatter
+    /// with zero security relevance. Found 2026-09-10.
+    private static func isKnownBenignPasteboardConnectionNoise(_ message: String) -> Bool {
+        let lower = message.lowercased()
+        return lower.contains("cfpasteboardref") && lower.contains("connection invalid")
     }
 
     /// Known-benign login/logout session-relaunch chatter: macOS's own
