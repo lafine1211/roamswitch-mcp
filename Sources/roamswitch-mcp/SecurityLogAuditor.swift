@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.16 (build 73).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.17 (build 74).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -228,6 +228,38 @@ final class SecurityLogAuditor {
             || isKnownBenignLoginLogoutRelaunchNoise(event.message)
             || isKnownBenignPasteboardConnectionNoise(event.message)
             || isKnownBenignCoreAudioHalNoise(event.message)
+            || isKnownBenignApplicationCoalitionStateNoise(event.message)
+    }
+
+    /// Excludes *every* method-trace line loginwindow logs from its own
+    /// `Application`/`ApplicationManager` objects, regardless of selector —
+    /// a class-identity rule instead of yet another selector/keyword to
+    /// enumerate. `loginwindow`'s `-[ClassName selector:] | detail` verbose
+    /// method-tracing convention was never designed as a security signal;
+    /// it's internal implementation-detail tracing, and different classes
+    /// under it mean fundamentally different things. A 24h/16k-line sample
+    /// of this Mac's own `process == "loginwindow"` stream (the same query
+    /// `performAuditSync` issues) found `Application`/`ApplicationManager`
+    /// alone behind 1,756 of these lines (23% of loginwindow's entire
+    /// "Standard"-category volume) — 100% generic AppKit/LaunchServices app
+    /// coalition/state bookkeeping (`kLSNotify*`, `setState:`,
+    /// `handleCASEvent:withData:`), *zero* containing any
+    /// authentication-adjacent keyword (password/unlock/biometric/
+    /// keychain/credential/...). That's structurally different from the
+    /// dozen or so other classes sharing this same trace convention
+    /// (`LWScreenLock`, `LWAuthServiceManager`, `LWTouchIDLockScreen`,
+    /// `LWPAMManager`, `SessionAgentCom`, ...), which the loginwindow
+    /// codebase itself scopes to its actual authentication/session domain —
+    /// `Application`/`ApplicationManager` are the two generic,
+    /// non-loginwindow-specific classes loginwindow just happens to also
+    /// drive while managing app coalitions during login/logout. Found
+    /// 2026-09-11: `-[Application setState:]` and `-[ApplicationManager
+    /// handleCASEvent:withData:] | kLSNotify...` flagged as 5 "new pattern"
+    /// hits from one ordinary Microsoft Update Assistant launch — the third
+    /// individually-enumerated exclusion in this area in as many days,
+    /// which is what prompted digging for this class-level rule instead.
+    private static func isKnownBenignApplicationCoalitionStateNoise(_ message: String) -> Bool {
+        message.hasPrefix("-[Application ") || message.hasPrefix("-[ApplicationManager ")
     }
 
     /// Known-benign CoreAudio HAL (Hardware Abstraction Layer) internal
