@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.6 (build 63).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.7 (build 64).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -17,6 +17,13 @@ public struct LogTemplateAnomaly: Codable, Identifiable, Equatable {
     public let count: Int
     public let zScore: Double
     public let isNew: Bool
+    /// How many runs (including this one) `template` has now been observed
+    /// in, and whether that's enough to trust its own historical baseline
+    /// rather than a same-run cross-template comparison. Lets a reader
+    /// distinguish "still learning this pattern's normal frequency" from
+    /// "this deviates from an already-established baseline".
+    public let ownHistoryObservations: Int
+    public let ownHistoryMature: Bool
 }
 
 /// Running per-template frequency baseline — "how many times has this
@@ -79,7 +86,7 @@ public enum LogTemplateAnalyzer {
     /// a template falls back to the cross-template comparison below, same
     /// as before per-template history existed, so a genuinely new attack
     /// pattern is never under-covered during its first few sightings.
-    private static let minObservationsForOwnBaseline = 3
+    public static let minObservationsForOwnBaseline = 3
     /// Floor on a template's own historical stddev, so a template that has
     /// happened at *exactly* the same count on every prior run (stddev == 0)
     /// doesn't turn a trivial +/-1 fluctuation into a division-by-near-zero,
@@ -153,7 +160,12 @@ public enum LogTemplateAnalyzer {
             let isNew = baselineCaptured && !knownTemplates.contains(template)
             let isSpike = entry.count >= minSpikeCount && zScore > zScoreThreshold
             guard isNew || isSpike else { return nil }
-            return LogTemplateAnomaly(template: template, example: entry.example, count: entry.count, zScore: zScore, isNew: isNew)
+            let observations = updatedHistory[template]?.observations ?? 0
+            let isMature = observations >= minObservationsForOwnBaseline
+            return LogTemplateAnomaly(
+                template: template, example: entry.example, count: entry.count, zScore: zScore, isNew: isNew,
+                ownHistoryObservations: observations, ownHistoryMature: isMature
+            )
         }
 
         anomalies.sort { $0.zScore > $1.zScore }
