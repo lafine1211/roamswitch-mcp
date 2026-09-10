@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.11 (build 68).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.12 (build 69).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -197,7 +197,22 @@ final class SecurityLogAuditor {
     /// `com.apple.security.syspolicy` — the same shape as the Linux snapd/
     /// suspend-loop false positives, just not yet observed in the wild here.
     static func isKnownBenignNoise(_ event: SecurityLogEvent) -> Bool {
-        event.category == .gatekeeper && event.severity == .info
+        (event.category == .gatekeeper && event.severity == .info)
+            || isKnownBenignFirstResponderKvoNoise(event.message)
+    }
+
+    /// Known-benign AppKit/lock-screen KVO chatter: `LWDefaultScreenLockUI`
+    /// (and similar system UI classes) log an `observeValueForKeyPath:
+    /// ofObject:change:context:` line every time UI focus moves anywhere in
+    /// the system — an extremely common, entirely routine event with zero
+    /// security relevance, not a sign anything happened. Found 2026-09-10:
+    /// a real ScheduledLogAuditGuard notification highlighted this as its
+    /// single representative example (highest z-score among that run's
+    /// "new pattern" hits), leaving the reader with no way to tell it was
+    /// meaningless UI noise.
+    private static func isKnownBenignFirstResponderKvoNoise(_ message: String) -> Bool {
+        let lower = message.lowercased()
+        return lower.contains("observevalueforkeypath") && lower.contains("firstresponder changed")
     }
 
     /// Not `private`: `RuntimeThreatContainmentManager` shares this exact
