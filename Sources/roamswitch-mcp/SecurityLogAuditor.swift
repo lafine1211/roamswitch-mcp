@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.13 (build 70).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.14 (build 71).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -107,14 +107,40 @@ final class SecurityLogAuditor {
         let gkBlocks = events.filter { $0.category == .gatekeeper && $0.severity != .info }.count
         let xpCount = events.filter { $0.category == .xprotect && $0.severity != .info }.count
 
+        // `events` is newest-first (see `fetchSecurityLogs`'s sort); the
+        // cursor logic needs chronological order to find where the
+        // previous run left off. Only events after that cursor are
+        // eligible for anomaly scoring — `totalEvents`/`sudoFailures`/etc.
+        // above deliberately still reflect the *full* requested window,
+        // since a human asking "what happened in the past N hours" wants
+        // everything, not just what's new since the last scheduled scan.
+        // Slicing on the full `SecurityLogEvent` (not just its message)
+        // keeps category/severity attached, since `isKnownBenignNoise`
+        // needs both.
+        let chronologicalEvents = Array(events.reversed())
         let baseline = LogTemplateAnalyzer.loadBaseline()
+        // Matched on `.message` directly rather than via
+        // `LogTemplateAnalyzer.itemsSinceCursor` — `SecurityLogEvent`'s
+        // synthesized `Equatable` includes its random per-instance `id`
+        // (see its declaration), so two structurally-identical events built
+        // in different runs would never compare equal there.
+        let newSinceCursor: [SecurityLogEvent]
+        if let cursor = baseline.lastProcessedMessage, let idx = chronologicalEvents.lastIndex(where: { $0.message == cursor }) {
+            newSinceCursor = Array(chronologicalEvents[(idx + 1)...])
+        } else {
+            newSinceCursor = chronologicalEvents
+        }
         let (anomalies, updatedKnown, updatedHistory) = LogTemplateAnalyzer.analyze(
-            messages: events.filter { !Self.isKnownBenignNoise($0) }.map(\.message),
+            messages: newSinceCursor.filter { !Self.isKnownBenignNoise($0) }.map(\.message),
             knownTemplates: baseline.known,
             baselineCaptured: baseline.captured,
             frequencyHistory: baseline.frequencyHistory
         )
-        LogTemplateAnalyzer.saveBaseline(known: updatedKnown, frequencyHistory: updatedHistory)
+        LogTemplateAnalyzer.saveBaseline(
+            known: updatedKnown,
+            frequencyHistory: updatedHistory,
+            lastProcessedMessage: chronologicalEvents.last?.message ?? baseline.lastProcessedMessage
+        )
 
         return SecurityLogAuditReport(
             auditDate: Date(),

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.13 (build 70).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.14 (build 71).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -183,8 +183,22 @@ public enum LogTemplateAnalyzer {
     /// from an older build with no value here just starts learning fresh
     /// via the `?? [:]` fallback below, no migration needed.
     private static let frequencyHistoryKey = "RoamSwitch.LogTemplateBaseline.FrequencyHistoryV1"
+    /// The raw text of the most recent log message fed into `analyze` on
+    /// the previous run. `ScheduledLogAuditGuard`'s scan interval and audit
+    /// window are the same length (1 hour each), so consecutive scheduled
+    /// runs nearly abut rather than deliberately double-overlapping like
+    /// the Linux daemons' rounded-up window — but the very first kickoff
+    /// scan (10s after enabling) landing close to the first regular-interval
+    /// scan, or any timer drift across a sleep/wake cycle, can still
+    /// re-present the same historical burst inside two consecutive windows.
+    /// Left unfiltered, that burst gets re-counted into the frequency
+    /// baseline and re-alerted every time it's still in view — mirrors
+    /// `LogTemplateBaseline::last_processed_line` in roamswitch-linux's
+    /// `log_auditor.rs`, found 2026-09-10 from the same failure mode
+    /// observed live on the Linux side first.
+    private static let lastProcessedMessageKey = "RoamSwitch.LogTemplateBaseline.LastProcessedMessageV1"
 
-    public static func loadBaseline() -> (known: Set<String>, captured: Bool, frequencyHistory: [String: TemplateFrequencyStats]) {
+    public static func loadBaseline() -> (known: Set<String>, captured: Bool, frequencyHistory: [String: TemplateFrequencyStats], lastProcessedMessage: String?) {
         let captured = UserDefaults.standard.bool(forKey: baselineCapturedKey)
         let known: Set<String>
         if let data = UserDefaults.standard.data(forKey: knownTemplatesKey),
@@ -200,10 +214,11 @@ public enum LogTemplateAnalyzer {
         } else {
             history = [:]
         }
-        return (known, captured, history)
+        let lastProcessedMessage = UserDefaults.standard.string(forKey: lastProcessedMessageKey)
+        return (known, captured, history, lastProcessedMessage)
     }
 
-    public static func saveBaseline(known: Set<String>, frequencyHistory: [String: TemplateFrequencyStats]) {
+    public static func saveBaseline(known: Set<String>, frequencyHistory: [String: TemplateFrequencyStats], lastProcessedMessage: String?) {
         if let data = try? JSONEncoder().encode(Array(known)) {
             UserDefaults.standard.set(data, forKey: knownTemplatesKey)
         }
@@ -211,5 +226,24 @@ public enum LogTemplateAnalyzer {
             UserDefaults.standard.set(data, forKey: frequencyHistoryKey)
         }
         UserDefaults.standard.set(true, forKey: baselineCapturedKey)
+        if let lastProcessedMessage {
+            UserDefaults.standard.set(lastProcessedMessage, forKey: lastProcessedMessageKey)
+        }
+    }
+
+    /// Returns the slice of `chronological` strictly after `cursor` (the
+    /// previous run's last-processed item — a message string in
+    /// `SecurityLogAuditor`'s real use, but generic here so the slicing
+    /// logic itself is unit-testable without needing a real
+    /// `SecurityLogEvent`), assuming the input is already oldest-first. If
+    /// `cursor` is `nil` (first run) or isn't found (it aged out of the
+    /// window entirely — a scan was missed for longer than the window
+    /// covers), the whole array is returned rather than silently seeing
+    /// nothing.
+    public static func itemsSinceCursor<T: Equatable>(_ chronological: [T], cursor: T?) -> [T] {
+        guard let cursor, let idx = chronological.lastIndex(of: cursor) else {
+            return chronological
+        }
+        return Array(chronological[(idx + 1)...])
     }
 }
