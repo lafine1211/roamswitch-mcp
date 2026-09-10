@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.12 (build 69).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.13 (build 70).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -199,6 +199,23 @@ final class SecurityLogAuditor {
     static func isKnownBenignNoise(_ event: SecurityLogEvent) -> Bool {
         (event.category == .gatekeeper && event.severity == .info)
             || isKnownBenignFirstResponderKvoNoise(event.message)
+            || isKnownBenignLoginLogoutRelaunchNoise(event.message)
+    }
+
+    /// Known-benign login/logout session-relaunch chatter: macOS's own
+    /// `PersistentAppsSupport` (the "reopen windows when logging back in"
+    /// feature) and `BTMManager` (Background Task Management — the
+    /// LaunchAgent/LaunchDaemon legitimacy tracker Apple added in Ventura)
+    /// both log unconditionally on every login/logout/reboot cycle. Since
+    /// these lines are essentially absent the rest of the time, their
+    /// per-template baseline mean sits near zero — so the very next login
+    /// after any gap produces a z-score in the double digits purely from
+    /// that near-zero floor, not from anything actually anomalous. Found
+    /// 2026-09-10: a real notification's single highest-z-score entry
+    /// (z=14.0) was exactly this, unrelated to security.
+    private static func isKnownBenignLoginLogoutRelaunchNoise(_ message: String) -> Bool {
+        let lower = message.lowercased()
+        return lower.contains("persistentappssupport") || lower.contains("btmmanager")
     }
 
     /// Known-benign AppKit/lock-screen KVO chatter: `LWDefaultScreenLockUI`
