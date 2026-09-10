@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.5 (build 62).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.6 (build 63).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -108,12 +108,13 @@ final class SecurityLogAuditor {
         let xpCount = events.filter { $0.category == .xprotect && $0.severity != .info }.count
 
         let baseline = LogTemplateAnalyzer.loadBaseline()
-        let (anomalies, updatedKnown) = LogTemplateAnalyzer.analyze(
+        let (anomalies, updatedKnown, updatedHistory) = LogTemplateAnalyzer.analyze(
             messages: events.filter { !Self.isKnownBenignNoise($0) }.map(\.message),
             knownTemplates: baseline.known,
-            baselineCaptured: baseline.captured
+            baselineCaptured: baseline.captured,
+            frequencyHistory: baseline.frequencyHistory
         )
-        LogTemplateAnalyzer.saveBaseline(known: updatedKnown)
+        LogTemplateAnalyzer.saveBaseline(known: updatedKnown, frequencyHistory: updatedHistory)
 
         return SecurityLogAuditReport(
             auditDate: Date(),

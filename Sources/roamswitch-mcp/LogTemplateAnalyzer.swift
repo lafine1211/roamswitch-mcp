@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.5 (build 62).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.6 (build 63).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -17,6 +17,41 @@ public struct LogTemplateAnomaly: Codable, Identifiable, Equatable {
     public let count: Int
     public let zScore: Double
     public let isNew: Bool
+}
+
+/// Running per-template frequency baseline — "how many times has this
+/// template historically appeared per audit run" — updated incrementally
+/// with Welford's online algorithm (no need to retain a full time series).
+/// Mirrors `TemplateFrequencyStats` in roamswitch-linux's `log_template.rs`;
+/// see that file's doc comment for the full rationale (a recurring-but-
+/// legitimate pattern, e.g. a daily cron job, should stop being flagged once
+/// its typical volume is learned, instead of re-alerting forever just
+/// because it looks bursty relative to whatever else happened to log that
+/// hour).
+public struct TemplateFrequencyStats: Codable, Equatable {
+    public var observations: Int = 0
+    public var mean: Double = 0
+    /// Sum of squared differences from the running mean (Welford's `M2`).
+    public var m2: Double = 0
+
+    mutating func update(_ newCount: Double) {
+        observations += 1
+        let delta = newCount - mean
+        mean += delta / Double(observations)
+        let delta2 = newCount - mean
+        m2 += delta * delta2
+    }
+
+    func stddev(floor: Double) -> Double {
+        max((m2 / Double(observations)).squareRoot(), floor)
+    }
+
+    /// Z-score of `count` against this template's own history, once there's
+    /// enough of it to trust (`LogTemplateAnalyzer.minObservationsForOwnBaseline`).
+    func zScore(count: Int, minObservations: Int, stddevFloor: Double) -> Double? {
+        guard observations >= minObservations else { return nil }
+        return (Double(count) - mean) / stddev(floor: stddevFloor)
+    }
 }
 
 /// Groups `SecurityLogEvent.message` values into templates by masking their
@@ -39,6 +74,17 @@ public enum LogTemplateAnalyzer {
     /// inspired this feature (note.com/aoi_localai).
     private static let zScoreThreshold = 3.0
     private static let maxAnomalies = 10
+    /// How many prior runs a template needs before its own history
+    /// (`TemplateFrequencyStats`) is trusted for spike-scoring. Below this,
+    /// a template falls back to the cross-template comparison below, same
+    /// as before per-template history existed, so a genuinely new attack
+    /// pattern is never under-covered during its first few sightings.
+    private static let minObservationsForOwnBaseline = 3
+    /// Floor on a template's own historical stddev, so a template that has
+    /// happened at *exactly* the same count on every prior run (stddev == 0)
+    /// doesn't turn a trivial +/-1 fluctuation into a division-by-near-zero,
+    /// infinite-looking z-score.
+    private static let minOwnStddev = 1.0
 
     /// `message` is expected to already be timestamp-free (as
     /// `SecurityLogEvent.message` is, unlike Linux's raw journalctl lines).
@@ -53,11 +99,19 @@ public enum LogTemplateAnalyzer {
         return result
     }
 
+    /// A template's own history is used for the frequency check once it has
+    /// enough observations (`minObservationsForOwnBaseline`) — this is what
+    /// lets a recurring-but-legitimate pattern stop being flagged once its
+    /// typical volume is learned. A template still building up history
+    /// instead falls back to a cross-template comparison (this run's other
+    /// template counts), the same method used before per-template history
+    /// existed.
     public static func analyze(
         messages: [String],
         knownTemplates: Set<String>,
-        baselineCaptured: Bool
-    ) -> (anomalies: [LogTemplateAnomaly], updatedKnown: Set<String>) {
+        baselineCaptured: Bool,
+        frequencyHistory: [String: TemplateFrequencyStats]
+    ) -> (anomalies: [LogTemplateAnomaly], updatedKnown: Set<String>, updatedHistory: [String: TemplateFrequencyStats]) {
         var counts: [String: (count: Int, example: String)] = [:]
         for message in messages where !message.trimmingCharacters(in: .whitespaces).isEmpty {
             let template = extractTemplate(message)
@@ -70,29 +124,32 @@ public enum LogTemplateAnalyzer {
         }
 
         var updatedKnown = knownTemplates
-        for template in counts.keys {
+        var updatedHistory = frequencyHistory
+        for (template, entry) in counts {
             updatedKnown.insert(template)
+            var stats = updatedHistory[template] ?? TemplateFrequencyStats()
+            stats.update(Double(entry.count))
+            updatedHistory[template] = stats
         }
 
-        guard counts.count >= 2 else {
-            let anomalies: [LogTemplateAnomaly] = baselineCaptured
-                ? counts.filter { !knownTemplates.contains($0.key) }.map {
-                    LogTemplateAnomaly(template: $0.key, example: $0.value.example, count: $0.value.count, zScore: 0, isNew: true)
-                }
-                : []
-            return (anomalies, updatedKnown)
-        }
-
+        // Cross-template comparison (this run's own distribution of
+        // counts), used as a fallback only for templates whose own history
+        // isn't mature yet.
         let total = counts.values.reduce(0) { $0 + $1.count }
-        let mean = Double(total) / Double(counts.count)
-        let variance = counts.values.reduce(0.0) { acc, entry in
-            let d = Double(entry.count) - mean
+        let crossMean = Double(total) / Double(max(counts.count, 1))
+        let crossVariance = counts.values.reduce(0.0) { acc, entry in
+            let d = Double(entry.count) - crossMean
             return acc + d * d
-        } / Double(counts.count)
-        let stddev = variance.squareRoot()
+        } / Double(max(counts.count, 1))
+        let crossStddev = crossVariance.squareRoot()
 
         var anomalies: [LogTemplateAnomaly] = counts.compactMap { template, entry in
-            let zScore = stddev > 0 ? (Double(entry.count) - mean) / stddev : 0
+            let ownZScore = frequencyHistory[template]?.zScore(
+                count: entry.count,
+                minObservations: minObservationsForOwnBaseline,
+                stddevFloor: minOwnStddev
+            )
+            let zScore = ownZScore ?? (crossStddev > 0 ? (Double(entry.count) - crossMean) / crossStddev : 0)
             let isNew = baselineCaptured && !knownTemplates.contains(template)
             let isSpike = entry.count >= minSpikeCount && zScore > zScoreThreshold
             guard isNew || isSpike else { return nil }
@@ -103,26 +160,43 @@ public enum LogTemplateAnalyzer {
         if anomalies.count > maxAnomalies {
             anomalies = Array(anomalies.prefix(maxAnomalies))
         }
-        return (anomalies, updatedKnown)
+        return (anomalies, updatedKnown, updatedHistory)
     }
 
     // MARK: - Baseline persistence (UserDefaults, mirroring PortAnomalyGuard.swift)
 
     private static let knownTemplatesKey = "RoamSwitch.LogTemplateBaseline.KnownTemplatesV1"
     private static let baselineCapturedKey = "RoamSwitch.LogTemplateBaseline.BaselineCapturedV1"
+    /// New key (frequency history didn't exist in V1) — a host upgrading
+    /// from an older build with no value here just starts learning fresh
+    /// via the `?? [:]` fallback below, no migration needed.
+    private static let frequencyHistoryKey = "RoamSwitch.LogTemplateBaseline.FrequencyHistoryV1"
 
-    public static func loadBaseline() -> (known: Set<String>, captured: Bool) {
+    public static func loadBaseline() -> (known: Set<String>, captured: Bool, frequencyHistory: [String: TemplateFrequencyStats]) {
         let captured = UserDefaults.standard.bool(forKey: baselineCapturedKey)
-        guard let data = UserDefaults.standard.data(forKey: knownTemplatesKey),
-              let decoded = try? JSONDecoder().decode([String].self, from: data) else {
-            return ([], captured)
+        let known: Set<String>
+        if let data = UserDefaults.standard.data(forKey: knownTemplatesKey),
+           let decoded = try? JSONDecoder().decode([String].self, from: data) {
+            known = Set(decoded)
+        } else {
+            known = []
         }
-        return (Set(decoded), captured)
+        let history: [String: TemplateFrequencyStats]
+        if let data = UserDefaults.standard.data(forKey: frequencyHistoryKey),
+           let decoded = try? JSONDecoder().decode([String: TemplateFrequencyStats].self, from: data) {
+            history = decoded
+        } else {
+            history = [:]
+        }
+        return (known, captured, history)
     }
 
-    public static func saveBaseline(known: Set<String>) {
+    public static func saveBaseline(known: Set<String>, frequencyHistory: [String: TemplateFrequencyStats]) {
         if let data = try? JSONEncoder().encode(Array(known)) {
             UserDefaults.standard.set(data, forKey: knownTemplatesKey)
+        }
+        if let data = try? JSONEncoder().encode(frequencyHistory) {
+            UserDefaults.standard.set(data, forKey: frequencyHistoryKey)
         }
         UserDefaults.standard.set(true, forKey: baselineCapturedKey)
     }
