@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.15 (build 72).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.16 (build 73).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -227,6 +227,25 @@ final class SecurityLogAuditor {
             || isKnownBenignFirstResponderKvoNoise(event.message)
             || isKnownBenignLoginLogoutRelaunchNoise(event.message)
             || isKnownBenignPasteboardConnectionNoise(event.message)
+            || isKnownBenignCoreAudioHalNoise(event.message)
+    }
+
+    /// Known-benign CoreAudio HAL (Hardware Abstraction Layer) internal
+    /// trace logging — `HALC_ProxyIOContext`/`HALC_*` classes log their own
+    /// C++ source file, line number, and method on every I/O
+    /// resume/pause, which happens routinely (every audio-route change:
+    /// waking, a Bluetooth device connecting, an app opening/closing an
+    /// audio stream) and is reachable through `loginwindow` (which links
+    /// CoreAudio for system sounds, so it matches this auditor's
+    /// `process == "loginwindow"` predicate) with zero security relevance.
+    /// `HALC_` is Apple's own fixed internal naming convention for this
+    /// framework's classes, not attacker-influenced content. Found
+    /// 2026-09-11: seven of ten anomalies in one notification were this
+    /// single source, repeatedly triggering as a frequency spike as well
+    /// as a new pattern — excluded entirely rather than just de-prioritized,
+    /// since audio I/O churn has no security value at any frequency.
+    private static func isKnownBenignCoreAudioHalNoise(_ message: String) -> Bool {
+        message.contains("HALC_")
     }
 
     /// Known-benign pasteboard-server hiccup: `CFPasteboardRef` logs
