@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.18 (build 75).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.19 (build 76).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -363,15 +363,16 @@ final class SecurityHealthChecker {
             return val == 1
         }()
 
+        let accessoryPolicy = isAppleSilicon ? Self.readAccessoryConnectionPolicy() : nil
         items.append(SecurityAuditItem(
             category: loc("物理ポート・デバイス防御"),
             title: loc("macOS アクセサリ接続保護"),
-            isPassed: true,
-            statusText: isAppleSilicon ? loc("有効 (ハードウェア保護中)") : loc("対象外 (Intel Mac)"),
+            isPassed: accessoryPolicy?.isPassed ?? false,
+            statusText: accessoryPolicy?.statusText ?? loc("対象外 (Intel Mac)"),
             detail: loc("新しいUSB/Thunderboltアクセサリが接続された際、Macがロックされている場合はデータ通信をOSハードウェア層で未然に遮断します。"),
             recommendation: loc("システム設定 > プライバシーとセキュリティ > アクセサリの接続を許可 が適切に設定されていることを推奨します。"),
             settingsURL: "x-apple.systempreferences:com.apple.preference.security",
-            isApplicable: isAppleSilicon
+            isApplicable: isAppleSilicon && accessoryPolicy != nil
         ))
 
         // Score & Grade Calculation — excludes not-applicable items (see
@@ -463,6 +464,54 @@ final class SecurityHealthChecker {
         let rootLoginBlocked = permitRootLogin.map { $0.contains("no") || $0.contains("prohibit-password") } ?? false
         let passwordAuthOff = passwordAuthentication?.contains("no") ?? false
         return rootLoginBlocked && passwordAuthOff
+    }
+
+    /// Reads the live value of System Settings > Privacy & Security >
+    /// "Allow accessories to connect" via IOKit — previously this item
+    /// hardcoded `isPassed: true` unconditionally, never actually checking
+    /// the setting at all.
+    ///
+    /// No documented `defaults`/API exists for this (the `allowUSBRestrictedMode`
+    /// key some references mention is a separate MDM policy *gate*, not the
+    /// user's chosen value, and is absent entirely on an unmanaged Mac).
+    /// Verified live 2026-09-11 by toggling the setting and diffing
+    /// `ioreg -c IOPortTransportStateUSB3 -r -l` output: each connected
+    /// port's `IOPortTransportStateUSB3` child node carries `TRM_Profile` /
+    /// `TRM_ProfileDescription` ("Trust Restriction Manager"), which changed
+    /// from `"Ask Every Time"` to `"Always Allow"` exactly matching the
+    /// System Settings toggle — no root required to read it. Matched by
+    /// description string (not the numeric `TRM_Profile`) since only the
+    /// "Ask Every Time" (1) and "Always Allow" (4) values were confirmed
+    /// live; the other two options' numeric encoding wasn't tested.
+    private static func readAccessoryConnectionPolicy() -> (isPassed: Bool, statusText: String)? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/sbin/ioreg")
+        process.arguments = ["-c", "IOPortTransportStateUSB3", "-r", "-l"]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+        do {
+            try process.run()
+            process.waitUntilExit()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            guard let output = String(data: data, encoding: .utf8) else { return nil }
+            guard let line = output.split(separator: "\n").first(where: { $0.contains("TRM_ProfileDescription") }) else {
+                return nil
+            }
+            // Line shape: `    "TRM_ProfileDescription" = "Always Allow"`
+            guard let firstQuote = line.range(of: "\" = \""),
+                  let profile = line[firstQuote.upperBound...].range(of: "\"").map({ String(line[firstQuote.upperBound..<$0.lowerBound]) })
+            else {
+                return nil
+            }
+            let isPassed = profile != "Always Allow"
+            let statusText = isPassed
+                ? String(format: loc("有効 (%@)"), profile)
+                : String(format: loc("弱い設定 (%@)。システム設定で見直しを推奨"), profile)
+            return (isPassed, statusText)
+        } catch {
+            return nil
+        }
     }
 
     private func runCommand(path: String, arguments: [String]) -> String {

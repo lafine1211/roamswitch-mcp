@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.18 (build 75).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.19 (build 76).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -50,18 +50,35 @@ final class QuarantineManager {
 
     /// Call right after a clamscan run with --move completes, passing the
     /// "path: Threat.Name FOUND" lines it printed — before the move, those
-    /// paths were still the files' original locations.
-    func recordQuarantinedFiles(fromFoundLines lines: [String]) {
+    /// paths were still the files' original locations. Also called directly
+    /// by `WebMailDownloadGuard` for a `StaticSignatureScanner` hit, where
+    /// the move below is the only thing that actually relocates the file.
+    ///
+    /// Returns the `originalPath`s that were genuinely confirmed quarantined
+    /// (the file now exists at `destPath` and no longer at `originalPath`)
+    /// — a path from `lines` that's missing from the returned set means its
+    /// move failed and the malicious file is still sitting untouched at its
+    /// original location. Callers that tell the user "quarantined" must
+    /// check this per file rather than assuming the whole batch succeeded.
+    /// `try?` silently swallowing `moveItem`'s error (permission denied,
+    /// locked file, read-only volume, ...) used to mean a failed quarantine
+    /// attempt still got recorded and reported as a success. A file whose
+    /// `originalPath` no longer exists when this runs (e.g. clamscan's own
+    /// `--move` already relocated it) is treated as already-quarantined,
+    /// not a failure — there's nothing left to move.
+    @discardableResult
+    func recordQuarantinedFiles(fromFoundLines lines: [String]) -> Set<String> {
         var entries = loadMetadata()
         let fileManager = FileManager.default
         let qDir = quarantineDirectory
+        var quarantinedPaths: Set<String> = []
 
         for line in lines {
             guard let range = line.range(of: ": "), let foundRange = line.range(of: " FOUND") else { continue }
             let originalPath = String(line[line.startIndex..<range.lowerBound])
             let threatName = String(line[range.upperBound..<foundRange.lowerBound])
             let originalFileName = (originalPath as NSString).lastPathComponent
-            
+
             // Check if file is still at originalPath (e.g. clamscan --move failed due to file existing in quarantine)
             var actualQuarantinedName = originalFileName
             var destPath = qDir + "/" + actualQuarantinedName
@@ -73,13 +90,24 @@ final class QuarantineManager {
                     actualQuarantinedName = ext.isEmpty ? "\(base)_\(timestamp)" : "\(base)_\(timestamp).\(ext)"
                     destPath = qDir + "/" + actualQuarantinedName
                 }
-                try? fileManager.moveItem(atPath: originalPath, toPath: destPath)
+                do {
+                    try fileManager.moveItem(atPath: originalPath, toPath: destPath)
+                } catch {
+                    NSLog("RoamSwitch QuarantineManager: failed to move \(originalPath) to quarantine: \(error.localizedDescription)")
+                }
             }
 
-            // Neutralize threat by removing all execute & read permissions (chmod 000)
-            if fileManager.fileExists(atPath: destPath) {
-                try? fileManager.setAttributes([.posixPermissions: 0o000], ofItemAtPath: destPath)
+            guard fileManager.fileExists(atPath: destPath) else {
+                // The move either failed above, or never ran because
+                // `originalPath` was already gone for some other reason —
+                // either way, nothing is quarantined at `destPath`, so this
+                // path isn't added to `quarantinedPaths`.
+                continue
             }
+            quarantinedPaths.insert(originalPath)
+
+            // Neutralize threat by removing all execute & read permissions (chmod 000)
+            try? fileManager.setAttributes([.posixPermissions: 0o000], ofItemAtPath: destPath)
 
             // Prevent duplicate records for the same file within a 60-second window
             if entries.contains(where: { $0.originalPath == originalPath && abs($0.quarantinedAt.timeIntervalSinceNow) < 60 }) {
@@ -95,6 +123,7 @@ final class QuarantineManager {
             ))
         }
         saveMetadata(entries)
+        return quarantinedPaths
     }
 
     func listQuarantinedFiles() -> [QuarantinedFile] {
