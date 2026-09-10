@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.17 (build 74).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.18 (build 75).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -72,7 +72,17 @@ public struct TemplateFrequencyStats: Codable, Equatable {
 public enum LogTemplateAnalyzer {
     private static let ipv4Regex = try! NSRegularExpression(pattern: #"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b"#)
     private static let hexRegex = try! NSRegularExpression(pattern: #"\b[0-9a-fA-F]{8,}\b"#)
-    private static let numRegex = try! NSRegularExpression(pattern: #"\b\d+\b"#)
+    // No `\b` around the digits: `\b` only fires at a word/non-word
+    // transition, so a digit run fused directly onto a letter with no
+    // separator (a duration like "3h17m58s", or an ISO8601 timestamp's
+    // "...T04:..." day/hour boundary) is all word characters end-to-end and
+    // never matched — those digits passed straight through unmasked,
+    // permanently defeating template collapsing for any line containing
+    // one. Found 2026-09-11 while porting the identical fix verified live
+    // against roamswitch-linux's own production server (`log_template.rs`):
+    // 691 already-"known" templates there collapsed to 285 (59%) purely
+    // from fixing this.
+    private static let numRegex = try! NSRegularExpression(pattern: #"\d+"#)
 
     /// Minimum occurrences within a single run before a frequency spike is
     /// considered meaningful.
