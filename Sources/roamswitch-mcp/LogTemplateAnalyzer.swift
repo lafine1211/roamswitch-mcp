@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.21 (build 78).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.22 (build 79).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -71,6 +71,19 @@ public struct TemplateFrequencyStats: Codable, Equatable {
 /// by the masked template string is sufficient.
 public enum LogTemplateAnalyzer {
     private static let ipv4Regex = try! NSRegularExpression(pattern: #"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b"#)
+    // `0x`-prefixed pointer/object addresses (XPC connection IDs, ObjC/Swift
+    // runtime debug identifiers) must be masked *before* `hexRegex` below:
+    // "0x" is itself all word characters running straight into the hex
+    // digits that follow with no transition, so `\b` never fires between
+    // the "x" and the first hex digit — `hexRegex` can only ever match
+    // starting at the "0" (immediately broken by the non-hex "x"), so the
+    // address never gets masked at all. Same root cause as the digit-fusion
+    // bug fixed for `numRegex` below, a different concrete shape of it.
+    // Found live 2026-09-11: `[0xbb38aae40] invalidated because the current
+    // process cancelled the connection by calling xpc_connection_cancel()`
+    // never stabilized into a known template since the address changes
+    // every XPC connection.
+    private static let hexPointerRegex = try! NSRegularExpression(pattern: #"0x[0-9a-fA-F]{4,}"#)
     private static let hexRegex = try! NSRegularExpression(pattern: #"\b[0-9a-fA-F]{8,}\b"#)
     // No `\b` around the digits: `\b` only fires at a word/non-word
     // transition, so a digit run fused directly onto a letter with no
@@ -111,6 +124,7 @@ public enum LogTemplateAnalyzer {
             return regex.stringByReplacingMatches(in: text, options: [], range: range, withTemplate: template)
         }
         var result = replace(ipv4Regex, in: message, with: "<IP>")
+        result = replace(hexPointerRegex, in: result, with: "<HEX>")
         result = replace(hexRegex, in: result, with: "<HEX>")
         result = replace(numRegex, in: result, with: "<NUM>")
         return result
