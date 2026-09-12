@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.23 (build 80).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.24 (build 81).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -168,6 +168,31 @@ final class SecurityLogAuditor {
             frequencyHistory: updatedHistory,
             lastProcessedMessage: chronologicalEvents.last?.message ?? baseline.lastProcessedMessage
         )
+
+        // `isNew` anomalies are a one-shot detection — once `saveBaseline`
+        // above absorbs the template into `known`, it structurally can
+        // never be flagged again (see `LogTemplateAnalyzer.analyze`'s doc
+        // comment), so this is the only chance to keep a durable record of
+        // it. Found from a live user report: the "テンプレート異常" count
+        // dropping from 1 back to 0 on the next scan/reopen looked like the
+        // anomaly had vanished with no way to look back at what it was.
+        // Recorded here (this function, not `ScheduledLogAuditGuard`) so it
+        // covers every path that reaches `buildReport` — the audit window's
+        // own manual rescan included, not just the scheduled background
+        // scan — and unconditionally (unlike `SecurityNotifier
+        // .sendThreatAlert`, this isn't Pro-gated): a Free user gets the
+        // same durable record, just without the live banner/sound.
+        // Frequency spikes are deliberately NOT recorded here — unlike
+        // `isNew`, they can recur across repeated manual rescans of the
+        // same ongoing spike, which would flood history with near-duplicate
+        // entries; they still reach history via the scheduled scan's own
+        // (rate-limited, once-an-hour) notification when that's enabled.
+        for anomaly in anomalies where anomaly.isNew {
+            NotificationHistory.record(
+                title: "🧩 " + loc("新規ログパターンを検出"),
+                body: anomaly.example
+            )
+        }
 
         return SecurityLogAuditReport(
             auditDate: Date(),
