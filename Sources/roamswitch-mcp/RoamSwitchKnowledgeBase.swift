@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.22 (build 79).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.23 (build 80).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -267,6 +267,7 @@ public struct RoamSwitchKnowledgeBase: Sendable {
                 • カナリア監視: `Desktop`, `Documents`, `Downloads` 内に隠しカナリアファイルを配置。FSEventsで変更・リネーム・削除を監視。
                 • ふるまいバースト検知: 短時間での異常な大量ファイル書き換えや暗号化シグネチャ（エントロピー上昇）を監視。
                 • 緊急エアギャップ隔離: ランサムウェア活動を検知した瞬間、PFパケットフィルタで外部通信を全遮断、共有サービスを停止し、被害拡大を物理防御。
+                • Wi-Fi無線も遮断（1.9.23〜）: PFの遮断はパケットを止めるだけで無線アダプタ自体は接続状態のままのため、`networksetup`でWi-Fi無線そのものも切断。最大10分で自動的に復帰し、アプリがクラッシュしても再起動しても手動操作なしで元に戻る。ARPスプーフィング検知・XProtectのマルウェア検知でも同様。設定で無効化可能。
                 """,
                 recommendation: "未知のゼロデイランサムウェアから重要データを守るため、「ランサムウェア・ふるまい検知 (Pro)」を有効にしておいてください。",
                 tags: ["ransomware", "canary", "airgap", "entropy", "fsevents", "pro"]

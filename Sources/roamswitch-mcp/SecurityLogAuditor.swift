@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.22 (build 79).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.23 (build 80).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -13,6 +13,14 @@ public enum LogEventCategory: String, CaseIterable, Identifiable, Codable {
     case gatekeeper
     case xprotect
     case auth
+    /// Synthetic category for `LogTemplateAnomaly` results, folded into the
+    /// same filterable/searchable list as everything else in
+    /// `SecurityLogAuditView` instead of being visible only via the
+    /// KPI card's bare count or the clipboard-only report/AI-consultation
+    /// text — found from a live user report that a "テンプレート異常: N件"
+    /// count with no way to actually look at the N items, right there on
+    /// screen, was not useful.
+    case templateAnomaly
 
     public var id: String { rawValue }
 
@@ -24,6 +32,7 @@ public enum LogEventCategory: String, CaseIterable, Identifiable, Codable {
         case .gatekeeper: return loc("Gatekeeper遮断")
         case .xprotect: return loc("XProtect検知")
         case .auth: return loc("ログイン/認証")
+        case .templateAnomaly: return loc("テンプレート異常")
         }
     }
 
@@ -35,6 +44,7 @@ public enum LogEventCategory: String, CaseIterable, Identifiable, Codable {
         case .gatekeeper: return "shield.slash.fill"
         case .xprotect: return "cross.case.fill"
         case .auth: return "lock.fill"
+        case .templateAnomaly: return "puzzlepiece.extension.fill"
         }
     }
 }
