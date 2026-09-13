@@ -133,7 +133,7 @@ enum MCPServer {
                     "resources": [String: Any](),
                 ],
                 "serverInfo": ["name": "RoamSwitch Security Advisor", "version": mcpServerVersion],
-                "instructions": "Read-only, fully local (no network calls) access to RoamSwitch's Mac security diagnostics, comprehensive feature specifications, alert message advice, and operational guides. Use 'get_app_help' or read 'roamswitch://docs/...' resources for in-depth documentation. Cannot change security level, isolate ports, or eject devices.",
+                "instructions": "Read-only, fully local (no network calls) access to RoamSwitch's Mac security diagnostics, comprehensive feature specifications, alert message advice, and operational guides. Use 'get_app_help' or read 'roamswitch://docs/...' resources for in-depth documentation. For incident triage (including from a local LLM during an Air-Gap), start with 'get_runtime_threat_status' and 'get_incident_timeline'. Cannot change security level, isolate ports, or eject devices.",
             ])]
 
         case "notifications/initialized":
@@ -152,7 +152,7 @@ enum MCPServer {
             guard let params = message["params"] as? [String: Any], let uri = params["uri"] as? String else {
                 return [error(id: id, code: -32602, message: "Missing resource uri")]
             }
-            if let content = RoamSwitchKnowledgeBase.shared.resource(for: uri) {
+            if let content = RoamSwitchKnowledgeBase.shared.resource(for: uri, language: RoamSwitchKnowledgeBase.activeLanguageCode()) {
                 return [result(id: id, [
                     "contents": [["uri": uri, "mimeType": "text/markdown", "text": content]],
                 ])]
@@ -201,6 +201,10 @@ enum MCPServer {
                 return [result(id: id, callGetPortAnomalyIncidents())]
             case "get_runtime_threat_status":
                 return [result(id: id, callGetRuntimeThreatStatus())]
+            case "get_incident_timeline":
+                return [result(id: id, callGetIncidentTimeline(arguments: arguments))]
+            case "get_network_history":
+                return [result(id: id, callGetNetworkHistory(arguments: arguments))]
             default:
                 return [error(id: id, code: -32602, message: "Unknown tool: \(name)")]
             }
@@ -322,7 +326,7 @@ enum MCPServer {
                     recommendation: $0.recommendation
                 )
             },
-            message: "Scan complete."
+            message: loc("スキャンが完了しました。")
         )
         return textContentResult(payload)
     }
@@ -381,7 +385,7 @@ enum MCPServer {
         if let pathStr = arguments["path"] as? String {
             var isDir: ObjCBool = false
             guard FileManager.default.fileExists(atPath: pathStr, isDirectory: &isDir) else {
-                return textContentResult(["error": "path not found: \(pathStr)"], isError: true)
+                return textContentResult(["error": String(format: loc("パスが見つかりません: %@"), pathStr)], isError: true)
             }
             if isDir.boolValue {
                 findings = SecretLeakScanning.auditDirectory(at: URL(fileURLWithPath: pathStr))
@@ -392,7 +396,7 @@ enum MCPServer {
         } else if let text = arguments["text"] as? String {
             findings = SecretLeakScanning.auditText(text)
         } else {
-            return textContentResult(["error": "Provide either 'text' or 'path'"], isError: true)
+            return textContentResult(["error": loc("'text' または 'path' のいずれかを指定してください。")], isError: true)
         }
 
         let payload = MCPAuditSecretsResultPayload(
@@ -548,6 +552,33 @@ enum MCPServer {
         return textContentResult(payload)
     }
 
+    /// SENDS NO NETWORK REQUESTS AT ALL — reads one local JSON file under
+    /// ~/Library/Application Support/RoamSwitch/ (the app is not sandboxed,
+    /// so this process resolves the same path). The only place ARP-spoof
+    /// containment is recorded at all. Same name as Linux's
+    /// `get_incident_timeline`.
+    private static func callGetIncidentTimeline(arguments: [String: Any]) -> [String: Any] {
+        let requested = (arguments["limit"] as? Int) ?? 50
+        let limit = min(max(requested, 1), 200)
+        let events = ContainmentIncidentTimeline.loadRecent(limit: limit)
+        return textContentResult(MCPResponseFormatting.makeIncidentTimelinePayload(events: events))
+    }
+
+    /// SENDS NO NETWORK REQUESTS AT ALL — reads `network_history.json`
+    /// directly (never instantiates `NetworkHistoryGuard.shared`, whose
+    /// `observe` writes). Gateway MACs are reduced to counts before output.
+    private static func callGetNetworkHistory(arguments: [String: Any]) -> [String: Any] {
+        let requested = (arguments["limit"] as? Int) ?? 50
+        let limit = min(max(requested, 1), 200)
+        let snapshot = NetworkHistoryGuard.readSnapshot()
+        let payload = MCPResponseFormatting.makeNetworkHistoryPayload(
+            entries: snapshot.entries,
+            lookalikes: snapshot.lookalikes,
+            limit: limit
+        )
+        return textContentResult(payload)
+    }
+
     private static func callGetGuardStatus() -> [String: Any] {
         let mac = GatewayFingerprint.currentGatewayMACAddress()
         let payload = MCPResponseFormatting.makeGuardStatusPayload(gatewayMAC: mac, defaults: sharedDefaults)
@@ -556,7 +587,7 @@ enum MCPServer {
 
     private static func callAuditURLSafety(arguments: [String: Any]) -> [String: Any] {
         guard let urlString = arguments["url"] as? String else {
-            return textContentResult(["error": "Missing required argument 'url'"], isError: true)
+            return textContentResult(["error": loc("必須引数 'url' が指定されていません。")], isError: true)
         }
         let report = LinkSafetyAuditor.shared.analyzeURL(urlString)
         let payload = MCPResponseFormatting.makeLinkAuditPayload(report: report)
@@ -566,7 +597,10 @@ enum MCPServer {
     private static func callGetAppHelp(arguments: [String: Any]) -> [String: Any] {
         let query = arguments["query"] as? String
         let topic = arguments["topic"] as? String
-        let result = RoamSwitchKnowledgeBase.shared.search(query: query, topic: topic)
+        // Explicit `language` wins when supported; otherwise the app's language
+        // setting (English when that is an unsupported system language).
+        let language = RoamSwitchKnowledgeBase.resolveLanguage(arguments["language"] as? String)
+        let result = RoamSwitchKnowledgeBase.shared.search(query: query, topic: topic, language: language)
         return textContentResult(result)
     }
 
@@ -672,13 +706,39 @@ enum MCPServer {
             "inputSchema": ["type": "object", "properties": [String: Any]()],
         ],
         [
+            "name": "get_incident_timeline",
+            "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only a local JSON file. Returns RoamSwitch's unified, chronological containment incident timeline (newest first) across ARP spoofing auto-containment, the Ransomware Canary Guard, Runtime Threat Containment (XProtect Air-Gap) and the Port Anomaly Guard. Each event has timestamp, source (stable id + localized sourceLabel), severity, summary, process name/PID when known, a MITRE ATT&CK technique ID only where confidently mappable (never guessed), the action taken (air_gap / port_block, + localized label) and resolution status (open / released / autoTimeout / allowlisted). ARP spoofing containment is recorded ONLY here — no other tool reports it. Additive to get_canary_status, get_port_anomaly_incidents and get_runtime_threat_status (use those for per-guard detail). Same name and shape as the Linux edition's get_incident_timeline. Works during an Air-Gap.",
+            "inputSchema": [
+                "type": "object",
+                "properties": [
+                    "limit": [
+                        "type": "integer",
+                        "description": "Maximum number of events to return, newest first (1-200). Defaults to 50.",
+                    ],
+                ],
+            ],
+        ],
+        [
+            "name": "get_network_history",
+            "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only a local JSON file. Summarizes RoamSwitch's cross-session network identity memory (its always-on Evil-Twin detector): each remembered Wi-Fi SSID with how many distinct gateway devices have answered for it and when it was last seen (gateway MAC addresses themselves are never returned), plus lookalikePairs — remembered SSIDs whose names are a suspicious near-miss of each other with no gateway device in common, i.e. past Evil-Twin access point candidates. Use this to answer 'have I joined a look-alike network' or 'have I used this Wi-Fi before'.",
+            "inputSchema": [
+                "type": "object",
+                "properties": [
+                    "limit": [
+                        "type": "integer",
+                        "description": "Maximum number of remembered networks to return, most recently seen first (1-200). Defaults to 50. lookalikePairs is always complete.",
+                    ],
+                ],
+            ],
+        ],
+        [
             "name": "get_guard_status",
-            "description": "Reports whether RoamSwitch's optional Pro-tier auto-response guards (port anomaly auto-block, ARP spoofing auto-containment, USB keyboard/storage auto-eject, Bluetooth guard, Web/Mail download guard with AI Pickle model protection, DNS threat guard, runtime threat containment / XProtect Air-Gap) are turned on in Settings, plus the currently active security level and trusted-network status. Use this to answer 'are my automatic protections turned on'.",
+            "description": "Reports the Settings on/off state of every RoamSwitch protection readable from its preferences — port anomaly auto-block, ARP spoofing auto-containment, USB keyboard/storage guards, Bluetooth guard, Web/Mail download guard (with AI Pickle model protection), DNS threat guard, runtime threat containment (XProtect Air-Gap), ransomware canary, ClickFix guard, Docker event guard, critical-path FIM, persistence monitor, gateway ARP lock, scheduled log audit, clipboard secret-leak auditor, Air-Gap auto Wi-Fi kill, WireGuard VPN, Tailscale kill-switch, Link Guard and its feed updates, active vuln scan opt-in — each flagged `usingDefault` when the user never toggled it. Also returns Link Guard mode (off / warn = pause and ask, blocked if unanswered / block), VPN backend (wireguard / tailscale), DNS threat guard provider and scope, isolated dev-server ports, USB storage allowlist size, the active security level and trusted-network status. Settings state only: Pro license state and live VPN tunnel / kill-switch state are not readable from this process. Use this to answer 'are my automatic protections turned on'.",
             "inputSchema": ["type": "object", "properties": [String: Any]()],
         ],
         [
             "name": "audit_url_safety",
-            "description": "Analyzes an email link or web URL for phishing threats, homograph (Unicode spoofing) attacks, deceptive brand subdomains, high-risk TLDs, and unsafe HTTP plaintext without sending any data to external servers (Zero Telemetry). Use this to inspect whether a link in an email, chat, or document is safe to click.",
+            "description": "Analyzes an email link or web URL for phishing threats, homograph (Unicode spoofing) attacks, deceptive brand subdomains, high-risk TLDs, and unsafe HTTP plaintext without sending any data to external servers (Zero Telemetry). Each risk factor also carries a language-independent `kind` (e.g. homograph, brandSubdomainSpoofing, highRiskTLD) so results can be matched regardless of the user's UI language. Use this to inspect whether a link in an email, chat, or document is safe to click.",
             "inputSchema": [
                 "type": "object",
                 "properties": [
@@ -692,7 +752,7 @@ enum MCPServer {
         ],
         [
             "name": "get_app_help",
-            "description": "Searches RoamSwitch's complete, authoritative knowledge base covering all features (PF packet filter, ARP spoofing, USB storage guard, dev/AI server isolation, ClamAV quarantine, Pickle model download guard, secret leak prevention, DNS threat guard, ransomware canary, Bluetooth guard), settings guides, troubleshooting, and advice for displayed alert banners or error messages. Use this to answer 'how does feature X work', 'what does this notification/alert mean', 'what should I do about message Y', or 'how do I configure Z'.",
+            "description": "Searches RoamSwitch's complete, authoritative knowledge base (written in ja, en, zh-Hans, zh-Hant, ko, de, fr, es, it, pt-PT; answers in the app's language unless 'language' is given; queries match in any language) covering every feature: network auto-switching & PF levels, network history / Evil Twin SSID detection, ARP spoofing auto-block, gateway ARP/NDP pinning, WireGuard/Tailscale VPN kill switch, emergency Air-Gap (Wi-Fi radio kill, 10-minute failsafe), unknown-port auto-block & dev/AI server isolation, active vuln scan, BadUSB keyboard guard with keystroke timing analysis, USB storage guard, ClamAV download quarantine & quarantine manager, Pickle model warning, DNS threat guard, Link Guard (system extension, DoH/SNI, JA3, fail-closed warn mode), ransomware canary with SIGSTOP freeze, XProtect-linked Air-Gap, ClickFix guard, LaunchAgent/Daemon persistence monitor, Docker privileged-container guard, critical-path FIM, log audit & scheduled template anomaly detection, incident timeline, notification history (EICAR recorded without alert), clipboard & secret leak auditor, package CVE scan, 18-item security audit, simulations, MCP setup, and license — plus settings guides (manual override durations, Pro default-on guards), troubleshooting, and advice for displayed alert banners or error messages. Use this to answer 'how does feature X work', 'what does this notification/alert mean', 'what should I do about message Y', or 'how do I configure Z'.",
             "inputSchema": [
                 "type": "object",
                 "properties": [
@@ -705,6 +765,10 @@ enum MCPServer {
                         "description": "Filter by topic: 'all' (default), 'feature', 'alert_message', 'setting', or 'troubleshooting'.",
                         "enum": ["all", "feature", "alert_message", "setting", "troubleshooting"],
                     ],
+                    "language": [
+                        "type": "string",
+                        "description": "Optional response language: 'ja', 'en', 'zh-Hans', 'zh-Hant', 'ko', 'de', 'fr', 'es', 'it', or 'pt-PT' (tags like 'en-US' or 'zh-TW' are accepted). Defaults to the RoamSwitch app's language setting; unsupported values fall back to that, and an unsupported system language falls back to English.",
+                    ],
                 ],
             ],
         ],
@@ -714,25 +778,25 @@ enum MCPServer {
         [
             "uri": "roamswitch://docs/features",
             "name": "RoamSwitch Features Specification",
-            "description": "Full technical specifications and internal mechanics for all RoamSwitch security features (PF packet filter, ARP guard, USB storage guard, dev server isolation, download quarantine, DNS threat guard, ransomware canary, Bluetooth guard).",
+            "description": "Full technical specifications, defaults, and internal mechanics for every RoamSwitch security feature (network auto-switching & PF levels, Evil Twin SSID detection, ARP guard & gateway pinning, WireGuard/Tailscale VPN, emergency Air-Gap, port anomaly guard & dev server isolation, active vuln scan, BadUSB keyboard & USB storage guards, download quarantine & Pickle warning, DNS threat guard, Link Guard, ransomware canary, XProtect Air-Gap, ClickFix, persistence monitor, Docker guard, critical-path FIM, log audit, incident timeline, notification history, secret leak & package CVE scanners, 18-item audit, simulations, MCP, license), in the app's language.",
             "mimeType": "text/markdown",
         ],
         [
             "uri": "roamswitch://docs/alerts-and-messages",
             "name": "RoamSwitch Alert & Notification Advice Catalog",
-            "description": "Catalog of all alert banners, notifications, and warning messages shown by RoamSwitch, with exact causes, automated defenses, and recommended step-by-step user actions.",
+            "description": "Catalog of all alert banners, notifications, and warning messages shown by RoamSwitch (ARP spoofing, Evil Twin Wi-Fi, port anomaly, exposed database, BadUSB & scripted keyboard, USB storage, download quarantine, EICAR, Pickle, Link Guard block/hold, ransomware, XProtect Air-Gap, Gatekeeper, ClickFix, persistence, Docker, file tampering, log audit anomalies, clipboard secrets, Air-Gap failure, helper, score drop), with exact causes, automated defenses, and recommended step-by-step user actions, in the app's language.",
             "mimeType": "text/markdown",
         ],
         [
             "uri": "roamswitch://docs/settings-guide",
             "name": "RoamSwitch Settings & Operations Guide",
-            "description": "Step-by-step guidance for configuring network tiers, manual overrides, USB whitelists, watched folders, and secure DNS policies.",
+            "description": "Step-by-step guidance for registered networks and protection levels, the away default level, manual override durations, guards Pro turns on by default, USB/BadUSB allowlists, watched folders, secure DNS policy, Link Guard modes, VPN backend (WireGuard/Tailscale), and language, in the app's language.",
             "mimeType": "text/markdown",
         ],
         [
             "uri": "roamswitch://docs/troubleshooting",
             "name": "RoamSwitch Troubleshooting & Technical FAQ",
-            "description": "Authoritative guidance for helper disconnection, ClamAV/Homebrew setup, blueutil configuration, false-positive handling, and Zero Telemetry privacy design.",
+            "description": "Authoritative guidance for Free vs Pro, helper disconnection and install location, ClamAV/Homebrew and blueutil setup, network cut off by Air-Gap, false positives (quarantine, Link Guard, blocked dev servers, keyboards), EICAR test behavior, system extension approval, VPN issues, repeated log audit alerts, MCP setup, and Zero Telemetry privacy design, in the app's language.",
             "mimeType": "text/markdown",
         ],
     ]

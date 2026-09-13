@@ -30,14 +30,14 @@ block traffic, no license or payment code, no UI. Just the code that *observes* 
 | Unified-log security audit + log-template anomalies | `SecurityLogAuditor.swift`, `LogTemplateAnalyzer.swift` |
 | Active vulnerability verification (`127.0.0.1` only, opt-in) | `ActiveVulnScan.swift`, `ActiveVulnCveMapData.swift` |
 | Local, network-free CVE matching (Homebrew + lockfiles) | `PackageCveScan.swift`, `PackageCveMapData.swift`, `PackageCveScanLanguages.swift`, `PackageCveMapLanguagesData.swift` |
-| Guard state readers (quarantine, canary, port anomaly, runtime threat, notifications) | `QuarantineManager.swift`, `CanaryStatusReader.swift`, `PortAnomalyStatusReader.swift`, `RuntimeThreatStatusReader.swift`, `NotificationHistory.swift` |
+| Guard state readers (quarantine, canary, port anomaly, runtime threat, notifications, containment timeline, network history) | `QuarantineManager.swift`, `CanaryStatusReader.swift`, `PortAnomalyStatusReader.swift`, `RuntimeThreatStatusReader.swift`, `NotificationHistory.swift`, `ContainmentIncidentTimeline.swift`, `NetworkHistoryGuard.swift` |
 | Bundled knowledge base (`get_app_help`) | `RoamSwitchKnowledgeBase.swift` |
 | Localization plumbing | `AppLanguage.swift` |
 | Tests | `Tests/roamswitch-mcpTests/` — mirrored unit tests + `StdioSmokeTests.swift` |
 
 ## Tools exposed (`tools/list`)
 
-15 tools. Every one is read-only. Only `get_exposed_ports` and the opt-in
+17 tools. Every one is read-only. Only `get_exposed_ports` and the opt-in
 `run_active_vuln_scan` touch a socket at all, and both are pinned to `127.0.0.1`.
 
 ### Posture & network
@@ -50,13 +50,20 @@ block traffic, no license or payment code, no UI. Just the code that *observes* 
   against a known-dangerous-service database (Redis, MongoDB, …, plus local AI inference
   servers such as Ollama:11434, LM Studio:1234, Gradio:7860, vLLM:8000) and probed at
   `127.0.0.1:<port>` for CORS/headers.
-- `get_guard_status` — on/off of RoamSwitch's Pro auto-response guards, current protection
-  level, trusted-network state (read from the app's preferences domain — see *Standalone* below).
+- `get_guard_status` — on/off of all 22 guard settings (port anomaly, ARP containment, USB, Bluetooth,
+  download/DNS guards, runtime threat, ransomware canary, ClickFix, Docker events, critical-path FIM,
+  persistence monitor, gateway ARP lock, scheduled log audit, clipboard secret-leak auditor, Air-Gap
+  Wi-Fi kill, WireGuard / Tailscale kill-switch, Link Guard + feed updates, active vuln scan), each
+  flagged `usingDefault` when never toggled; plus Link Guard mode, VPN backend, DNS threat guard
+  provider/scope, isolated dev-server ports, USB storage allowlist size, current protection level
+  and trusted-network state (read from the app's preferences domain — see *Standalone* below).
+  Settings only: live VPN tunnel state lives in the privileged helper and is not reported.
 
 ### Offline auditing
 
 - `audit_url_safety` — phishing / Unicode homograph / brand-subdomain spoofing / high-risk TLD /
   plaintext HTTP. **Synchronous and fully offline**; the URL is sent nowhere and is never fetched.
+  Each risk factor carries a language-independent `kind` (e.g. `homograph`).
 - `audit_secrets` — API keys (OpenAI, Anthropic, GitHub, AWS, HuggingFace, Google AI/Gemini,
   Slack, Stripe) and SSH/RSA private keys in a string, a file, or a directory tree, via regex
   plus Shannon-entropy scoring. Matches are masked in the output.
@@ -99,6 +106,14 @@ RoamSwitch has severed the network.
   timestamp and size per quarantined file. Files are moved here, never deleted.
 - `get_notification_history` — every notification RoamSwitch sent in the past 7 days, newest
   first.
+- `get_incident_timeline` — one chronological view across ARP-spoof auto-containment, the
+  Ransomware Canary Guard, Runtime Threat Containment and the Port Anomaly Guard: source,
+  severity, summary, process, MITRE ATT&CK ID (only where confidently mappable), action taken,
+  and open/released/allowlisted status. ARP-spoof containment is recorded only here. Same name
+  as the Linux edition's tool.
+- `get_network_history` — the always-on Evil-Twin detector's memory: remembered SSIDs with a
+  gateway-device *count* and last-seen time (MAC addresses are never returned), plus look-alike
+  SSID pairs that never shared a gateway.
 
 ### Resources (`resources/list`)
 
@@ -154,7 +169,7 @@ Claude Code, Codex CLI, OpenCode and Antigravity at <https://lafine.net/mcp-setu
 ## Standalone vs. bundled
 
 Run inside the RoamSwitch app bundle, this code reads the app's live state. Built standalone from
-this repo, three things differ:
+this repo, four things differ:
 
 - **`get_guard_status`** reads the `com.tetsuharu.RoamSwitch` preferences domain, which is empty
   for a binary that isn't the app — so it reports guards off / network untrusted.
@@ -162,6 +177,9 @@ this repo, three things differ:
   `get_runtime_threat_status`, `get_notification_history`, `get_quarantine_status`) read the same
   preferences domain and the app's quarantine vault, so standalone they report "not enabled" with
   empty history rather than failing.
+- **`get_incident_timeline` / `get_network_history`** read JSON files under
+  `~/Library/Application Support/RoamSwitch/`, so they show the real history when RoamSwitch is
+  installed for the same user, and empty results otherwise.
 - **Localization**: without the app's `.lproj` resources, `loc(_:)` falls back to the key, which
   is the Japanese source string. Output is otherwise identical.
 

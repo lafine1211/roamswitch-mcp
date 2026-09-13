@@ -9,6 +9,14 @@ import Foundation
 /// Comprehensive, authoritative offline knowledge base for RoamSwitch.
 /// Exposes full product specifications, internal mechanics, alert message advice,
 /// settings guidance, and troubleshooting information to MCP clients and tests.
+///
+/// Localization: every entry exists in all 10 app languages (ja, en, zh-Hans,
+/// zh-Hant, ko, de, fr, es, it, pt-PT). The text is embedded directly in Swift
+/// source (`RoamSwitchKnowledgeBaseContent_<lang>.swift`) rather than in
+/// `Localizable.xcstrings`, because this file is mirrored verbatim into the
+/// standalone `roamswitch-mcp` SwiftPM package, which ships no localization
+/// resources at all. Entry ids, topics, and tags are language-independent and
+/// live in `entryCatalog()` below — ids are a stable API for MCP clients.
 public struct RoamSwitchKnowledgeBase: Sendable {
     public static let shared = RoamSwitchKnowledgeBase()
 
@@ -47,904 +55,465 @@ public struct RoamSwitchKnowledgeBase: Sendable {
         public let topic: String?
         public let totalResults: Int
         public let items: [KnowledgeItem]
+        /// Language code the returned items are written in (e.g. "ja", "en").
+        public let language: String?
 
-        public init(query: String?, topic: String?, totalResults: Int, items: [KnowledgeItem]) {
+        public init(query: String?, topic: String?, totalResults: Int, items: [KnowledgeItem], language: String? = nil) {
             self.query = query
             self.topic = topic
             self.totalResults = totalResults
             self.items = items
+            self.language = language
         }
+    }
+
+    /// Language-independent part of an entry (stable id, topic, search tags).
+    struct EntryMeta: Sendable {
+        let id: String
+        let topic: String
+        let tags: [String]
+    }
+
+    /// Language-dependent part of an entry, provided per language by the
+    /// `RoamSwitchKnowledgeBaseContent_<lang>.swift` files.
+    struct LocalizedEntry: Sendable {
+        let id: String
+        let title: String
+        let summary: String
+        let details: String
+        let recommendation: String
+    }
+
+    /// Localized framing for the `roamswitch://docs/*` Markdown resources.
+    struct MarkdownLabels: Sendable {
+        let featuresTitle: String
+        let featuresIntro: String
+        let alertsTitle: String
+        let alertsIntro: String
+        let settingsTitle: String
+        let settingsIntro: String
+        let troubleshootingTitle: String
+        let troubleshootingIntro: String
+        let summary: String
+        let overview: String
+        let detailsHeading: String
+        let adviceHeading: String
+        let recommendation: String
+        let bestPractice: String
+        let advice: String
+    }
+
+    // MARK: - Languages
+
+    /// Every language the knowledge base is written in (matches `AppLanguage`).
+    public static let supportedLanguageCodes: [String] = ["ja", "en", "zh-Hans", "zh-Hant", "ko", "de", "fr", "es", "it", "pt-PT"]
+
+    /// Used when a requested or system language is not one of the supported ones.
+    public static let fallbackLanguageCode = "en"
+
+    /// Maps a free-form language tag ("en-US", "zh_TW", "pt-BR", "JA") to one of
+    /// `supportedLanguageCodes`, or nil if it matches none of them.
+    public static func normalizeLanguageCode(_ raw: String?) -> String? {
+        guard let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else {
+            return nil
+        }
+        let lower = trimmed.replacingOccurrences(of: "_", with: "-").lowercased()
+        for code in supportedLanguageCodes where code.lowercased() == lower {
+            return code
+        }
+        if lower.hasPrefix("zh") {
+            let traditionalMarkers = ["hant", "-tw", "-hk", "-mo"]
+            if traditionalMarkers.contains(where: { lower.contains($0) }) {
+                return "zh-Hant"
+            }
+            return "zh-Hans"
+        }
+        if lower == "pt" || lower.hasPrefix("pt-") {
+            return "pt-PT"
+        }
+        let primary = lower.split(separator: "-").first.map(String.init) ?? lower
+        for code in supportedLanguageCodes where code.lowercased() == primary {
+            return code
+        }
+        return nil
+    }
+
+    /// The language the app is currently set to (`AppLanguage`, shared with the
+    /// MCP server process), else the first supported OS preferred language,
+    /// else English. Unlike `AppLanguage.activeLocaleCode`, an unsupported
+    /// system language falls back to English rather than Japanese.
+    public static func activeLanguageCode() -> String {
+        let current = AppLanguage.current
+        if current != .system, let code = normalizeLanguageCode(current.rawValue) {
+            return code
+        }
+        for preferred in Locale.preferredLanguages {
+            if let code = normalizeLanguageCode(preferred) {
+                return code
+            }
+        }
+        return fallbackLanguageCode
+    }
+
+    /// Resolves an explicitly requested language (if supported) or the active one.
+    public static func resolveLanguage(_ requested: String?) -> String {
+        if let code = normalizeLanguageCode(requested) {
+            return code
+        }
+        return activeLanguageCode()
     }
 
     // MARK: - Knowledge Database
 
-    public let allItems: [KnowledgeItem]
+    private let itemsByLanguage: [String: [KnowledgeItem]]
+    /// Per item index: one lowercased search haystack per language, so a query
+    /// written in any language matches regardless of the response language.
+    private let searchHaystacks: [[String]]
+
+    /// All items in the currently active language.
+    public var allItems: [KnowledgeItem] {
+        items(language: nil)
+    }
 
     public init() {
-        var items: [KnowledgeItem] = []
+        let metas = Self.entryCatalog()
+        var tables: [String: [String: LocalizedEntry]] = [:]
+        for code in Self.supportedLanguageCodes {
+            var table: [String: LocalizedEntry] = [:]
+            for entry in Self.localizedEntries(for: code) where table[entry.id] == nil {
+                table[entry.id] = entry
+            }
+            tables[code] = table
+        }
 
-        // 1. Features
-        items.append(contentsOf: Self.buildFeatures())
+        var byLanguage: [String: [KnowledgeItem]] = [:]
+        for code in Self.supportedLanguageCodes {
+            var list: [KnowledgeItem] = []
+            for meta in metas {
+                guard let text = tables[code]?[meta.id]
+                        ?? tables[Self.fallbackLanguageCode]?[meta.id]
+                        ?? tables["ja"]?[meta.id] else {
+                    continue
+                }
+                list.append(KnowledgeItem(
+                    id: meta.id,
+                    topic: meta.topic,
+                    title: text.title,
+                    summary: text.summary,
+                    details: text.details,
+                    recommendation: text.recommendation.isEmpty ? nil : text.recommendation,
+                    tags: meta.tags
+                ))
+            }
+            byLanguage[code] = list
+        }
+        self.itemsByLanguage = byLanguage
 
-        // 2. Alert Messages & Advice
-        items.append(contentsOf: Self.buildAlertMessages())
+        let reference = byLanguage[Self.fallbackLanguageCode] ?? []
+        var haystacks: [[String]] = []
+        for index in reference.indices {
+            var perLanguage: [String] = []
+            for code in Self.supportedLanguageCodes {
+                guard let list = byLanguage[code], index < list.count else { continue }
+                let item = list[index]
+                let text = "\(item.id) \(item.title) \(item.summary) \(item.details) \(item.recommendation ?? "") \(item.tags.joined(separator: " "))"
+                perLanguage.append(text.lowercased())
+            }
+            haystacks.append(perLanguage)
+        }
+        self.searchHaystacks = haystacks
+    }
 
-        // 3. Settings & Operations
-        items.append(contentsOf: Self.buildSettings())
-
-        // 4. Troubleshooting & FAQ
-        items.append(contentsOf: Self.buildTroubleshooting())
-
-        self.allItems = items
+    /// Items in `language` (any tag `normalizeLanguageCode` accepts), or the
+    /// active language when nil / unsupported.
+    public func items(language: String?) -> [KnowledgeItem] {
+        let code = Self.resolveLanguage(language)
+        return itemsByLanguage[code] ?? itemsByLanguage[Self.fallbackLanguageCode] ?? []
     }
 
     // MARK: - Search API
 
-    public func search(query: String? = nil, topic: String? = nil) -> KnowledgeSearchResult {
+    public func search(query: String? = nil, topic: String? = nil, language: String? = nil) -> KnowledgeSearchResult {
+        let code = Self.resolveLanguage(language)
+        let localized = itemsByLanguage[code] ?? itemsByLanguage[Self.fallbackLanguageCode] ?? []
         let trimmedQuery = query?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let trimmedTopic = topic?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let tokens = (trimmedQuery ?? "").components(separatedBy: .whitespaces).filter { !$0.isEmpty }
+        let filterTopic: String? = {
+            guard let t = trimmedTopic, !t.isEmpty, t != "all" else { return nil }
+            return t
+        }()
 
-        var filtered = allItems
-
-        if let topic = trimmedTopic, !topic.isEmpty, topic != "all" {
-            filtered = filtered.filter { $0.topic.lowercased() == topic }
-        }
-
-        if let q = trimmedQuery, !q.isEmpty {
-            let tokens = q.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
-            filtered = filtered.filter { item in
-                let targetText = "\(item.title) \(item.summary) \(item.details) \(item.recommendation ?? "") \(item.tags.joined(separator: " "))".lowercased()
-                return tokens.allSatisfy { targetText.contains($0) }
+        var filtered: [KnowledgeItem] = []
+        for (index, item) in localized.enumerated() {
+            if let t = filterTopic, item.topic.lowercased() != t {
+                continue
             }
+            if !tokens.isEmpty {
+                let haystacks = index < searchHaystacks.count ? searchHaystacks[index] : []
+                let matched = haystacks.contains { hay in
+                    tokens.allSatisfy { hay.contains($0) }
+                }
+                if !matched {
+                    continue
+                }
+            }
+            filtered.append(item)
         }
 
         return KnowledgeSearchResult(
             query: query,
             topic: topic,
             totalResults: filtered.count,
-            items: filtered
+            items: filtered,
+            language: code
         )
     }
 
     // MARK: - MCP Resource Documents
 
-    public func resource(for uri: String) -> String? {
+    public func resource(for uri: String, language: String? = nil) -> String? {
         switch uri {
         case "roamswitch://docs/features":
-            return generateFeaturesMarkdown()
+            return generateFeaturesMarkdown(language: language)
         case "roamswitch://docs/alerts-and-messages":
-            return generateAlertsMarkdown()
+            return generateAlertsMarkdown(language: language)
         case "roamswitch://docs/settings-guide":
-            return generateSettingsMarkdown()
+            return generateSettingsMarkdown(language: language)
         case "roamswitch://docs/troubleshooting":
-            return generateTroubleshootingMarkdown()
+            return generateTroubleshootingMarkdown(language: language)
         default:
             return nil
         }
     }
 
-    // MARK: - Internal Builders: Features
-
-    private static func buildFeatures() -> [KnowledgeItem] {
-        return [
-            KnowledgeItem(
-                id: "feat_network_autoswitch",
-                topic: "feature",
-                title: "自動ネットワークセキュリティ切替 & PFパケットフィルタ (3段階レベル)",
-                summary: "接続先ネットワーク（BSSID/ゲートウェイMAC/IP）を常時監視し、未登録Wi-Fiでは自動で最大ロックダウンを適用。PFパケットフィルタとステルスモードでMacを防御します。",
-                details: """
-                • 🟢 信頼 (Trusted / Open): 自宅・専用オフィス等。ファイアウォール解除、共有サービス（SSH/SMB/VNC/画面共有）およびAirDropを許可。
-                • 🟡 標準保護 (Protected / Filter): 職場・テザリング等。PFパケットフィルタ有効、ステルスモードで外部探査を遮断しつつ、共有サービスを維持。
-                • 🔴 最大ロックダウン (Lockdown): カフェ・公衆Wi-Fi・未登録ネットワーク等。PFパケットフィルタ全遮断、ステルスモード、共有デーモン停止、AirDrop完全無効化。
-                • 内部構造: 特権ヘルパー `RoamSwitchHelper`（XPC経由）が `/sbin/pfctl` の専用アンカー `com.tetsuharu.roamswitch` を操作。カーネルレベルでパケットを破棄（drop）。
-                • 手動オーバーライド: 「1時間だけ」「次回ネットワーク切断まで」「手動変更まで」を指定可能。移動時は自動解除され安全を維持。
-                """,
-                recommendation: "自宅・安全なオフィスは「現在のネットワークを登録」から登録し、外出先では常に「最大ロックダウン」が自動適用される状態で運用してください。",
-                tags: ["network", "firewall", "pf", "packet filter", "lockdown", "stealth", "airdrop", "ssh", "smb"]
-            ),
-            KnowledgeItem(
-                id: "feat_arp_spoof_guard",
-                topic: "feature",
-                title: "ARPスプーフィング（なりすまし通信）検知 & 自動隔離",
-                summary: "同一Wi-Fi内の攻撃者がルーターになりすまして通信を盗聴・改ざんするARPスプーフィング（中間者攻撃 / MITM）をリアルタイム検知し、自動遮断します。",
-                details: """
-                • 動作原理: 定期的にローカルARPテーブルを監視し、デフォルトゲートウェイのIPアドレスに対応するMACアドレスの急変や不審な重複エントリを検知。
-                • 検知時の挙動 (1.7.5〜): ロックダウン中は即座に全遮断（エアギャップ隔離）。バランス／信頼済みネットワークでは通知のみで、ユーザーがメニューの「今すぐ全遮断する」から手動発動。ルーター再起動やアクセスポイント切り替えでの誤発動、攻撃者が偽ARP 1つで通信を止めさせる事態を防ぐため。
-                • 位置づけ: これは「検知したら人間より速く切る」事後策です。未然防止は `feat_gateway_arp_lock`（予防固定）と `feat_vpn_tunnel`（暗号化トンネル）が担います。
-                """,
-                recommendation: "検知は既定でオンです。より強い中間者攻撃対策が必要なら VPN トンネル（feat_vpn_tunnel）、追加インフラ無しの予防なら ARP/NDP 固定（feat_gateway_arp_lock）を有効化してください。",
-                tags: ["arp", "spoofing", "mitm", "eavesdropping", "gateway", "mac", "airgap", "pro", "notify-first"]
-            ),
-            KnowledgeItem(
-                id: "feat_vpn_tunnel",
-                topic: "feature",
-                title: "VPN トンネル（WireGuard / Tailscale・キルスイッチ付き） (Pro)",
-                summary: "未信頼ネットワークで暗号化トンネルを自動接続し、中間者攻撃を無効化します。バックエンドは WireGuard（設定ファイル）または Tailscale（Exit Node）から選択。L2（ARP/NDP）の完全性に依存しない、中間者攻撃対策の本命。1.7.6 以降、1.8.0 でバックエンド選択。Network Extension エンタイトルメント不要。",
-                details: """
-                • バックエンド選択: 「ポート・デバイス監視」→「VPN トンネル」→「バックエンド」で WireGuard か Tailscale を選ぶ。選んだ方だけが動作。
-                • WireGuard: Homebrew の `wireguard-tools`（`brew install wireguard-tools`）が必要。WireGuard 設定ファイル（`.conf`）を読み込む。設定ファイルは**ユーザーが用意**（Mullvad・IVPN・Proton VPN、自前サーバー、勤務先支給）。RoamSwitch は VPN サーバーを提供しない。
-                • WireGuard キルスイッチ: pf `block drop all` に「lo / トンネル IF / 固定エンドポイント IP への UDP ハンドシェイク / DHCP / ICMP」だけの pass。トンネルが死んでいる間は平文が一切漏れない。
-                • Tailscale（1.8.0〜）: 既に Tailscale を使っている人向け。RoamSwitch は `tailscale up`/ログイン/導入はしない。`tailscale status` を読み `tailscale set --exit-node=<ノード>` を実行するだけ。**Exit Node 必須**（全通信をそこ経由に）。オフライン時は自動解除。
-                • Tailscale は **CLI 版（standalone）推奨**: `brew install tailscale` → `sudo tailscaled install-system-daemon` → `sudo tailscale up`。CLI が `/opt/homebrew/bin/tailscale` か `/usr/local/bin/tailscale` にあれば RoamSwitch がヘルパー（root）経由で確実に制御できる。**App Store 版（GUI）はアプリ外から `tailscale set` を実行できない**ため、その場合は Tailscale アプリで Exit Node を選び、RoamSwitch は状態表示とキルスイッチのみ担当。
-                • Tailscale キルスイッチ（**既定オフ・オプトイン**）: pf `block drop all` に「lo / Tailscale の utunN / CGNAT 100.64.0.0/10 / DNS / STUN 3478 / 41641 / DERP tcp 443 / DHCP / ICMP」の pass。WireGuard より緩く「漏れにくい」止まり。環境によっては Tailscale 自身の接続を切ることがあるため任意。
-                • 自動適用: 未信頼ネットワークでトンネル/Exit Node を up、信頼済みで down。
-                • ライセンス失効時: トンネル・Exit Node・キルスイッチは自動解除。
-                """,
-                recommendation: "カフェや公衆 Wi-Fi を頻繁に使うなら最も効果的です。Tailscale を既に使っているなら CLI 版（`brew install tailscale` + `sudo tailscaled install-system-daemon`）を入れて Tailscale バックエンド + Exit Node を選ぶのが手軽。そうでなければ `brew install wireguard-tools` + VPN プロバイダーの `.conf` で WireGuard。フルトンネル推奨。",
-                tags: ["vpn", "wireguard", "tailscale", "exit-node", "mitm", "killswitch", "tunnel", "pf", "untrusted-network", "pro", "homebrew"]
-            ),
-            KnowledgeItem(
-                id: "feat_gateway_arp_lock",
-                topic: "feature",
-                title: "ゲートウェイ ARP/NDP 固定（予防） (Pro)",
-                summary: "未信頼ネットワークに接続した時点で、ゲートウェイ・IPv6 ルーター・同一リンク上の DNS サーバーの MAC アドレスを近隣キャッシュに固定（permanent）し、ARP/NDP スプーフィングによる中間者攻撃を未然に防ぎます。1.7.5 以降。追加インフラ不要。",
-                details: """
-                • 動作: 「ポート・デバイス監視」→「未信頼ネットワークでゲートウェイの ARP/NDP を固定（予防）」で有効化。接続時に `route` / `scutil --dns` / `arp -n` / `ndp -an` から対象の現在の MAC を収集し、ヘルパーが `arp -s` / `ndp -s` で permanent エントリ化。
-                • 範囲: 固定するのは上記 3 種のエントリのみ。信頼済み（オープン）ネットワークでは固定しない。ネットワーク変更ごとに一度解除して再固定。
-                • 限界（TOFU）: 「最初に観測した MAC を信頼する」方式のため、接続前から攻撃者が居座っていた場合は偽の MAC を固定しうる。この前提を置きたくない場合は VPN トンネル（feat_vpn_tunnel）を使う。
-                • 永続化: 固定中の IP→MAC 集合は `/Library/Application Support/RoamSwitch/gateway_arp_lock.json` に保存。
-                """,
-                recommendation: "VPN の用意が難しい場合の軽量な中間者攻撃対策として有効です。VPN トンネルと併用も可能（VPN が本命、こちらは補助）。",
-                tags: ["arp", "ndp", "mitm", "gateway", "tofu", "neighbor-cache", "untrusted-network", "pro", "preventive"]
-            ),
-            KnowledgeItem(
-                id: "feat_port_anomaly_guard",
-                topic: "feature",
-                title: "ポート監視・未知のポート自動遮断 & 開発サーバー隔離",
-                summary: "リスニング中の全TCPポートを監視し、0.0.0.0で不用意にLANへ晒されたポートの検知、未知ポートの自動遮断、開発サーバーのワンクリック127.0.0.1隔離を行います。",
-                details: """
-                • リスニングポート監査: `lsof -iTCP -sTCP:LISTEN -n -P` で待機ポートを抽出。`0.0.0.0` (全公開) か `127.0.0.1` (localhost限定) かを判定。
-                • 危険サービス検査: 認証なしで公開されがちなRedis (6379), MongoDB (27017), Memcached (11211), Elasticsearch (9200), VNC (5900) に加え、ローカルAI/LLMサーバー（Ollama: 11434, LM Studio: 1234, Gradio/WebUI: 7860, vLLM: 8000）などを検知し警告。
-                • 未知ポート自動遮断 (Pro): 過去に確認されていない新しい実行体が突然0.0.0.0でリッスンを開始した際、`PFRulesetCoordinator` 経由でpfに外部アクセス遮断ルールを追加（localhostは素通し）。Pro有効化時に既定でオン。macOS標準のシステムデーモン（rapportd等、Handoffの中身）は対象外。誤検知時は通知の「許可する」ボタンまたは「外部公開ポート」画面で恒久的に解除可能。
-                • 開発サーバー外部隔離: Vite, Next.js, Flask, DockerやローカルLLMサーバー等がLAN内に露出した際、ワンクリックで外部通信を遮断しローカル専用に封鎖。
-                """,
-                recommendation: "Web開発時やローカルLLM実行時はサーバーを `127.0.0.1` (localhost) にバインドして起動してください（例: `OLLAMA_HOST=127.0.0.1 ollama serve`, `npm run dev -- -H 127.0.0.1`）。",
-                tags: ["port", "devserver", "0.0.0.0", "localhost", "redis", "mongodb", "ollama", "lmstudio", "ai", "llm", "lsof", "pro"]
-            ),
-            KnowledgeItem(
-                id: "feat_usb_keyboard_guard",
-                topic: "feature",
-                title: "不正USB / BadUSB 物理キーボード承認ガード",
-                summary: "未知のUSBキーボードや改造USBケーブル（Rubber Ducky / O.MG Cable等）接続時にキーストロークを遮断し、承認されるまでコマンド注入を防止します。",
-                details: """
-                • IOHIDManager常時監視: 新規HIDキーボードデバイス（UsagePage 0x01, Usage 0x06）の物理ポート接続をリアルタイム検知。
-                • CGEventTapキーストローク遮断: 未登録・未承認のキーボードからのキーストローク入力を即座に破棄（ドロップ）し、悪意ある自動スクリプト実行を阻止。
-                • 内蔵キーボード自動保護: MacBook内蔵キーボードは自動認識・許可され、作業を妨げません。
-                • 最前面承認モーダル: 接続時に承認ダイアログを表示し、ユーザー自身が「信頼して許可」した場合のみ入力を有効化。
-                • OSアクセサリ保護連携: Apple Silicon Macの「アクセサリの接続を許可」設定との二重防御を提供。
-                """,
-                recommendation: "「不正USB / BadUSB物理ポートガード (Pro)」を有効化し、信頼できる外付けキーボードのみを許可リストに登録してください。",
-                tags: ["badusb", "usb", "keyboard", "hid", "rubberducky", "omgcable", "pro", "injection"]
-            ),
-            KnowledgeItem(
-                id: "feat_usb_storage_guard",
-                topic: "feature",
-                title: "不正USBストレージ自動遮断 & ClamAV自動スキャン",
-                summary: "未登録のUSBストレージやSDカード接続時に自動取り出し。許可デバイスもClamAVでマルウェア検査を行ってからアクセスを許可します。",
-                details: """
-                • DiskArbitration監視: `DASession` と `DARegisterDiskAppearedCallback` により、外部ストレージマウントを瞬時に捕捉。
-                • 未登録デバイス遮断 (Pro): ホワイトリスト（USB許可リスト）に登録されていないデバイスを即座に `DADiskUnmount` / `DADiskEject` で取り出し。
-                • 段階的アクセス許可: 許可済みデバイスであっても、まずは「読み取り専用」でマウントしてClamAVでウイルススキャン。感染がなければ設定されたアクセス権（読み書き or 読み取り専用）に昇格。
-                • 感染時の緊急排出: マルウェア検知時は即座にアンマウント・取り出しを実行し、ユーザーへ緊急通知を発出。
-                """,
-                recommendation: "業務で使用する安全なUSBメモリのみを「USBデバイス許可リスト」に登録し、不要なデバイスの接続を制限してください。",
-                tags: ["usb", "badusb", "diskarbitration", "clamav", "whitelist", "pro", "storage"]
-            ),
-            KnowledgeItem(
-                id: "feat_webmail_download_guard",
-                topic: "feature",
-                title: "Web・メールダウンロード保護 & 自動検疫隔離",
-                summary: "Safari, Chrome, Mail, Slack, Discord等から保存されたファイルをFSEventsで常時監視し、ClamAVで即座にウイルス検査して隔離します。",
-                details: """
-                • FSEvents監視: `Downloads`, `Desktop`, `Documents` およびユーザー指定の監視対象フォルダを常時監視。
-                • 隔離属性検知: ダウンロード時にmacOSが付与する `com.apple.quarantine` 拡張属性を検出。
-                • ClamAV自動スキャン: バックグラウンドで `clamscan` を実行。
-                • セキュア隔離: 脅威検知時、ファイルを専用の隔離フォルダ（`~/Library/Application Support/RoamSwitch/Quarantine/`）へ即時退避し、パーミッションを `000` に制限して無力化。
-                • 隔離管理画面: メニューの「検疫・隔離ファイル管理」から、隔離理由の確認、完全削除、または安全確認後の復元が可能。
-                """,
-                recommendation: "「Web・メールダウンロード保護 (Pro)」を有効化し、独自の保存フォルダがある場合は「監視対象フォルダの編集」から追加してください。",
-                tags: ["download", "mail", "fsevents", "quarantine", "clamav", "malware", "pro"]
-            ),
-            KnowledgeItem(
-                id: "feat_dns_threat_guard",
-                topic: "feature",
-                title: "DNS脅威保護 & セキュア暗号化DNS自動適用",
-                summary: "Quad9, Cloudflare, AdGuard, CleanBrowsing等のセキュアDNSプロファイルを適用し、マルウェアC2通信やフィッシング詐欺ドメインをDNSレイヤーで未然に遮断します。",
-                details: """
-                • セキュアDNSプロバイダ: Quad9 (脅威ブロック重視), Cloudflare (1.1.1.2 マルウェアブロック), AdGuard (広告・トラッカー遮断), CleanBrowsing (セキュリティフィルター)。
-                • 適用ポリシー: 「未信頼ネットワークのみ適用（外出先限定）」または「常時適用（すべてのネットワーク）」。
-                • 内部制御: `networksetup -setdnsservers` を通じてアクティブなネットワークインターフェースのDNS設定を安全に切替・復元。
-                """,
-                recommendation: "外出先での悪質ドメイン接続や公衆Wi-Fiの偽DNSサーバー（DNSハイジャック）を防ぐため、Quad9等のセキュアDNSを有効化してください。",
-                tags: ["dns", "quad9", "cloudflare", "adguard", "phishing", "c2", "pro"]
-            ),
-            KnowledgeItem(
-                id: "feat_ransomware_canary_guard",
-                topic: "feature",
-                title: "ランサムウェア・ふるまい検知 & 自律エアギャップ隔離",
-                summary: "重要フォルダ内に高エントロピーなおとり（カナリア）ファイルを配置し、不正な暗号化や大量改ざんを検知した瞬間にネットワークを緊急全遮断します。",
-                details: """
-                • カナリア監視: `Desktop`, `Documents`, `Downloads` 内に隠しカナリアファイルを配置。FSEventsで変更・リネーム・削除を監視。
-                • ふるまいバースト検知: 短時間での異常な大量ファイル書き換えや暗号化シグネチャ（エントロピー上昇）を監視。
-                • 緊急エアギャップ隔離: ランサムウェア活動を検知した瞬間、PFパケットフィルタで外部通信を全遮断、共有サービスを停止し、被害拡大を物理防御。
-                • Wi-Fi無線も遮断（1.9.23〜）: PFの遮断はパケットを止めるだけで無線アダプタ自体は接続状態のままのため、`networksetup`でWi-Fi無線そのものも切断。最大10分で自動的に復帰し、アプリがクラッシュしても再起動しても手動操作なしで元に戻る。ARPスプーフィング検知・XProtectのマルウェア検知でも同様。設定で無効化可能。
-                """,
-                recommendation: "未知のゼロデイランサムウェアから重要データを守るため、「ランサムウェア・ふるまい検知 (Pro)」を有効にしておいてください。",
-                tags: ["ransomware", "canary", "airgap", "entropy", "fsevents", "pro"]
-            ),
-            KnowledgeItem(
-                id: "feat_bluetooth_guard",
-                topic: "feature",
-                title: "未信頼ネットワークでのBluetooth自動オフ",
-                summary: "外出先などの未登録Wi-Fiに接続した瞬間、Bluetoothを自動でオフにし、BlueBorne攻撃やAirTag/BLEトラッキングを防止。信頼ネットワークに戻ると自動復帰します。",
-                details: """
-                • ツール連携: Homebrew経由のオープンソースツール `blueutil` を使用してBluetoothの電源状態を制御。
-                • 動作フロー: 未登録Wi-Fi検知 -> Bluetooth切断・OFF -> 登録済みWi-Fi（自宅・職場）再接続 -> 自動でONに復帰。
-                • 注意事項: 有効にするには `brew install blueutil` が必要です（未導入時はメニュー内にセットアップ案内が表示されます）。
-                """,
-                recommendation: "外出先でAirDropやBLE機器を使用しない場合は、Bluetooth自動オフを有効にして周囲からの電波探索を防ぎましょう。",
-                tags: ["bluetooth", "blueutil", "ble", "blueborne", "pro", "homebrew"]
-            ),
-            KnowledgeItem(
-                id: "feat_link_safety_auditor",
-                topic: "feature",
-                title: "メール・Webリンクの安全性診断 (Zero Telemetry)",
-                summary: "不審なURLや短縮URLをブラウザで開く前に、端末内（Zero Telemetry）で安全に展開・解析し、Unicodeホモグラフ偽装やフィッシング危険度を100点満点で診断します。",
-                details: """
-                • Unicodeホモグラフ偽装検知: キリル文字やギリシャ文字を使ったなりすまし文字（Punycode / `xn--`）を検出。
-                • サブドメイン偽装検知: `apple.com.login-verify.xyz` のように大手ブランド名をサブドメインに紛れ込ませた構造を解析。
-                • 高リスクTLD判定: `.xyz`, `.top`, `.tk`, `.icu` などの使い捨てフィッシング頻出TLDをスコアリング減点。
-                • HTTP平文・IP直打ち検知: 認証画面等での暗号化なしHTTPや、生IPアドレスURLを警告。
-                • 完全ローカル完結: 外部の診断API等にURLを送信しないため、機密URLや認証トークンが外部に漏洩しません。
-                """,
-                recommendation: "メールやチャットで届いた不審なリンクは、直接クリックせずに「リンク安全性診断」またはMCPの `audit_url_safety` で検査してください。",
-                tags: ["link", "url", "phishing", "homograph", "punycode", "zerotelemetry", "audit"]
-            ),
-            KnowledgeItem(
-                id: "feat_passive_link_guard",
-                topic: "feature",
-                title: "リンク保護（フィッシング接続の自動遮断） (Pro)",
-                summary: "既知の詐欺サイト一覧とブランド偽装ドメイン判定に基づき、フィッシング／詐欺サイトへの接続を端末側で自動遮断します（Network Extension の申請は不要な /etc/hosts シンクホール方式）。macOS 1.7.2 以降は標準で「自動ブロック」。",
-                details: """
-                • 動作: 特権ヘルパーが `/etc/hosts` の管理セクションに対象ドメインを `0.0.0.0` で追記し、DNS キャッシュをフラッシュ。接続はブラウザ／アプリを問わず遮断されます。
-                • 3モード: 「オフ」＝セクション削除。「警告のみ（遮断しない）」＝フィードは読み込むが hosts は書き換えない。「明らかな詐欺サイトは自動でブロック（推奨）」＝フィード掲載・ブランドホモグラフを遮断。メニューバーの「リンク保護」で切替。
-                • 判定エンジンは Linux 版と共通。遮断対象は「脅威フィード掲載」または「ブランド名のホモグラフ偽装」の明確なケースのみ。それ以外は警告に留めます。
-                • 脅威フィード: 1日1回、受信専用の署名付き取得（送信なし・識別子なし）。フィード専用 Ed25519 鍵で検証（本体アップデートの Sparkle 鍵とは別鍵）。「自動更新」オフで外部通信ゼロ、同梱シード（約280件）＋ホモグラフ検知のみで動作。
-                • 非 Pro: モードは保存されるが `/etc/hosts` は変更されません（Pro 有効化で遮断が有効に）。
-                • 誤遮断時: 通知またはメニューからドメインを「許可」（5分間 or 恒久）。
-                """,
-                recommendation: "標準の「自動ブロック」を推奨します。社内ツール等が誤って遮断された場合はメニューの「許可リスト」に追加してください。外部通信を一切させたくない場合は「自動更新」をオフにしても、ホモグラフ検知と同梱シードで基本的な保護は維持されます。",
-                tags: ["link", "linkguard", "phishing", "homograph", "hosts", "sinkhole", "feed", "pro", "receive-only"]
-            ),
-            KnowledgeItem(
-                id: "feat_secret_leak_auditor",
-                topic: "feature",
-                title: "APIキー / シークレット誤送信防止（クリップボード保護）",
-                summary: "クリップボード内のテキストを完全ローカル（Zero Telemetry）で正規表現スキャンし、OpenAI、Anthropic、GitHub、AWS等のAPIキーを検知してWebやチャットへの誤貼り付けを防ぎます。",
-                details: """
-                • 検知対象キー: OpenAI (`sk-...`), Anthropic (`sk-ant-...`), GitHub (`ghp_...`), AWS Access Key (`AKIA...`), HuggingFace (`hf_...`), Google AI (`AIza...`), SSH/RSA秘密鍵, Slackトークン。
-                • 完全ローカル完結: クリップボードの内容は外部へ一切送信されず、生データもメモリに保持しません。
-                • 即時サニタイズ: 検知時にメニューバーからワンクリックでクリップボードを消去（クリア）可能。
-                """,
-                recommendation: "APIキーやシークレットをコピーした後は、AIチャットやWebフォームに貼り付ける前にワンクリックでクリップボードをクリアしてください。",
-                tags: ["secret", "apikey", "clipboard", "openai", "anthropic", "github", "aws", "zerotelemetry"]
-            ),
-            KnowledgeItem(
-                id: "feat_secret_leak_audit_tool",
-                topic: "feature",
-                title: "機密情報・APIキー漏洩監査ツール（貼り付け診断 & フォルダ一括スキャン） (1.8.4〜、1.8.9 でフォルダスキャン対応)",
-                summary: "メニューバー →「マルウェア対策」→「機密情報・APIキー漏洩監査」。テキストを貼り付けての即時診断に加え、1.8.9からはフォルダ単位の再帰スキャンにも対応した、オンデマンドの手動監査ツールです。クリップボード監視（feat_secret_leak_auditor）とは別機能で、対象を自分で選んで能動的に監査します。",
-                details: """
-                • テキスト診断: テキストを貼り付けると `SecretLeakAuditor` が即座に走査し、行番号・マスク済み文字列・種別ごとの推奨対応を表示。
-                • フォルダスキャン（1.8.9〜）: 「フォルダを選択してスキャン」から、ソースコードのチェックアウト先などディレクトリを丸ごと再帰的に監査（`auditDirectory(at:)`）。`.git`・`node_modules`・`target`・`vendor`・`dist`・`build`・`__pycache__`・`venv` は自動除外、2MB超・バイナリ判定ファイルもスキップ。
-                • 権限プロンプトの説明（1.8.9〜）: デスクトップ/ダウンロード等の保護フォルダを選ぶと、macOSのアクセス許可プロンプトが出る前に「なぜこのアクセスが必要か」「Zero Telemetryである」ことを説明する初回のみのダイアログを表示。不審なアプリと誤解されるのを防ぐ。
-                • 完全ローカル: 処理は別スレッドで実行されUIをブロックしない。外部への送信は一切発生しない。
-                """,
-                recommendation: "リポジトリのチェックアウト直後や、AIチャットにコードを貼り付ける前の一括チェックに使ってください。",
-                tags: ["secret", "apikey", "folder-scan", "audit", "zerotelemetry", "tcc", "permission"]
-            ),
-            KnowledgeItem(
-                id: "feat_docker_event_guard",
-                topic: "feature",
-                title: "Dockerリスク検知ガード (1.8.9〜、Pro・既定オフ)",
-                summary: "メニューバー →「マルウェア対策」→「Dockerの特権コンテナ・docker.sockマウントを検知」。--privileged起動やdocker.sockのバインドマウントなど、コンテナ脱出につながり得るリスクの高いDocker設定を新規起動の瞬間に検知して通知します。",
-                details: """
-                • 動作: `DockerEventGuard` が20秒ごとに `docker ps -q` で軽量ポーリングし、前回との差分（新規起動コンテナ）だけを `docker inspect --format` で詳細確認。Linux版と同一の判定書式（`DOCKER_INSPECT_RISK_FORMAT`）を使い、両OSで同じ条件を検知。
-                • 通知のみ: 検知しても自動遮断は行わない。リスクの高い「設定」であって確認された侵害ではないため（監視エージェントを意図的にprivilegedで動かす等の正当用途もある）。
-                • 既定オフの理由: Dockerを使わないユーザーが大半のため、Proライセンスでも既定はOFF。
-                • シミュレーション: メニューの「Dockerリスク検知のシミュレーション（動作確認）」からDockerを使わずに通知経路をテスト可能。
-                """,
-                recommendation: "Dockerを開発で使うPro契約者は、コンテナ脱出リスクの早期発見のため有効化を推奨します。",
-                tags: ["docker", "container", "privileged", "docker.sock", "container-escape", "pro", "notify-only"]
-            ),
-            KnowledgeItem(
-                id: "feat_ai_model_guard",
-                topic: "feature",
-                title: "危険なAIモデル形式（Pickle / PyTorch）ダウンロード保護",
-                summary: "HuggingFaceやCivitaiからダウンロードされたモデルファイル（.pkl, .pickle, .pt）のデシリアライズ脆弱性・任意コード実行リスクを検知し、安全なSafeTensors / GGUF形式の利用を推奨します。",
-                details: """
-                • 高リスク形式検知: PythonのPickle機構（任意コード実行の危険性）を含む `.pkl` / `.pickle` / `.pt` ファイルをダウンロード時に自動識別。
-                • 安全形式推奨: 改ざんや任意コード実行の危険がない `.safetensors` や `.gguf` 形式への移行をガイダンス。
-                • ClamAV自動スキャン: Web/Mailダウンロード保護ガードと連携し、ウイルス・マルウェアのシグネチャ検査を自動実行。
-                """,
-                recommendation: "出所不明なPickle / PyTorch形式のモデルファイルは直接ロードせず、SafeTensors形式のモデルを利用してください。",
-                tags: ["ai", "model", "pickle", "safetensors", "gguf", "pytorch", "huggingface", "malware"]
-            ),
-            KnowledgeItem(
-                id: "feat_security_health_checker",
-                topic: "feature",
-                title: "Macセキュリティ総合診断 (10項目 スコア & レポート)",
-                summary: "FileVault, SIP, Gatekeeper, 自動アップデート, XProtect, ファイアウォール, Wi-Fi暗号化, ARP, ポート露出等を包括的にスキャンし、100点スコアと改善手順を提示します。",
-                details: """
-                • 1. FileVault: APFSディスク暗号化が有効か
-                • 2. SIP (システム整合性保護): OS中核ファイル保護が有効か
-                • 3. Gatekeeper: 開発元公認アプリのみに制限されているか
-                • 4. 自動アップデート: セキュリティパッチの自動適用が有効か
-                • 5. XProtect: Apple標準マルウェア定義が最新稼働しているか
-                • 6. macOSファイアウォール: 受信接続ブロックが有効か
-                • 7. ステルスモード: ICMP/探査パケットへの応答拒否が有効か
-                • 8. Wi-Fi暗号化強度: WPA3/WPA2が適用されているか (Open/WEP警告)
-                • 9. ARPスプーフィング: ゲートウェイなりすましがないか
-                • 10. 外部公開ポート: 危険な0.0.0.0バインドの待機ポートがないか
-                """,
-                recommendation: "定期的に「総合診断レポート」を実行し、スコア90点以上（Grade A）を維持するように設定を調整してください。",
-                tags: ["audit", "score", "filevault", "sip", "gatekeeper", "firewall", "xprotect"]
-            ),
-            KnowledgeItem(
-                id: "feat_autonomous_sentinel",
-                topic: "feature",
-                title: "バックグラウンド自律巡回 & ClamAV定義自動更新",
-                summary: "アプリ起動中、4時間ごとにバックグラウンドでセキュリティ健全性を自律診断。スコア低下時の自動警告や1日1回のウイルス定義更新・定期スキャンを行います。",
-                details: """
-                • 4時間ごとの定期診断: スコア低下や新たな脆弱性（ポート露出、ファイアウォール無効化など）を検知すると自動通知。
-                • ClamAV定義自動更新: 1日1回 `freshclam` を自律実行し、最新のウイルスシグネチャを自動取得。
-                • 日次定期スキャン: 指定フォルダのウイルススキャンを行い、脅威検出時は即時隔離＋警告通知を発出。
-                """,
-                recommendation: "Pro版をお使いの場合は、バックグラウンド自律巡回が有効になっていることを確認してください。",
-                tags: ["autonomous", "sentinel", "background", "freshclam", "pro"]
-            ),
-            KnowledgeItem(
-                id: "feat_privileged_helper",
-                topic: "feature",
-                title: "特権ヘルパーツール (`RoamSwitchHelper` XPC)",
-                summary: "macOSのPFファイアウォールや共有サービスを安全に制御するため、特権分離されたLaunchDaemonヘルパーがバックグラウンドで連携動作します。",
-                details: """
-                • 特権分離アーキテクチャ: メインアプリは通常ユーザー権限で動作し、ルート権限が必要なPFルール変更やデーモン制御のみを専用XPCプロトコル経由で `RoamSwitchHelper` に委譲。
-                • インストール場所: `/Library/PrivilegedHelperTools/com.tetsuharu.RoamSwitch.Helper`
-                • セキュリティ検証: コード署名（Team ID / Requirement string）を相互検証し、不正なプロセスからのXPC呼び出しを遮断。
-                """,
-                recommendation: "初回起動時にヘルパーツールのインストール許可（パスワードまたはTouch ID）を承認してください。",
-                tags: ["helper", "xpc", "root", "pfctl", "privilege", "security"]
-            ),
-            KnowledgeItem(
-                id: "feat_license_pro_tier",
-                topic: "feature",
-                title: "Pro 永続ライセンス & 2台利用アンロック",
-                summary: "買い切り（¥2,980）のPro永続ライセンス。Ed25519暗号署名トークンによりオフラインでも動作し、1ライセンスで2台のMacまで利用可能です。",
-                details: """
-                • Proアンロック機能: ランサムウェアふるまい検知、未知ポート自動遮断、ARPスプーフィング自動遮断、不正USBストレージガード、Web/Mailダウンロード自動隔離、DNS脅威保護、Bluetooth自動オフ、リアルタイム通知、自律巡回、ログCSV出力。
-                • 暗号検証: サーバーから発行されるEd25519電子署名入りライセンストークンをアプリ内の公開鍵で端末ローカル検証。
-                • 端末管理: ライセンス認証画面から現在のアクティベーション状況確認や、買い替え時のアンバインド（登録解除）が可能。
-                """,
-                recommendation: "高度な自動防護機能や自律巡回を利用したい場合は、Pro版へのアップグレードをご検討ください。",
-                tags: ["license", "pro", "ed25519", "activation", "devices"]
-            ),
-            KnowledgeItem(
-                id: "feat_package_cve_scan",
-                topic: "feature",
-                title: "パッケージCVE照合 (Homebrew + npm/PyPI/crates.io等7エコシステム) (Zero Telemetry)",
-                summary: "インストール済みのHomebrewパッケージと、指定したプロジェクトフォルダ内の依存関係ロックファイルを、ローカルに保持した既知CVEマップと突き合わせます。ネットワーク接続は一切行いません。",
-                details: """
-                • Homebrewスキャン: `brew list --versions` で列挙した各パッケージを、NVDの実CVE APIから生成したformula→CPE対応表と突き合わせ。findingには `confidence` フィールドが付き、「confirmed」（手動検証済みの対応表）と「gray」（未検証のCPEキーワード一致、誤検知の可能性ありと明記）を区別。
-                • 依存関係スキャン（開発者向け・任意）: 追加したプロジェクトフォルダ内のロックファイル（package-lock.json / requirements.txt / Pipfile.lock / poetry.lock / Cargo.lock / Gemfile.lock / composer.lock / go.sum / pom.xml）を解析し、npm・PyPI・crates.io・RubyGems・Packagist・Go・Mavenの7エコシステムの既知CVEマップ（OSV.dev由来、CVSS 7.0以上）と突き合わせ。
-                • データ配信: 各マップは組み込み時は意図的に空のシードで、`PackageCveMapUpdater` が日次で署名済みマニフェストから実データを取得（受信専用・識別子なし）。日次配信が未実行またはOFFの間は「未取得」と表示され、何も検出しない。
-                • MCPツール: `run_package_cve_scan`（Homebrew）と `run_package_cve_scan_languages`（依存関係、`watchedFolders` 引数）の2種。
-                • 完全ローカル完結: パッケージ列挙・バージョン比較・CVE照合すべて端末内で完結し、スキャン自体はネットワーク接続を一切行わない。
-                """,
-                recommendation: "メニューの「📦 パッケージCVE照合 (Homebrew)…」から実行できます。開発中プロジェクトの依存関係も確認したい場合は「依存関係」タブでプロジェクトフォルダを追加してください。",
-                tags: ["cve", "homebrew", "npm", "pypi", "crates.io", "rubygems", "packagist", "go", "maven", "zerotelemetry", "mcp"]
-            ),
-            KnowledgeItem(
-                id: "feat_active_vuln_scan",
-                topic: "feature",
-                title: "実証型脆弱性診断（能動的到達確認） — 既定オフ",
-                summary: "127.0.0.1上で検出されたサービスに対し、認証なしで実際に応答するかを最小限の読み取り専用プローブで確認します。既定でオフ・明示的なオプトインが必要です。",
-                details: """
-                • 対象は127.0.0.1のみ: `ListeningPortMonitor` が検出したこのMac自身のポートのみを対象とし、他ホストへは一切送信しない。
-                • 既知サービスの無認証確認: Redis（PING）・Memcached（stats）・MongoDB（listDatabases、isMaster/helloハンドシェイクは意図的に不使用）に対し、単発・短タイムアウトの非破壊プローブを送信し、認証なしで応答するかを確認。
-                • 汎用開発サーバー診断: 検出されたローカル開発サーバーポートに対し、CORS誤設定（Origin反射+資格情報許可）・パストラバーサル（`../`での`/etc/passwd`読み取り試行）・オープンリダイレクトを診断。
-                • 既知CVEバージョン照合: Redis/Memcachedが無認証確認された場合、そのバージョンを追加の非破壊クエリで取得し、既知CVE（例: Redis CVE-2022-24834、Memcached CVE-2018-1000115）のバージョン範囲とのみ照合。実際のエクスプロイトペイロードは一切送信しない。
-                • オプトイン: `UserDefaults` の `RoamSwitch.ActiveVulnScanEnabled` が明示的にtrueでない限り実行されない。
-                """,
-                recommendation: "自分のMac上で動かしている開発用サーバー（Redis・Docker・ローカルLLM等）が本当に無認証で到達可能かを確認したい場合に有効化してください。他ホストへの診断は行いません。",
-                tags: ["vulnerability", "redis", "memcached", "mongodb", "cors", "cve", "opt-in", "mcp"]
-            ),
-            KnowledgeItem(
-                id: "feat_clickfix_guard",
-                topic: "feature",
-                title: "ClickFix対策 — 不審なTerminalコマンド検知時に自動遮断 (Pro・既定オフ)",
-                summary: "偽CAPTCHA/エラー画面がユーザー自身にコマンドを貼り付けさせて実行させる「ClickFix」手口を、シェル履歴から検知し、検知時にネットワークを緊急遮断します。",
-                details: """
-                • 検知対象: `~/.zsh_history` / `~/.bash_history` を監視し、①`StaticSignatureScanner` と共有するリバースシェル一発コマンドのパターン、②base64デコード結果をシェルや`osascript`に直接パイプする二重迂回パターン、の2種類のみを検知（正規のインストーラーが使う単純な`curl | bash`は意図的に対象外）。
-                • 事後対応の理由: 検知時点でコマンドは既に実行済みだが、多段階ペイロード（二段目のダウンロード・リバースシェル接続・認証情報の持ち出し等）が進行中であれば、即座のネットワーク遮断で被害拡大を止められる。
-                • Gatekeeperをすり抜ける理由: ユーザー自身の正規シェルが入力通りに実行しているだけなので、プロセス自体には不審な点がなく、コード署名検証では検知できない。
-                • 既定オフ: 他の自律遮断ガードと異なり、ネットワーク自動遮断という強い反応を伴う比較的新しいヒューリスティックのため、既定では無効。
-                """,
-                recommendation: "偽エラーページや偽CAPTCHAに騙されてTerminalにコマンドを貼り付けてしまうリスクに備えたい場合は、有効化を検討してください。",
-                tags: ["clickfix", "social-engineering", "terminal", "shell-history", "airgap", "pro", "opt-in"]
-            ),
-            KnowledgeItem(
-                id: "feat_persistence_monitor_guard",
-                topic: "feature",
-                title: "永続化（LaunchAgent/LaunchDaemon）監視",
-                summary: "新規のLaunchAgent/LaunchDaemonインストールをリアルタイム監視し、生のシェル/スクリプトインタープリタを直接起動する不審な設定を検知・通知します。",
-                details: """
-                • 監視対象: `~/Library/LaunchAgents`・`/Library/LaunchAgents`・`/Library/LaunchDaemons` をFSEventsで常時監視（デバウンス約1.5秒）。
-                • 検知ロジック: マルウェアは正規署名済みの`/bin/bash`や`/usr/bin/osascript`自体にコードを埋め込まず「スクリプトとして」実行させるため、インタープリタ自身の署名確認では検知できない。そのため、生インタープリタを直接起動するLaunchAgent/Daemonはインタープリタの署名に関わらず一律で検知対象とし、スクリプト引数を`StaticSignatureScanner`にも通して追加シグナルとする。
-                • 検知のみ（ブロックしない）: EndpointSecurityの`ES_EVENT_TYPE_AUTH_CREATE`エンタイトルメントを取得していないため、plistの書き込み自体は止められない。書き込みから約1.5秒以内に検知し、正規かどうかを判定して通知する設計。
-                • 既定オン: 新規インストール直後から有効。
-                """,
-                recommendation: "見慣れないLaunchAgent/Daemonの通知が来た場合は、内容を確認し不審であれば削除してください。正規のアプリのインストーラーによるものであれば無視して構いません。",
-                tags: ["persistence", "launchagent", "launchdaemon", "fsevents", "malware", "detection-only"]
-            ),
-            KnowledgeItem(
-                id: "feat_runtime_threat_containment",
-                topic: "feature",
-                title: "XProtectのマルウェア検知に連動した自動ネットワーク遮断 (Pro・既定オフ)",
-                summary: "Apple純正のXProtect / XProtect Remediatorが実際にマルウェアを検知（有罪判定）した瞬間、ネットワークを緊急全遮断します。Gatekeeperのブロック（未署名アプリの実行阻止等）だけでは発動しません。",
-                details: """
-                • 信号源: `/usr/bin/log stream --predicate ... --style ndjson` の長時間ストリーム購読（ポーリングではなくブロッキング待機のためアイドル時のCPU負荷はほぼゼロ）でXProtect関連のシステムログを監視。
-                • Gatekeeperとの違い: 未署名アプリの起動阻止など、開発者が自分のビルドを実行する際にも日常的に発生するGatekeeperブロックは通知のみに留め、誤検知によるロックダウンを避ける。XProtectがマルウェアを実際に有罪判定した場合のみ「critical」として扱い、自動遮断する。
-                • 位置づけ: `PortAnomalyGuard`（新規プロセス⇔新規公開ポートのヒューリスティック、狭い範囲でそのポートのみ隔離）や`RansomwareCanaryGuard`（おとりファイルのふるまい検知）とは別の独立した信号源。Apple自身のマルウェアエンジンが実際に検知した、という高信頼度シグナルに反応する。
-                • 分類ロジック共有: 手動実行の「Macセキュリティログ監査」と同じ`SecurityLogAuditor.parseNdjsonLine`を使うため、両者は常に同じ基準でイベントを分類する。
-                • 既定オフ: 他の自律遮断ガード同様にオプトイン。
-                """,
-                recommendation: "Apple純正のマルウェア対策と連動した自動防御を追加したい場合に有効化してください。開発者が未署名の自作アプリを頻繁に実行する環境でも、Gatekeeperブロックだけでは誤発動しません。",
-                tags: ["xprotect", "runtime-threat", "airgap", "malware", "log-stream", "pro", "opt-in"]
-            ),
-        ]
-    }
-
-    // MARK: - Internal Builders: Alert Messages & Advice
-
-    private static func buildAlertMessages() -> [KnowledgeItem] {
-        return [
-            KnowledgeItem(
-                id: "alert_arp_spoofing",
-                topic: "alert_message",
-                title: "🚨 ARP Spoofing Detected / ゲートウェイのなりすまし通信を検知",
-                summary: "同じWi-Fiネットワーク内に、ルーター（ゲートウェイ）になりすまして通信を盗聴・改ざんしようとしている端末が存在することを検知した際のアラート。",
-                details: """
-                • 発生原因: 攻撃者が同一LAN内でARP応答パケットを偽造してブロードキャストし、被害端末の通信を自分経由に誘導（中間者攻撃 / Man-In-The-Middle）。
-                • 自動防御: RoamSwitchのARPガードが自動的に通信を隔離し、パケット傍受を防止。
-                • メッセージ例:
-                  - 「🚨 ARPスプーフィング（なりすまし通信）を検知しました」
-                  - 「Gateway 192.168.1.1 is being spoofed by 00:11:22:33:44:55」
-                """,
-                recommendation: """
-                【即時対処手順】
-                1. 🚨 **ただちにWi-Fiを切断**してください（このWi-Fiネットワークは極めて危険です）。
-                2. インターネットが必要な場合は、スマートフォンのテザリングや暗号化された安全な回線に切り替えてください。
-                3. パスワード入力やオンライン決済、業務通信は絶対に行わないでください。
-                4. メッシュWi-Fiの移動による誤検知と判明している場合のみ、メニューから手動で解除してください。
-                """,
-                tags: ["alert", "arp", "spoofing", "mitm", "wifi", "danger"]
-            ),
-            KnowledgeItem(
-                id: "alert_unencrypted_wifi",
-                topic: "alert_message",
-                title: "⚠️ Unencrypted Wi-Fi / 暗号化のない公衆Wi-Fiに接続",
-                summary: "パスワード設定や暗号化（WPA2/WPA3）のないOpen Wi-Fi、または古いWEP暗号化ネットワークに接続した際の警告。",
-                details: """
-                • 発生原因: カフェや街頭のフリーWi-Fiなど、無線区間が平文で暗号化されていないため、周囲の誰でも無線パケットを傍受可能な状態。
-                • 自動防御: RoamSwitchが自動で「最大ロックダウン」を適用し、外部からのインバウンド接続と共有サービスを停止。
-                """,
-                recommendation: """
-                【即時対処手順】
-                1. 可能であればVPN（Virtual Private Network）を併用するか、信頼できるテザリング回線に切り替えてください。
-                2. 暗号化されていないHTTPサイトでのログインや個人情報の入力は避けてください。
-                3. RoamSwitchの「最大ロックダウン」が有効になっていることを確認してください。
-                """,
-                tags: ["alert", "wifi", "open", "unencrypted", "wep", "lockdown"]
-            ),
-            KnowledgeItem(
-                id: "alert_port_anomaly",
-                topic: "alert_message",
-                title: "🚪 Port Anomaly Detected / 新しい外部公開ポートが検出されました",
-                summary: "これまで確認されていない新しいTCPポートが `0.0.0.0` (全公開) でバインドされ、外部ネットワークに露出した際のアラート。",
-                details: """
-                • 発生原因: 開発用Webサーバー（Next.js, Vite, Python, Docker）の起動、LAN受信アプリ（LocalSend, Syncthing等）のガード有効化後の起動、またはバックドア/不正アプリの待機開始。
-                • 自動防御: 「未知ポート自動遮断 (Pro)」が有効な場合、該当ポートへの外部アクセスをpfパケットフィルタで即座に遮断（Macからの利用・localhostは影響なし）。macOS標準のシステムデーモンは対象外。
-                """,
-                recommendation: """
-                【即時対処手順】
-                1. メニューの「外部公開ポート」または `get_exposed_ports` ツールでプロセス名（PID）とポート番号を確認してください。
-                2. 自身の開発サーバーやLAN受信アプリ（LocalSend等）の場合は、通知バナーの「許可する」ボタン、または「外部公開ポート」画面の当該項目で解除してください。以降は恒久的に許可されます。
-                3. 開発サーバーは `127.0.0.1` バインドに変更して再起動するのが安全です。
-                4. 身に覚えのない不審なプロセスの場合は、そのまま遮断させたうえでプロセスを終了し、セキュリティ診断とウイルススキャンを実行してください。
-                """,
-                tags: ["alert", "port", "anomaly", "exposed", "0.0.0.0", "devserver"]
-            ),
-            KnowledgeItem(
-                id: "alert_untrusted_usb",
-                topic: "alert_message",
-                title: "🔌 Untrusted USB Storage Blocked / 未登録のUSBストレージを取り出しました",
-                summary: "ホワイトリスト（許可リスト）に登録されていないUSBメモリや外部ストレージが挿入され、データ保護のため自動排出された際のアラート。",
-                details: """
-                • 発生原因: 未許可のUSBストレージ接続。悪意ある人物による不正持ち出しやBadUSB攻撃を防止。
-                • 自動防御: ディスクをマウントさせずに即時アンマウント・排出。
-                """,
-                recommendation: """
-                【対処手順】
-                1. 自身が接続した安全なデバイスである場合は、メニューの「USBストレージ保護設定」>「接続中デバイスから追加」で許可リストに登録してください。
-                2. 業務方針に合わせて「読み取り専用」または「読み書き両方」を選択して登録してください。
-                """,
-                tags: ["alert", "usb", "storage", "untrusted", "eject", "badusb"]
-            ),
-            KnowledgeItem(
-                id: "alert_malware_usb",
-                topic: "alert_message",
-                title: "🦠 Malware Detected on USB / USBストレージからマルウェアを検出",
-                summary: "許可済みUSBストレージのマウント前ClamAV自動検査において、ウイルスまたは悪意あるファイルが検出された際のアラート。",
-                details: """
-                • 発生原因: USBメモリ内に感染ファイルが存在。
-                • 自動防御: 直ちにボリュームをアンマウントして強制排出。Mac本体への感染を防ぎます。
-                """,
-                recommendation: """
-                【即時対処手順】
-                1. 該当のUSBメモリを別の安全な隔離環境で初期化（フォーマット）するか、ウイルス駆除を行ってください。
-                2. Mac本体に感染がないか、「マルウェア対策」からシステム全体のスキャンを実行してください。
-                """,
-                tags: ["alert", "malware", "virus", "usb", "clamav", "danger"]
-            ),
-            KnowledgeItem(
-                id: "alert_quarantined_download",
-                topic: "alert_message",
-                title: "📥 Malicious Download Quarantined / ダウンロードされた脅威ファイルを隔離しました",
-                summary: "Webブラウザやメール、Slack等から保存されたファイルからマルウェアシグネチャが検出され、即座に安全な隔離フォルダへ移動された際のアラート。",
-                details: """
-                • 発生原因: ダウンロードファイルにウイルス、トロイの木馬、アドウェアが含まれていた。
-                • 自動防御: ファイルを直ちに `~/Library/Application Support/RoamSwitch/Quarantine/` へ退避し、パーミッション `000` で無力化。
-                """,
-                recommendation: """
-                【対処手順】
-                1. 該当ファイルは実行できない状態に隔離されています。
-                2. メニューの「検疫・隔離ファイル管理」を開き、該当ファイルを選択して「完全に削除」してください。
-                3. 誤検知が確実な開発用バイナリ等の場合のみ、「元の場所へ復元」を実行してください。
-                """,
-                tags: ["alert", "download", "quarantine", "clamav", "trojan", "malware"]
-            ),
-            KnowledgeItem(
-                id: "alert_ransomware_activity",
-                topic: "alert_message",
-                title: "🚨 Ransomware Activity Detected / ランサムウェアの疑いのある活動を検知・緊急隔離",
-                summary: "カナリアファイルの不正な改ざんや、短時間での異常なファイル書き換えバーストを検知し、緊急エアギャップ全遮断が発動した際のアラート。",
-                details: """
-                • 発生原因: バックグラウンドで動作する未知のランサムウェアがユーザーのドキュメントを暗号化しようとした。
-                • 自動防御: 外部通信を全遮断、共有サービスを緊急停止し、C2サーバーとの通信やLAN内への感染拡大を物理阻止。
-                """,
-                recommendation: """
-                【緊急対処手順】
-                1. 🚨 **作業中の重要な未保存ファイルを別名保存し、不審なアプリをすべて終了**してください。
-                2. アクティビティモニタでCPUやディスク書き込みが急増している不審なプロセスがないか確認・強制終了してください。
-                3. Time Machineバックアップの最新状態を確認し、必要に応じて安全な時点への復元を検討してください。
-                """,
-                tags: ["alert", "ransomware", "canary", "airgap", "emergency", "danger"]
-            ),
-            KnowledgeItem(
-                id: "alert_helper_disconnected",
-                topic: "alert_message",
-                title: "⚠️ Helper Not Connected / ヘルパー未接続",
-                summary: "RoamSwitchの特権ヘルパーツール（`RoamSwitchHelper`）とのXPC通信が確立できない際のエラー警告。",
-                details: """
-                • 発生原因: macOSアップデート等でLaunchDaemonが停止したか、「ログイン項目と機能拡張」でバックグラウンド実行がオフになっている。RoamSwitch本体が「アプリケーション」フォルダの外（ダウンロードフォルダやディスクイメージ内など）にある場合、macOSの仕様上ヘルパーを登録できません。
-                • 影響: ファイアウォール切替やデーモン停止などの特権操作が制限されます。
-                """,
-                recommendation: """
-                【修復手順】
-                1. メニューバーのRoamSwitchアイコンをクリックし、「⚠️ ヘルパーを承認する…」があれば選択してください（設定画面が開きます）。
-                2. 「システム設定」>「一般」>「ログイン項目とApp機能拡張」を開き、「バックグラウンドでの実行を許可」の一覧で「RoamSwitchHelper」をオンにしてください。
-                3. RoamSwitchが「アプリケーション」フォルダに入っているか確認してください。入っていない場合は移動してから開き直してください。
-                4. 改善しない場合は、ターミナルで `sudo killall RoamSwitchHelper` を実行し、RoamSwitchアプリを再起動してヘルパーの再インストールを許可してください。
-                """,
-                tags: ["alert", "helper", "xpc", "error", "troubleshooting"]
-            ),
-            KnowledgeItem(
-                id: "alert_score_drop",
-                topic: "alert_message",
-                title: "⚠️ Security Score Drop / セキュリティスコア低下アラート",
-                summary: "自律診断または手動診断において、Macのセキュリティ健全性スコアが低下（FileVault無効、SIP無効、ポート露出等）した際の通知。",
-                details: """
-                • 発生原因: OS設定の変更、ファイアウォール解除、危険なポートの開放など。
-                • 判定基準: スコア80点未満（Grade B以下）または重要項目の失敗。
-                """,
-                recommendation: """
-                【改善手順】
-                1. `get_security_report` ツールまたはアプリ内の「総合診断レポート」を実行してください。
-                2. 「改善点」として赤色・黄色で表示された項目（例: FileVault有効化、SIP有効化、ポートバインド修正）を順に対応してください。
-                """,
-                tags: ["alert", "score", "audit", "health", "recommendation"]
-            ),
-            KnowledgeItem(
-                id: "alert_dangerous_url",
-                topic: "alert_message",
-                title: "🛑 Dangerous URL Detected / 危険なリンク・フィッシング詐欺を検出",
-                summary: "リンク診断（`audit_url_safety`）において、ホモグラフ偽装、偽装サブドメイン、高リスクTLD等を含む悪質なURLを検知した際の警告。",
-                details: """
-                • 判定項目: ホモグラフ文字（Punycode）、大手企業を装う偽装サブドメイン、フィッシング頻出TLD、短縮URL転送先など。
-                • スコア: 50点未満（危険 / Dangerous）または50〜79点（注意 / Caution）。
-                """,
-                recommendation: """
-                【推奨アクション】
-                1. 🛑 **該当のリンクは絶対に開かないでください**。
-                2. メールやメッセージを破棄し、必要に応じて社内のセキュリティ担当者へフィッシング報告を行ってください。
-                """,
-                tags: ["alert", "url", "link", "phishing", "homograph", "danger"]
-            ),
-        ]
-    }
-
-    // MARK: - Internal Builders: Settings
-
-    private static func buildSettings() -> [KnowledgeItem] {
-        return [
-            KnowledgeItem(
-                id: "set_trusted_networks",
-                topic: "setting",
-                title: "登録済みネットワーク管理 & 保護レベル個別設定",
-                summary: "接続したことのあるWi-Fiネットワークを「自宅」「職場」「テザリング」等として登録し、ネットワークごとに保護強度（信頼/標準保護/ロックダウン）を設定できます。",
-                details: """
-                • 登録方法: 接続中のネットワークでメニューから「現在のネットワークを登録」を選択。
-                • レベル変更: 登録済みネットワーク一覧から対象Wi-Fiを選び、「🟢信頼」「🟡標準保護」「🔴最大ロックダウン」を選択。
-                • 名前変更・削除: 「名称を変更…」で識別しやすい名前に編集可能。不要になったネットワークは「登録を解除」で削除。
-                """,
-                recommendation: "自宅LANは「🟢信頼」、職場の共有オフィスWi-Fiは「🟡標準保護」に設定するのが最適です。",
-                tags: ["settings", "networks", "trusted", "levels"]
-            ),
-            KnowledgeItem(
-                id: "set_manual_override",
-                topic: "setting",
-                title: "手動オーバーライド & 戻し忘れ防止タイマー",
-                summary: "一時的に保護レベルを手動で変更したい場合、戻し忘れを防ぐためタイマーや自動解除トリガーを設定できます。",
-                details: """
-                • オプション:
-                  - 「1時間だけ」: 60分経過後に自動で元のポリシーへ復帰。
-                  - 「次回ネットワーク切断まで」: 別のWi-Fiへ移動・切断した瞬間に手動設定を自動解除。
-                  - 「手動で変更するまで」: 永続的に固定。
-                • 即時解除: メニュー最上部の「🔄 手動指定を解除」からいつでもワンクリックで自動判定に戻せます。
-                """,
-                recommendation: "開発作業やプレゼン等で一時的に保護を緩める際は、「1時間だけ」または「次回切断まで」を活用して外出先での無防備化を防ぎましょう。",
-                tags: ["settings", "override", "timer", "revert"]
-            ),
-            KnowledgeItem(
-                id: "set_usb_whitelist",
-                topic: "setting",
-                title: "USBストレージ許可リスト & アクセス権設定 (Pro)",
-                summary: "業務で使用する安全なUSBストレージをホワイトリストに登録し、「読み取り専用」または「読み書き両方」のアクセス権を管理します。",
-                details: """
-                • 登録手順: USBストレージを接続 -> メニュー「USBストレージ保護設定」>「接続中デバイスから追加」をクリック。
-                • モード選択:
-                  - 「読み取り専用 (Read Only)」: データの吸い上げ・持ち出しを物理遮断し、閲覧のみ許可。
-                  - 「読み書き両方 (Read & Write)」: 通常の書き込みも許可（接続時のClamAVスキャンは常時実行）。
-                """,
-                recommendation: "機密データを扱うMacでは、登録デバイスを「読み取り専用」にしておくことで情報漏洩リスクを大幅に低減できます。",
-                tags: ["settings", "usb", "whitelist", "readonly", "pro"]
-            ),
-            KnowledgeItem(
-                id: "set_watched_folders",
-                topic: "setting",
-                title: "Web・メール監視対象フォルダの編集 (Pro)",
-                summary: "ダウンロード保護（FSEvents監視）の対象となるフォルダを自由に追加・削除・デフォルト復元できます。",
-                details: """
-                • デフォルト監視フォルダ: `~/Downloads`, `~/Desktop`, `~/Documents`
-                • カスタム追加: 「フォルダを追加…」から任意の作業用フォルダ（例: `~/Inbox`, `~/SharedProjects`）を指定可能。
-                • ワンクリック復元: 「デフォルトに戻す」ボタンで標準構成にいつでもリセット可能。
-                """,
-                recommendation: "ブラウザの保存先を独自フォルダに変更している場合は、必ず監視対象フォルダに追加してください。",
-                tags: ["settings", "watched_folders", "downloads", "fsevents", "pro"]
-            ),
-            KnowledgeItem(
-                id: "set_dns_policy",
-                topic: "setting",
-                title: "DNS脅威保護ポリシー & プロバイダ選択 (Pro)",
-                summary: "悪質ドメインを遮断するセキュアDNSプロバイダの選択と、適用タイミング（外出先のみ / 常時）を設定します。",
-                details: """
-                • プロバイダ選択:
-                  - Quad9 (9.9.9.9): 高度なマルウェア・フィッシング遮断
-                  - Cloudflare Security (1.1.1.2): 高速かつマルウェアブロック
-                  - AdGuard (94.140.14.14): 悪質サイト＋広告・トラッカー遮断
-                  - CleanBrowsing Security (185.228.168.9): セキュリティフィルター
-                • 適用ポリシー:
-                  - 「未信頼ネットワークのみ」: 外出先Wi-Fiに接続した際のみ自動切替。
-                  - 「常時適用」: 自宅や職場を含むすべての接続でセキュアDNSを強制。
-                """,
-                recommendation: "一般的な利用では「Quad9」＋「未信頼ネットワークのみ」または「常時適用」が最も効果的です。",
-                tags: ["settings", "dns", "quad9", "cloudflare", "policy", "pro"]
-            ),
-        ]
-    }
-
-    // MARK: - Internal Builders: Troubleshooting
-
-    private static func buildTroubleshooting() -> [KnowledgeItem] {
-        return [
-            KnowledgeItem(
-                id: "faq_free_vs_pro",
-                topic: "troubleshooting",
-                title: "無料版とPro永続版の違い",
-                summary: "無料版でも全10項目のセキュリティ手動診断やパケット自動遮断が利用可能です。Pro版ではリアルタイム自動隔離や自律巡回などの高度機能がアンロックされます。",
-                details: """
-                【無料版 (Free)】
-                • Wi-Fi接続先に応じたパケットフィルタ自動切替（外出先ロックダウン）
-                • Macセキュリティ総合診断（10項目の手動診断・スコアリング・改善提案）
-                • Apple XProtect稼働状況確認、ファイル署名・隔離属性診断
-                • 待機中ポート一覧表示
-                • リンク安全性診断（Zero Telemetry）
-                • MCPサーバー連携（AIからの全診断ツールの呼び出し）
-
-                【Pro 永続版 (買い切り ¥2,980)】
-                • 🚨 ランサムウェア・ふるまい検知 & 緊急エアギャップ自律隔離
-                • 📥 Web・メールダウンロード自動保護 & ClamAV自動検疫隔離
-                • 🌐 DNS脅威保護 & セキュア暗号化DNS自動適用
-                • 🛡️ 開発サーバーのワンクリック外部隔離 (127.0.0.1封鎖)
-                • 🚪 未知のリスニングポート自動遮断
-                • 📡 ARPスプーフィング検知時の自動隔離
-                • 🔌 不正USB / BadUSB 物理ポート自動遮断 & 自動ウイルススキャン
-                • 🔵 未信頼ネットワークでのBluetooth自動オフ
-                • 🤖 4時間ごとのバックグラウンド自律巡回 & ClamAV定義自動更新
-                • 📄 セキュリティログのCSVエクスポート
-                • 2台のMacでの同時利用
-                """,
-                recommendation: "自動隔離やリアルタイム防護、バックグラウンド巡回が必要な場合はPro版をお選びください。",
-                tags: ["faq", "free", "pro", "features", "comparison", "license"]
-            ),
-            KnowledgeItem(
-                id: "faq_homebrew_clamav",
-                topic: "troubleshooting",
-                title: "ClamAV (ウイルス検査) のセットアップとHomebrewについて",
-                summary: "無料のウイルススキャン機能「ClamAV」を利用する場合のみHomebrewが必要です。未導入でもApple XProtectやRoamSwitch本体機能は100%動作します。",
-                details: """
-                • Homebrewとは: macOS用の安全な標準パッケージ管理ツール (https://brew.sh/ja/)
-                • インストール手順:
-                  1. ターミナルを開き、公式コマンドを実行:
-                     `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"`
-                  2. 続いてClamAVをインストール:
-                     `brew install clamav`
-                  3. メニューの「マルウェア対策」>「ウイルス定義の更新」を実行。
-                • 注意点: ClamAVを導入しなくても、Apple公式のXProtectやRoamSwitchの全パケット防御・ポート監査・リンク診断は完全に動作します。
-                """,
-                recommendation: "ファイルのウイルス自動スキャンやUSB接続時スキャンを活用したい場合は、HomebrewとClamAVの導入をおすすめします。",
-                tags: ["faq", "clamav", "homebrew", "install", "antivirus", "troubleshooting"]
-            ),
-            KnowledgeItem(
-                id: "faq_blueutil_setup",
-                topic: "troubleshooting",
-                title: "Bluetooth自動オフガード (Pro) と blueutil のセットアップ",
-                summary: "外出先でBluetoothを自動オフにする機能には、オープンソースツール `blueutil` の導入が必要です。",
-                details: """
-                • 背景: macOSにはアプリから直接Bluetoothの電源を切り替える公式APIが存在しないため、CLIツール `blueutil` を連携利用します。
-                • インストール手順:
-                  1. ターミナルで `brew install blueutil` を実行。
-                  2. RoamSwitchメニューの「ポート・デバイス監視」>「Bluetooth自動オフ」を有効化。
-                • 未導入時の動作: 未導入でも他の機能には一切影響せず、初期設定はオフになっています。
-                """,
-                recommendation: "公衆Wi-Fiでの電波追跡やBluetooth脆弱性を防ぎたい場合は、`brew install blueutil` を実行して有効化してください。",
-                tags: ["faq", "bluetooth", "blueutil", "homebrew", "setup"]
-            ),
-            KnowledgeItem(
-                id: "faq_helper_troubleshooting",
-                topic: "troubleshooting",
-                title: "「⚠️ ヘルパー未接続」と表示される場合の対処法",
-                summary: "特権ヘルパーツール（RoamSwitchHelper）との通信が切断されている場合の復旧手順。",
-                details: """
-                【復旧コマンドと手順】
-                1. ターミナルを開き、ヘルパープロセスを再起動:
-                   `sudo killall RoamSwitchHelper`
-                   （launchdにより数秒で自動再起動されます）
-                2. 「システム設定」>「一般」>「ログイン項目とApp機能拡張」を開き、「RoamSwitchHelper」のトグルがオンになっているか確認。
-                3. アプリを再起動し、メニューバーの表示が「🟢 接続中」または正常アイコンに戻るか確認。
-                """,
-                recommendation: "OSアップデート直後などにヘルパーが応答しなくなった場合は、`sudo killall RoamSwitchHelper` を試してください。",
-                tags: ["faq", "helper", "troubleshooting", "xpc", "repair"]
-            ),
-            KnowledgeItem(
-                id: "faq_quarantine_false_positive",
-                topic: "troubleshooting",
-                title: "ダウンロードファイルが誤検知で隔離された場合の復元手順",
-                summary: "自作のスクリプトや開発用バイナリがClamAVに誤検知されて隔離された場合の復元と除外設定手順。",
-                details: """
-                【復元手順】
-                1. メニューバーアイコンをクリックし、「検疫・隔離ファイル管理」を選択。
-                2. 隔離ファイル一覧から該当ファイルを選択。
-                3. 「元の場所へ復元」ボタンをクリック（元のパーミッションが復元され、元のパスに戻ります）。
-                4. 特定のフォルダをスキャン対象外にしたい場合は、「設定」>「ClamAV除外設定」または「監視対象フォルダの編集」から調整可能。
-                """,
-                recommendation: "自作の実行可能ファイルが誤検知された場合は、「検疫・隔離ファイル管理」から安全に復元してください。",
-                tags: ["faq", "quarantine", "restore", "false_positive", "clamav"]
-            ),
-            KnowledgeItem(
-                id: "faq_zero_telemetry",
-                topic: "troubleshooting",
-                title: "Zero Telemetry（外部送信ゼロ）のプライバシー設計",
-                summary: "RoamSwitchおよびMCPサーバーは、診断データやURL、ポート情報、ログを外部サーバーに一切送信しません。",
-                details: """
-                • 完全ローカル処理: セキュリティ診断、ポートスキャン、URLリンク解析、ウイルス検査、MCP通信はすべてMac端末内で完結。
-                • 通信の唯一の例外:
-                  - Stripe決済ページを開く際のリダイレクト（ユーザーがPro購入ボタンを押した時のみ）
-                  - ライセンス認証時のEd25519署名トークン取得（認証時のみ）
-                  - Sparkleによるアプリアップデート確認（GitHub / 公式ホスティング）
-                  - ClamAVウイルス定義ファイルの更新（`freshclam` 実行時）
-                • 診断データ・ログ・URL等のテレメトリ収集はコードベース内に一切存在しません。
-                """,
-                recommendation: "機密性の高い企業ネットワークや個人開発環境でも、情報流出の懸念なく安全にご利用いただけます。",
-                tags: ["faq", "privacy", "zero_telemetry", "security", "telemetry"]
-            ),
-        ]
-    }
-
     // MARK: - Markdown Document Generators
 
-    public func generateFeaturesMarkdown() -> String {
-        var md = "# 🛡️ RoamSwitch Full Feature Specification & Architecture\n\n"
-        md += "This document details the complete technical architecture and operational specifications of RoamSwitch.\n\n"
-        let features = allItems.filter { $0.topic == "feature" }
-        for f in features {
+    public func generateFeaturesMarkdown(language: String? = nil) -> String {
+        let code = Self.resolveLanguage(language)
+        let labels = Self.markdownLabels(for: code)
+        var md = "# 🛡️ \(labels.featuresTitle)\n\n"
+        md += "\(labels.featuresIntro)\n\n"
+        for f in items(language: code) where f.topic == "feature" {
             md += "## \(f.title)\n"
-            md += "**Summary**: \(f.summary)\n\n"
+            md += "**\(labels.summary)**: \(f.summary)\n\n"
             md += "\(f.details)\n\n"
             if let rec = f.recommendation {
-                md += "> **💡 Recommendation**: \(rec)\n\n"
+                md += "> **💡 \(labels.recommendation)**: \(rec)\n\n"
             }
             md += "---\n\n"
         }
         return md
     }
 
-    public func generateAlertsMarkdown() -> String {
-        var md = "# 🚨 RoamSwitch Complete Alert Catalog & Advice Guide\n\n"
-        md += "This catalog lists all alert banners, notification messages, and warning states displayed by RoamSwitch, along with exact causes, automated defenses, and recommended step-by-step user actions.\n\n"
-        let alerts = allItems.filter { $0.topic == "alert_message" }
-        for a in alerts {
+    public func generateAlertsMarkdown(language: String? = nil) -> String {
+        let code = Self.resolveLanguage(language)
+        let labels = Self.markdownLabels(for: code)
+        var md = "# 🚨 \(labels.alertsTitle)\n\n"
+        md += "\(labels.alertsIntro)\n\n"
+        for a in items(language: code) where a.topic == "alert_message" {
             md += "## \(a.title)\n"
-            md += "**Overview**: \(a.summary)\n\n"
-            md += "### Details & Technical Causes\n\(a.details)\n\n"
+            md += "**\(labels.overview)**: \(a.summary)\n\n"
+            md += "### \(labels.detailsHeading)\n\(a.details)\n\n"
             if let rec = a.recommendation {
-                md += "### 🛠️ Step-by-Step User Advice\n\(rec)\n\n"
+                md += "### 🛠️ \(labels.adviceHeading)\n\(rec)\n\n"
             }
             md += "---\n\n"
         }
         return md
     }
 
-    public func generateSettingsMarkdown() -> String {
-        var md = "# ⚙️ RoamSwitch Settings & Operational Guide\n\n"
-        md += "Step-by-step guidance for every configuration option, toggle, whitelist, and custom policy in RoamSwitch.\n\n"
-        let settings = allItems.filter { $0.topic == "setting" }
-        for s in settings {
+    public func generateSettingsMarkdown(language: String? = nil) -> String {
+        let code = Self.resolveLanguage(language)
+        let labels = Self.markdownLabels(for: code)
+        var md = "# ⚙️ \(labels.settingsTitle)\n\n"
+        md += "\(labels.settingsIntro)\n\n"
+        for s in items(language: code) where s.topic == "setting" {
             md += "## \(s.title)\n"
-            md += "**Summary**: \(s.summary)\n\n"
+            md += "**\(labels.summary)**: \(s.summary)\n\n"
             md += "\(s.details)\n\n"
             if let rec = s.recommendation {
-                md += "> **💡 Best Practice**: \(rec)\n\n"
+                md += "> **💡 \(labels.bestPractice)**: \(rec)\n\n"
             }
             md += "---\n\n"
         }
         return md
     }
 
-    public func generateTroubleshootingMarkdown() -> String {
-        var md = "# 🔧 RoamSwitch Troubleshooting, FAQ & Technical Q&A\n\n"
-        md += "Authoritative answers for common questions, permissions, Homebrew/ClamAV/blueutil installation, false-positive handling, and privacy guarantees.\n\n"
-        let faqs = allItems.filter { $0.topic == "troubleshooting" }
-        for faq in faqs {
+    public func generateTroubleshootingMarkdown(language: String? = nil) -> String {
+        let code = Self.resolveLanguage(language)
+        let labels = Self.markdownLabels(for: code)
+        var md = "# 🔧 \(labels.troubleshootingTitle)\n\n"
+        md += "\(labels.troubleshootingIntro)\n\n"
+        for faq in items(language: code) where faq.topic == "troubleshooting" {
             md += "## \(faq.title)\n"
-            md += "**Summary**: \(faq.summary)\n\n"
+            md += "**\(labels.summary)**: \(faq.summary)\n\n"
             md += "\(faq.details)\n\n"
             if let rec = faq.recommendation {
-                md += "> **💡 Advice**: \(rec)\n\n"
+                md += "> **💡 \(labels.advice)**: \(rec)\n\n"
             }
             md += "---\n\n"
         }
         return md
+    }
+
+    // MARK: - Per-language dispatch
+
+    static func localizedEntries(for code: String) -> [LocalizedEntry] {
+        switch code {
+        case "ja": return contentJa()
+        case "en": return contentEn()
+        case "zh-Hans": return contentZhHans()
+        case "zh-Hant": return contentZhHant()
+        case "ko": return contentKo()
+        case "de": return contentDe()
+        case "fr": return contentFr()
+        case "es": return contentEs()
+        case "it": return contentIt()
+        case "pt-PT": return contentPtPT()
+        default: return contentEn()
+        }
+    }
+
+    static func markdownLabels(for code: String) -> MarkdownLabels {
+        switch code {
+        case "ja": return labelsJa()
+        case "zh-Hans": return labelsZhHans()
+        case "zh-Hant": return labelsZhHant()
+        case "ko": return labelsKo()
+        case "de": return labelsDe()
+        case "fr": return labelsFr()
+        case "es": return labelsEs()
+        case "it": return labelsIt()
+        case "pt-PT": return labelsPtPT()
+        default: return labelsEn()
+        }
+    }
+
+    // MARK: - Entry catalog (stable ids, topics, tags)
+
+    /// Order here is the order items are returned in. Ids are a stable API —
+    /// never rename an existing one; add new entries instead.
+    static func entryCatalog() -> [EntryMeta] {
+        var list: [EntryMeta] = []
+        list.append(contentsOf: featureCatalog())
+        list.append(contentsOf: alertCatalog())
+        list.append(contentsOf: settingCatalog())
+        list.append(contentsOf: troubleshootingCatalog())
+        return list
+    }
+
+    private static func featureCatalog() -> [EntryMeta] {
+        let t = "feature"
+        return [
+            EntryMeta(id: "feat_network_autoswitch", topic: t, tags: ["network", "firewall", "pf", "packet filter", "lockdown", "stealth", "airdrop", "ssh", "smb", "trusted", "balanced", "free"]),
+            EntryMeta(id: "feat_network_history_guard", topic: t, tags: ["ssid", "evil-twin", "gateway", "mac", "network-history", "wifi", "impersonation", "levenshtein", "pro"]),
+            EntryMeta(id: "feat_arp_spoof_guard", topic: t, tags: ["arp", "spoofing", "mitm", "eavesdropping", "gateway", "mac", "airgap", "pro", "notify-first", "default-on-pro"]),
+            EntryMeta(id: "feat_gateway_arp_lock", topic: t, tags: ["arp", "ndp", "mitm", "gateway", "tofu", "neighbor-cache", "untrusted-network", "pro", "preventive"]),
+            EntryMeta(id: "feat_vpn_tunnel", topic: t, tags: ["vpn", "wireguard", "tailscale", "exit-node", "mitm", "killswitch", "tunnel", "pf", "untrusted-network", "pro", "homebrew"]),
+            EntryMeta(id: "feat_airgap_containment", topic: t, tags: ["airgap", "air-gap", "containment", "pf", "wifi", "radio", "failsafe", "boot-gate", "emergency", "pro"]),
+            EntryMeta(id: "feat_port_anomaly_guard", topic: t, tags: ["port", "devserver", "0.0.0.0", "localhost", "redis", "mongodb", "ollama", "lmstudio", "ai", "llm", "lsof", "isolation", "pro", "default-on-pro"]),
+            EntryMeta(id: "feat_active_vuln_scan", topic: t, tags: ["vulnerability", "redis", "memcached", "mongodb", "cors", "path-traversal", "open-redirect", "cve", "opt-in", "mcp", "127.0.0.1"]),
+            EntryMeta(id: "feat_usb_keyboard_guard", topic: t, tags: ["badusb", "usb", "keyboard", "hid", "rubberducky", "omgcable", "flipper", "keystroke-timing", "seize", "pro", "injection"]),
+            EntryMeta(id: "feat_usb_storage_guard", topic: t, tags: ["usb", "badusb", "diskarbitration", "clamav", "whitelist", "allowlist", "read-only", "pro", "storage"]),
+            EntryMeta(id: "feat_bluetooth_guard", topic: t, tags: ["bluetooth", "blueutil", "ble", "blueborne", "pro", "homebrew", "lockdown"]),
+            EntryMeta(id: "feat_webmail_download_guard", topic: t, tags: ["download", "mail", "fsevents", "quarantine", "clamav", "malware", "static-signature", "eicar", "pro"]),
+            EntryMeta(id: "feat_ai_model_guard", topic: t, tags: ["ai", "model", "pickle", "safetensors", "gguf", "pytorch", "huggingface", "malware", "pro"]),
+            EntryMeta(id: "feat_quarantine_manager", topic: t, tags: ["quarantine", "vault", "restore", "delete", "exclusion", "clamav", "false_positive", "mcp"]),
+            EntryMeta(id: "feat_xprotect_file_safety", topic: t, tags: ["xprotect", "gatekeeper", "notarization", "codesign", "quarantine", "file-safety", "free"]),
+            EntryMeta(id: "feat_dns_threat_guard", topic: t, tags: ["dns", "quad9", "cloudflare", "adguard", "cleanbrowsing", "phishing", "c2", "pro"]),
+            EntryMeta(id: "feat_passive_link_guard", topic: t, tags: ["link", "linkguard", "phishing", "homograph", "hosts", "sinkhole", "system-extension", "content-filter", "doh", "sni", "ja3", "warn", "fail-closed", "feed", "pro", "receive-only"]),
+            EntryMeta(id: "feat_link_safety_auditor", topic: t, tags: ["link", "url", "phishing", "homograph", "punycode", "zerotelemetry", "audit", "mcp", "free"]),
+            EntryMeta(id: "feat_ransomware_canary_guard", topic: t, tags: ["ransomware", "canary", "bait", "airgap", "sigstop", "freeze", "kqueue", "sha256", "pro", "default-on-pro"]),
+            EntryMeta(id: "feat_runtime_threat_containment", topic: t, tags: ["xprotect", "runtime-threat", "airgap", "malware", "log-stream", "gatekeeper", "wifi", "pro", "default-on-pro"]),
+            EntryMeta(id: "feat_clickfix_guard", topic: t, tags: ["clickfix", "social-engineering", "terminal", "shell-history", "clipboard", "airgap", "pro", "opt-in"]),
+            EntryMeta(id: "feat_persistence_monitor_guard", topic: t, tags: ["persistence", "launchagent", "launchdaemon", "fsevents", "malware", "infostealer", "detection-only", "pro"]),
+            EntryMeta(id: "feat_docker_event_guard", topic: t, tags: ["docker", "container", "privileged", "docker.sock", "container-escape", "pro", "notify-only"]),
+            EntryMeta(id: "feat_critical_path_fim", topic: t, tags: ["fim", "integrity", "tampering", "sudoers", "sshd_config", "pam", "hosts", "sha256", "baseline", "pro", "default-on-pro"]),
+            EntryMeta(id: "feat_security_log_audit", topic: t, tags: ["log", "audit", "unified-logging", "sudo", "ssh", "gatekeeper", "xprotect", "template-anomaly", "csv", "mcp", "free"]),
+            EntryMeta(id: "feat_scheduled_log_audit", topic: t, tags: ["log", "audit", "scheduled", "template-anomaly", "z-score", "baseline", "learning", "pro", "default-on-pro"]),
+            EntryMeta(id: "feat_containment_incident_timeline", topic: t, tags: ["incident", "timeline", "forensics", "mitre", "att&ck", "airgap", "canary", "port-anomaly", "arp", "runtime-threat"]),
+            EntryMeta(id: "feat_notification_history", topic: t, tags: ["notification", "history", "7-days", "eicar", "mcp", "free"]),
+            EntryMeta(id: "feat_secret_leak_auditor", topic: t, tags: ["secret", "apikey", "clipboard", "openai", "anthropic", "github", "aws", "stripe", "clickfix", "zerotelemetry", "free"]),
+            EntryMeta(id: "feat_secret_leak_audit_tool", topic: t, tags: ["secret", "apikey", "folder-scan", "audit", "zerotelemetry", "tcc", "permission", "mcp", "free"]),
+            EntryMeta(id: "feat_package_cve_scan", topic: t, tags: ["cve", "homebrew", "npm", "pypi", "crates.io", "rubygems", "packagist", "go", "maven", "zerotelemetry", "mcp", "free"]),
+            EntryMeta(id: "feat_security_health_checker", topic: t, tags: ["audit", "score", "filevault", "sip", "gatekeeper", "firewall", "xprotect", "ssh", "sudo", "accessory", "18-items", "free"]),
+            EntryMeta(id: "feat_autonomous_sentinel", topic: t, tags: ["autonomous", "sentinel", "background", "freshclam", "clamav", "scheduled-scan", "pro"]),
+            EntryMeta(id: "feat_simulation_self_test", topic: t, tags: ["simulation", "self-test", "test", "ransomware", "airgap", "docker", "eicar"]),
+            EntryMeta(id: "feat_privileged_helper", topic: t, tags: ["helper", "xpc", "root", "pfctl", "privilege", "security", "smappservice", "launchdaemon"]),
+            EntryMeta(id: "feat_mcp_server", topic: t, tags: ["mcp", "ai", "claude", "read-only", "stdio", "tools", "resources", "zerotelemetry"]),
+            EntryMeta(id: "feat_license_pro_tier", topic: t, tags: ["license", "pro", "team", "ed25519", "activation", "devices", "lifetime"]),
+        ]
+    }
+
+    private static func alertCatalog() -> [EntryMeta] {
+        let t = "alert_message"
+        return [
+            EntryMeta(id: "alert_arp_spoofing", topic: t, tags: ["alert", "arp", "spoofing", "mitm", "wifi", "danger"]),
+            EntryMeta(id: "alert_evil_twin_ssid", topic: t, tags: ["alert", "ssid", "evil-twin", "wifi", "impersonation"]),
+            EntryMeta(id: "alert_unencrypted_wifi", topic: t, tags: ["alert", "wifi", "open", "unencrypted", "wep", "lockdown"]),
+            EntryMeta(id: "alert_port_anomaly", topic: t, tags: ["alert", "port", "anomaly", "exposed", "0.0.0.0", "devserver"]),
+            EntryMeta(id: "alert_exposed_database", topic: t, tags: ["alert", "port", "database", "redis", "mongodb", "exposed", "danger"]),
+            EntryMeta(id: "alert_unapproved_keyboard", topic: t, tags: ["alert", "usb", "keyboard", "badusb", "hid"]),
+            EntryMeta(id: "alert_scripted_keyboard", topic: t, tags: ["alert", "usb", "keyboard", "badusb", "keystroke-timing", "danger"]),
+            EntryMeta(id: "alert_untrusted_usb", topic: t, tags: ["alert", "usb", "storage", "untrusted", "eject", "read-only", "badusb"]),
+            EntryMeta(id: "alert_malware_usb", topic: t, tags: ["alert", "malware", "virus", "usb", "clamav", "danger"]),
+            EntryMeta(id: "alert_quarantined_download", topic: t, tags: ["alert", "download", "quarantine", "clamav", "trojan", "malware"]),
+            EntryMeta(id: "alert_eicar_test_signature", topic: t, tags: ["alert", "eicar", "test", "clamav", "notification-history"]),
+            EntryMeta(id: "alert_pickle_model", topic: t, tags: ["alert", "pickle", "ai", "model", "safetensors", "download"]),
+            EntryMeta(id: "alert_link_guard_blocked", topic: t, tags: ["alert", "link", "linkguard", "phishing", "blocked"]),
+            EntryMeta(id: "alert_link_guard_warn_hold", topic: t, tags: ["alert", "link", "linkguard", "warn", "hold", "fail-closed"]),
+            EntryMeta(id: "alert_dangerous_url", topic: t, tags: ["alert", "url", "link", "phishing", "homograph", "danger"]),
+            EntryMeta(id: "alert_ransomware_activity", topic: t, tags: ["alert", "ransomware", "canary", "airgap", "emergency", "danger"]),
+            EntryMeta(id: "alert_runtime_threat_airgap", topic: t, tags: ["alert", "xprotect", "malware", "airgap", "emergency", "danger"]),
+            EntryMeta(id: "alert_gatekeeper_block", topic: t, tags: ["alert", "gatekeeper", "unsigned", "notify-only"]),
+            EntryMeta(id: "alert_clickfix_command", topic: t, tags: ["alert", "clickfix", "terminal", "clipboard", "airgap", "danger"]),
+            EntryMeta(id: "alert_new_persistence_item", topic: t, tags: ["alert", "persistence", "launchagent", "launchdaemon", "malware"]),
+            EntryMeta(id: "alert_docker_risk", topic: t, tags: ["alert", "docker", "privileged", "docker.sock"]),
+            EntryMeta(id: "alert_critical_file_tampering", topic: t, tags: ["alert", "fim", "tampering", "sudoers", "sshd_config", "hosts", "danger"]),
+            EntryMeta(id: "alert_log_audit_anomaly", topic: t, tags: ["alert", "log", "audit", "template-anomaly", "z-score"]),
+            EntryMeta(id: "alert_secret_in_clipboard", topic: t, tags: ["alert", "secret", "apikey", "clipboard"]),
+            EntryMeta(id: "alert_airgap_failed", topic: t, tags: ["alert", "airgap", "failed", "helper", "danger"]),
+            EntryMeta(id: "alert_helper_disconnected", topic: t, tags: ["alert", "helper", "xpc", "error", "troubleshooting"]),
+            EntryMeta(id: "alert_score_drop", topic: t, tags: ["alert", "score", "audit", "health", "recommendation"]),
+        ]
+    }
+
+    private static func settingCatalog() -> [EntryMeta] {
+        let t = "setting"
+        return [
+            EntryMeta(id: "set_trusted_networks", topic: t, tags: ["settings", "networks", "trusted", "levels", "register"]),
+            EntryMeta(id: "set_away_default_level", topic: t, tags: ["settings", "away", "default", "levels", "untrusted-network"]),
+            EntryMeta(id: "set_manual_override", topic: t, tags: ["settings", "override", "timer", "revert", "duration"]),
+            EntryMeta(id: "set_pro_default_guards", topic: t, tags: ["settings", "pro", "defaults", "guards", "opt-in", "default-on-pro"]),
+            EntryMeta(id: "set_usb_whitelist", topic: t, tags: ["settings", "usb", "whitelist", "allowlist", "readonly", "keyboard", "pro"]),
+            EntryMeta(id: "set_watched_folders", topic: t, tags: ["settings", "watched_folders", "downloads", "fsevents", "pro"]),
+            EntryMeta(id: "set_dns_policy", topic: t, tags: ["settings", "dns", "quad9", "cloudflare", "adguard", "cleanbrowsing", "policy", "pro"]),
+            EntryMeta(id: "set_link_guard_modes", topic: t, tags: ["settings", "link", "linkguard", "warn", "block", "allowlist", "feed", "system-extension", "pro"]),
+            EntryMeta(id: "set_vpn_backend", topic: t, tags: ["settings", "vpn", "wireguard", "tailscale", "exit-node", "killswitch", "pro"]),
+            EntryMeta(id: "set_language", topic: t, tags: ["settings", "language", "localization", "mcp"]),
+        ]
+    }
+
+    private static func troubleshootingCatalog() -> [EntryMeta] {
+        let t = "troubleshooting"
+        return [
+            EntryMeta(id: "faq_free_vs_pro", topic: t, tags: ["faq", "free", "pro", "features", "comparison", "license"]),
+            EntryMeta(id: "faq_homebrew_clamav", topic: t, tags: ["faq", "clamav", "homebrew", "install", "antivirus", "troubleshooting"]),
+            EntryMeta(id: "faq_blueutil_setup", topic: t, tags: ["faq", "bluetooth", "blueutil", "homebrew", "setup"]),
+            EntryMeta(id: "faq_helper_troubleshooting", topic: t, tags: ["faq", "helper", "troubleshooting", "xpc", "repair"]),
+            EntryMeta(id: "faq_install_location", topic: t, tags: ["faq", "install", "applications", "translocation", "dmg", "helper"]),
+            EntryMeta(id: "faq_network_cut_off", topic: t, tags: ["faq", "airgap", "network", "offline", "wifi", "release", "failsafe"]),
+            EntryMeta(id: "faq_quarantine_false_positive", topic: t, tags: ["faq", "quarantine", "restore", "false_positive", "clamav", "exclusion"]),
+            EntryMeta(id: "faq_eicar_test", topic: t, tags: ["faq", "eicar", "test", "clamav", "notification-history"]),
+            EntryMeta(id: "faq_dev_server_blocked", topic: t, tags: ["faq", "port", "devserver", "blocked", "allow", "localsend", "syncthing"]),
+            EntryMeta(id: "faq_link_guard_false_block", topic: t, tags: ["faq", "link", "linkguard", "false_positive", "allowlist", "warn"]),
+            EntryMeta(id: "faq_system_extension_approval", topic: t, tags: ["faq", "system-extension", "content-filter", "approval", "linkguard"]),
+            EntryMeta(id: "faq_keyboard_blocked", topic: t, tags: ["faq", "keyboard", "usb", "badusb", "accessibility", "approve"]),
+            EntryMeta(id: "faq_vpn_troubleshooting", topic: t, tags: ["faq", "vpn", "wireguard", "tailscale", "exit-node", "killswitch", "app-store"]),
+            EntryMeta(id: "faq_log_audit_repeated_alerts", topic: t, tags: ["faq", "log", "audit", "template-anomaly", "learning", "notification"]),
+            EntryMeta(id: "faq_mcp_setup", topic: t, tags: ["faq", "mcp", "claude", "setup", "stdio", "language"]),
+            EntryMeta(id: "faq_zero_telemetry", topic: t, tags: ["faq", "privacy", "zero_telemetry", "security", "telemetry", "network"]),
+        ]
     }
 }

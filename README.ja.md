@@ -30,14 +30,14 @@
 | 統合ログのセキュリティ監査＋ログテンプレート異常検知 | `SecurityLogAuditor.swift`, `LogTemplateAnalyzer.swift` |
 | 実証型脆弱性検証（`127.0.0.1` 限定・オプトイン） | `ActiveVulnScan.swift`, `ActiveVulnCveMapData.swift` |
 | ネットワーク非依存のローカル CVE 照合（Homebrew＋ロックファイル） | `PackageCveScan.swift`, `PackageCveMapData.swift`, `PackageCveScanLanguages.swift`, `PackageCveMapLanguagesData.swift` |
-| 各ガードの状態リーダー（隔離Vault・カナリア・ポート異常・ランタイム脅威・通知履歴） | `QuarantineManager.swift`, `CanaryStatusReader.swift`, `PortAnomalyStatusReader.swift`, `RuntimeThreatStatusReader.swift`, `NotificationHistory.swift` |
+| 各ガードの状態リーダー（隔離Vault・カナリア・ポート異常・ランタイム脅威・通知履歴・封じ込めタイムライン・ネットワーク履歴） | `QuarantineManager.swift`, `CanaryStatusReader.swift`, `PortAnomalyStatusReader.swift`, `RuntimeThreatStatusReader.swift`, `NotificationHistory.swift`, `ContainmentIncidentTimeline.swift`, `NetworkHistoryGuard.swift` |
 | 同梱ナレッジベース（`get_app_help`） | `RoamSwitchKnowledgeBase.swift` |
 | 多言語化まわり | `AppLanguage.swift` |
 | テスト | `Tests/roamswitch-mcpTests/` — ミラーされたユニットテスト＋ `StdioSmokeTests.swift` |
 
 ## 提供ツール（`tools/list`）
 
-全 15 ツール。すべて読み取り専用です。ソケットを開くのは `get_exposed_ports` と、既定で無効な
+全 17 ツール。すべて読み取り専用です。ソケットを開くのは `get_exposed_ports` と、既定で無効な
 `run_active_vuln_scan` の 2 つだけで、いずれも `127.0.0.1` 限定です。
 
 ### 状態診断・ネットワーク
@@ -51,14 +51,21 @@
   ものは既知の危険サービス DB（Redis・MongoDB 等に加え、Ollama:11434 / LM Studio:1234 /
   Gradio:7860 / vLLM:8000 などのローカル AI 推論サーバー）と照合し、`127.0.0.1:<port>` への
   CORS・ヘッダー確認も行います。
-- `get_guard_status` — 各 Pro 自動対応ガードの ON/OFF、現在の保護レベル、信頼ネットワーク
-  判定（アプリの preferences ドメインから読み取り。後述「単体ビルド時の差異」参照）。
+- `get_guard_status` — 全 22 項目のガード設定の ON/OFF（ポート異常、ARP 封じ込め、USB、
+  Bluetooth、ダウンロード / DNS 保護、ランタイム脅威、ランサムウェア・カナリア、ClickFix、
+  Docker イベント、重要パス FIM、永続化監視、ゲートウェイ ARP 固定、定期ログ監査、クリップボードの
+  機密情報漏洩監視、Air-Gap 時の Wi-Fi 自動オフ、WireGuard / Tailscale キルスイッチ、リンク保護と
+  フィード更新、実証型脆弱性診断）と、一度も切り替えていない既定値かどうか（`usingDefault`）。
+  加えてリンク保護モード、VPN 方式、DNS 脅威保護のプロバイダー / 適用範囲、隔離中の開発サーバー
+  ポート、USB ストレージ許可リスト件数、現在の保護レベル、信頼ネットワーク判定を返します（アプリの
+  preferences ドメインから読み取り。後述「単体ビルド時の差異」参照）。設定値のみで、VPN トンネルの
+  実際の接続状態は特権ヘルパー側にあるため返しません。
 
 ### 完全オフラインの監査
 
 - `audit_url_safety` — フィッシング / Unicode ホモグラフ / ブランド偽装サブドメイン /
   高リスク TLD / 平文 HTTP の判定。**同期処理・完全オフライン**で、URL はどこにも送信せず、
-  対象ページを取得もしません。
+  対象ページを取得もしません。各リスク要因には言語非依存の `kind`（例: `homograph`）が付きます。
 - `audit_secrets` — 文字列・ファイル・ディレクトリ（再帰）から API キー（OpenAI、Anthropic、
   GitHub、AWS、HuggingFace、Google AI/Gemini、Slack、Stripe）や SSH/RSA 秘密鍵を、正規表現と
   シャノンエントロピー評価で検出します。検出値は出力時にマスクされます。
@@ -97,6 +104,14 @@
 - `get_quarantine_status` — マルウェア隔離 Vault の中身。元パス、ClamAV が検出した脅威名、
   隔離日時、サイズ。ファイルは移動されるだけで削除されません。
 - `get_notification_history` — 直近 7 日間に RoamSwitch が送信した通知を新しい順で返します。
+- `get_incident_timeline` — ARP スプーフィング自動封じ込め、ランサムウェア・カナリアガード、
+  ランタイム脅威封じ込め、ポート異常ガードの封じ込めを 1 本の時系列で横断表示します（発生元、
+  重大度、概要、プロセス、確度の高い場合のみ MITRE ATT&CK ID、実施した対処、未解決 / 解除済み /
+  許可済みの状態）。ARP スプーフィング封じ込めの記録はここにしかありません。Linux 版と同名の
+  ツールです。
+- `get_network_history` — 常時稼働の Evil Twin 検知が記憶しているネットワーク履歴。SSID ごとの
+  ゲートウェイ機器の**件数**と最終接続日時（MAC アドレスは出力しません）、および共通の
+  ゲートウェイを持たないのに名前が酷似した SSID の組を返します。
 
 ### リソース（`resources/list`）
 
@@ -152,13 +167,16 @@ Claude Desktop / Claude Code / Codex CLI / OpenCode / Antigravity の設定手�
 ## 単体ビルド時の差異
 
 RoamSwitch アプリのバンドル内で動く場合、このコードはアプリのライブ状態を読みます。
-このリポジトリから単体ビルドした場合の違いは 3 点です。
+このリポジトリから単体ビルドした場合の違いは 4 点です。
 
 - **`get_guard_status`** は `com.tetsuharu.RoamSwitch` の preferences ドメインを読みますが、
   アプリ以外のバイナリからは空のため、「ガードはすべて無効・ネットワークは未信頼」と報告します。
 - **インシデント状態系ツール**（`get_canary_status`、`get_port_anomaly_incidents`、
   `get_runtime_threat_status`、`get_notification_history`、`get_quarantine_status`）も同じ
   ドメインとアプリの隔離 Vault を読むため、単体では失敗ではなく「未有効・履歴なし」を返します。
+- **`get_incident_timeline` / `get_network_history`** は
+  `~/Library/Application Support/RoamSwitch/` 配下の JSON を読むため、同じユーザーに RoamSwitch
+  がインストールされていれば実際の履歴を、そうでなければ空の結果を返します。
 - **多言語化**: アプリの `.lproj` リソースがないため `loc(_:)` はキー（＝日本語の原文）に
   フォールバックします。それ以外の出力は同一です。
 

@@ -20,16 +20,35 @@ public enum LinkRiskLevel: String, Codable, Equatable {
     }
 }
 
+/// Language-independent identity of a risk factor. `title`/`detail` are
+/// localized at analysis time, so any enforcement decision (see
+/// `LinkAuditReport.verdict`) must key off this, never off the display text —
+/// matching on the translated title silently broke `.block` for every UI
+/// language except Japanese and English.
+public enum LinkRiskFactorKind: String, Codable, Equatable {
+    case invalidURL
+    case plaintextHTTP
+    case ipAddressHost
+    case homograph
+    case brandSubdomainSpoofing
+    case highRiskTLD
+    case nonStandardPort
+    case phishingPathKeyword
+}
+
 public struct LinkRiskFactor: Identifiable, Codable, Equatable {
     public var id: String { title }
     public let title: String
     public let detail: String
     public let isSevere: Bool
+    /// Optional so previously-encoded factors (no `kind` key) still decode.
+    public let kind: LinkRiskFactorKind?
 
-    public init(title: String, detail: String, isSevere: Bool) {
+    public init(title: String, detail: String, isSevere: Bool, kind: LinkRiskFactorKind? = nil) {
         self.title = title
         self.detail = detail
         self.isSevere = isSevere
+        self.kind = kind
     }
 }
 
@@ -70,15 +89,16 @@ public enum LinkGuardVerdict: String, Codable, Equatable {
 /// The user-selectable link-guard mode (menu picker + `LinkGuardManager`).
 /// Lives here, not in `LinkGuardManager.swift`, so the roamswitch-mcp mirror and
 /// its tests compile without that file's AppKit/Combine dependencies.
-/// `off` removes the managed `/etc/hosts` section; `warn` loads the feed but
-/// does not sinkhole; `block` sinkholes (Linux parity, the 1.7.2 default).
+/// `off` removes the managed `/etc/hosts` section; `warn` pauses each matching
+/// flow and asks allow/block, FAIL-CLOSED (blocked) when unanswered — see
+/// `LinkGuardManager`; `block` sinkholes (Linux parity, the 1.7.2 default).
 public enum LinkGuardMode: String, CaseIterable, Codable {
     case off, warn, block
 
     public var displayName: String {
         switch self {
         case .off: return loc("オフ")
-        case .warn: return loc("警告のみ (遮断しない)")
+        case .warn: return loc("警告して確認 (応答がなければ遮断)")
         case .block: return loc("明らかな詐欺サイトは自動でブロック (推奨)")
         }
     }
@@ -89,8 +109,11 @@ public extension LinkAuditReport {
     /// heuristics alone (matching Linux: feed hit OR brand homograph).
     /// Brand-in-subdomain impersonation, high-risk TLDs, etc. are `.warn`.
     var verdict: LinkGuardVerdict {
-        let homograph = riskFactors.contains {
-            $0.isSevere && ($0.title.contains("ホモグラフ") || $0.title.lowercased().contains("homograph"))
+        let homograph = riskFactors.contains { factor in
+            guard factor.isSevere else { return false }
+            if let kind = factor.kind { return kind == .homograph }
+            // Legacy factors encoded before `kind` existed.
+            return factor.title.contains("ホモグラフ") || factor.title.lowercased().contains("homograph")
         }
         if homograph { return .block }
         if riskLevel == .dangerous || riskLevel == .caution || score < 60 { return .warn }
@@ -131,7 +154,7 @@ public final class LinkSafetyAuditor {
                 domain: loc("無効なURL"),
                 score: 0,
                 riskLevel: .dangerous,
-                riskFactors: [LinkRiskFactor(title: loc("不正なURL形式"), detail: loc("URLの構造が無効または解析不能です。"), isSevere: true)],
+                riskFactors: [LinkRiskFactor(title: loc("不正なURL形式"), detail: loc("URLの構造が無効または解析不能です。"), isSevere: true, kind: .invalidURL)],
                 isHTTPS: false
             )
         }
@@ -146,7 +169,8 @@ public final class LinkSafetyAuditor {
             riskFactors.append(LinkRiskFactor(
                 title: loc("暗号化なし (HTTP通信)"),
                 detail: loc("通信が暗号化されていないため、盗聴や改ざんのリスクがあります。"),
-                isSevere: false
+                isSevere: false,
+                kind: .plaintextHTTP
             ))
         }
 
@@ -156,7 +180,8 @@ public final class LinkSafetyAuditor {
             riskFactors.append(LinkRiskFactor(
                 title: loc("IPアドレス直打ちURL"),
                 detail: loc("ドメイン名ではなくIPアドレス（例: http://45.33.x.x）を直接指定している不審な接続先です。"),
-                isSevere: true
+                isSevere: true,
+                kind: .ipAddressHost
             ))
         }
 
@@ -166,7 +191,8 @@ public final class LinkSafetyAuditor {
             riskFactors.append(LinkRiskFactor(
                 title: loc("ホモグラフ攻撃の疑い (Unicode偽装ドメイン)"),
                 detail: loc("見た目が正規ドメインに酷似したキリル文字やPunycode（xn--）が使用されている詐欺ドメインの疑いがあります。"),
-                isSevere: true
+                isSevere: true,
+                kind: .homograph
             ))
         }
 
@@ -176,7 +202,8 @@ public final class LinkSafetyAuditor {
             riskFactors.append(LinkRiskFactor(
                 title: String(format: loc("ブランド名偽装の疑い (%@)"), spoofedBrand),
                 detail: String(format: loc("「%@」の正規ドメインではなく、サブドメインにブランド名を含めたフィッシングドメインです。"), spoofedBrand),
-                isSevere: true
+                isSevere: true,
+                kind: .brandSubdomainSpoofing
             ))
         }
 
@@ -187,7 +214,8 @@ public final class LinkSafetyAuditor {
             riskFactors.append(LinkRiskFactor(
                 title: String(format: loc("高リスクTLD (.%@)"), tld),
                 detail: String(format: loc("フィッシング詐欺やスパムメールで頻繁に悪用されるドメイン末尾（.%@）です。"), tld),
-                isSevere: false
+                isSevere: false,
+                kind: .highRiskTLD
             ))
         }
 
@@ -197,7 +225,8 @@ public final class LinkSafetyAuditor {
             riskFactors.append(LinkRiskFactor(
                 title: String(format: loc("非標準ポート指定 (Port %d)"), port),
                 detail: loc("Web標準（80/443）以外の特殊ポートへの通信を要求しています。"),
-                isSevere: false
+                isSevere: false,
+                kind: .nonStandardPort
             ))
         }
 
@@ -209,7 +238,8 @@ public final class LinkSafetyAuditor {
                 riskFactors.append(LinkRiskFactor(
                     title: String(format: loc("認証・アカウント詐取キーワード (%@)"), kw),
                     detail: loc("アカウント認証や決済情報を詐取するためのページURL構造が見られます。"),
-                    isSevere: true
+                    isSevere: true,
+                    kind: .phishingPathKeyword
                 ))
                 break
             }

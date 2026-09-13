@@ -81,15 +81,50 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         if cur != .system {
             return cur.rawValue
         }
-        let preferred = Locale.preferredLanguages
-        for pref in preferred {
-            for candidate in AppLanguage.allCases where candidate != .system {
-                if pref.hasPrefix(candidate.rawValue) {
-                    return candidate.rawValue
-                }
+        for pref in Locale.preferredLanguages {
+            if let code = supportedLocaleCode(forPreferredLanguage: pref) {
+                return code
             }
         }
-        return "ja"
+        // No supported language anywhere in the user's preference list: English
+        // is far more likely to be readable than the Japanese source strings.
+        return AppLanguage.english.rawValue
+    }
+
+    /// Maps one `Locale.preferredLanguages` entry (e.g. "pt-BR", "zh-Hant-TW",
+    /// "zh-HK", "en-JP") to the `.lproj` code this app ships, or `nil` if the
+    /// language isn't supported. A plain `hasPrefix(rawValue)` match missed
+    /// every regional variant whose raw value carries its own region/script
+    /// ("pt-BR" never starts with "pt-PT", "zh-TW"/"zh-HK" never start with
+    /// "zh-Hant"), silently dropping those users to the fallback language.
+    static func supportedLocaleCode(forPreferredLanguage pref: String) -> String? {
+        let parts = pref.replacingOccurrences(of: "_", with: "-")
+            .split(separator: "-")
+            .map { $0.lowercased() }
+        guard let base = parts.first else { return nil }
+        let rest = parts.dropFirst()
+
+        switch base {
+        case "zh":
+            if rest.contains("hans") { return AppLanguage.simplifiedChinese.rawValue }
+            if rest.contains("hant") { return AppLanguage.traditionalChinese.rawValue }
+            // Script-less regional tags: Taiwan / Hong Kong / Macau use
+            // Traditional characters; everything else (CN, SG, bare "zh") Simplified.
+            if rest.contains(where: { ["tw", "hk", "mo"].contains($0) }) {
+                return AppLanguage.traditionalChinese.rawValue
+            }
+            return AppLanguage.simplifiedChinese.rawValue
+        case "pt":
+            return AppLanguage.portuguese.rawValue
+        case "ja": return AppLanguage.japanese.rawValue
+        case "en": return AppLanguage.english.rawValue
+        case "ko": return AppLanguage.korean.rawValue
+        case "de": return AppLanguage.german.rawValue
+        case "fr": return AppLanguage.french.rawValue
+        case "es": return AppLanguage.spanish.rawValue
+        case "it": return AppLanguage.italian.rawValue
+        default: return nil
+        }
     }
 
     /// `RoamSwitchMCPServer` is a bare Mach-O executable embedded at
@@ -139,8 +174,13 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     private static var activeBundleCache: [String: Bundle] = [:]
 
     static var activeBundle: Bundle {
-        let code = activeLocaleCode
+        bundle(forLocaleCode: activeLocaleCode)
+    }
 
+    /// Resolves (and caches) the `.lproj` bundle for `code`, falling back to the
+    /// resource bundle itself when no such `.lproj` exists (e.g. the standalone
+    /// roamswitch-mcp build, which ships no localization resources at all).
+    static func bundle(forLocaleCode code: String) -> Bundle {
         activeBundleCacheLock.lock()
         let cached = activeBundleCache[code]
         activeBundleCacheLock.unlock()
@@ -165,7 +205,30 @@ extension Notification.Name {
     static let languageDidChange = Notification.Name("RoamSwitch.languageDidChange")
 }
 
-@inline(__always)
+/// Sentinel passed as `value:` so a missing translation is distinguishable from
+/// a translation that happens to equal its key. Contains a NUL, so it can never
+/// collide with a real catalog value.
+private let locMissingSentinel = "\u{0}RoamSwitch.loc.missing\u{0}"
+
 func loc(_ key: String) -> String {
-    AppLanguage.activeBundle.localizedString(forKey: key, value: nil, table: nil)
+    let code = AppLanguage.activeLocaleCode
+    let value = AppLanguage.bundle(forLocaleCode: code)
+        .localizedString(forKey: key, value: locMissingSentinel, table: nil)
+    if value != locMissingSentinel {
+        return value
+    }
+    // Keys are the Japanese source strings, so for Japanese the key itself is
+    // the correct text. For any other language, a missing translation reads
+    // better in English than in raw Japanese — try `en.lproj` before giving up.
+    // (Without any `.lproj` resources, as in the standalone roamswitch-mcp
+    // build, both lookups miss and this still returns the key, as before.)
+    let english = AppLanguage.english.rawValue
+    if code != AppLanguage.japanese.rawValue, code != english {
+        let fallback = AppLanguage.bundle(forLocaleCode: english)
+            .localizedString(forKey: key, value: locMissingSentinel, table: nil)
+        if fallback != locMissingSentinel {
+            return fallback
+        }
+    }
+    return key
 }

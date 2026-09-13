@@ -32,10 +32,17 @@ EOF
 CORE=(AppLanguage TrustedNetwork GatewayFingerprint WiFiSecurityMonitor \
       ARPSpoofMonitor ListeningPortMonitor PortSecurityAuditor ServiceSignatures \
       ActiveVulnScan ActiveVulnCveMapData SecurityHealthChecker \
-      LinkSafetyAuditor RoamSwitchKnowledgeBase MCPResponseFormatting MCPProtocol MCPServer \
+      LinkSafetyAuditor RoamSwitchKnowledgeBase \
+      RoamSwitchKnowledgeBaseContent_ja RoamSwitchKnowledgeBaseContent_en \
+      RoamSwitchKnowledgeBaseContent_zhHans RoamSwitchKnowledgeBaseContent_zhHant \
+      RoamSwitchKnowledgeBaseContent_ko RoamSwitchKnowledgeBaseContent_de \
+      RoamSwitchKnowledgeBaseContent_fr RoamSwitchKnowledgeBaseContent_es \
+      RoamSwitchKnowledgeBaseContent_it RoamSwitchKnowledgeBaseContent_ptPT \
+      MCPResponseFormatting MCPProtocol MCPServer \
       PackageCveScan PackageCveMapData PackageCveScanLanguages PackageCveMapLanguagesData \
       SecretLeakScanning SecurityLogAuditor LogTemplateAnalyzer QuarantineManager CanaryStatusReader \
-      PortAnomalyStatusReader RuntimeThreatStatusReader NotificationHistory)
+      PortAnomalyStatusReader RuntimeThreatStatusReader NotificationHistory \
+      ContainmentIncidentTimeline NetworkHistoryGuard)
 
 # App test files that only exercise types present in this repo. Their
 # `@testable import RoamSwitch` is rewritten to this package's module name.

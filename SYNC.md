@@ -26,9 +26,22 @@ All files live in `Sources/roamswitch-mcp/`.
 | `ARPSpoofMonitor.swift` | `RoamSwitch/ARPSpoofMonitor.swift` |
 | `ListeningPortMonitor.swift` | `RoamSwitch/ListeningPortMonitor.swift` |
 | `PortSecurityAuditor.swift` | `RoamSwitch/PortSecurityAuditor.swift` |
+| `ServiceSignatures.swift` | `RoamSwitch/ServiceSignatures.swift` |
+| `ActiveVulnScan.swift` | `RoamSwitch/ActiveVulnScan.swift` |
+| `ActiveVulnCveMapData.swift` | `RoamSwitch/ActiveVulnCveMapData.swift` |
 | `SecurityHealthChecker.swift` | `RoamSwitch/SecurityHealthChecker.swift` |
 | `LinkSafetyAuditor.swift` | `RoamSwitch/LinkSafetyAuditor.swift` |
 | `RoamSwitchKnowledgeBase.swift` | `RoamSwitch/RoamSwitchKnowledgeBase.swift` |
+| `RoamSwitchKnowledgeBaseContent_ja.swift` | `RoamSwitch/RoamSwitchKnowledgeBaseContent_ja.swift` |
+| `RoamSwitchKnowledgeBaseContent_en.swift` | `RoamSwitch/RoamSwitchKnowledgeBaseContent_en.swift` |
+| `RoamSwitchKnowledgeBaseContent_zhHans.swift` | `RoamSwitch/RoamSwitchKnowledgeBaseContent_zhHans.swift` |
+| `RoamSwitchKnowledgeBaseContent_zhHant.swift` | `RoamSwitch/RoamSwitchKnowledgeBaseContent_zhHant.swift` |
+| `RoamSwitchKnowledgeBaseContent_ko.swift` | `RoamSwitch/RoamSwitchKnowledgeBaseContent_ko.swift` |
+| `RoamSwitchKnowledgeBaseContent_de.swift` | `RoamSwitch/RoamSwitchKnowledgeBaseContent_de.swift` |
+| `RoamSwitchKnowledgeBaseContent_fr.swift` | `RoamSwitch/RoamSwitchKnowledgeBaseContent_fr.swift` |
+| `RoamSwitchKnowledgeBaseContent_es.swift` | `RoamSwitch/RoamSwitchKnowledgeBaseContent_es.swift` |
+| `RoamSwitchKnowledgeBaseContent_it.swift` | `RoamSwitch/RoamSwitchKnowledgeBaseContent_it.swift` |
+| `RoamSwitchKnowledgeBaseContent_ptPT.swift` | `RoamSwitch/RoamSwitchKnowledgeBaseContent_ptPT.swift` |
 | `MCPResponseFormatting.swift` | `RoamSwitch/MCPResponseFormatting.swift` |
 | `MCPProtocol.swift` | `RoamSwitch/MCPProtocol.swift` |
 | `MCPServer.swift` | `RoamSwitch/MCPServer.swift` |
@@ -43,6 +56,9 @@ All files live in `Sources/roamswitch-mcp/`.
 | `CanaryStatusReader.swift` | `RoamSwitch/CanaryStatusReader.swift` |
 | `PortAnomalyStatusReader.swift` | `RoamSwitch/PortAnomalyStatusReader.swift` |
 | `RuntimeThreatStatusReader.swift` | `RoamSwitch/RuntimeThreatStatusReader.swift` |
+| `NotificationHistory.swift` | `RoamSwitch/NotificationHistory.swift` |
+| `ContainmentIncidentTimeline.swift` | `RoamSwitch/ContainmentIncidentTimeline.swift` |
+| `NetworkHistoryGuard.swift` | `RoamSwitch/NetworkHistoryGuard.swift` |
 
 This is exactly the source set the app compiles into its `RoamSwitchMCPServer` target
 (see `project.yml` in the app repo).
