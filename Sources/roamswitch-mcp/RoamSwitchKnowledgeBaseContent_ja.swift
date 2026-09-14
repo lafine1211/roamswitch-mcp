@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.28 (build 85).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.29 (build 86).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -510,6 +510,20 @@ extension RoamSwitchKnowledgeBase {
                 • MCPツール: `run_npm_audit_signatures`（`directory`引数、Pro限定・オプトイン限定の二重ゲート）。
                 """,
                 recommendation: "本番デプロイ前の依存関係監査や、サプライチェーン侵害が疑われるインシデント調査時にのみ有効化してください。常時オンにする必要はありません。"
+            ),
+            LocalizedEntry(
+                id: "feat_npm_sandboxed_install",
+                title: "npm/pnpm installのサンドボックス実行 (roamswitch-npm, Pro)",
+                summary: "preinstall/install/postinstall/prepareスクリプトの実行だけをネットワーク接続不可のサンドボックス (sandbox-exec) に封じ込める、実行代行型のコマンドラインラッパーです。単なる検知ではなく実際にインストールを代行します。Pro版限定。",
+                details: """
+                • 開き方: 「📦 パッケージCVE照合」→「サンドボックス実行 (npm/pnpm) (Pro)」タブの「インストール」ボタンで、コマンドラインラッパー `roamswitch-npm` を ~/Library/Application Support/RoamSwitch/bin/ に配置します。
+                • 二段階フロー: ①ダウンロードフェーズは `npm install --ignore-scripts` / `pnpm install --ignore-scripts` を通常通りネットワーク接続ありで実行。②スクリプト実行フェーズは `npm rebuild` / `pnpm rebuild`（rootがprepareを宣言していれば `run prepare` も）を sandbox-exec の `(deny network-outbound)` プロファイル下で実行します。
+                • サンドボックス方式: Linux版はbwrapによるファイルシステム制限を採用しますが、macOSには同等技術がないため、実機で動作検証済みのネットワーク遮断を採用しています（`(allow default)` + `(deny network-outbound)`）。ファイル読み書き・子プロセス起動は制限しません。
+                • シェルエイリアス: `npm`/`pnpm` をラッパー経由にするエイリアス2行をシェル設定ファイルに追記できます（既存内容は変更せず末尾追記のみ、任意）。
+                • プレビュー: 実行前にプロジェクトフォルダのライフサイクルスクリプト一覧（機能「インストールスクリプトの一覧」と同じスキャナ）を表示できます。
+                • sandbox-execが利用できない場合や失敗した場合、サンドボックス無しへの暗黙フォールバックはしません。yarnは非対応です。GTK/MCPツールはありません（ターミナルから使うコマンドラインツール）。
+                """,
+                recommendation: "見慣れないパッケージを含むプロジェクトや、外部から取得したプロジェクトへの `npm install` は、通常のnpm/pnpmの代わりに `roamswitch-npm install` を使うことを推奨します。"
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",

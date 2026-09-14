@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.28 (build 85).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.29 (build 86).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -511,6 +511,20 @@ extension RoamSwitchKnowledgeBase {
                 • Outil MCP : `run_npm_audit_signatures` (argument `directory`, double verrouillage Pro + commutateur d'activation).
                 """,
                 recommendation: "N'activez cette fonction que pour un audit des dépendances avant déploiement ou lors de l'investigation d'une éventuelle compromission de la chaîne d'approvisionnement — elle n'a pas besoin de rester activée en permanence."
+            ),
+            LocalizedEntry(
+                id: "feat_npm_sandboxed_install",
+                title: "Installation npm/pnpm en bac à sable (roamswitch-npm, Pro)",
+                summary: "Un véritable wrapper d'intervention — pas une simple détection — qui confine uniquement l'exécution des scripts preinstall/install/postinstall/prepare dans un bac à sable sans accès réseau (sandbox-exec), exécutant réellement l'installation à votre place. Pro uniquement.",
+                details: """
+                • Activation : le bouton « Installer » dans « 📦 Vérification CVE des paquets » → « Installation en bac à sable (npm/pnpm) (Pro) » place le wrapper en ligne de commande `roamswitch-npm` dans ~/Library/Application Support/RoamSwitch/bin/.
+                • Flux en deux phases : ① La phase de téléchargement exécute `npm install --ignore-scripts` / `pnpm install --ignore-scripts` normalement, avec accès réseau. ② La phase des scripts exécute `npm rebuild` / `pnpm rebuild` (ainsi que `run prepare` si la racine en déclare un) sous un profil sandbox-exec avec `(deny network-outbound)`.
+                • Mécanisme du bac à sable : la version Linux utilise bwrap pour restreindre le système de fichiers ; comme macOS ne dispose pas d'une technologie équivalente, un blocage réseau est utilisé à la place, vérifié sur du matériel réel (`(allow default)` + `(deny network-outbound)`). Les lectures/écritures de fichiers et le lancement de processus enfants ne sont pas restreints.
+                • Alias shell : deux lignes d'alias faisant passer `npm`/`pnpm` par le wrapper peuvent être ajoutées au fichier de configuration de votre shell (facultatif, ajout uniquement — le contenu existant reste inchangé).
+                • Aperçu : avant l'exécution, vous pouvez lister les scripts de cycle de vie du dossier du projet (le même analyseur que « Inventaire des scripts d'installation »).
+                • Si sandbox-exec est indisponible ou échoue, il n'y a jamais de repli silencieux vers une exécution sans bac à sable. yarn n'est pas pris en charge. Il n'y a pas d'outil GTK/MCP — c'est un outil en ligne de commande utilisé depuis un terminal.
+                """,
+                recommendation: "Pour les projets contenant des paquets inconnus, ou les projets récupérés depuis des sources externes, utilisez `roamswitch-npm install` à la place d'un npm/pnpm install habituel."
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",

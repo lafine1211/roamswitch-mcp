@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.28 (build 85).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.29 (build 86).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -511,6 +511,20 @@ extension RoamSwitchKnowledgeBase {
                 • MCP 도구: `run_npm_audit_signatures`(`directory` 인자, Pro와 옵트인 토글의 이중 게이트).
                 """,
                 recommendation: "배포 전 의존성 감사나 공급망 침해가 의심되는 사고 조사 시에만 활성화하세요. 항상 켜둘 필요는 없습니다."
+            ),
+            LocalizedEntry(
+                id: "feat_npm_sandboxed_install",
+                title: "npm/pnpm 설치 샌드박스 실행 (roamswitch-npm, Pro)",
+                summary: "단순 탐지가 아니라 실제로 개입하는 래퍼로, preinstall/install/postinstall/prepare 스크립트 실행만을 네트워크가 차단된 샌드박스(sandbox-exec) 안에 가두어 실제로 설치를 대신 수행합니다. Pro 전용.",
+                details: """
+                • 활성화 방법: "📦 패키지 CVE 대조" → "샌드박스 설치 (npm/pnpm) (Pro)" 탭의 "설치" 버튼을 누르면 명령줄 래퍼 `roamswitch-npm`이 ~/Library/Application Support/RoamSwitch/bin/ 에 배치됩니다.
+                • 2단계 흐름: ① 다운로드 단계는 `npm install --ignore-scripts` / `pnpm install --ignore-scripts`를 평소처럼 네트워크를 사용해 실행합니다. ② 스크립트 단계는 `npm rebuild` / `pnpm rebuild`(루트가 prepare를 선언한 경우 `run prepare`도 포함)를 `(deny network-outbound)`가 설정된 sandbox-exec 프로필 아래에서 실행합니다.
+                • 샌드박스 방식: Linux 버전은 bwrap을 이용한 파일 시스템 제한을 사용하지만, macOS에는 동등한 기술이 없으므로 실기에서 동작이 검증된 네트워크 차단을 대신 사용합니다(`(allow default)` + `(deny network-outbound)`). 파일 읽기/쓰기와 자식 프로세스 실행은 제한하지 않습니다.
+                • 셸 별칭: `npm`/`pnpm`을 래퍼 경유로 만드는 별칭 2줄을 셸 설정 파일에 추가할 수 있습니다(선택 사항, 끝에 추가만 하며 기존 내용은 변경하지 않음).
+                • 미리보기: 실행 전에 프로젝트 폴더의 라이프사이클 스크립트 목록("설치 스크립트 목록" 기능과 동일한 스캐너)을 표시할 수 있습니다.
+                • sandbox-exec를 사용할 수 없거나 실패하는 경우, 샌드박스 없이 조용히 실행으로 넘어가지 않습니다. yarn은 지원되지 않습니다. GTK/MCP 도구는 없습니다(터미널에서 사용하는 명령줄 도구입니다).
+                """,
+                recommendation: "낯선 패키지가 포함된 프로젝트나 외부에서 가져온 프로젝트에는 일반 npm/pnpm install 대신 `roamswitch-npm install`을 사용하는 것을 권장합니다."
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",

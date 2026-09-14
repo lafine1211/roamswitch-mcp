@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.28 (build 85).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.29 (build 86).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -511,6 +511,20 @@ extension RoamSwitchKnowledgeBase {
                 • MCP 工具：`run_npm_audit_signatures`（`directory` 参数，Pro 与选择性启用开关的双重限制）。
                 """,
                 recommendation: "仅在部署前的依赖审计，或怀疑发生供应链入侵的事件调查时启用即可，无需始终保持开启。"
+            ),
+            LocalizedEntry(
+                id: "feat_npm_sandboxed_install",
+                title: "npm/pnpm 安装沙箱执行 (roamswitch-npm, Pro)",
+                summary: "这是一个真正进行干预的包装器,而非仅做检测——仅将 preinstall/install/postinstall/prepare 脚本的执行限制在禁止联网的沙箱(sandbox-exec)中,实际代为执行安装。仅限 Pro 版。",
+                details: """
+                • 启用方法: 在「📦 软件包 CVE 比对」→「沙箱安装 (npm/pnpm) (Pro)」标签页点击「安装」按钮,即可将命令行包装器 `roamswitch-npm` 放置到 ~/Library/Application Support/RoamSwitch/bin/。
+                • 两阶段流程: ①下载阶段照常联网执行 `npm install --ignore-scripts` / `pnpm install --ignore-scripts`。②脚本执行阶段在设有 `(deny network-outbound)` 的 sandbox-exec 配置文件下执行 `npm rebuild` / `pnpm rebuild`(若根目录声明了 prepare,还会执行 `run prepare`)。
+                • 沙箱方式: Linux 版采用 bwrap 进行文件系统限制,但 macOS 没有同等技术,因此改为采用已在实机验证可行的网络阻断(`(allow default)` + `(deny network-outbound)`)。不限制文件读写与子进程的启动。
+                • Shell 别名: 可在 shell 配置文件中追加两行别名,让 `npm`/`pnpm` 经由包装器执行(可选,仅追加,不更改现有内容)。
+                • 预览: 执行前可列出项目文件夹的生命周期脚本清单(与「安装脚本清单」功能使用相同的扫描器)。
+                • 若 sandbox-exec 不可用或执行失败,绝不会默默回退到不加沙箱的执行。不支持 yarn。没有 GTK/MCP 工具——这是一个从终端使用的命令行工具。
+                """,
+                recommendation: "对于包含陌生软件包的项目,或从外部来源获取的项目,建议使用 `roamswitch-npm install` 代替常规的 npm/pnpm install。"
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.28 (build 85).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.29 (build 86).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -511,6 +511,20 @@ extension RoamSwitchKnowledgeBase {
                 • Herramienta MCP: `run_npm_audit_signatures` (argumento `directory`, doble control: Pro más el interruptor de activación).
                 """,
                 recommendation: "Actívela solo para una auditoría de dependencias antes de desplegar o al investigar una posible vulneración de la cadena de suministro — no es necesario dejarla activada siempre."
+            ),
+            LocalizedEntry(
+                id: "feat_npm_sandboxed_install",
+                title: "Instalación npm/pnpm en sandbox (roamswitch-npm, Pro)",
+                summary: "Un wrapper de intervención real, no solo detección, que confina únicamente la ejecución de los scripts preinstall/install/postinstall/prepare dentro de un sandbox sin acceso a la red (sandbox-exec), ejecutando realmente la instalación en su nombre. Solo Pro.",
+                details: """
+                • Cómo activarlo: el botón «Instalar» en «📦 Cotejo de CVE de paquetes» → «Instalación en sandbox (npm/pnpm) (Pro)» coloca el wrapper de línea de comandos `roamswitch-npm` en ~/Library/Application Support/RoamSwitch/bin/.
+                • Flujo de dos fases: ① La fase de descarga ejecuta `npm install --ignore-scripts` / `pnpm install --ignore-scripts` con normalidad, con acceso a la red. ② La fase de scripts ejecuta `npm rebuild` / `pnpm rebuild` (además de `run prepare` si la raíz lo declara) bajo un perfil de sandbox-exec con `(deny network-outbound)`.
+                • Mecanismo de sandbox: la versión de Linux usa bwrap para restringir el sistema de archivos; como macOS no tiene una tecnología equivalente, en su lugar se usa el bloqueo de red, verificado en hardware real (`(allow default)` + `(deny network-outbound)`). No se restringen las lecturas/escrituras de archivos ni el lanzamiento de procesos hijos.
+                • Alias de shell: se pueden añadir dos líneas de alias que enrutan `npm`/`pnpm` a través del wrapper al archivo de configuración de su shell (opcional, solo se añaden — el contenido existente no se modifica).
+                • Vista previa: antes de ejecutar, puede listar los scripts de ciclo de vida de la carpeta del proyecto (el mismo escáner que usa «Inventario de scripts de instalación»).
+                • Si sandbox-exec no está disponible o falla, nunca se recurre silenciosamente a una ejecución sin sandbox. yarn no es compatible. No hay herramienta GTK/MCP: es una herramienta de línea de comandos que se usa desde una terminal.
+                """,
+                recommendation: "Para proyectos con paquetes desconocidos, o proyectos obtenidos de fuentes externas, use `roamswitch-npm install` en lugar de un npm/pnpm install habitual."
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",

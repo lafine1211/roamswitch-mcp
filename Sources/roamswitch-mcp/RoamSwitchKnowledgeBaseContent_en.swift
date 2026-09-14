@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.28 (build 85).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.29 (build 86).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -510,6 +510,20 @@ extension RoamSwitchKnowledgeBase {
                 • MCP tool: `run_npm_audit_signatures` (`directory` argument, double-gated on Pro plus the opt-in toggle).
                 """,
                 recommendation: "Enable this only for a pre-deploy dependency audit or when investigating a suspected supply-chain compromise — it doesn't need to stay on all the time."
+            ),
+            LocalizedEntry(
+                id: "feat_npm_sandboxed_install",
+                title: "Sandboxed npm/pnpm Install (roamswitch-npm, Pro)",
+                summary: "A real intervention wrapper — not just detection — that confines only the preinstall/install/postinstall/prepare script execution inside a network-denied sandbox (sandbox-exec), actually running the install on your behalf. Pro only.",
+                details: """
+                • How to enable: the "Install" button in "📦 Package CVE Scan" → "Sandboxed Install (npm/pnpm) (Pro)" places the command-line wrapper `roamswitch-npm` at ~/Library/Application Support/RoamSwitch/bin/.
+                • Two-phase flow: ① The download phase runs `npm install --ignore-scripts` / `pnpm install --ignore-scripts` normally, with network access. ② The script phase runs `npm rebuild` / `pnpm rebuild` (plus `run prepare` if the root declares one) under a sandbox-exec profile with `(deny network-outbound)`.
+                • Sandbox mechanism: the Linux version uses bwrap for filesystem restriction, but since macOS has no equivalent technology, this uses network blocking instead, verified to actually work on real hardware (`(allow default)` + `(deny network-outbound)`). File reads/writes and spawning child processes are not restricted.
+                • Shell alias: two alias lines routing `npm`/`pnpm` through the wrapper can be appended to your shell config file (optional, only appended — existing content is left unchanged).
+                • Preview: before running, you can list the project folder's lifecycle scripts (the same scanner "Install Script Inventory" uses).
+                • If sandbox-exec is unavailable or fails, this never silently falls back to running unsandboxed. yarn is not supported. There's no GTK/MCP tool — it's a command-line tool used from a terminal.
+                """,
+                recommendation: "For projects containing unfamiliar packages, or projects fetched from external sources, use `roamswitch-npm install` in place of a regular npm/pnpm install."
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",
