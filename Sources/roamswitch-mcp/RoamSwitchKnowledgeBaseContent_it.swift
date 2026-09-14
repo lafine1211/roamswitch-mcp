@@ -441,7 +441,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "Sorveglia gli appunti solo sul dispositivo, avvisa quando è stata copiata una chiave API o una chiave privata così da non incollarla per errore, e svuota automaticamente gli appunti quando copi un comando dannoso che un sito truffaldino vuole farti eseguire (ClickFix). Attiva per impostazione predefinita nell'edizione gratuita.",
                 details: """
                 • Monitoraggio: controlla le modifiche agli appunti circa una volta al secondo. I contenuti non vengono mai inviati né memorizzati.
-                • Chiavi rilevate: chiavi API e token di OpenAI, Anthropic, GitHub, AWS, Hugging Face, Google AI / Gemini, Slack e Stripe, oltre alle chiavi private RSA / SSH.
+                • Chiavi rilevate: chiavi API e token di OpenAI, Anthropic, GitHub, AWS, Hugging Face, Google AI / Gemini, Slack e Stripe, oltre alle chiavi private RSA / SSH. Anche frasi seed di wallet crypto (BIP39) e chiavi private Bitcoin (WIF/BIP32), entrambe verificate tramite checksum per ridurre i falsi positivi.
                 • Per le chiavi segrete: solo notifica («Chiave riservata rilevata negli appunti»); gli appunti non vengono svuotati, poiché una chiave trapelata può comunque essere revocata e rinnovata in seguito.
                 • Per i comandi ClickFix: notifica («Comando sospetto rilevato negli appunti») e gli appunti vengono svuotati immediatamente, impedendo l'incollaggio ovunque fosse diretto: Terminale, Editor script, Spotlight o altrove. Questo integra feat_clickfix_guard, che sorveglia la cronologia della shell.
                 """,

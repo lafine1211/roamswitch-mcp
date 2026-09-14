@@ -440,7 +440,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "Watches the clipboard on the device only, warns when an API key or private key has been copied so you don't paste it by mistake, and automatically clears the clipboard when you copy a malicious command that a scam site wants you to run (ClickFix). On by default in the free edition.",
                 details: """
                 • Monitoring: checks the clipboard for changes about once per second. Contents are never sent anywhere or stored.
-                • Keys detected: OpenAI, Anthropic, GitHub, AWS, Hugging Face, Google AI / Gemini, Slack, and Stripe API keys and tokens, plus RSA / SSH private keys.
+                • Keys detected: OpenAI, Anthropic, GitHub, AWS, Hugging Face, Google AI / Gemini, Slack, and Stripe API keys and tokens, plus RSA / SSH private keys. Also cryptocurrency wallet seed phrases (BIP39) and Bitcoin private keys (WIF/BIP32) — both checksum-verified to keep false positives low.
                 • For secret keys: notification only ("Confidential Key Detected in Clipboard"); the clipboard isn't cleared, since a leaked key can still be revoked and rotated afterwards.
                 • For ClickFix commands: notification ("Suspicious Command Detected in Clipboard") and the clipboard is cleared immediately, stopping the paste wherever it was headed: Terminal, Script Editor, Spotlight, or elsewhere. It complements feat_clickfix_guard, which watches shell history.
                 """,

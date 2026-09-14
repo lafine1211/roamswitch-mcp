@@ -50,6 +50,7 @@ All files live in `Sources/roamswitch-mcp/`.
 | `PackageCveScanLanguages.swift` | `RoamSwitch/PackageCveScanLanguages.swift` |
 | `PackageCveMapLanguagesData.swift` | `RoamSwitch/PackageCveMapLanguagesData.swift` |
 | `SecretLeakScanning.swift` | `RoamSwitch/SecretLeakScanning.swift` |
+| `CryptoSecretDetection.swift` | `RoamSwitch/CryptoSecretDetection.swift` |
 | `SecurityLogAuditor.swift` | `RoamSwitch/SecurityLogAuditor.swift` |
 | `LogTemplateAnalyzer.swift` | `RoamSwitch/LogTemplateAnalyzer.swift` |
 | `QuarantineManager.swift` | `RoamSwitch/QuarantineManager.swift` |
@@ -80,6 +81,7 @@ via `@testable import RoamSwitch`. Only `main.swift` (the stdin→stdout pump) i
 | This repo | RoamSwitch app repo |
 | --- | --- |
 | `LinkSafetyAuditorTests.swift` | `RoamSwitchTests/LinkSafetyAuditorTests.swift` |
+| `CryptoSecretDetectionTests.swift` | `RoamSwitchTests/CryptoSecretDetectionTests.swift` |
 | `MCPKnowledgeBaseTests.swift` | `RoamSwitchTests/MCPKnowledgeBaseTests.swift` |
 | `MCPProtocolTests.swift` | `RoamSwitchTests/MCPProtocolTests.swift` |
 | `MCPResponseFormattingTests.swift` | `RoamSwitchTests/MCPResponseFormattingTests.swift` |

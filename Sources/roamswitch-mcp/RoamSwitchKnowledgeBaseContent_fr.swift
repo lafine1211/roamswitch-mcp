@@ -441,7 +441,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "Surveille le presse-papiers uniquement sur l'appareil, avertit lorsqu'une clé API ou une clé privée a été copiée afin que vous ne la colliez pas par erreur, et vide automatiquement le presse-papiers lorsque vous copiez une commande malveillante qu'un site d'arnaque veut vous faire exécuter (ClickFix). Activé par défaut dans l'édition gratuite.",
                 details: """
                 • Surveillance : vérifie les changements du presse-papiers environ une fois par seconde. Le contenu n'est jamais envoyé ni stocké.
-                • Clés détectées : clés API et jetons d'OpenAI, Anthropic, GitHub, AWS, Hugging Face, Google AI / Gemini, Slack et Stripe, ainsi que les clés privées RSA / SSH.
+                • Clés détectées : clés API et jetons d'OpenAI, Anthropic, GitHub, AWS, Hugging Face, Google AI / Gemini, Slack et Stripe, ainsi que les clés privées RSA / SSH. Également les phrases de récupération de portefeuille crypto (BIP39) et les clés privées Bitcoin (WIF/BIP32), toutes deux vérifiées par somme de contrôle pour limiter les faux positifs.
                 • Pour les clés secrètes : notification uniquement (« Clé confidentielle détectée dans le presse-papiers ») ; le presse-papiers n'est pas vidé, car une clé divulguée peut encore être révoquée et renouvelée ensuite.
                 • Pour les commandes ClickFix : notification (« Commande suspecte détectée dans le presse-papiers ») et le presse-papiers est vidé immédiatement, empêchant le collage où qu'il soit destiné : Terminal, Éditeur de scripts, Spotlight ou ailleurs. Cela complète feat_clickfix_guard, qui surveille l'historique du shell.
                 """,

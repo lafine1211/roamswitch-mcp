@@ -441,7 +441,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "仅在本机监视剪贴板，检测到复制了 API 密钥或私钥时发出误粘贴警告。如果复制了诈骗网站企图让您执行的恶意命令（ClickFix），会自动从剪贴板中删除。免费版默认开启。",
                 details: """
                 • 监视：约每 1 秒检查一次剪贴板的变化。内容不会发送到外部，也不会保存原始数据。
-                • 检测的密钥：OpenAI、Anthropic、GitHub、AWS、HuggingFace、Google AI / Gemini、Slack、Stripe 的 API 密钥和令牌，以及 RSA / SSH 私钥。
+                • 检测的密钥：OpenAI、Anthropic、GitHub、AWS、HuggingFace、Google AI / Gemini、Slack、Stripe 的 API 密钥和令牌，以及 RSA / SSH 私钥。此外还包括加密钱包助记词（BIP39）和比特币私钥（WIF/BIP32），两者均经过校验和验证以降低误报。
                 • 机密密钥的情况：仅发出「剪贴板中检测到机密密钥」通知（由于可以通过吊销并重新签发密钥进行事后处理，因此不会删除）。
                 • ClickFix 命令的情况：发出「剪贴板中检测到可疑命令」通知，并立即清空剪贴板。不仅是终端，在粘贴到 Script Editor、Spotlight 等任何位置之前都能拦截。可补充基于 Shell 历史记录的 feat_clickfix_guard。
                 """,

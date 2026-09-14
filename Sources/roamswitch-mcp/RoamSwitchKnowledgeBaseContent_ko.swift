@@ -441,7 +441,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "기기 내에서만 클립보드를 감시하여 API 키나 개인 키가 복사되면 실수로 붙여넣지 않도록 경고하고, 사기 사이트가 실행하도록 유도하는 악성 명령어(ClickFix)가 복사되면 클립보드를 자동으로 비웁니다. 무료 버전에서도 기본값으로 켜져 있습니다.",
                 details: """
                 • 모니터링 방식: 약 1초마다 클립보드 변경을 확인합니다. 내용은 어디로도 전송되거나 저장되지 않습니다.
-                • 탐지하는 키: OpenAI, Anthropic, GitHub, AWS, Hugging Face, Google AI / Gemini, Slack, Stripe의 API 키와 토큰, RSA / SSH 개인 키.
+                • 탐지하는 키: OpenAI, Anthropic, GitHub, AWS, Hugging Face, Google AI / Gemini, Slack, Stripe의 API 키와 토큰, RSA / SSH 개인 키. 그 외 암호화폐 지갑 시드 문구(BIP39)와 비트코인 개인 키(WIF/BIP32)도 감지하며, 둘 다 체크섬 검증을 거쳐 오탐을 줄입니다.
                 • 비밀 키의 경우: 알림만 발송합니다("클립보드에서 기밀 키 감지"). 유출된 키는 이후에도 폐기하고 재발급할 수 있으므로 클립보드는 비우지 않습니다.
                 • ClickFix 명령어의 경우: 알림을 발송하고("클립보드에서 의심스러운 명령어 감지") 클립보드를 즉시 비워, 터미널, 스크립트 편집기, Spotlight 등 어디로 향하든 붙여넣기를 막습니다. 셸 기록을 감시하는 feat_clickfix_guard를 보완합니다.
                 """,

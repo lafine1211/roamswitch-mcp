@@ -652,7 +652,7 @@ enum MCPServer {
         ],
         [
             "name": "audit_secrets",
-            "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only local text/files. Scans for exposed API keys (OpenAI, Anthropic, GitHub, AWS, HuggingFace, Google AI/Gemini, Slack, Stripe) and SSH/RSA private keys with masking, using regex plus Shannon entropy scoring. Pass either 'text' (a snippet) or 'path' (a file, or a directory to scan recursively).",
+            "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only local text/files. Scans for exposed API keys (OpenAI, Anthropic, GitHub, AWS, HuggingFace, Google AI/Gemini, Slack, Stripe), SSH/RSA private keys, and cryptocurrency wallet secrets (BIP39 seed phrases and Bitcoin WIF/BIP32 extended private keys, checksum-verified so ordinary text is never mistaken for one) with full masking, using regex plus Shannon entropy scoring. Pass either 'text' (a snippet) or 'path' (a file, or a directory to scan recursively).",
             "inputSchema": [
                 "type": "object",
                 "properties": [

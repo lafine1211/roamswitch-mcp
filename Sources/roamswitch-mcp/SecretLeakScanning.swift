@@ -4,6 +4,7 @@
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
 // ─────────────────────────────────────────────────────────────────────────────
+import CryptoKit
 import Foundation
 
 /// Pure, dependency-free secret-detection logic — split out of
@@ -24,6 +25,12 @@ public enum SecretLeakScanning {
         case privateKey = "Private Key (RSA/SSH)"
         case slack = "Slack Token"
         case stripe = "Stripe API Key"
+        /// A checksum-verified BIP39 mnemonic seed phrase (12/15/18/21/24 words).
+        case cryptoSeedPhrase = "Crypto Seed Phrase (BIP39)"
+        /// A checksum-verified Bitcoin Wallet Import Format private key.
+        case cryptoBitcoinWIF = "Bitcoin Private Key (WIF)"
+        /// A checksum-verified BIP32 extended private key (xprv/yprv/zprv/tprv).
+        case cryptoExtendedKey = "Crypto Extended Private Key (BIP32)"
 
         public var localizedName: String {
             switch self {
@@ -36,6 +43,9 @@ public enum SecretLeakScanning {
             case .privateKey: return loc("秘密鍵 (RSA/SSH)")
             case .slack: return loc("Slackトークン")
             case .stripe: return loc("Stripe APIキー")
+            case .cryptoSeedPhrase: return loc("暗号資産ウォレットのシードフレーズ (BIP39)")
+            case .cryptoBitcoinWIF: return loc("Bitcoin秘密鍵 (WIF形式)")
+            case .cryptoExtendedKey: return loc("暗号資産ウォレットの拡張秘密鍵 (BIP32)")
             }
         }
 
@@ -51,6 +61,9 @@ public enum SecretLeakScanning {
             case .privateKey: return loc("秘密鍵が漏洩している可能性があります。直ちに鍵を再生成し、authorized_keysを更新してください。")
             case .slack: return loc("Slack API管理画面からトークンをRevokeしてください。")
             case .stripe: return loc("StripeダッシュボードからAPIキーをロールしてください。")
+            case .cryptoSeedPhrase: return loc("これは暗号資産ウォレットを復元できる可能性があります。APIキーと違い「失効」はできません。直ちに新しいウォレットを作成し、資産を移動してください。このフレーズを入力したウォレットは今後一切使用しないでください。")
+            case .cryptoBitcoinWIF: return loc("暗号資産ウォレットの秘密鍵です。APIキーと違い「失効」はできません。直ちに新しいウォレットを作成し、資産を移動してください。この鍵に対応するウォレットは今後一切使用しないでください。")
+            case .cryptoExtendedKey: return loc("暗号資産ウォレットの拡張秘密鍵です。この鍵から配下の全アドレスの秘密鍵を導出できます。APIキーと違い「失効」はできません。直ちに新しいウォレットを作成し、資産を移動してください。")
             }
         }
     }
@@ -112,7 +125,47 @@ public enum SecretLeakScanning {
                 results.append(DetectedSecretItem(type: type, detectedAt: now))
             }
         }
+        for line in text.components(separatedBy: .newlines) {
+            if !seen.contains(.cryptoSeedPhrase), !CryptoSecretDetection.findMnemonicSpans(CryptoSecretDetection.tokenizeWords(line)).isEmpty {
+                seen.insert(.cryptoSeedPhrase)
+                results.append(DetectedSecretItem(type: .cryptoSeedPhrase, detectedAt: now))
+            }
+            if !seen.contains(.cryptoBitcoinWIF) || !seen.contains(.cryptoExtendedKey) {
+                for (pattern, type) in cryptoKeyPatterns where !seen.contains(type) {
+                    if matchesRegex(pattern: pattern, in: line), lineContainsVerifiedCryptoKey(line, pattern: pattern, expecting: type) {
+                        seen.insert(type)
+                        results.append(DetectedSecretItem(type: type, detectedAt: now))
+                    }
+                }
+            }
+        }
         return results
+    }
+
+    /// `(candidate regex, secret type)` pairs for the checksum-verified
+    /// crypto key detectors — parallel to `patterns`, but each candidate
+    /// match still has to pass `CryptoSecretDetection.classifyCryptoKeyCandidate`
+    /// before being reported (see that type's documentation for why a plain
+    /// regex alone isn't trustworthy here).
+    private static let cryptoKeyPatterns: [(regex: String, type: DetectedSecretType)] = [
+        (CryptoSecretDetection.wifCandidatePattern, .cryptoBitcoinWIF),
+        (CryptoSecretDetection.extendedKeyCandidatePattern, .cryptoExtendedKey),
+    ]
+
+    private static func lineContainsVerifiedCryptoKey(_ line: String, pattern: String, expecting type: DetectedSecretType) -> Bool {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return false }
+        let range = NSRange(line.startIndex..<line.endIndex, in: line)
+        var found = false
+        regex.enumerateMatches(in: line, options: [], range: range) { match, _, stop in
+            guard let match, let matchRange = Range(match.range, in: line) else { return }
+            let candidate = String(line[matchRange])
+            let wantKind: CryptoSecretDetection.CryptoKeyKind = type == .cryptoBitcoinWIF ? .wif : .extendedPrivateKey
+            if CryptoSecretDetection.classifyCryptoKeyCandidate(candidate) == wantKind {
+                found = true
+                stop.pointee = true
+            }
+        }
+        return found
     }
 
     private static func matchesRegex(pattern: String, in text: String) -> Bool {
@@ -142,8 +195,50 @@ public enum SecretLeakScanning {
                     ))
                 }
             }
+
+            // BIP39 mnemonic seed phrase: word-run + checksum, not a regex.
+            let tokens = CryptoSecretDetection.tokenizeWords(line)
+            for span in CryptoSecretDetection.findMnemonicSpans(tokens) {
+                let phrase = tokens[span.start..<span.end].joined(separator: " ")
+                findings.append(SecretFinding(
+                    type: .cryptoSeedPhrase,
+                    lineNumber: idx + 1,
+                    masked: cryptoSecretPlaceholder(),
+                    entropy: shannonEntropy(phrase),
+                    filePath: filePath
+                ))
+            }
+
+            // Bitcoin WIF / BIP32 extended private key: regex pre-filter,
+            // then a real Base58Check + version-byte verification before
+            // ever reporting a finding (see `CryptoSecretDetection`'s docs).
+            for (pattern, type) in cryptoKeyPatterns {
+                guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+                regex.enumerateMatches(in: line, options: [], range: lineRange) { match, _, _ in
+                    guard let match, let matchRange = Range(match.range, in: line) else { return }
+                    let candidate = String(line[matchRange])
+                    let wantKind: CryptoSecretDetection.CryptoKeyKind = type == .cryptoBitcoinWIF ? .wif : .extendedPrivateKey
+                    guard CryptoSecretDetection.classifyCryptoKeyCandidate(candidate) == wantKind else { return }
+                    findings.append(SecretFinding(
+                        type: type,
+                        lineNumber: idx + 1,
+                        masked: cryptoSecretPlaceholder(),
+                        entropy: shannonEntropy(candidate),
+                        filePath: filePath
+                    ))
+                }
+            }
         }
         return findings
+    }
+
+    /// Fixed, fully-redacted display value for a crypto secret finding —
+    /// unlike API keys (where showing a few boundary characters is low
+    /// risk), even one or two words of a BIP39 phrase, or any base58
+    /// characters of a WIF/extended key, meaningfully narrows a brute-force
+    /// search, so nothing of the actual value is ever shown.
+    private static func cryptoSecretPlaceholder() -> String {
+        loc("[値は完全に非表示]")
     }
 
     /// Directory/build-dependency names skipped during a recursive folder scan,
@@ -202,6 +297,55 @@ public enum SecretLeakScanning {
                 let matched = String(result[matchRange])
                 result.replaceSubrange(matchRange, with: maskSecret(matched))
             }
+        }
+        for (pattern, type) in cryptoKeyPatterns {
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+            let range = NSRange(result.startIndex..<result.endIndex, in: result)
+            let matches = regex.matches(in: result, options: [], range: range)
+            let wantKind: CryptoSecretDetection.CryptoKeyKind = type == .cryptoBitcoinWIF ? .wif : .extendedPrivateKey
+            for match in matches.reversed() {
+                guard let matchRange = Range(match.range, in: result) else { continue }
+                let candidate = String(result[matchRange])
+                guard CryptoSecretDetection.classifyCryptoKeyCandidate(candidate) == wantKind else { continue }
+                result.replaceSubrange(matchRange, with: cryptoRedactionMarker)
+            }
+        }
+        result = redactMnemonics(in: result)
+        return result
+    }
+
+    /// Fixed, non-localized redaction marker for a verified crypto secret —
+    /// same convention as `maskSecret`'s `"****"`, which also isn't
+    /// translated (it's a technical marker, not user-facing prose).
+    private static let cryptoRedactionMarker = "[REDACTED-CRYPTO-SECRET]"
+
+    /// Replaces every checksum-verified BIP39 mnemonic phrase in `text` with
+    /// `cryptoRedactionMarker`, line by line (mnemonic detection is
+    /// word-based, not a single regex — see `CryptoSecretDetection`).
+    private static func redactMnemonics(in text: String) -> String {
+        text.components(separatedBy: "\n")
+            .map(redactMnemonics(inLine:))
+            .joined(separator: "\n")
+    }
+
+    private static func redactMnemonics(inLine line: String) -> String {
+        guard let wordRegex = try? NSRegularExpression(pattern: "[A-Za-z]+") else { return line }
+        let range = NSRange(line.startIndex..<line.endIndex, in: line)
+        let nsMatches = wordRegex.matches(in: line, options: [], range: range)
+        guard !nsMatches.isEmpty else { return line }
+        let wordRanges: [Range<String.Index>] = nsMatches.compactMap { Range($0.range, in: line) }
+        guard wordRanges.count == nsMatches.count else { return line }
+        let tokens = wordRanges.map { line[$0].lowercased() }
+        let spans = CryptoSecretDetection.findMnemonicSpans(tokens)
+        guard !spans.isEmpty else { return line }
+
+        var result = line
+        // Replace back-to-front so earlier ranges stay valid as later ones
+        // are rewritten (same pattern as the regex-based redactions above).
+        for span in spans.sorted(by: { $0.start > $1.start }) {
+            let start = wordRanges[span.start].lowerBound
+            let end = wordRanges[span.end - 1].upperBound
+            result.replaceSubrange(start..<end, with: cryptoRedactionMarker)
         }
         return result
     }

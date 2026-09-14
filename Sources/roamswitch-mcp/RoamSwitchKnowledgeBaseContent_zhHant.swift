@@ -441,7 +441,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "僅在裝置端監控剪貼簿，當偵測到已複製 API 金鑰或私密金鑰時發出警告，避免您誤貼上；當複製到詐騙網站要求您執行的惡意指令（ClickFix）時，會自動清除剪貼簿。免費版預設開啟。",
                 details: """
                 • 監控方式：約每秒檢查一次剪貼簿是否有變更。內容絕不會被傳送或儲存到任何地方。
-                • 偵測的金鑰：OpenAI、Anthropic、GitHub、AWS、Hugging Face、Google AI / Gemini、Slack 與 Stripe 的 API 金鑰與權杖，以及 RSA / SSH 私密金鑰。
+                • 偵測的金鑰：OpenAI、Anthropic、GitHub、AWS、Hugging Face、Google AI / Gemini、Slack 與 Stripe 的 API 金鑰與權杖，以及 RSA / SSH 私密金鑰。另外還包括加密錢包助記詞（BIP39）與比特幣私鑰（WIF/BIP32），皆經過檢查碼驗證以降低誤判。
                 • 機密金鑰：僅發出通知（「剪貼簿中偵測到機密金鑰」）；不會清除剪貼簿，因為外洩的金鑰日後仍可撤銷並重新產生。
                 • ClickFix 指令：發出通知（「剪貼簿中偵測到可疑指令」）並立即清除剪貼簿，阻止您貼到 Terminal、指令碼編輯器、Spotlight 或其他任何地方。此功能與監控殼層歷史記錄的 feat_clickfix_guard 相輔相成。
                 """,

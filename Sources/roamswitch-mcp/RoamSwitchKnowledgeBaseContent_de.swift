@@ -441,7 +441,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "Überwacht die Zwischenablage ausschließlich auf dem Gerät, warnt beim Kopieren eines API-Schlüssels oder privaten Schlüssels, damit Sie ihn nicht versehentlich einfügen, und leert die Zwischenablage automatisch, wenn Sie einen bösartigen Befehl kopieren, den eine Betrugsseite ausführen lassen will (ClickFix). In der kostenlosen Version standardmäßig aktiviert.",
                 details: """
                 • Überwachung: Prüft die Zwischenablage etwa einmal pro Sekunde auf Änderungen. Inhalte werden nie gesendet oder gespeichert.
-                • Erkannte Schlüssel: API-Schlüssel und Tokens von OpenAI, Anthropic, GitHub, AWS, Hugging Face, Google AI / Gemini, Slack und Stripe sowie private RSA-/SSH-Schlüssel.
+                • Erkannte Schlüssel: API-Schlüssel und Tokens von OpenAI, Anthropic, GitHub, AWS, Hugging Face, Google AI / Gemini, Slack und Stripe sowie private RSA-/SSH-Schlüssel. Außerdem Krypto-Wallet-Seed-Phrasen (BIP39) und Bitcoin-Private-Keys (WIF/BIP32) — beide werden per Prüfsumme verifiziert, um Fehlalarme gering zu halten.
                 • Bei Geheimschlüsseln: Nur eine Benachrichtigung („Vertraulicher Schlüssel in Zwischenablage erkannt“); die Zwischenablage wird nicht geleert, da ein durchgesickerter Schlüssel im Nachhinein noch widerrufen und erneuert werden kann.
                 • Bei ClickFix-Befehlen: Eine Benachrichtigung („Verdächtiger Befehl in Zwischenablage erkannt“), und die Zwischenablage wird sofort geleert, sodass das Einfügen gestoppt wird, egal wohin es gehen sollte: Terminal, Skripteditor, Spotlight oder anderswo. Dies ergänzt feat_clickfix_guard, das den Shell-Verlauf überwacht.
                 """,

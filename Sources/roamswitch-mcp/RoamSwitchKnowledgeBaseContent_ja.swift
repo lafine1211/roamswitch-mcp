@@ -440,7 +440,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "クリップボードを端末内だけで監視し、APIキーや秘密鍵のコピーを検知して誤貼り付けを警告します。詐欺サイトが実行させようとする不正なコマンド（ClickFix）をコピーした場合は、クリップボードから自動で削除します。無料版で既定オンです。",
                 details: """
                 • 監視: 約1秒ごとにクリップボードの変更を確認。内容は外部に送信せず、生データを保存しません。
-                • 検知するキー: OpenAI、Anthropic、GitHub、AWS、HuggingFace、Google AI / Gemini、Slack、Stripe のAPIキー・トークン、RSA / SSH 秘密鍵。
+                • 検知するキー: OpenAI、Anthropic、GitHub、AWS、HuggingFace、Google AI / Gemini、Slack、Stripe のAPIキー・トークン、RSA / SSH 秘密鍵。加えて、暗号資産ウォレットのシードフレーズ（BIP39）とBitcoin秘密鍵（WIF/BIP32、いずれもチェックサム検証付きで誤検知を抑制）。
                 • 機密キーの場合: 「クリップボードに機密キーを検知しました」と通知のみ（キーの失効・再発行で事後対応が可能なため、削除はしません）。
                 • ClickFixコマンドの場合: 「クリップボードで不審なコマンドを検知しました」と通知し、クリップボードを即座に消去。Terminalだけでなく、Script Editor・Spotlightなど、どこに貼り付けられる前でも止められます。シェル履歴を見る feat_clickfix_guard を補完します。
                 """,

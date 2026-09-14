@@ -441,7 +441,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "Vigia a área de transferência apenas no dispositivo, avisa quando uma chave de API ou uma chave privada foi copiada para que não a cole por engano, e limpa automaticamente a área de transferência quando copia um comando malicioso que um site de burla quer que execute (ClickFix). Ativa por predefinição na edição gratuita.",
                 details: """
                 • Monitorização: verifica alterações na área de transferência cerca de uma vez por segundo. O conteúdo nunca é enviado nem armazenado.
-                • Chaves detetadas: chaves de API e tokens da OpenAI, Anthropic, GitHub, AWS, Hugging Face, Google AI / Gemini, Slack e Stripe, além de chaves privadas RSA / SSH.
+                • Chaves detetadas: chaves de API e tokens da OpenAI, Anthropic, GitHub, AWS, Hugging Face, Google AI / Gemini, Slack e Stripe, além de chaves privadas RSA / SSH. Também frases-semente de carteiras cripto (BIP39) e chaves privadas Bitcoin (WIF/BIP32), ambas verificadas por checksum para reduzir falsos positivos.
                 • Para chaves secretas: apenas notificação («Chave confidencial detetada na área de transferência»); a área de transferência não é limpa, uma vez que uma chave divulgada ainda pode ser revogada e renovada posteriormente.
                 • Para comandos ClickFix: notificação («Comando suspeito detetado na área de transferência») e a área de transferência é limpa de imediato, impedindo a colagem seja para onde for: Terminal, Editor de Scripts, Spotlight ou outro local. Isto complementa feat_clickfix_guard, que vigia o histórico da shell.
                 """,

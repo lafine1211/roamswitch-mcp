@@ -441,7 +441,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "Vigila el portapapeles solo en el dispositivo, avisa cuando se ha copiado una clave API o una clave privada para que no la pegues por error, y vacía automáticamente el portapapeles cuando copias un comando malicioso que un sitio de estafa quiere que ejecutes (ClickFix). Activada por defecto en la edición gratuita.",
                 details: """
                 • Supervisión: comprueba los cambios del portapapeles aproximadamente una vez por segundo. El contenido nunca se envía ni se almacena.
-                • Claves detectadas: claves API y tokens de OpenAI, Anthropic, GitHub, AWS, Hugging Face, Google AI / Gemini, Slack y Stripe, además de claves privadas RSA / SSH.
+                • Claves detectadas: claves API y tokens de OpenAI, Anthropic, GitHub, AWS, Hugging Face, Google AI / Gemini, Slack y Stripe, además de claves privadas RSA / SSH. También frases semilla de monederos cripto (BIP39) y claves privadas de Bitcoin (WIF/BIP32), ambas verificadas por checksum para reducir los falsos positivos.
                 • Para claves secretas: solo notificación («Clave confidencial detectada en el portapapeles»); el portapapeles no se vacía, ya que una clave filtrada aún puede revocarse y renovarse después.
                 • Para comandos ClickFix: notificación («Comando sospechoso detectado en el portapapeles») y el portapapeles se vacía de inmediato, deteniendo el pegado allá donde fuera a ir: Terminal, Editor de scripts, Spotlight u otro lugar. Esto complementa a feat_clickfix_guard, que vigila el historial del shell.
                 """,
