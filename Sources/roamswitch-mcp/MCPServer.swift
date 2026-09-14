@@ -185,6 +185,8 @@ enum MCPServer {
                 return [result(id: id, callRunPackageCveScanLanguages(arguments: arguments))]
             case "run_package_lifecycle_script_scan":
                 return [result(id: id, callRunPackageLifecycleScriptScan(arguments: arguments))]
+            case "run_npm_audit_signatures":
+                return [result(id: id, callRunNpmAuditSignatures(arguments: arguments))]
             case "audit_url_safety":
                 return [result(id: id, callAuditURLSafety(arguments: arguments))]
             case "get_app_help":
@@ -425,6 +427,46 @@ enum MCPServer {
             }
         )
         return textContentResult(payload)
+    }
+
+    /// UNLIKE EVERY OTHER PACKAGE/CVE TOOL IN THIS FILE, THIS SENDS NETWORK
+    /// REQUESTS — `npm audit signatures` talks to the npm registry
+    /// (registry.npmjs.org). Gated on `NpmAuditSignatures.enabledDefaultsKey`,
+    /// read from `sharedDefaults` for the same cross-process reason as
+    /// `run_active_vuln_scan` (see `callRunActiveVulnScan`'s doc comment).
+    /// `rawOutput` is npm's own verbatim output, not hand-parsed — see
+    /// `MCPNpmAuditSignaturesResultPayload`'s doc comment.
+    private static func callRunNpmAuditSignatures(arguments: [String: Any]) -> [String: Any] {
+        guard sharedDefaults.bool(forKey: "RoamSwitch.IsProCache") else {
+            return textContentResult(["error": loc("この機能はPro版限定です。RoamSwitchでPro版を有効化してください。")], isError: true)
+        }
+        guard sharedDefaults.bool(forKey: NpmAuditSignatures.enabledDefaultsKey) else {
+            let payload = MCPNpmAuditSignaturesResultPayload(
+                enabled: false, directory: nil, rawOutput: nil, exitCode: nil, hasIssues: nil,
+                message: loc("npm署名検証は既定で無効です。設定タブの「npm署名検証」をオンにしてから実行してください。")
+            )
+            return textContentResult(payload)
+        }
+        guard let directory = arguments["directory"] as? String, !directory.isEmpty else {
+            return textContentResult(["error": loc("'directory' 引数を指定してください。")], isError: true)
+        }
+
+        switch NpmAuditSignatures.run(directory: directory) {
+        case .success(let r):
+            let payload = MCPNpmAuditSignaturesResultPayload(
+                enabled: true, directory: r.directory, rawOutput: r.rawOutput, exitCode: r.exitCode,
+                hasIssues: r.hasIssues, message: loc("npm audit signatures を実行しました。")
+            )
+            return textContentResult(payload)
+        case .failure(.npmNotFound):
+            let payload = MCPNpmAuditSignaturesResultPayload(
+                enabled: true, directory: directory, rawOutput: nil, exitCode: nil, hasIssues: nil,
+                message: loc("npmコマンドが見つかりませんでした。Node.js/npmをインストールしてください。")
+            )
+            return textContentResult(payload)
+        case .failure(.launchFailed(let reason)):
+            return textContentResult(["error": String(format: loc("npmの起動に失敗しました: %@"), reason)], isError: true)
+        }
     }
 
     /// SENDS NO NETWORK REQUESTS AT ALL — reads only local text/files.
@@ -711,6 +753,20 @@ enum MCPServer {
                     ],
                 ],
                 "required": ["watchedFolders"],
+            ],
+        ],
+        [
+            "name": "run_npm_audit_signatures",
+            "description": "THIS SENDS NETWORK REQUESTS TO THE NPM REGISTRY (registry.npmjs.org) — unlike every other package/CVE tool above. Runs `npm audit signatures` in the given directory to verify installed packages' registry signatures/provenance. Pro-only, and disabled by default even on Pro: requires the 'npm署名検証' (npm Signature Verification) toggle enabled in the Package CVE Scan window, and refuses to run otherwise. Returns npm's own raw command output verbatim (never hand-parsed into a rigid schema, since npm's exact wording isn't a contract this app controls) plus a lightweight `hasIssues` heuristic (non-zero exit code, or \"invalid\"/\"missing registry signature\" in the output).",
+            "inputSchema": [
+                "type": "object",
+                "properties": [
+                    "directory": [
+                        "type": "string",
+                        "description": "Absolute path to the npm project directory to audit (must contain node_modules).",
+                    ],
+                ],
+                "required": ["directory"],
             ],
         ],
         [

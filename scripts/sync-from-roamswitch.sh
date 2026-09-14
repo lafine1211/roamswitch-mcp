@@ -40,7 +40,7 @@ CORE=(AppLanguage TrustedNetwork GatewayFingerprint WiFiSecurityMonitor \
       RoamSwitchKnowledgeBaseContent_it RoamSwitchKnowledgeBaseContent_ptPT \
       MCPResponseFormatting MCPProtocol MCPServer \
       PackageCveScan PackageCveMapData PackageCveScanLanguages PackageCveMapLanguagesData \
-      PackageCveScriptScan \
+      PackageCveScriptScan NpmAuditSignatures \
       SecretLeakScanning CryptoSecretDetection SecurityLogAuditor LogTemplateAnalyzer QuarantineManager CanaryStatusReader \
       PortAnomalyStatusReader RuntimeThreatStatusReader NotificationHistory \
       ContainmentIncidentTimeline NetworkHistoryGuard)

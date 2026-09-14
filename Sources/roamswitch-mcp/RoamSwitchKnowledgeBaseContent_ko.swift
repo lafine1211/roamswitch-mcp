@@ -500,6 +500,19 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "⚠️ 표시가 있는 스크립트는 해당 패키지에 정말 필요한 작업인지 개별적으로 확인하세요. 낯선 패키지의 postinstall은 특히 주의가 필요합니다."
             ),
             LocalizedEntry(
+                id: "feat_npm_audit_signatures",
+                title: "npm 서명/출처 검증 (npm audit signatures, 옵트인, Pro)",
+                summary: "npm 레지스트리와 통신하여 설치된 패키지의 서명/출처를 검증합니다. RoamSwitch 내에서 npmjs.com과 통신하는 유일한 기능으로, 기본적으로 꺼져 있으며 명시적인 옵트인과 실행마다의 확인이 필요합니다. Pro 전용.",
+                details: """
+                • 활성화 방법: 「📦 패키지 CVE 대조」→「npm 서명 검증 (옵트인) (Pro)」 탭의 "npm 서명 검증 활성화" 토글. 이는 각 프로젝트 폴더의 "감사 실행" 버튼을 해제할 뿐이며, 그 자체로는 아무것도 전송하지 않습니다. 실행할 때마다 "npm 레지스트리와 통신할까요?"라고 확인합니다.
+                • 동작 내용: 대상 폴더를 작업 디렉터리로 하여 `npm audit signatures`를 실행하고, npm 레지스트리(registry.npmjs.org)와 통신합니다. RoamSwitch에서 npmjs.com과 통신하는 것은 이 기능뿐입니다.
+                • 출력: npm의 명령 출력을 그대로 표시합니다(자체적으로 해석하거나 단정하지 않음). 종료 코드가 0이 아니거나 출력에 "invalid"/"missing registry signature" 등의 문구가 포함되면 참고용 주의 표시를 합니다.
+                • npm 명령을 찾을 수 없으면 Node.js/npm 설치를 안내하는 메시지를 표시합니다.
+                • MCP 도구: `run_npm_audit_signatures`(`directory` 인자, Pro와 옵트인 토글의 이중 게이트).
+                """,
+                recommendation: "배포 전 의존성 감사나 공급망 침해가 의심되는 사고 조사 시에만 활성화하세요. 항상 켜둘 필요는 없습니다."
+            ),
+            LocalizedEntry(
                 id: "feat_security_health_checker",
                 title: "Mac 보안 진단 (18개 항목, 점수와 개선 단계)",
                 summary: "시스템 강화, 네트워크 방어, 인증 및 접근 제어, 포트 노출, 악성코드 보호, 물리적 기기 방어 등 6개 영역 18개 항목을 검사하여 0~100점의 점수, 등급, 실패 항목별 개선 단계를 보여줍니다. 무료 버전에서도 사용할 수 있습니다.",

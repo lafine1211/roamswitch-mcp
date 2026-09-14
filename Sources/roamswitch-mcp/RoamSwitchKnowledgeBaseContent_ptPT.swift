@@ -500,6 +500,19 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "Para qualquer script assinalado com ⚠️, verifique se o pacote realmente precisa dele — preste especial atenção aos scripts postinstall de pacotes pouco conhecidos."
             ),
             LocalizedEntry(
+                id: "feat_npm_audit_signatures",
+                title: "Verificação de assinaturas/proveniência npm (npm audit signatures, opcional, Pro)",
+                summary: "Contacta o registo npm para verificar as assinaturas/proveniência dos pacotes instalados. A única funcionalidade do RoamSwitch que comunica com npmjs.com — desativada por predefinição, requer ativação explícita e confirmação em cada execução. Apenas Pro.",
+                details: """
+                • Como ativar: o interruptor «Ativar a verificação de assinaturas npm» no separador «📦 Verificação de CVE de pacotes» → «Verificação de assinaturas npm (opcional) (Pro)». Isto apenas desbloqueia o botão «Executar auditoria» de cada pasta de projeto — nunca envia nada por si só. Cada execução é confirmada com «Contactar o registo npm?».
+                • O que faz: executa `npm audit signatures` com a pasta alvo como diretório de trabalho, contactando o registo npm (registry.npmjs.org). É a única funcionalidade do RoamSwitch que comunica com npmjs.com.
+                • Saída: a saída do próprio comando npm é apresentada tal como é (nunca interpretada manualmente). Um código de saída diferente de zero, ou termos como «invalid»/«missing registry signature» na saída, recebem uma marca de atenção leve.
+                • Se o comando npm não for encontrado, aparece uma mensagem a sugerir a instalação do Node.js/npm.
+                • Ferramenta MCP: `run_npm_audit_signatures` (argumento `directory`, com dupla verificação Pro mais o interruptor opcional).
+                """,
+                recommendation: "Ative apenas para uma auditoria de dependências antes de um deployment ou ao investigar uma suspeita de comprometimento da cadeia de fornecimento — não precisa de estar sempre ativo."
+            ),
+            LocalizedEntry(
                 id: "feat_security_health_checker",
                 title: "Auditoria de segurança do Mac (18 pontos, pontuação e passos de correção)",
                 summary: "Verifica 18 pontos em seis áreas (reforço do sistema, defesa de rede, autenticação e controlo de acesso, exposição de portas, proteção contra malware e defesa física de dispositivos) e mostra uma pontuação de 0 a 100, uma nota, e os passos para corrigir cada ponto não aprovado. Disponível na edição gratuita.",

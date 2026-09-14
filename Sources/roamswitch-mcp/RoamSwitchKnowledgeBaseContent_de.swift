@@ -500,6 +500,19 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "Prüfen Sie bei jedem ⚠️-markierten Skript, ob das Paket es wirklich benötigt — besonders bei postinstall-Skripten unbekannter Pakete."
             ),
             LocalizedEntry(
+                id: "feat_npm_audit_signatures",
+                title: "npm-Signatur-/Provenienzprüfung (npm audit signatures, Opt-in, Pro)",
+                summary: "Kontaktiert die npm-Registry, um Signaturen/Provenienz installierter Pakete zu prüfen. Die einzige Funktion in RoamSwitch, die mit npmjs.com kommuniziert — standardmäßig aus, erfordert ausdrückliches Opt-in plus Bestätigung bei jedem Lauf. Nur Pro.",
+                details: """
+                • Aktivierung: der Schalter „npm-Signaturprüfung aktivieren“ im Tab „📦 Paket-CVE-Abgleich“ → „npm-Signaturprüfung (Opt-in) (Pro)“. Dies schaltet nur die Schaltfläche „Audit ausführen“ für jeden Projektordner frei — von sich aus wird nichts gesendet. Jeder Lauf wird mit „Mit der npm-Registry kommunizieren?“ bestätigt.
+                • Ablauf: führt `npm audit signatures` mit dem Zielordner als Arbeitsverzeichnis aus und kontaktiert die npm-Registry (registry.npmjs.org). Dies ist die einzige RoamSwitch-Funktion, die mit npmjs.com kommuniziert.
+                • Ausgabe: npms eigene Befehlsausgabe wird unverändert angezeigt (nie eigenständig interpretiert). Ein Exit-Code ungleich null oder Formulierungen wie „invalid“/„missing registry signature“ in der Ausgabe erhalten eine leichte Aufmerksamkeitsmarkierung.
+                • Wird der npm-Befehl nicht gefunden, erscheint ein Hinweis, Node.js/npm zu installieren.
+                • MCP-Tool: `run_npm_audit_signatures` (Argument `directory`, doppelt abgesichert durch Pro plus Opt-in-Schalter).
+                """,
+                recommendation: "Aktivieren Sie dies nur für ein Abhängigkeits-Audit vor einem Deployment oder bei der Untersuchung eines vermuteten Lieferketten-Kompromisses — es muss nicht dauerhaft an bleiben."
+            ),
+            LocalizedEntry(
                 id: "feat_security_health_checker",
                 title: "Mac-Sicherheitsprüfung (18 Punkte, Punktzahl & Korrekturschritte)",
                 summary: "Prüft 18 Punkte in sechs Bereichen (Systemhärtung, Netzwerkverteidigung, Authentifizierung und Zugriffskontrolle, Portexposition, Malware-Schutz sowie physischer Geräteschutz) und zeigt eine Punktzahl von 0 bis 100, eine Note sowie Korrekturschritte für jeden nicht bestandenen Punkt. In der kostenlosen Version enthalten.",

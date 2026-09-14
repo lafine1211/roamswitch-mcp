@@ -439,6 +439,7 @@ public struct RoamSwitchKnowledgeBase: Sendable {
             EntryMeta(id: "feat_package_cve_scan", topic: t, tags: ["cve", "homebrew", "npm", "pypi", "crates.io", "rubygems", "packagist", "go", "maven", "zerotelemetry", "mcp", "free"]),
             EntryMeta(id: "feat_lockfile_tamper_guard", topic: t, tags: ["npm", "yarn", "pnpm", "lockfile", "fim", "sha256", "tampering", "supply-chain", "baseline", "cryptokit", "fsevents", "pro"]),
             EntryMeta(id: "feat_package_lifecycle_script_scan", topic: t, tags: ["npm", "node_modules", "package.json", "lifecycle-script", "postinstall", "preinstall", "prepare", "supply-chain", "heuristic", "mcp", "pro"]),
+            EntryMeta(id: "feat_npm_audit_signatures", topic: t, tags: ["npm", "audit", "signatures", "provenance", "registry", "npmjs.com", "opt-in", "network", "mcp", "pro"]),
             EntryMeta(id: "feat_security_health_checker", topic: t, tags: ["audit", "score", "filevault", "sip", "gatekeeper", "firewall", "xprotect", "ssh", "sudo", "accessory", "18-items", "free"]),
             EntryMeta(id: "feat_autonomous_sentinel", topic: t, tags: ["autonomous", "sentinel", "background", "freshclam", "clamav", "scheduled-scan", "pro"]),
             EntryMeta(id: "feat_simulation_self_test", topic: t, tags: ["simulation", "self-test", "test", "ransomware", "airgap", "docker", "eicar"]),

@@ -499,6 +499,19 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "For any script flagged ⚠️, check whether the package genuinely needs it — pay particular attention to postinstall scripts from unfamiliar packages."
             ),
             LocalizedEntry(
+                id: "feat_npm_audit_signatures",
+                title: "npm Signature / Provenance Verification (npm audit signatures, opt-in, Pro)",
+                summary: "Contacts the npm registry to verify installed packages' signatures/provenance. The only feature in RoamSwitch that talks to npmjs.com — off by default, requiring explicit opt-in plus a per-run confirmation. Pro only.",
+                details: """
+                • How to enable: the "Enable npm signature verification" toggle in the "📦 Package CVE Scan" → "npm Signature Verification (opt-in) (Pro)" tab. This only unlocks the "Run Audit" button for each project folder — it never sends anything on its own. Every run is confirmed with "Contact the npm registry?".
+                • What it does: runs `npm audit signatures` with the target folder as the working directory, contacting the npm registry (registry.npmjs.org). This is the only RoamSwitch feature that talks to npmjs.com.
+                • Output: npm's own command output is shown verbatim (never hand-interpreted). A non-zero exit code, or wording like "invalid"/"missing registry signature" in the output, gets a lightweight attention marker.
+                • If the npm command isn't found, a message prompts installing Node.js/npm.
+                • MCP tool: `run_npm_audit_signatures` (`directory` argument, double-gated on Pro plus the opt-in toggle).
+                """,
+                recommendation: "Enable this only for a pre-deploy dependency audit or when investigating a suspected supply-chain compromise — it doesn't need to stay on all the time."
+            ),
+            LocalizedEntry(
                 id: "feat_security_health_checker",
                 title: "Mac Security Audit (18 Items, Score & Fix Steps)",
                 summary: "Checks 18 items across six areas (system hardening, network defense, authentication and access control, port exposure, malware protection, and physical device defense) and shows a 0-100 score, a grade, and steps to fix each failing item. Available in the free edition.",

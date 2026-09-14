@@ -500,6 +500,19 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "对标有 ⚠️ 的脚本，请逐一确认该软件包是否确实需要执行此操作。对不熟悉软件包的 postinstall 脚本请格外留意。"
             ),
             LocalizedEntry(
+                id: "feat_npm_audit_signatures",
+                title: "npm 签名/来源验证 (npm audit signatures，选择性启用，Pro)",
+                summary: "与 npm 注册表通信，验证已安装软件包的签名/来源。这是 RoamSwitch 中唯一与 npmjs.com 通信的功能——默认关闭，需要明确选择性启用并在每次运行时确认。仅限 Pro。",
+                details: """
+                • 启用方式：「📦 软件包 CVE 比对」→「npm 签名验证（选择性启用）(Pro)」标签页中的"启用 npm 签名验证"开关。这仅会解锁每个项目文件夹的「运行审计」按钮，本身不会发送任何内容。每次运行都会以"要与 npm 注册表通信吗？"进行确认。
+                • 执行内容：以目标文件夹为工作目录运行 `npm audit signatures`，与 npm 注册表 (registry.npmjs.org) 通信。这是 RoamSwitch 中唯一与 npmjs.com 通信的功能。
+                • 输出：原样显示 npm 命令的输出（绝不自行解读或定论）。若退出码非零，或输出中包含 "invalid"/"missing registry signature" 等字样，会显示轻量级的注意提示。
+                • 若找不到 npm 命令，会显示提示安装 Node.js/npm 的信息。
+                • MCP 工具：`run_npm_audit_signatures`（`directory` 参数，Pro 与选择性启用开关的双重限制）。
+                """,
+                recommendation: "仅在部署前的依赖审计，或怀疑发生供应链入侵的事件调查时启用即可，无需始终保持开启。"
+            ),
+            LocalizedEntry(
                 id: "feat_security_health_checker",
                 title: "Mac 安全综合诊断（18 个项目・评分 & 改进步骤）",
                 summary: "检查系统健壮性、网络防御、身份验证与访问控制、端口暴露、恶意软件防护、物理设备防御 6 个领域共 18 个项目，并显示 100 分制的评分、等级和改进步骤。免费版即可使用。",

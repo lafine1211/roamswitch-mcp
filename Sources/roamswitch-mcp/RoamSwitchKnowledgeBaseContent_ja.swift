@@ -499,6 +499,19 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "⚠️マークの付いたスクリプトは、そのパッケージが本当に必要とする処理かを個別に確認してください。見慣れないパッケージのpostinstallは特に注意が必要です。"
             ),
             LocalizedEntry(
+                id: "feat_npm_audit_signatures",
+                title: "npm署名/provenance検証 (npm audit signatures, オプトイン, Pro)",
+                summary: "npmレジストリと通信し、インストール済みパッケージの署名/provenanceを検証します。RoamSwitch内でnpmjs.comと通信する唯一の機能で、既定オフ・明示的なオプトインと実行ごとの確認が必要です。Pro版限定。",
+                details: """
+                • 有効化: 「📦 パッケージCVE照合」→「npm署名検証 (オプトイン) (Pro)」タブの「npm署名検証を有効化」。これは各プロジェクトフォルダの「監査を実行」ボタンを解禁するだけで、単独では何も送信しません。実行時も毎回「npmレジストリと通信しますか？」と確認します。
+                • 実行内容: 対象フォルダをカレントディレクトリとして `npm audit signatures` を起動し、npmレジストリ(registry.npmjs.org)と通信します。RoamSwitch内でnpmjs.comと通信するのはこの機能だけです。
+                • 出力: npmのコマンド出力をそのまま表示します（独自の解釈・断定はしません）。終了コードが0以外、または「invalid」「missing registry signature」等の文言を含む場合は参考情報として要注意の表示をします。
+                • npmコマンドが見つからない場合はNode.js/npmのインストールを促すメッセージを表示します。
+                • MCPツール: `run_npm_audit_signatures`（`directory`引数、Pro限定・オプトイン限定の二重ゲート）。
+                """,
+                recommendation: "本番デプロイ前の依存関係監査や、サプライチェーン侵害が疑われるインシデント調査時にのみ有効化してください。常時オンにする必要はありません。"
+            ),
+            LocalizedEntry(
                 id: "feat_security_health_checker",
                 title: "Macセキュリティ総合診断（18項目・スコア & 改善手順）",
                 summary: "システム堅牢性・ネットワーク防御・認証とアクセス制御・ポート露出・マルウェア対策・物理デバイス防御の6分野18項目を検査し、100点満点のスコア・ランクと改善手順を表示します。無料版で利用できます。",

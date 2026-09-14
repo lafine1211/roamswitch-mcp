@@ -500,6 +500,19 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "對標有 ⚠️ 的指令碼，請逐一確認該套件是否確實需要執行此操作。對不熟悉套件的 postinstall 指令碼請格外留意。"
             ),
             LocalizedEntry(
+                id: "feat_npm_audit_signatures",
+                title: "npm 簽章/來源驗證 (npm audit signatures，選擇性啟用，Pro)",
+                summary: "與 npm 註冊表通訊，驗證已安裝套件的簽章/來源。這是 RoamSwitch 中唯一與 npmjs.com 通訊的功能——預設關閉，需要明確選擇性啟用並在每次執行時確認。僅限 Pro。",
+                details: """
+                • 啟用方式：「📦 套件 CVE 比對」→「npm 簽章驗證（選擇性啟用）(Pro)」分頁中的「啟用 npm 簽章驗證」開關。這僅會解鎖每個專案資料夾的「執行稽核」按鈕，本身不會傳送任何內容。每次執行都會以「要與 npm 註冊表通訊嗎？」進行確認。
+                • 執行內容：以目標資料夾為工作目錄執行 `npm audit signatures`，與 npm 註冊表 (registry.npmjs.org) 通訊。這是 RoamSwitch 中唯一與 npmjs.com 通訊的功能。
+                • 輸出：原樣顯示 npm 指令的輸出（絕不自行解讀或定論）。若結束代碼非零，或輸出中包含「invalid」/「missing registry signature」等字樣，會顯示輕量級的注意提示。
+                • 若找不到 npm 指令，會顯示提示安裝 Node.js/npm 的訊息。
+                • MCP 工具：`run_npm_audit_signatures`（`directory` 參數，Pro 與選擇性啟用開關的雙重限制）。
+                """,
+                recommendation: "僅在部署前的相依性稽核，或懷疑發生供應鏈入侵的事件調查時啟用即可，無需一直保持開啟。"
+            ),
+            LocalizedEntry(
                 id: "feat_security_health_checker",
                 title: "Mac 安全稽核（18 個項目、分數與修正步驟）",
                 summary: "檢查六大領域（系統強化、網路防禦、驗證與存取控制、連接埠曝露、惡意軟體防護、實體裝置防護）共 18 個項目，並顯示 0 到 100 分的分數、等級，以及每個未通過項目的修正步驟。免費版即可使用。",

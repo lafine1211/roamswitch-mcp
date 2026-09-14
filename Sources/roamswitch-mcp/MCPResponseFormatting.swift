@@ -129,6 +129,21 @@ public struct MCPPackageLifecycleScriptScanResultPayload: Codable, Equatable {
     public let findings: [MCPPackageLifecycleScriptFindingPayload]
 }
 
+/// Result payload for `run_npm_audit_signatures` — unlike every other
+/// package/CVE payload in this file, `rawOutput` is npm's own verbatim
+/// command output rather than a hand-parsed structure: npm's exact wording
+/// isn't a contract this app controls, so it's surfaced directly instead of
+/// being fitted into a rigid schema that could silently misparse a future
+/// npm version's phrasing.
+public struct MCPNpmAuditSignaturesResultPayload: Codable, Equatable {
+    public let enabled: Bool
+    public let directory: String?
+    public let rawOutput: String?
+    public let exitCode: Int32?
+    public let hasIssues: Bool?
+    public let message: String
+}
+
 public struct MCPExposedPortsPayload: Codable, Equatable {
     public let isFirewallShielded: Bool
     public let ports: [MCPPortPayload]
