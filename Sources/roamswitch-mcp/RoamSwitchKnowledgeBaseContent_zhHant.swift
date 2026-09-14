@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.29 (build 86).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.30 (build 87).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -525,6 +525,19 @@ extension RoamSwitchKnowledgeBase {
                 • 若 sandbox-exec 不可用或執行失敗,絕不會默默回退到不加沙箱的執行。不支援 yarn。沒有 GTK/MCP 工具——這是一個從終端機使用的命令列工具。
                 """,
                 recommendation: "對於包含陌生套件的專案,或從外部來源取得的專案,建議使用 `roamswitch-npm install` 取代常規的 npm/pnpm install。"
+            ),
+            LocalizedEntry(
+                id: "feat_typosquat_guard",
+                title: "打字仿冒偵測 (npm/pnpm package.json, Pro)",
+                summary: "將 package.json 的相依名稱與知名 npm 套件名稱清單進行編輯距離(Levenshtein 1〜2)比對，偵測 expres→express、loadash→lodash 這類可能的打字仿冒。應用程式本身完全不為此進行網路連線。僅限 Pro 版。",
+                details: """
+                • 範圍：僅限專案自身 package.json 的 dependencies/devDependencies/optionalDependencies（peerDependencies 不在範圍內）。node_modules（已安裝的傳遞相依性）也刻意不在範圍內——打字錯誤產生於人類將相依性加入 package.json 的那一刻。
+                • 比對邏輯：標準的 Levenshtein 距離動態規劃實作，將每個相依名稱與知名 npm 套件名稱清單比對。帶作用域的套件（`@scope/pkg`）以其基礎名稱（`pkg`）比較。長度差超過 2 的候選會被低成本預過濾跳過。閾值為：知名名稱長度 8 個字元以上時允許距離最多為 2，更短則僅允許距離 1。
+                • 清單保持更新的方式：用於比對的熱門套件名稱清單由 `PackageCveMapUpdater` 透過與 CVE 對應表相同的每日一次、僅接收、Ed25519 簽章驗證的清單進行分發（建置時內嵌種子加兩層覆蓋，優先採用 `mapVersion` 較新的一方）。無需等待應用程式發布即可更新該清單。
+                • 這是參考資訊，並非定論——已知的許可清單會部分排除一些正規的相似套件（如 preact），但並不完整。
+                • 開啟方式：「📦 套件 CVE 比對」→「打字仿冒偵測 (Pro)」分頁，針對與「相依性」分頁相同的專案資料夾。MCP：`run_typosquat_scan`（`watchedFolders` 參數，僅限 Pro）。
+                """,
+                recommendation: "請對任何標記 ⚠️ 的相依性逐一核實是否確實是拼寫錯誤——尤其要留意陌生的套件名稱。"
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",

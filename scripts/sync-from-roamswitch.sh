@@ -40,7 +40,7 @@ CORE=(AppLanguage TrustedNetwork GatewayFingerprint WiFiSecurityMonitor \
       RoamSwitchKnowledgeBaseContent_it RoamSwitchKnowledgeBaseContent_ptPT \
       MCPResponseFormatting MCPProtocol MCPServer \
       PackageCveScan PackageCveMapData PackageCveScanLanguages PackageCveMapLanguagesData \
-      PackageCveScriptScan NpmAuditSignatures \
+      PackageCveScriptScan NpmAuditSignatures TyposquatGuard \
       SecretLeakScanning CryptoSecretDetection SecurityLogAuditor LogTemplateAnalyzer QuarantineManager CanaryStatusReader \
       PortAnomalyStatusReader RuntimeThreatStatusReader NotificationHistory \
       ContainmentIncidentTimeline NetworkHistoryGuard)
@@ -51,7 +51,8 @@ CORE=(AppLanguage TrustedNetwork GatewayFingerprint WiFiSecurityMonitor \
 # are intentionally not mirrored.) StdioSmokeTests.swift is specific to this
 # repo and is not touched by the sync.
 TESTS=(LinkSafetyAuditorTests CryptoSecretDetectionTests MCPKnowledgeBaseTests MCPProtocolTests \
-       MCPResponseFormattingTests ARPSpoofMonitorTests MCPServerRobustnessTests ParserRobustnessTests)
+       MCPResponseFormattingTests ARPSpoofMonitorTests MCPServerRobustnessTests ParserRobustnessTests \
+       TyposquatGuardTests)
 
 TDST="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/Tests/roamswitch-mcpTests"
 

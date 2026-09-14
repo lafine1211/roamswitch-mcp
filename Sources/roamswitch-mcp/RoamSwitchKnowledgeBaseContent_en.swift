@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.29 (build 86).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.30 (build 87).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -524,6 +524,19 @@ extension RoamSwitchKnowledgeBase {
                 • If sandbox-exec is unavailable or fails, this never silently falls back to running unsandboxed. yarn is not supported. There's no GTK/MCP tool — it's a command-line tool used from a terminal.
                 """,
                 recommendation: "For projects containing unfamiliar packages, or projects fetched from external sources, use `roamswitch-npm install` in place of a regular npm/pnpm install."
+            ),
+            LocalizedEntry(
+                id: "feat_typosquat_guard",
+                title: "Typosquat Detection (npm/pnpm package.json, Pro)",
+                summary: "Checks package.json dependency names against a list of popular npm package names by edit distance (Levenshtein 1-2), flagging possible typosquatting such as expres→express or loadash→lodash. The app itself makes no network connections to do this. Pro only.",
+                details: """
+                • Scope: only the project's own package.json dependencies/devDependencies/optionalDependencies (peerDependencies is out of scope). node_modules (already-installed transitive dependencies) is deliberately out of scope too — a typo is introduced at the moment a human adds a dependency to package.json.
+                • Matching logic: a standard Levenshtein-distance DP implementation checks each dependency name against a list of popular npm package names. Scoped packages (`@scope/pkg`) compare by their base name (`pkg`). Candidates whose length differs by more than 2 are skipped by a cheap pre-filter. The threshold is edit distance up to 2 for popular names of 8+ characters, distance 1 only for shorter names.
+                • How the list stays current: the popular-package-name list checked against is distributed by `PackageCveMapUpdater` via the same once-a-day, receive-only, Ed25519-signed manifest as the CVE maps (a build-time embedded seed plus a two-tier override, preferring whichever has the newer `mapVersion`). The list can be refreshed without waiting for an app release.
+                • Reference information, not a verdict — a known allowlist suppresses some legitimate look-alike packages (e.g. preact), but it isn't exhaustive.
+                • How to open: "📦 Package CVE Scan" → "Typosquat Detection (Pro)" tab, targeting the same project folders as the "Dependencies" tab. MCP: `run_typosquat_scan` (`watchedFolders` argument, Pro only).
+                """,
+                recommendation: "Double-check any ⚠️-flagged dependency for an actual typo — pay particular attention to unfamiliar package names."
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",

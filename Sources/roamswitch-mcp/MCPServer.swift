@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.29 (build 86).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.30 (build 87).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -185,6 +185,8 @@ enum MCPServer {
                 return [result(id: id, callRunPackageCveScanLanguages(arguments: arguments))]
             case "run_package_lifecycle_script_scan":
                 return [result(id: id, callRunPackageLifecycleScriptScan(arguments: arguments))]
+            case "run_typosquat_scan":
+                return [result(id: id, callRunTyposquatScan(arguments: arguments))]
             case "run_npm_audit_signatures":
                 return [result(id: id, callRunNpmAuditSignatures(arguments: arguments))]
             case "audit_url_safety":
@@ -423,6 +425,31 @@ enum MCPServer {
                     scriptCommand: $0.scriptCommand,
                     relativePath: $0.relativePath,
                     isDangerPattern: $0.isDangerPattern
+                )
+            }
+        )
+        return textContentResult(payload)
+    }
+
+    /// SENDS NO NETWORK REQUESTS AT ALL — reads only local files. A
+    /// reference-only heuristic, not a threat verdict — see
+    /// `TyposquatGuard`'s doc comment. Same Pro-gate pattern as
+    /// `callRunPackageLifecycleScriptScan` above (reads the UserDefaults
+    /// mirror rather than `LicenseManager.shared` directly, for the minimal
+    /// `RoamSwitchMCPServer` tool target's sake).
+    private static func callRunTyposquatScan(arguments: [String: Any]) -> [String: Any] {
+        guard sharedDefaults.bool(forKey: "RoamSwitch.IsProCache") else {
+            return textContentResult(["error": loc("この機能はPro版限定です。RoamSwitchでPro版を有効化してください。")], isError: true)
+        }
+        let folders = (arguments["watchedFolders"] as? [Any])?.compactMap { $0 as? String } ?? []
+        let findings = TyposquatGuard.runScan(watchedFolders: folders)
+        let payload = MCPTyposquatScanResultPayload(
+            scannedFolderCount: folders.count,
+            findings: findings.map {
+                MCPTyposquatFindingPayload(
+                    dependencyName: $0.dependencyName,
+                    suspectedTarget: $0.suspectedTarget,
+                    distance: $0.distance
                 )
             }
         )
@@ -750,6 +777,21 @@ enum MCPServer {
                         "type": "array",
                         "items": ["type": "string"],
                         "description": "Absolute paths to project folders whose node_modules should be scanned.",
+                    ],
+                ],
+                "required": ["watchedFolders"],
+            ],
+        ],
+        [
+            "name": "run_typosquat_scan",
+            "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only local files, contacts no registry. This is a reference-only heuristic, NOT a threat verdict. Checks each given project folder's package.json (dependencies/devDependencies/optionalDependencies) for names that are suspiciously close (Levenshtein edit distance 1-2) to a well-known popular npm package — the classic `expres`/`loadash`/`reactt` typosquatting attack, where a malicious package is published under a name a developer might mistype. The popular-package list is a static snapshot refreshed via the same daily signed manifest as the CVE maps, not a live registry query. A small allowlist (e.g. `preact`) suppresses the most common legitimate look-alikes, but it isn't exhaustive — some real findings can still be false positives. Only checks the project's own manifest, not node_modules (already-installed transitive dependencies).",
+            "inputSchema": [
+                "type": "object",
+                "properties": [
+                    "watchedFolders": [
+                        "type": "array",
+                        "items": ["type": "string"],
+                        "description": "Absolute paths to project folders whose package.json should be checked.",
                     ],
                 ],
                 "required": ["watchedFolders"],

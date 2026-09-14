@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.29 (build 86).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.30 (build 87).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -127,6 +127,19 @@ public struct MCPPackageLifecycleScriptFindingPayload: Codable, Equatable {
 public struct MCPPackageLifecycleScriptScanResultPayload: Codable, Equatable {
     public let scannedFolderCount: Int
     public let findings: [MCPPackageLifecycleScriptFindingPayload]
+}
+
+public struct MCPTyposquatFindingPayload: Codable, Equatable {
+    public let dependencyName: String
+    public let suspectedTarget: String
+    public let distance: Int
+}
+
+/// Result payload for `run_typosquat_scan` — a reference-only heuristic
+/// match, never a verdict. See `TyposquatGuard`'s doc comment.
+public struct MCPTyposquatScanResultPayload: Codable, Equatable {
+    public let scannedFolderCount: Int
+    public let findings: [MCPTyposquatFindingPayload]
 }
 
 /// Result payload for `run_npm_audit_signatures` — unlike every other

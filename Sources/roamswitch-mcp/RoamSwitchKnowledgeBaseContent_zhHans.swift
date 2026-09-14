@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.29 (build 86).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.30 (build 87).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -525,6 +525,19 @@ extension RoamSwitchKnowledgeBase {
                 • 若 sandbox-exec 不可用或执行失败,绝不会默默回退到不加沙箱的执行。不支持 yarn。没有 GTK/MCP 工具——这是一个从终端使用的命令行工具。
                 """,
                 recommendation: "对于包含陌生软件包的项目,或从外部来源获取的项目,建议使用 `roamswitch-npm install` 代替常规的 npm/pnpm install。"
+            ),
+            LocalizedEntry(
+                id: "feat_typosquat_guard",
+                title: "打字仿冒检测 (npm/pnpm package.json, Pro)",
+                summary: "将 package.json 的依赖名称与知名 npm 包名列表进行编辑距离(Levenshtein 1〜2)比对，检测 expres→express、loadash→lodash 这类可能的打字仿冒。应用本身完全不为此进行网络连接。仅限 Pro 版。",
+                details: """
+                • 范围：仅限项目自身 package.json 的 dependencies/devDependencies/optionalDependencies（peerDependencies 不在范围内）。node_modules（已安装的传递依赖）也刻意不在范围内——打字错误产生于人类将依赖添加到 package.json 的那一刻。
+                • 比对逻辑：标准的 Levenshtein 距离动态规划实现，将每个依赖名称与知名 npm 包名列表比对。带作用域的包（`@scope/pkg`）以其基础名称（`pkg`）比较。长度差超过 2 的候选会被低成本预过滤跳过。阈值为：知名名称长度 8 个字符以上时允许距离最多为 2，更短则仅允许距离 1。
+                • 列表保持更新的方式：用于比对的热门包名列表由 `PackageCveMapUpdater` 通过与 CVE 映射相同的每日一次、仅接收、Ed25519 签名验证的清单进行分发（构建时内嵌种子加两层覆盖，优先采用 `mapVersion` 较新的一方）。无需等待应用发布即可更新该列表。
+                • 这是参考信息，并非定论——已知的许可清单会部分排除一些正规的相似软件包（如 preact），但并不完整。
+                • 开启方式：「📦 软件包 CVE 比对」→「打字仿冒检测 (Pro)」标签页，针对与「依赖关系」标签页相同的项目文件夹。MCP：`run_typosquat_scan`（`watchedFolders` 参数，仅限 Pro）。
+                """,
+                recommendation: "请对任何标记 ⚠️ 的依赖逐一核实是否确实是拼写错误——尤其要留意陌生的软件包名称。"
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",

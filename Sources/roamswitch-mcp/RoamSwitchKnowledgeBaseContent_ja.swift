@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.29 (build 86).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.30 (build 87).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -524,6 +524,19 @@ extension RoamSwitchKnowledgeBase {
                 • sandbox-execが利用できない場合や失敗した場合、サンドボックス無しへの暗黙フォールバックはしません。yarnは非対応です。GTK/MCPツールはありません（ターミナルから使うコマンドラインツール）。
                 """,
                 recommendation: "見慣れないパッケージを含むプロジェクトや、外部から取得したプロジェクトへの `npm install` は、通常のnpm/pnpmの代わりに `roamswitch-npm install` を使うことを推奨します。"
+            ),
+            LocalizedEntry(
+                id: "feat_typosquat_guard",
+                title: "タイポスクワッティング検知 (npm/pnpm package.json, Pro)",
+                summary: "package.jsonの依存関係名を、有名なnpmパッケージ名リストと編集距離(レーベンシュタイン距離1〜2)で突き合わせ、expres→express・loadash→lodashのようなtyposquatting(似た名前で偽装した悪意あるパッケージ)の可能性を検出します。アプリ自体は判定にネットワーク接続を一切行いません。Pro版限定。",
+                details: """
+                • 対象範囲: プロジェクト自身のpackage.jsonのdependencies/devDependencies/optionalDependenciesのみ(peerDependenciesは対象外)。node_modules配下(既にインストール済みの推移的依存関係)は意図的に対象外——タイポは人間がpackage.jsonに依存関係を追加する瞬間に生まれるものであるため。
+                • 判定ロジック: 標準的なレーベンシュタイン距離のDP実装で各依存関係名を人気npmパッケージ名リストと照合。スコープ付きパッケージ(`@scope/pkg`)はベース名(`pkg`)で比較。長さの差が2を超える候補は事前フィルタでスキップ。閾値は人気パッケージ名の長さが8文字以上なら距離2まで、それ未満なら距離1のみ許容。
+                • 更新の仕組み: 判定に使う人気パッケージ名リストは、`PackageCveMapUpdater`が既存のCVEマップ群と同じ「1日1回・受信専用・Ed25519署名検証済み」マニフェスト経由で配信する(build-time埋め込みシード + 更新分の二段構え、mapVersion比較で新しい方を採用)。アプリのリリースを待たずにリストを更新できる。
+                • 参考情報であり断定ではありません。正規の類似パッケージ(preact等)は既知の許可リストで一部除外していますが完全ではありません。
+                • 開き方: 「📦 パッケージCVE照合」→「タイポスクワッティング検知 (Pro)」タブ。「依存関係」タブと同じプロジェクトフォルダを対象にします。MCP: `run_typosquat_scan`(`watchedFolders`引数、Pro限定)。
+                """,
+                recommendation: "⚠️の付いた依存関係は、実際にタイプミスでないか個別に確認してください。見慣れないパッケージ名は特に注意が必要です。"
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",

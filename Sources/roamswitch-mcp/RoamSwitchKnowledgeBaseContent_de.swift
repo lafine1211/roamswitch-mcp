@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.29 (build 86).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.30 (build 87).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -525,6 +525,19 @@ extension RoamSwitchKnowledgeBase {
                 • Ist sandbox-exec nicht verfügbar oder schlägt fehl, erfolgt niemals ein stiller Rückfall auf eine ungeschützte Ausführung. yarn wird nicht unterstützt. Es gibt kein GTK/MCP-Tool – es handelt sich um ein Kommandozeilen-Tool für das Terminal.
                 """,
                 recommendation: "Verwenden Sie für Projekte mit unbekannten Paketen oder aus externen Quellen bezogene Projekte `roamswitch-npm install` anstelle einer regulären npm/pnpm-Installation."
+            ),
+            LocalizedEntry(
+                id: "feat_typosquat_guard",
+                title: "Typosquatting-Erkennung (npm/pnpm package.json, Pro)",
+                summary: "Vergleicht Abhängigkeitsnamen in package.json per Editierdistanz (Levenshtein 1-2) mit einer Liste beliebter npm-Paketnamen und markiert mögliches Typosquatting wie expres→express oder loadash→lodash. Die App selbst stellt dafür keine Netzwerkverbindung her. Nur Pro.",
+                details: """
+                • Umfang: nur die eigenen dependencies/devDependencies/optionalDependencies des Projekts in package.json (peerDependencies ist ausgenommen). node_modules (bereits installierte transitive Abhängigkeiten) ist ebenfalls bewusst ausgenommen — ein Tippfehler entsteht in dem Moment, in dem ein Mensch eine Abhängigkeit zu package.json hinzufügt.
+                • Abgleichlogik: eine standardmäßige DP-Implementierung der Levenshtein-Distanz prüft jeden Abhängigkeitsnamen gegen eine Liste beliebter npm-Paketnamen. Paket mit Scope (`@scope/pkg`) werden anhand des Basisnamens (`pkg`) verglichen. Kandidaten mit mehr als 2 Zeichen Längenunterschied werden durch einen günstigen Vorfilter übersprungen. Der Schwellenwert liegt bei Editierdistanz bis 2 für beliebte Namen ab 8 Zeichen, sonst nur Distanz 1.
+                • Wie die Liste aktuell bleibt: Die Liste beliebter Paketnamen wird von `PackageCveMapUpdater` über dasselbe einmal tägliche, nur empfangende, Ed25519-signierte Manifest wie die CVE-Maps verteilt (ein eingebauter Seed zur Build-Zeit plus eine zweistufige Aktualisierung, wobei die Version mit der neueren `mapVersion` bevorzugt wird). Die Liste kann aktualisiert werden, ohne auf ein App-Release zu warten.
+                • Referenzinformation, kein Urteil — eine bekannte Positivliste unterdrückt einige legitime Doppelgänger-Pakete (z. B. preact), ist aber nicht vollständig.
+                • Öffnen: Tab „📦 Paket-CVE-Abgleich“ → „Typosquatting-Erkennung (Pro)“, bezogen auf dieselben Projektordner wie der Tab „Abhängigkeiten“. MCP: `run_typosquat_scan` (Argument `watchedFolders`, nur Pro).
+                """,
+                recommendation: "Prüfen Sie jede mit ⚠️ markierte Abhängigkeit noch einmal auf einen tatsächlichen Tippfehler — achten Sie besonders auf unbekannte Paketnamen."
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",

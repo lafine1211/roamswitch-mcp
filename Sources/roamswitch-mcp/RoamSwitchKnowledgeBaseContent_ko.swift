@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.29 (build 86).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.30 (build 87).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -525,6 +525,19 @@ extension RoamSwitchKnowledgeBase {
                 • sandbox-exec를 사용할 수 없거나 실패하는 경우, 샌드박스 없이 조용히 실행으로 넘어가지 않습니다. yarn은 지원되지 않습니다. GTK/MCP 도구는 없습니다(터미널에서 사용하는 명령줄 도구입니다).
                 """,
                 recommendation: "낯선 패키지가 포함된 프로젝트나 외부에서 가져온 프로젝트에는 일반 npm/pnpm install 대신 `roamswitch-npm install`을 사용하는 것을 권장합니다."
+            ),
+            LocalizedEntry(
+                id: "feat_typosquat_guard",
+                title: "오타스쿼팅 탐지 (npm/pnpm package.json, Pro)",
+                summary: "package.json의 의존성 이름을 인기 npm 패키지 이름 목록과 편집 거리(레벤슈타인 1〜2)로 비교하여 expres→express, loadash→lodash 같은 오타스쿼팅 가능성을 탐지합니다. 앱 자체는 이를 위해 네트워크 연결을 전혀 하지 않습니다. Pro 전용.",
+                details: """
+                • 범위: package.json의 프로젝트 자체 dependencies/devDependencies/optionalDependencies만 해당(peerDependencies는 제외). node_modules(이미 설치된 전이 의존성)도 의도적으로 제외됩니다 — 오타는 사람이 package.json에 의존성을 추가하는 순간 발생하기 때문입니다.
+                • 비교 로직: 표준 레벤슈타인 거리 DP 구현으로 각 의존성 이름을 인기 npm 패키지 이름 목록과 비교합니다. 스코프가 있는 패키지(`@scope/pkg`)는 기본 이름(`pkg`)으로 비교합니다. 길이 차이가 2를 초과하는 후보는 저비용 사전 필터로 건너뜁니다. 임계값은 인기 패키지 이름이 8자 이상이면 편집 거리 2까지, 그보다 짧으면 거리 1만 허용합니다.
+                • 목록이 최신 상태로 유지되는 방식: 비교 대상인 인기 패키지 이름 목록은 `PackageCveMapUpdater`가 CVE 맵과 동일하게 하루 한 번, 수신 전용, Ed25519 서명된 매니페스트를 통해 배포합니다(빌드 시점에 내장된 시드와 2단계 재정의 중 `mapVersion`이 더 최신인 쪽을 선택). 앱 릴리스를 기다리지 않고 목록을 갱신할 수 있습니다.
+                • 참고 정보이며 단정이 아닙니다 — 알려진 허용 목록으로 일부 정상적인 유사 패키지(예: preact)를 제외하지만 완전하지 않습니다.
+                • 여는 방법: "📦 패키지 CVE 대조" → "오타스쿼팅 탐지 (Pro)" 탭에서 "의존성" 탭과 동일한 프로젝트 폴더를 대상으로 합니다. MCP: `run_typosquat_scan`(`watchedFolders` 인자, Pro 전용).
+                """,
+                recommendation: "⚠️가 표시된 의존성은 실제 오타인지 개별적으로 다시 확인하세요 — 낯선 패키지 이름은 특히 주의가 필요합니다."
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",

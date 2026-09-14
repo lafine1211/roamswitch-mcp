@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.29 (build 86).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.30 (build 87).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -525,6 +525,19 @@ extension RoamSwitchKnowledgeBase {
                 • Se sandbox-exec non è disponibile o fallisce, non si ricade mai silenziosamente in un'esecuzione senza sandbox. yarn non è supportato. Non esiste uno strumento GTK/MCP: è uno strumento da riga di comando utilizzato da un terminale.
                 """,
                 recommendation: "Per i progetti che contengono pacchetti sconosciuti, o per i progetti ottenuti da fonti esterne, utilizzare `roamswitch-npm install` al posto di un normale npm/pnpm install."
+            ),
+            LocalizedEntry(
+                id: "feat_typosquat_guard",
+                title: "Rilevamento typosquatting (npm/pnpm package.json, Pro)",
+                summary: "Confronta i nomi delle dipendenze in package.json con un elenco di pacchetti npm popolari tramite distanza di modifica (Levenshtein 1-2), segnalando un possibile typosquatting come expres→express o loadash→lodash. L'app stessa non stabilisce alcuna connessione di rete per questo controllo. Solo Pro.",
+                details: """
+                • Ambito: solo le dependencies/devDependencies/optionalDependencies proprie del progetto in package.json (peerDependencies è escluso). Anche node_modules (dipendenze transitive già installate) è deliberatamente escluso — un errore di battitura viene introdotto nel momento in cui una persona aggiunge una dipendenza a package.json.
+                • Logica di confronto: un'implementazione DP standard della distanza di Levenshtein confronta ogni nome di dipendenza con un elenco di pacchetti npm popolari. I pacchetti con scope (`@scope/pkg`) vengono confrontati in base al nome base (`pkg`). I candidati la cui lunghezza differisce di più di 2 vengono scartati da un pre-filtro economico. La soglia è una distanza di modifica fino a 2 per nomi popolari di 8 o più caratteri, solo distanza 1 per nomi più brevi.
+                • Come l'elenco resta aggiornato: l'elenco dei nomi di pacchetti popolari con cui viene confrontato è distribuito da `PackageCveMapUpdater` tramite lo stesso manifest giornaliero, di sola ricezione e firmato Ed25519 delle mappe CVE (un seed incorporato in fase di build più una sostituzione a due livelli, preferendo quella con `mapVersion` più recente). L'elenco può essere aggiornato senza attendere una nuova release dell'app.
+                • Informazione di riferimento, non un verdetto — una whitelist nota sopprime alcuni pacchetti legittimi simili (ad es. preact), ma non è esaustiva.
+                • Come aprirlo: scheda «📦 Verifica CVE dei pacchetti» → «Rilevamento typosquatting (Pro)», rivolta alle stesse cartelle di progetto della scheda «Dipendenze». MCP: `run_typosquat_scan` (argomento `watchedFolders`, solo Pro).
+                """,
+                recommendation: "Ricontrolla ogni dipendenza contrassegnata con ⚠️ per un effettivo errore di battitura — presta particolare attenzione ai nomi di pacchetti sconosciuti."
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",
