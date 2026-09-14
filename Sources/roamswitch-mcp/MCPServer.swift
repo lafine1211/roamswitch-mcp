@@ -308,16 +308,25 @@ enum MCPServer {
         }
 
         let ports = ListeningPortMonitor.shared.scanListeningPorts()
-        let findings = ActiveVulnScan.runScan(ports: ports)
+        let scan = ActiveVulnScan.runScan(ports: ports)
         let targetCount = ports.filter { port in
             !ServiceSignatures.match(processName: port.processName, executablePath: port.executablePath).isEmpty
                 || PortSecurityAuditor.isKnownDevServerPort(port.port)
         }.count
 
+        // Distinct from "スキャンが完了しました" (no partial-failure concept):
+        // a caller must be able to tell "N checks couldn't complete" apart from
+        // "everything checked out clean" rather than both looking like an
+        // empty findings list (see
+        // https://dev.to/raknaos/my-wait-for-it-wrapper-reported-success-for-a-port-that-never-opened-ga3).
+        let message = scan.inconclusive.isEmpty
+            ? loc("スキャンが完了しました。")
+            : String(format: loc("スキャンが完了しました（%d件は接続できず未確認）。"), scan.inconclusive.count)
+
         let payload = MCPActiveVulnScanResultPayload(
             enabled: true,
             scannedTargetCount: targetCount,
-            findings: findings.map {
+            findings: scan.findings.map {
                 MCPActiveVulnScanFindingPayload(
                     port: $0.port,
                     processName: $0.processName,
@@ -326,7 +335,13 @@ enum MCPServer {
                     recommendation: $0.recommendation
                 )
             },
-            message: loc("スキャンが完了しました。")
+            confirmedSafe: scan.confirmedSafe.map {
+                MCPScanCheckOutcomePayload(port: $0.port, processName: $0.processName, check: $0.check)
+            },
+            inconclusive: scan.inconclusive.map {
+                MCPScanCheckOutcomePayload(port: $0.port, processName: $0.processName, check: $0.check)
+            },
+            message: message
         )
         return textContentResult(payload)
     }

@@ -41,6 +41,29 @@ enum ActiveVulnScan {
         let recommendation: String
     }
 
+    /// One probe that did NOT produce a `Finding` — either the target was
+    /// actually confirmed safe, or the probe itself couldn't complete
+    /// (connection refused, timeout, DNS/socket error). Reported separately
+    /// so a caller can't mistake "checked, and it's fine" for "never
+    /// actually got to check" — both used to collapse into the same empty
+    /// findings list (see the 2026-09 discussion of `wait-for-it.sh`
+    /// reporting success for a port that never opened —
+    /// https://dev.to/raknaos/my-wait-for-it-wrapper-reported-success-for-a-port-that-never-opened-ga3).
+    /// `check` is the same title a `Finding` for this exact probe would carry.
+    struct CheckOutcome {
+        let port: Int
+        let processName: String
+        let check: String
+    }
+
+    /// Everything `runScan` learned: confirmed findings, checks that ran to
+    /// completion and found nothing, and checks that could not complete at all.
+    struct ScanRunResult {
+        var findings: [Finding] = []
+        var confirmedSafe: [CheckOutcome] = []
+        var inconclusive: [CheckOutcome] = []
+    }
+
     // MARK: - Phase 2: known-service raw-TCP probes
 
     /// Sends a single non-destructive `PING` to a Redis-protocol port and checks whether
@@ -475,11 +498,12 @@ enum ActiveVulnScan {
     }
 
     /// Runs Phase 2 (known-service reachability) and Phase 3 (generic CORS/traversal
-    /// checks, only for ports flagged as dev servers) against the given ports, returning
-    /// only confirmed findings. Sequential — no concurrency, matching the Linux
-    /// implementation's safety invariants.
-    static func runScan(ports: [ListeningPortInfo]) -> [Finding] {
-        var findings: [Finding] = []
+    /// checks, only for ports flagged as dev servers) against the given ports.
+    /// Sequential — no concurrency, matching the Linux implementation's safety
+    /// invariants. Confirmed-safe and inconclusive checks are tracked
+    /// separately from findings — see `CheckOutcome`.
+    static func runScan(ports: [ListeningPortInfo]) -> ScanRunResult {
+        var result = ScanRunResult()
 
         for port in ports {
             let signatures = ServiceSignatures.match(processName: port.processName, executablePath: port.executablePath)
@@ -491,18 +515,23 @@ enum ActiveVulnScan {
                 case "mongod-default-noauth": confirmed = probeMongoDBNoAuth(port: port.port)
                 default: confirmed = nil
                 }
-                if confirmed == true {
-                    findings.append(Finding(
+                let outcome = CheckOutcome(port: port.port, processName: port.processName, check: signature.title)
+                switch confirmed {
+                case true:
+                    result.findings.append(Finding(
                         port: port.port,
                         processName: port.processName,
                         title: signature.title,
                         description: signature.description,
                         recommendation: signature.recommendation
                     ))
+                    // Known-CVE version matching piggybacks on the same confirmed-reachable
+                    // target — a bonus lookup on an already-reported finding, not a separate
+                    // pass/fail check of its own, so its own outcome isn't tracked here.
                     if let versionString = probeVersion(signatureID: signature.id, port: port.port, timeout: 2.0),
                        let version = parseSemver(versionString) {
                         for cve in findKnownCVEs(signatureID: signature.id, version: version) {
-                            findings.append(Finding(
+                            result.findings.append(Finding(
                                 port: port.port,
                                 processName: port.processName,
                                 title: resolveLang(cve.title),
@@ -511,40 +540,58 @@ enum ActiveVulnScan {
                             ))
                         }
                     }
+                case false:
+                    result.confirmedSafe.append(outcome)
+                case nil:
+                    result.inconclusive.append(outcome)
                 }
             }
         }
 
         for port in ports where PortSecurityAuditor.isKnownDevServerPort(port.port) {
-            if probeCorsMisconfiguration(port: port.port) == true {
-                findings.append(Finding(
+            let corsOutcome = CheckOutcome(port: port.port, processName: port.processName, check: loc("CORS 設定ミス（認証情報付きクロスオリジン許可）"))
+            switch probeCorsMisconfiguration(port: port.port) {
+            case true:
+                result.findings.append(Finding(
                     port: port.port,
                     processName: port.processName,
                     title: loc("CORS 設定ミス（認証情報付きクロスオリジン許可）"),
                     description: loc("任意のOriginヘッダを送信したところ、そのOriginがAccess-Control-Allow-Originに反映（または*が返却）され、かつAccess-Control-Allow-Credentials: trueが同時に返されました。この組み合わせは、悪意あるWebサイトが被害者のブラウザ経由でこのサーバーへ認証済みリクエストを送信し、レスポンスを読み取れることを意味します。"),
                     recommendation: loc("Access-Control-Allow-Origin を信頼できる特定のオリジンのみに限定し、Access-Control-Allow-Credentials は本当に必要な場合のみ有効にしてください。")
                 ))
+            case false: result.confirmedSafe.append(corsOutcome)
+            case nil: result.inconclusive.append(corsOutcome)
             }
-            if probePathTraversal(port: port.port) == true {
-                findings.append(Finding(
+
+            let traversalOutcome = CheckOutcome(port: port.port, processName: port.processName, check: loc("パストラバーサル（ディレクトリトラバーサル）"))
+            switch probePathTraversal(port: port.port) {
+            case true:
+                result.findings.append(Finding(
                     port: port.port,
                     processName: port.processName,
                     title: loc("パストラバーサル（ディレクトリトラバーサル）"),
                     description: loc("静的ファイル配信のパスに ../ を含むリクエストを送信したところ、Webルート外の /etc/passwd の内容が取得できました。ファイルパスの正規化・検証が不十分なため、Webルート外の任意のファイルを読み取られる危険があります。"),
                     recommendation: loc("静的ファイル配信ライブラリを最新版に更新し、配信元パスを正規化したうえでWebルート内に限定してください。可能であればサンドボックスでファイルシステムへのアクセス範囲自体を制限することも推奨します。")
                 ))
+            case false: result.confirmedSafe.append(traversalOutcome)
+            case nil: result.inconclusive.append(traversalOutcome)
             }
-            if probeOpenRedirect(port: port.port) == true {
-                findings.append(Finding(
+
+            let redirectOutcome = CheckOutcome(port: port.port, processName: port.processName, check: loc("オープンリダイレクト（未検証の外部リダイレクト）"))
+            switch probeOpenRedirect(port: port.port) {
+            case true:
+                result.findings.append(Finding(
                     port: port.port,
                     processName: port.processName,
                     title: loc("オープンリダイレクト（未検証の外部リダイレクト）"),
                     description: loc("既知のリダイレクトパラメータ（redirect/url/next 等）に外部ドメインを指定したところ、検証なしにそのドメインへリダイレクトされました。フィッシング詐欺で正規サイトのURLを装いつつ悪意あるサイトへ誘導する手口に悪用される危険があります。"),
                     recommendation: loc("リダイレクト先URLを許可リスト（同一オリジンまたは信頼済みドメインのみ）で検証してください。")
                 ))
+            case false: result.confirmedSafe.append(redirectOutcome)
+            case nil: result.inconclusive.append(redirectOutcome)
             }
         }
 
-        return findings
+        return result
     }
 }
