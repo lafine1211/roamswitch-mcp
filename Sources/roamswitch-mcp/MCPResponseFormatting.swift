@@ -339,6 +339,7 @@ public enum MCPResponseFormatting {
     static let clickFixGuardKey = "RoamSwitch.ClickFixGuardEnabled"                   // ClickFixGuard — false
     static let dockerEventGuardKey = "RoamSwitch.DockerEventGuardEnabled"             // DockerEventGuard — false
     static let criticalPathFimKey = "RoamSwitch.CriticalPathFimEnabled"               // CriticalPathFimGuard — false; Pro default-on
+    static let lockfileTamperGuardKey = "RoamSwitch.LockfileTamperGuardEnabled"       // LockfileTamperGuard — false; Pro default-on
     static let persistenceMonitorKey = "RoamSwitch.PersistenceMonitorEnabled"         // PersistenceMonitorGuard — true
     static let gatewayARPLockKey = "RoamSwitch.GatewayARPLockEnabled"                 // GatewayARPLockManager — false
     static let scheduledLogAuditKey = "RoamSwitch.ScheduledLogAuditEnabled"           // ScheduledLogAuditGuard — false; Pro default-on
