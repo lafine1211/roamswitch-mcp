@@ -183,6 +183,8 @@ enum MCPServer {
                 return [result(id: id, callRunPackageCveScan())]
             case "run_package_cve_scan_languages":
                 return [result(id: id, callRunPackageCveScanLanguages(arguments: arguments))]
+            case "run_package_lifecycle_script_scan":
+                return [result(id: id, callRunPackageLifecycleScriptScan(arguments: arguments))]
             case "audit_url_safety":
                 return [result(id: id, callAuditURLSafety(arguments: arguments))]
             case "get_app_help":
@@ -388,6 +390,37 @@ enum MCPServer {
                     cvssScore: $0.cvssScore,
                     fixedVersion: $0.fixedVersion,
                     summary: $0.summary
+                )
+            }
+        )
+        return textContentResult(payload)
+    }
+
+    /// SENDS NO NETWORK REQUESTS AT ALL — reads only local files, executes
+    /// nothing. A plain inventory of package.json lifecycle scripts, not a
+    /// threat verdict — see `PackageCveScriptScan`'s doc comment. Pro-gated
+    /// like the section itself in the app UI: re-checked here so a direct
+    /// MCP call can't bypass it. Reads the plain UserDefaults mirror
+    /// (`LicenseManager.isProCacheKey`) rather than `LicenseManager.shared`
+    /// itself, since this file is also compiled into the minimal
+    /// `RoamSwitchMCPServer` tool target, which doesn't link
+    /// `LicenseManager`'s Keychain/Ed25519 dependency chain.
+    private static func callRunPackageLifecycleScriptScan(arguments: [String: Any]) -> [String: Any] {
+        guard sharedDefaults.bool(forKey: "RoamSwitch.IsProCache") else {
+            return textContentResult(["error": loc("この機能はPro版限定です。RoamSwitchでPro版を有効化してください。")], isError: true)
+        }
+        let folders = (arguments["watchedFolders"] as? [Any])?.compactMap { $0 as? String } ?? []
+        let findings = PackageCveScriptScan.runScan(watchedFolders: folders)
+        let payload = MCPPackageLifecycleScriptScanResultPayload(
+            scannedFolderCount: folders.count,
+            findings: findings.map {
+                MCPPackageLifecycleScriptFindingPayload(
+                    packageName: $0.packageName,
+                    packageVersion: $0.packageVersion,
+                    scriptName: $0.scriptName,
+                    scriptCommand: $0.scriptCommand,
+                    relativePath: $0.relativePath,
+                    isDangerPattern: $0.isDangerPattern
                 )
             }
         )
@@ -660,6 +693,21 @@ enum MCPServer {
                         "type": "array",
                         "items": ["type": "string"],
                         "description": "Absolute paths to project folders to scan for lockfiles.",
+                    ],
+                ],
+                "required": ["watchedFolders"],
+            ],
+        ],
+        [
+            "name": "run_package_lifecycle_script_scan",
+            "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only local files, executes nothing. This is a plain inventory, NOT a threat verdict. Scans the given project folders' node_modules for package.json lifecycle scripts (preinstall/install/postinstall/prepare) that run unconditionally at `npm install` time and can execute arbitrary code (see the dev.to article on npm-install supply-chain risk this was inspired by). Each finding carries `isDangerPattern`: a lightweight, reference-only heuristic match against common risky shell patterns (curl|sh, wget|sh, eval(, base64 -d, node -e) — many legitimate scripts (native module rebuilds, setup wizards) also match, so this is never a definitive verdict. Only scans one level into node_modules (plus one extra level for @scope/ packages) — never descends into a dependency's own nested node_modules.",
+            "inputSchema": [
+                "type": "object",
+                "properties": [
+                    "watchedFolders": [
+                        "type": "array",
+                        "items": ["type": "string"],
+                        "description": "Absolute paths to project folders whose node_modules should be scanned.",
                     ],
                 ],
                 "required": ["watchedFolders"],

@@ -474,6 +474,32 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "Exécutez régulièrement l'analyse Homebrew, enregistrez les projets actifs dans l'onglet Dépendances, et mettez à jour rapidement les paquets présentant des CVE graves."
             ),
             LocalizedEntry(
+                id: "feat_lockfile_tamper_guard",
+                title: "Surveillance des altérations de fichiers de verrouillage de dépendances (Lockfile FIM, Pro)",
+                summary: "Surveille en continu package-lock.json / yarn.lock / pnpm-lock.yaml / npm-shrinkwrap.json via une référence SHA-256, détectant les altérations externes via l'intégration continue ou la chaîne d'approvisionnement. Pro uniquement.",
+                details: """
+                • Comment ouvrir : activez/désactivez depuis l'élément de la barre de menus « 🔔/✅ Surveiller périodiquement l'altération des fichiers de verrouillage de dépendances (Pro) ».
+                • Fichiers surveillés : les mêmes dossiers de projet enregistrés dans l'onglet « Dépendances » de la vérification CVE des paquets — pas de liste de dossiers distincte.
+                • Détection : différence de référence SHA-256 via CryptoKit, avec détection quasi temps réel par FSEvents et une analyse de secours horaire.
+                • Urgence de la notification : si npm/yarn/pnpm est en cours d'exécution au moment de la détection, cela est consigné dans l'historique des notifications avec une alerte discrète ; sinon, il s'agit d'une alerte critique standard. La détection elle-même n'est jamais ignorée dans les deux cas.
+                • Désactivé automatiquement en cas de perte de la licence Pro.
+                """,
+                recommendation: "Enregistrez les projets importants dans l'onglet « Dépendances » de la vérification CVE des paquets et laissez cette fonction activée (par défaut une fois Pro actif)."
+            ),
+            LocalizedEntry(
+                id: "feat_package_lifecycle_script_scan",
+                title: "Inventaire des scripts d'installation (scripts de cycle de vie package.json npm, Pro)",
+                summary: "Répertorie les scripts preinstall/install/postinstall/prepare déclarés par les fichiers package.json sous node_modules. Vise à révéler le code exécuté sans condition lors de npm install — pas un verdict de menace. Pro uniquement.",
+                details: """
+                • Comment ouvrir : menu « Protection contre les logiciels malveillants » → « 📦 Vérification CVE des paquets (Homebrew)… » → onglet « Scripts d'installation (npm) (Pro) ». Analyse les mêmes dossiers de projet que l'onglet « Dépendances ».
+                • Portée : un niveau sous node_modules (plus un niveau supplémentaire pour les paquets @scope/). Ne descend jamais dans le node_modules propre d'un paquet.
+                • Marquage à titre indicatif uniquement : les commandes correspondant à curl|sh, wget|sh, eval(, base64 -d ou node -e reçoivent un badge ⚠️ — une heuristique légère, pas un verdict ; de nombreux scripts légitimes (compilations de modules natifs, etc.) correspondent aussi.
+                • Aucune connexion réseau, et rien n'est jamais exécuté — un inventaire purement statique.
+                • Outil MCP : `run_package_lifecycle_script_scan` (argument `watchedFolders`, Pro uniquement).
+                """,
+                recommendation: "Pour tout script marqué ⚠️, vérifiez si le paquet en a réellement besoin — soyez particulièrement attentif aux scripts postinstall de paquets peu familiers."
+            ),
+            LocalizedEntry(
                 id: "feat_security_health_checker",
                 title: "Audit de sécurité Mac (18 points, score et étapes de correction)",
                 summary: "Vérifie 18 points répartis en six domaines (renforcement système, défense réseau, authentification et contrôle d'accès, exposition des ports, protection contre les malwares et défense physique des appareils) et affiche un score de 0 à 100, une note, ainsi que les étapes pour corriger chaque point non validé. Disponible dans l'édition gratuite.",

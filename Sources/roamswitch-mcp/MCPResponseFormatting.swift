@@ -113,6 +113,22 @@ public struct MCPPackageCveScanLanguagesResultPayload: Codable, Equatable {
     public let findings: [MCPPackageCveLanguageFindingPayload]
 }
 
+public struct MCPPackageLifecycleScriptFindingPayload: Codable, Equatable {
+    public let packageName: String
+    public let packageVersion: String
+    public let scriptName: String
+    public let scriptCommand: String
+    public let relativePath: String
+    /// Reference-only heuristic — see `PackageCveScriptScan`'s doc comment.
+    /// Never a threat verdict.
+    public let isDangerPattern: Bool
+}
+
+public struct MCPPackageLifecycleScriptScanResultPayload: Codable, Equatable {
+    public let scannedFolderCount: Int
+    public let findings: [MCPPackageLifecycleScriptFindingPayload]
+}
+
 public struct MCPExposedPortsPayload: Codable, Equatable {
     public let isFirewallShielded: Bool
     public let ports: [MCPPortPayload]

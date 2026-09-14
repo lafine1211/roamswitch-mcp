@@ -474,6 +474,32 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "Esegui regolarmente la scansione Homebrew, registra i progetti attivi nella scheda Dipendenze, e aggiorna tempestivamente i pacchetti con CVE gravi."
             ),
             LocalizedEntry(
+                id: "feat_lockfile_tamper_guard",
+                title: "Monitoraggio manomissioni dei lockfile delle dipendenze (Lockfile FIM, Pro)",
+                summary: "Monitora continuamente package-lock.json / yarn.lock / pnpm-lock.yaml / npm-shrinkwrap.json tramite una baseline SHA-256, rilevando manomissioni esterne tramite CI o supply chain. Solo Pro.",
+                details: """
+                • Come aprire: attiva/disattiva dalla voce della barra dei menu «🔔/✅ Monitora periodicamente le manomissioni dei lockfile delle dipendenze (Pro)».
+                • File monitorati: le stesse cartelle di progetto registrate nella scheda «Dipendenze» della verifica CVE dei pacchetti — nessun elenco di cartelle separato.
+                • Rilevamento: diff della baseline SHA-256 tramite CryptoKit, con rilevamento quasi in tempo reale via FSEvents più una scansione di backup oraria.
+                • Urgenza della notifica: se npm/yarn/pnpm è in esecuzione al momento del rilevamento, viene registrato nella cronologia delle notifiche con un avviso silenzioso; altrimenti è un avviso critico normale. Il rilevamento stesso non viene mai saltato in entrambi i casi.
+                • Disattivato automaticamente in caso di perdita della licenza Pro.
+                """,
+                recommendation: "Registra i progetti importanti nella scheda «Dipendenze» della verifica CVE dei pacchetti e lascia questa funzione attiva (predefinita quando Pro è attivo)."
+            ),
+            LocalizedEntry(
+                id: "feat_package_lifecycle_script_scan",
+                title: "Elenco degli script di installazione (script del ciclo di vita package.json npm, Pro)",
+                summary: "Elenca gli script preinstall/install/postinstall/prepare dichiarati dai file package.json sotto node_modules. Mostra il codice eseguito incondizionatamente durante npm install — non è un verdetto di minaccia. Solo Pro.",
+                details: """
+                • Come aprire: menu «Protezione da malware» → «📦 Verifica CVE dei pacchetti (Homebrew)…» → scheda «Script di installazione (npm) (Pro)». Analizza le stesse cartelle di progetto della scheda «Dipendenze».
+                • Ambito: un livello sotto node_modules (più un livello aggiuntivo per i pacchetti @scope/). Non scende mai nel node_modules proprio di un pacchetto.
+                • Segnalazione solo a titolo informativo: i comandi che corrispondono a curl|sh, wget|sh, eval(, base64 -d o node -e ricevono un badge ⚠️ — un'euristica leggera, non un verdetto; anche molti script legittimi (build di moduli nativi, ecc.) corrispondono.
+                • Nessuna connessione di rete e non viene mai eseguito nulla — un elenco puramente statico.
+                • Strumento MCP: `run_package_lifecycle_script_scan` (argomento `watchedFolders`, solo Pro).
+                """,
+                recommendation: "Per ogni script contrassegnato con ⚠️, verifica se il pacchetto ne ha davvero bisogno — presta particolare attenzione agli script postinstall di pacchetti poco noti."
+            ),
+            LocalizedEntry(
                 id: "feat_security_health_checker",
                 title: "Audit di sicurezza del Mac (18 punti, punteggio e passaggi di correzione)",
                 summary: "Verifica 18 punti in sei aree (rafforzamento del sistema, difesa di rete, autenticazione e controllo degli accessi, esposizione delle porte, protezione da malware e difesa fisica dei dispositivi) e mostra un punteggio da 0 a 100, un voto, e i passaggi per correggere ogni punto non superato. Disponibile nell'edizione gratuita.",

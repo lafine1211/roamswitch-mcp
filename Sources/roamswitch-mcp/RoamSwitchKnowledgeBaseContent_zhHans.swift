@@ -474,6 +474,32 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "请定期运行 Homebrew 扫描，并将开发中的项目登记到依赖关系标签页，尽早更新含有严重 CVE 的软件包。"
             ),
             LocalizedEntry(
+                id: "feat_lockfile_tamper_guard",
+                title: "依赖锁定文件篡改监控 (Lockfile FIM, Pro)",
+                summary: "通过 SHA-256 基线持续监控 package-lock.json / yarn.lock / pnpm-lock.yaml / npm-shrinkwrap.json，检测经由 CI 或供应链的外部篡改。仅限 Pro。",
+                details: """
+                • 打开方式：在菜单栏「🔔/✅ 定期监控依赖锁定文件是否被篡改 (Pro)」项中切换。
+                • 监控对象：与软件包 CVE 比对「依赖关系」标签页中登记的相同项目文件夹内的 package-lock.json / yarn.lock / pnpm-lock.yaml / npm-shrinkwrap.json。不新增独立的监控文件夹列表。
+                • 检测方式：通过 CryptoKit 进行 SHA-256 基线差分比对，结合 FSEvents 近实时检测与每小时一次的兜底扫描。
+                • 通知紧急程度：若检测时 npm/yarn/pnpm 本身正在运行，会记录到通知历史中并以静默方式通知；未运行时的篡改则为常规紧急通知。无论哪种情况，检测本身都必定执行。
+                • 若 Pro 许可证失效将自动停用。
+                """,
+                recommendation: "建议将重要项目登记到软件包 CVE 比对的「依赖关系」标签页中，并保持此功能开启（启用 Pro 后默认开启）。"
+            ),
+            LocalizedEntry(
+                id: "feat_package_lifecycle_script_scan",
+                title: "安装脚本清单 (npm package.json 生命周期脚本, Pro)",
+                summary: "列出 node_modules 下 package.json 声明的 preinstall/install/postinstall/prepare 脚本。目的是让 npm install 时无条件执行的代码可见，并非威胁判定。仅限 Pro。",
+                details: """
+                • 打开方式：菜单「恶意软件防护」→「📦 软件包 CVE 比对 (Homebrew)…」→「安装脚本 (npm) (Pro)」标签页。扫描对象与「依赖关系」标签页相同。
+                • 扫描范围：node_modules 下一层（@scope/ 软件包再多一层）。绝不深入软件包自身嵌套的 node_modules。
+                • 仅供参考的危险标记：匹配 curl|sh、wget|sh、eval(、base64 -d、node -e 的命令会显示 ⚠️ 标记——这只是轻量级启发式判断，并非定论，许多合法脚本（如原生模块构建）也会命中。
+                • 完全不进行任何网络连接，也绝不执行脚本——纯粹的静态清单展示。
+                • MCP 工具：`run_package_lifecycle_script_scan`（`watchedFolders` 参数，仅限 Pro）。
+                """,
+                recommendation: "对标有 ⚠️ 的脚本，请逐一确认该软件包是否确实需要执行此操作。对不熟悉软件包的 postinstall 脚本请格外留意。"
+            ),
+            LocalizedEntry(
                 id: "feat_security_health_checker",
                 title: "Mac 安全综合诊断（18 个项目・评分 & 改进步骤）",
                 summary: "检查系统健壮性、网络防御、身份验证与访问控制、端口暴露、恶意软件防护、物理设备防御 6 个领域共 18 个项目，并显示 100 分制的评分、等级和改进步骤。免费版即可使用。",

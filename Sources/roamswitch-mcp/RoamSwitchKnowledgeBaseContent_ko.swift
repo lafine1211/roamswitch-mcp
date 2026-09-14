@@ -474,6 +474,32 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "정기적으로 Homebrew 검사를 실행하고, 진행 중인 프로젝트를 의존성 탭에 등록하며, 심각한 CVE가 있는 패키지는 신속히 업데이트하세요."
             ),
             LocalizedEntry(
+                id: "feat_lockfile_tamper_guard",
+                title: "의존 잠금 파일 변조 감시 (Lockfile FIM, Pro)",
+                summary: "package-lock.json / yarn.lock / pnpm-lock.yaml / npm-shrinkwrap.json을 SHA-256 베이스라인으로 지속적으로 감시하여 CI나 공급망을 통한 외부 변조를 감지합니다. Pro 전용.",
+                details: """
+                • 여는 방법: 메뉴 바의 "🔔/✅ 의존 잠금 파일 변조를 주기적으로 감시 (Pro)" 항목으로 전환합니다.
+                • 감시 대상: 패키지 CVE 대조의 "의존성" 탭에 등록한 동일한 프로젝트 폴더 안의 package-lock.json / yarn.lock / pnpm-lock.yaml / npm-shrinkwrap.json. 별도의 감시 폴더 목록을 추가하지 않습니다.
+                • 감지 방식: CryptoKit을 이용한 SHA-256 베이스라인 차분. FSEvents를 통한 근실시간 감지와 1시간마다의 백스톱 스캔을 병행합니다.
+                • 알림 긴급도: 감지 시점에 npm/yarn/pnpm 자체가 실행 중이면 알림 기록에는 남기되 조용한 알림으로 처리합니다. 실행 중이 아닐 때의 변조는 일반적인 긴급 알림입니다. 감지 자체는 두 경우 모두 항상 수행됩니다.
+                • Pro 라이선스를 잃으면 자동으로 비활성화됩니다.
+                """,
+                recommendation: "중요한 프로젝트는 패키지 CVE 대조의 \"의존성\" 탭에 등록하고, Pro 활성화 시 기본값인 켜짐 상태를 유지하는 것을 권장합니다."
+            ),
+            LocalizedEntry(
+                id: "feat_package_lifecycle_script_scan",
+                title: "설치 스크립트 목록 (npm package.json lifecycle 스크립트, Pro)",
+                summary: "node_modules 아래 package.json이 선언한 preinstall/install/postinstall/prepare 스크립트를 나열합니다. npm install 시 무조건 실행되는 코드를 가시화하는 것이 목적이며, 위협 판정이 아닙니다. Pro 전용.",
+                details: """
+                • 여는 방법: 메뉴 "악성코드 방지" → "📦 패키지 CVE 대조 (Homebrew)…" → "설치 스크립트 (npm) (Pro)" 탭. "의존성" 탭과 동일한 프로젝트 폴더를 대상으로 합니다.
+                • 범위: node_modules 바로 아래 1단계(@scope/ 패키지는 한 단계 더). 패키지 자체의 중첩된 node_modules에는 내려가지 않습니다.
+                • 참고용 위험 패턴 표시: curl|sh, wget|sh, eval(, base64 -d, node -e와 일치하는 명령에는 ⚠️ 배지가 표시되지만, 이는 경량 휴리스틱에 의한 참고 정보이며 많은 정상 스크립트(네이티브 모듈 빌드 등)도 해당됩니다.
+                • 네트워크 연결을 전혀 하지 않으며, 스크립트를 실행하지도 않습니다. 순수한 정적 목록 표시입니다.
+                • MCP 도구: `run_package_lifecycle_script_scan` (`watchedFolders` 인자, Pro 전용).
+                """,
+                recommendation: "⚠️ 표시가 있는 스크립트는 해당 패키지에 정말 필요한 작업인지 개별적으로 확인하세요. 낯선 패키지의 postinstall은 특히 주의가 필요합니다."
+            ),
+            LocalizedEntry(
                 id: "feat_security_health_checker",
                 title: "Mac 보안 진단 (18개 항목, 점수와 개선 단계)",
                 summary: "시스템 강화, 네트워크 방어, 인증 및 접근 제어, 포트 노출, 악성코드 보호, 물리적 기기 방어 등 6개 영역 18개 항목을 검사하여 0~100점의 점수, 등급, 실패 항목별 개선 단계를 보여줍니다. 무료 버전에서도 사용할 수 있습니다.",

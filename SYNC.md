@@ -49,6 +49,7 @@ All files live in `Sources/roamswitch-mcp/`.
 | `PackageCveMapData.swift` | `RoamSwitch/PackageCveMapData.swift` |
 | `PackageCveScanLanguages.swift` | `RoamSwitch/PackageCveScanLanguages.swift` |
 | `PackageCveMapLanguagesData.swift` | `RoamSwitch/PackageCveMapLanguagesData.swift` |
+| `PackageCveScriptScan.swift` | `RoamSwitch/PackageCveScriptScan.swift` |
 | `SecretLeakScanning.swift` | `RoamSwitch/SecretLeakScanning.swift` |
 | `CryptoSecretDetection.swift` | `RoamSwitch/CryptoSecretDetection.swift` |
 | `SecurityLogAuditor.swift` | `RoamSwitch/SecurityLogAuditor.swift` |

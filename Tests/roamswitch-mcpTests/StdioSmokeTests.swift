@@ -60,6 +60,7 @@ final class StdioSmokeTests: XCTestCase {
                        ["get_security_report", "get_exposed_ports", "get_guard_status",
                         "audit_url_safety", "get_app_help", "run_active_vuln_scan",
                         "run_package_cve_scan", "run_package_cve_scan_languages",
+                        "run_package_lifecycle_script_scan",
                         "audit_secrets", "audit_security_logs", "get_quarantine_status",
                         "get_canary_status", "get_port_anomaly_incidents",
                         "get_runtime_threat_status", "get_notification_history",

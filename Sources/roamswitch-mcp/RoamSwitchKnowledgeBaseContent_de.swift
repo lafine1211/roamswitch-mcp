@@ -474,6 +474,32 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "Führen Sie den Homebrew-Scan regelmäßig aus, registrieren Sie aktive Projekte im Tab „Abhängigkeiten“ und aktualisieren Sie Pakete mit schwerwiegenden CVEs umgehend."
             ),
             LocalizedEntry(
+                id: "feat_lockfile_tamper_guard",
+                title: "Überwachung auf Manipulation von Abhängigkeits-Lockfiles (Lockfile FIM, Pro)",
+                summary: "Überwacht package-lock.json / yarn.lock / pnpm-lock.yaml / npm-shrinkwrap.json fortlaufend über eine SHA-256-Baseline und erkennt externe Manipulation über CI oder die Lieferkette. Nur Pro.",
+                details: """
+                • Öffnen: über den Menüleisteneintrag „🔔/✅ Überwachung auf Manipulation von Abhängigkeits-Lockfiles (Pro)“ umschalten.
+                • Überwachte Dateien: dieselben Projektordner, die im Tab „Abhängigkeiten“ des Paket-CVE-Abgleichs registriert sind — keine separate Ordnerliste.
+                • Erkennung: SHA-256-Baseline-Diff via CryptoKit, mit FSEvents-Nahzeiterkennung plus stündlichem Backstop-Scan.
+                • Dringlichkeit: Läuft npm/yarn/pnpm selbst zum Erkennungszeitpunkt, wird dies im Mitteilungsverlauf vermerkt und nur leise benachrichtigt; andernfalls erfolgt eine normale kritische Benachrichtigung. Die Erkennung selbst wird in beiden Fällen durchgeführt.
+                • Wird bei Verlust der Pro-Lizenz automatisch deaktiviert.
+                """,
+                recommendation: "Registrieren Sie wichtige Projekte im Tab „Abhängigkeiten“ des Paket-CVE-Abgleichs und lassen Sie dies aktiviert (Standard bei aktivem Pro)."
+            ),
+            LocalizedEntry(
+                id: "feat_package_lifecycle_script_scan",
+                title: "Übersicht der Installationsskripte (npm package.json Lifecycle-Skripte, Pro)",
+                summary: "Listet preinstall/install/postinstall/prepare-Skripte auf, die von package.json-Dateien unter node_modules deklariert werden. Zeigt Code, der bei npm install bedingungslos ausgeführt wird — kein Bedrohungsurteil. Nur Pro.",
+                details: """
+                • Öffnen: Menü „Malware-Schutz“ → „📦 Paket-CVE-Abgleich (Homebrew)…“ → Tab „Installationsskripte (npm) (Pro)“. Nutzt dieselben Projektordner wie der Tab „Abhängigkeiten“.
+                • Umfang: eine Ebene unter node_modules (plus eine weitere Ebene für @scope/-Pakete). Steigt nie in das eigene node_modules eines Pakets ab.
+                • Reine Referenzmarkierung: Befehle, die auf curl|sh, wget|sh, eval(, base64 -d oder node -e passen, erhalten ein ⚠️-Abzeichen — eine leichte Heuristik, kein Urteil; viele legitime Skripte (z. B. native Modul-Builds) treffen ebenfalls zu.
+                • Keinerlei Netzwerkverbindung, und es wird nie etwas ausgeführt — eine rein statische Übersicht.
+                • MCP-Tool: `run_package_lifecycle_script_scan` (Argument `watchedFolders`, nur Pro).
+                """,
+                recommendation: "Prüfen Sie bei jedem ⚠️-markierten Skript, ob das Paket es wirklich benötigt — besonders bei postinstall-Skripten unbekannter Pakete."
+            ),
+            LocalizedEntry(
                 id: "feat_security_health_checker",
                 title: "Mac-Sicherheitsprüfung (18 Punkte, Punktzahl & Korrekturschritte)",
                 summary: "Prüft 18 Punkte in sechs Bereichen (Systemhärtung, Netzwerkverteidigung, Authentifizierung und Zugriffskontrolle, Portexposition, Malware-Schutz sowie physischer Geräteschutz) und zeigt eine Punktzahl von 0 bis 100, eine Note sowie Korrekturschritte für jeden nicht bestandenen Punkt. In der kostenlosen Version enthalten.",

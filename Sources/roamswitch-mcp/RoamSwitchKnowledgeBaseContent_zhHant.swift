@@ -474,6 +474,32 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "定期執行 Homebrew 掃描，在「相依性」分頁登錄開發中的專案，並儘快更新含有嚴重 CVE 的套件。"
             ),
             LocalizedEntry(
+                id: "feat_lockfile_tamper_guard",
+                title: "相依鎖定檔案竄改監控 (Lockfile FIM, Pro)",
+                summary: "透過 SHA-256 基準持續監控 package-lock.json / yarn.lock / pnpm-lock.yaml / npm-shrinkwrap.json，偵測經由 CI 或供應鏈的外部竄改。僅限 Pro。",
+                details: """
+                • 開啟方式：在選單列「🔔/✅ 定期監控相依鎖定檔案是否遭竄改 (Pro)」項目中切換。
+                • 監控對象：與套件 CVE 比對「相依關係」分頁中登記的相同專案資料夾內的 package-lock.json / yarn.lock / pnpm-lock.yaml / npm-shrinkwrap.json。不新增獨立的監控資料夾清單。
+                • 偵測方式：透過 CryptoKit 進行 SHA-256 基準差異比對，結合 FSEvents 近即時偵測與每小時一次的備援掃描。
+                • 通知緊急程度：若偵測時 npm/yarn/pnpm 本身正在執行，會記錄於通知記錄中並以靜音方式通知；未執行時的竄改則為一般緊急通知。無論何種情況，偵測本身都必定執行。
+                • 若 Pro 授權失效將自動停用。
+                """,
+                recommendation: "建議將重要專案登記到套件 CVE 比對的「相依關係」分頁中，並保持此功能開啟（啟用 Pro 後預設開啟）。"
+            ),
+            LocalizedEntry(
+                id: "feat_package_lifecycle_script_scan",
+                title: "安裝指令碼清單 (npm package.json lifecycle 指令碼, Pro)",
+                summary: "列出 node_modules 下 package.json 宣告的 preinstall/install/postinstall/prepare 指令碼。目的是讓 npm install 時無條件執行的程式碼可見，並非威脅判定。僅限 Pro。",
+                details: """
+                • 開啟方式：選單「惡意軟體防護」→「📦 套件 CVE 比對 (Homebrew)…」→「安裝指令碼 (npm) (Pro)」分頁。掃描對象與「相依關係」分頁相同。
+                • 掃描範圍：node_modules 下一層（@scope/ 套件再多一層）。絕不深入套件自身巢狀的 node_modules。
+                • 僅供參考的危險標記：符合 curl|sh、wget|sh、eval(、base64 -d、node -e 的指令會顯示 ⚠️ 標記——這僅是輕量啟發式判斷，並非定論，許多合法指令碼（如原生模組建置）也會命中。
+                • 完全不進行任何網路連線，也絕不執行指令碼——純粹的靜態清單展示。
+                • MCP 工具：`run_package_lifecycle_script_scan`（`watchedFolders` 參數，僅限 Pro）。
+                """,
+                recommendation: "對標有 ⚠️ 的指令碼，請逐一確認該套件是否確實需要執行此操作。對不熟悉套件的 postinstall 指令碼請格外留意。"
+            ),
+            LocalizedEntry(
                 id: "feat_security_health_checker",
                 title: "Mac 安全稽核（18 個項目、分數與修正步驟）",
                 summary: "檢查六大領域（系統強化、網路防禦、驗證與存取控制、連接埠曝露、惡意軟體防護、實體裝置防護）共 18 個項目，並顯示 0 到 100 分的分數、等級，以及每個未通過項目的修正步驟。免費版即可使用。",

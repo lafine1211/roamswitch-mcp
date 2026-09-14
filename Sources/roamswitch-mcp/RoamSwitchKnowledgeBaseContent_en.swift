@@ -473,6 +473,32 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "Run the Homebrew scan regularly, register active projects in the Dependencies tab, and update packages with serious CVEs promptly."
             ),
             LocalizedEntry(
+                id: "feat_lockfile_tamper_guard",
+                title: "Dependency Lockfile Tamper Monitoring (Lockfile FIM, Pro)",
+                summary: "Continuously watches package-lock.json / yarn.lock / pnpm-lock.yaml / npm-shrinkwrap.json via a SHA-256 baseline, detecting external tampering via CI or the supply chain. Pro only.",
+                details: """
+                • How to open: toggle via the menu bar item "🔔/✅ Periodically monitor dependency lockfiles for tampering (Pro)".
+                • Watched files: the same project folders registered in the Package CVE Scan window's "Dependencies" tab — no separate watched-folder list.
+                • Detection: a CryptoKit SHA-256 baseline diff, with near-real-time FSEvents detection plus an hourly backstop scan.
+                • Notification urgency: if npm/yarn/pnpm itself is running at detection time, it's recorded in notification history with a quiet, non-critical alert; otherwise it's a standard critical alert. Detection itself is never skipped either way.
+                • Automatically disabled if the Pro license is lost.
+                """,
+                recommendation: "Register important projects in the Package CVE Scan window's \"Dependencies\" tab and leave this on (the default once Pro is active)."
+            ),
+            LocalizedEntry(
+                id: "feat_package_lifecycle_script_scan",
+                title: "Install Script Inventory (npm package.json lifecycle scripts, Pro)",
+                summary: "Lists preinstall/install/postinstall/prepare scripts declared by package.json files under node_modules. Meant to surface code that runs unconditionally at npm install time — not a threat verdict. Pro only.",
+                details: """
+                • How to open: menu "Malware Protection" → "📦 Package CVE Scan (Homebrew)..." → the "Install Scripts (npm) (Pro)" tab. Scans the same project folders as the "Dependencies" tab.
+                • Scope: one level under node_modules (plus one extra level for @scope/ packages). Never descends into a package's own nested node_modules.
+                • Reference-only danger markers: commands matching curl|sh, wget|sh, eval(, base64 -d, or node -e get a ⚠️ badge — a lightweight heuristic, not a verdict; many legitimate scripts (native module builds, etc.) also match.
+                • No network connection at all, and nothing is ever executed — a purely static inventory.
+                • MCP tool: `run_package_lifecycle_script_scan` (`watchedFolders` argument, Pro only).
+                """,
+                recommendation: "For any script flagged ⚠️, check whether the package genuinely needs it — pay particular attention to postinstall scripts from unfamiliar packages."
+            ),
+            LocalizedEntry(
                 id: "feat_security_health_checker",
                 title: "Mac Security Audit (18 Items, Score & Fix Steps)",
                 summary: "Checks 18 items across six areas (system hardening, network defense, authentication and access control, port exposure, malware protection, and physical device defense) and shows a 0-100 score, a grade, and steps to fix each failing item. Available in the free edition.",

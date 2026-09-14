@@ -473,6 +473,32 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "定期的にHomebrewのスキャンを実行し、開発中のプロジェクトは依存関係タブに登録して、重大なCVEを含むパッケージを早めに更新してください。"
             ),
             LocalizedEntry(
+                id: "feat_lockfile_tamper_guard",
+                title: "依存関係ロックファイルの改ざん監視 (Lockfile FIM, Pro)",
+                summary: "package-lock.json / yarn.lock / pnpm-lock.yaml / npm-shrinkwrap.json をSHA-256ベースラインで常時監視し、CIやサプライチェーン経由の外部改ざんを検知します。Pro版限定。",
+                details: """
+                • 開き方: メニューバーの「🔔/✅ 依存関係ロックファイルの改ざんを定期監視 (Pro)」で切り替え。
+                • 監視対象: パッケージCVE照合の「依存関係」タブで登録した同じプロジェクトフォルダ内の package-lock.json / yarn.lock / pnpm-lock.yaml / npm-shrinkwrap.json。新規の監視対象リストは追加しません。
+                • 検知方式: CryptoKitによるSHA-256ベースライン差分。FSEventsによる近似リアルタイム検知＋1時間ごとのバックストップスキャン。
+                • 通知の緊急度: npm/yarn/pnpm自体が実行中に検知した場合は、その旨を通知履歴に記録した上で静かな通知にとどめます。非実行中の改ざんは通常の緊急通知です。検知自体は両ケースで必ず行われます。
+                • ライセンス喪失時は自動的に無効化されます。
+                """,
+                recommendation: "重要なプロジェクトはパッケージCVE照合の「依存関係」タブに登録し、Pro版有効化時の既定オンのままにしておくことを推奨します。"
+            ),
+            LocalizedEntry(
+                id: "feat_package_lifecycle_script_scan",
+                title: "インストールスクリプトの一覧 (npm package.json lifecycle scripts, Pro)",
+                summary: "node_modules配下のpackage.jsonが宣言するpreinstall/install/postinstall/prepareスクリプトを一覧表示します。npm install時に無条件実行されるコードの可視化が目的で、脅威判定ではありません。Pro版限定。",
+                details: """
+                • 開き方: メニュー「マルウェア対策」→「📦 パッケージCVE照合 (Homebrew)…」→「インストールスクリプト (npm) (Pro)」タブ。「依存関係」タブと同じプロジェクトフォルダを対象にします。
+                • 列挙対象: node_modules直下1階層（@scope/パッケージはさらに1階層）のpackage.jsonに宣言されたpreinstall/install/postinstall/prepareスクリプト。ネストしたnode_modulesへは降りません。
+                • 危険パターンの参考表示: curl|sh・wget|sh・eval(・base64 -d・node -eに一致するコマンドには⚠️を表示しますが、これは軽量ヒューリスティックによる参考情報で、多くの正規スクリプト（ネイティブモジュールのビルド等）も該当します。
+                • ネットワーク接続は一切行わず、スクリプトを実行することもありません。純粋な静的一覧表示です。
+                • MCPツール: `run_package_lifecycle_script_scan`（`watchedFolders`引数、Pro限定）。
+                """,
+                recommendation: "⚠️マークの付いたスクリプトは、そのパッケージが本当に必要とする処理かを個別に確認してください。見慣れないパッケージのpostinstallは特に注意が必要です。"
+            ),
+            LocalizedEntry(
                 id: "feat_security_health_checker",
                 title: "Macセキュリティ総合診断（18項目・スコア & 改善手順）",
                 summary: "システム堅牢性・ネットワーク防御・認証とアクセス制御・ポート露出・マルウェア対策・物理デバイス防御の6分野18項目を検査し、100点満点のスコア・ランクと改善手順を表示します。無料版で利用できます。",
