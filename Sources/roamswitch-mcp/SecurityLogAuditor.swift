@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.30 (build 87).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.31 (build 88).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -182,14 +182,33 @@ final class SecurityLogAuditor {
         // scan — and unconditionally (unlike `SecurityNotifier
         // .sendThreatAlert`, this isn't Pro-gated): a Free user gets the
         // same durable record, just without the live banner/sound.
-        // Frequency spikes are deliberately NOT recorded here — unlike
-        // `isNew`, they can recur across repeated manual rescans of the
-        // same ongoing spike, which would flood history with near-duplicate
-        // entries; they still reach history via the scheduled scan's own
-        // (rate-limited, once-an-hour) notification when that's enabled.
         for anomaly in anomalies where anomaly.isNew {
             NotificationHistory.record(
                 title: "🧩 " + loc("新規ログパターンを検出"),
+                body: anomaly.example
+            )
+        }
+        // Frequency spikes were deliberately NOT recorded here for a long
+        // time (they can recur across a template's first few runs while its
+        // own baseline is still maturing, unlike `isNew`'s one-shot nature),
+        // on the assumption a spike would still be visible afterward via
+        // this same `buildReport`'s own `templateAnomalies` output. That
+        // assumption is false: `lastProcessedMessage` above already
+        // advanced past every line this spike was computed from, and
+        // `updatedHistory` already folded its count into the template's
+        // mean/stddev — so the *next* call to `buildReport` (whether the
+        // next scheduled scan or a human opening the audit view moments
+        // later) can structurally never see these same lines again, let
+        // alone re-flag them. A live user report: `ScheduledLogAuditGuard`
+        // fired a spike notification, and opening the audit detail view
+        // right after showed "no anomalies detected" with no way to look
+        // back at what had just been flagged. Recording here (a handful of
+        // near-duplicate entries while a template's baseline matures, at
+        // most `LogTemplateAnalyzer.minObservationsForOwnBaseline` of them)
+        // is a better trade than a notification with zero durable trail.
+        for anomaly in anomalies where !anomaly.isNew {
+            NotificationHistory.record(
+                title: "📈 " + String(format: loc("ログの発生頻度が急増 (z=%.1f)"), anomaly.zScore),
                 body: anomaly.example
             )
         }
