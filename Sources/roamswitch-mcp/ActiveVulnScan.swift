@@ -64,6 +64,84 @@ enum ActiveVulnScan {
         var inconclusive: [CheckOutcome] = []
     }
 
+    // MARK: - Lightweight per-run persistence (heartbeat log)
+    //
+    // `runScan` always executes synchronously, right now, at the caller's
+    // request (MCP tool call / manual "Run Active Verification" button) —
+    // there is no scheduled/background runner yet. But the answer to "did
+    // we look, and was it clean" is worth persisting the moment it exists,
+    // independent of whether a timer ever gets added: it's the first
+    // artifact that outlives the calling process. This appends one row per
+    // probe attempted (oldest dropped first past `maxProbeLogEntries`) to a
+    // small JSON file under Application Support — same location convention
+    // as `ContainmentIncidentTimeline`/`NetworkHistoryGuard`, so it's
+    // readable/writable identically from the main app and the separate,
+    // read-only `RoamSwitchMCPServer` process.
+    //
+    // Deliberately NOT wired into any reporting/API/UI yet, and deliberately
+    // NOT computing any notion of staleness — storage only. Recording per
+    // probe at storage time is cheap right now; promising per-probe
+    // precision in a public field before a scheduled runner actually exists
+    // is what creates real design debt (a consumer builds an expectation
+    // around several independent timestamps, and retracting that false
+    // precision later becomes a breaking change). When "how long since we
+    // last actually checked" is surfaced, that field must be named
+    // `passAge` (Linux mirror: `pass_age`) — reserved here so a future
+    // implementation doesn't have to guess or rename later, and so it can
+    // report one number even while these rows stay per-probe underneath.
+    struct ProbeRunRecord: Codable {
+        /// Stable machine identifier for the check, not the localized
+        /// title — a `ServiceSignatures.Signature.id` (`"redis-default-noauth"`)
+        /// or a Phase 3 check name (`"webvuln-cors"`, `"webvuln-traversal"`,
+        /// `"webvuln-redirect"`).
+        let probeName: String
+        /// ISO 8601, matching `NotificationHistory`'s timestamp convention.
+        let lastStartedAt: String
+        let lastFinishedAt: String
+        /// `"vulnerable"` | `"safe"` | `"inconclusive"` — the same
+        /// three-state distinction `ScanRunResult` already makes (see
+        /// `CheckOutcome`), just named on the row instead of being implied
+        /// by which list it landed in.
+        let outcome: String
+    }
+
+    private static let maxProbeLogEntries = 500
+    private static let probeLogFormatter = ISO8601DateFormatter()
+
+    /// Pure path computation — no side effects, matching
+    /// `ContainmentIncidentTimeline.storeURL`'s convention.
+    private static var probeLogURL: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("RoamSwitch", isDirectory: true)
+            .appendingPathComponent("active_vuln_scan_log.json")
+    }
+
+    private static func loadProbeLog(at url: URL) -> [ProbeRunRecord] {
+        guard let data = try? Data(contentsOf: url) else { return [] }
+        return (try? JSONDecoder().decode([ProbeRunRecord].self, from: data)) ?? []
+    }
+
+    private static func saveProbeLog(_ entries: [ProbeRunRecord], to url: URL) {
+        guard let data = try? JSONEncoder().encode(entries) else { return }
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? data.write(to: url, options: .atomic)
+    }
+
+    /// Appends `records` (oldest-first within this run), capped at
+    /// `maxProbeLogEntries` overall (oldest dropped first). Best-effort: a
+    /// write failure here must never fail or slow down the scan itself,
+    /// and an empty `records` list writes nothing (a run with zero
+    /// applicable targets shouldn't touch the file at all).
+    static func appendProbeLog(_ records: [ProbeRunRecord], to url: URL = probeLogURL) {
+        guard !records.isEmpty else { return }
+        var entries = loadProbeLog(at: url)
+        entries.append(contentsOf: records)
+        if entries.count > maxProbeLogEntries {
+            entries.removeFirst(entries.count - maxProbeLogEntries)
+        }
+        saveProbeLog(entries, to: url)
+    }
+
     // MARK: - Phase 2: known-service raw-TCP probes
 
     /// Sends a single non-destructive `PING` to a Redis-protocol port and checks whether
@@ -502,12 +580,14 @@ enum ActiveVulnScan {
     /// Sequential — no concurrency, matching the Linux implementation's safety
     /// invariants. Confirmed-safe and inconclusive checks are tracked
     /// separately from findings — see `CheckOutcome`.
-    static func runScan(ports: [ListeningPortInfo]) -> ScanRunResult {
+    static func runScan(ports: [ListeningPortInfo], probeLogURL: URL = probeLogURL) -> ScanRunResult {
         var result = ScanRunResult()
+        var logEntries: [ProbeRunRecord] = []
 
         for port in ports {
             let signatures = ServiceSignatures.match(processName: port.processName, executablePath: port.executablePath)
             for signature in signatures where probeableSignatureIDs.contains(signature.id) {
+                let startedAt = Date()
                 let confirmed: Bool?
                 switch signature.id {
                 case "redis-default-noauth": confirmed = probeRedisNoAuth(port: port.port)
@@ -515,6 +595,13 @@ enum ActiveVulnScan {
                 case "mongod-default-noauth": confirmed = probeMongoDBNoAuth(port: port.port)
                 default: confirmed = nil
                 }
+                let finishedAt = Date()
+                logEntries.append(ProbeRunRecord(
+                    probeName: signature.id,
+                    lastStartedAt: probeLogFormatter.string(from: startedAt),
+                    lastFinishedAt: probeLogFormatter.string(from: finishedAt),
+                    outcome: confirmed == true ? "vulnerable" : (confirmed == false ? "safe" : "inconclusive")
+                ))
                 let outcome = CheckOutcome(port: port.port, processName: port.processName, check: signature.title)
                 switch confirmed {
                 case true:
@@ -548,50 +635,79 @@ enum ActiveVulnScan {
             }
         }
 
-        for port in ports where PortSecurityAuditor.isKnownDevServerPort(port.port) {
-            let corsOutcome = CheckOutcome(port: port.port, processName: port.processName, check: loc("CORS 設定ミス（認証情報付きクロスオリジン許可）"))
-            switch probeCorsMisconfiguration(port: port.port) {
-            case true:
-                result.findings.append(Finding(
-                    port: port.port,
-                    processName: port.processName,
-                    title: loc("CORS 設定ミス（認証情報付きクロスオリジン許可）"),
-                    description: loc("任意のOriginヘッダを送信したところ、そのOriginがAccess-Control-Allow-Originに反映（または*が返却）され、かつAccess-Control-Allow-Credentials: trueが同時に返されました。この組み合わせは、悪意あるWebサイトが被害者のブラウザ経由でこのサーバーへ認証済みリクエストを送信し、レスポンスを読み取れることを意味します。"),
-                    recommendation: loc("Access-Control-Allow-Origin を信頼できる特定のオリジンのみに限定し、Access-Control-Allow-Credentials は本当に必要な場合のみ有効にしてください。")
-                ))
-            case false: result.confirmedSafe.append(corsOutcome)
-            case nil: result.inconclusive.append(corsOutcome)
-            }
-
-            let traversalOutcome = CheckOutcome(port: port.port, processName: port.processName, check: loc("パストラバーサル（ディレクトリトラバーサル）"))
-            switch probePathTraversal(port: port.port) {
-            case true:
-                result.findings.append(Finding(
-                    port: port.port,
-                    processName: port.processName,
-                    title: loc("パストラバーサル（ディレクトリトラバーサル）"),
-                    description: loc("静的ファイル配信のパスに ../ を含むリクエストを送信したところ、Webルート外の /etc/passwd の内容が取得できました。ファイルパスの正規化・検証が不十分なため、Webルート外の任意のファイルを読み取られる危険があります。"),
-                    recommendation: loc("静的ファイル配信ライブラリを最新版に更新し、配信元パスを正規化したうえでWebルート内に限定してください。可能であればサンドボックスでファイルシステムへのアクセス範囲自体を制限することも推奨します。")
-                ))
-            case false: result.confirmedSafe.append(traversalOutcome)
-            case nil: result.inconclusive.append(traversalOutcome)
-            }
-
-            let redirectOutcome = CheckOutcome(port: port.port, processName: port.processName, check: loc("オープンリダイレクト（未検証の外部リダイレクト）"))
-            switch probeOpenRedirect(port: port.port) {
-            case true:
-                result.findings.append(Finding(
-                    port: port.port,
-                    processName: port.processName,
-                    title: loc("オープンリダイレクト（未検証の外部リダイレクト）"),
-                    description: loc("既知のリダイレクトパラメータ（redirect/url/next 等）に外部ドメインを指定したところ、検証なしにそのドメインへリダイレクトされました。フィッシング詐欺で正規サイトのURLを装いつつ悪意あるサイトへ誘導する手口に悪用される危険があります。"),
-                    recommendation: loc("リダイレクト先URLを許可リスト（同一オリジンまたは信頼済みドメインのみ）で検証してください。")
-                ))
-            case false: result.confirmedSafe.append(redirectOutcome)
-            case nil: result.inconclusive.append(redirectOutcome)
+        // Runs one Phase 3 probe, records its timing/outcome for the
+        // heartbeat log, and routes the result the same way the Phase 2
+        // loop above does.
+        func runOne(
+            probeName: String,
+            probe: () -> Bool?,
+            makeFinding: () -> Finding,
+            outcome: CheckOutcome
+        ) {
+            let startedAt = Date()
+            let confirmed = probe()
+            let finishedAt = Date()
+            logEntries.append(ProbeRunRecord(
+                probeName: probeName,
+                lastStartedAt: probeLogFormatter.string(from: startedAt),
+                lastFinishedAt: probeLogFormatter.string(from: finishedAt),
+                outcome: confirmed == true ? "vulnerable" : (confirmed == false ? "safe" : "inconclusive")
+            ))
+            switch confirmed {
+            case true: result.findings.append(makeFinding())
+            case false: result.confirmedSafe.append(outcome)
+            case nil: result.inconclusive.append(outcome)
             }
         }
 
+        for port in ports where PortSecurityAuditor.isKnownDevServerPort(port.port) {
+            runOne(
+                probeName: "webvuln-cors",
+                probe: { probeCorsMisconfiguration(port: port.port) },
+                makeFinding: {
+                    Finding(
+                        port: port.port,
+                        processName: port.processName,
+                        title: loc("CORS 設定ミス（認証情報付きクロスオリジン許可）"),
+                        description: loc("任意のOriginヘッダを送信したところ、そのOriginがAccess-Control-Allow-Originに反映（または*が返却）され、かつAccess-Control-Allow-Credentials: trueが同時に返されました。この組み合わせは、悪意あるWebサイトが被害者のブラウザ経由でこのサーバーへ認証済みリクエストを送信し、レスポンスを読み取れることを意味します。"),
+                        recommendation: loc("Access-Control-Allow-Origin を信頼できる特定のオリジンのみに限定し、Access-Control-Allow-Credentials は本当に必要な場合のみ有効にしてください。")
+                    )
+                },
+                outcome: CheckOutcome(port: port.port, processName: port.processName, check: loc("CORS 設定ミス（認証情報付きクロスオリジン許可）"))
+            )
+
+            runOne(
+                probeName: "webvuln-traversal",
+                probe: { probePathTraversal(port: port.port) },
+                makeFinding: {
+                    Finding(
+                        port: port.port,
+                        processName: port.processName,
+                        title: loc("パストラバーサル（ディレクトリトラバーサル）"),
+                        description: loc("静的ファイル配信のパスに ../ を含むリクエストを送信したところ、Webルート外の /etc/passwd の内容が取得できました。ファイルパスの正規化・検証が不十分なため、Webルート外の任意のファイルを読み取られる危険があります。"),
+                        recommendation: loc("静的ファイル配信ライブラリを最新版に更新し、配信元パスを正規化したうえでWebルート内に限定してください。可能であればサンドボックスでファイルシステムへのアクセス範囲自体を制限することも推奨します。")
+                    )
+                },
+                outcome: CheckOutcome(port: port.port, processName: port.processName, check: loc("パストラバーサル（ディレクトリトラバーサル）"))
+            )
+
+            runOne(
+                probeName: "webvuln-redirect",
+                probe: { probeOpenRedirect(port: port.port) },
+                makeFinding: {
+                    Finding(
+                        port: port.port,
+                        processName: port.processName,
+                        title: loc("オープンリダイレクト（未検証の外部リダイレクト）"),
+                        description: loc("既知のリダイレクトパラメータ（redirect/url/next 等）に外部ドメインを指定したところ、検証なしにそのドメインへリダイレクトされました。フィッシング詐欺で正規サイトのURLを装いつつ悪意あるサイトへ誘導する手口に悪用される危険があります。"),
+                        recommendation: loc("リダイレクト先URLを許可リスト（同一オリジンまたは信頼済みドメインのみ）で検証してください。")
+                    )
+                },
+                outcome: CheckOutcome(port: port.port, processName: port.processName, check: loc("オープンリダイレクト（未検証の外部リダイレクト）"))
+            )
+        }
+
+        appendProbeLog(logEntries, to: probeLogURL)
         return result
     }
 }
