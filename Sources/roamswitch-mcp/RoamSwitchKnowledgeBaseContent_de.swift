@@ -159,6 +159,18 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "Aktivieren Sie diese Funktion nur, wenn Sie prüfen möchten, ob Redis, Docker, ein lokales LLM o. Ä. auf Ihrem eigenen Mac wirklich ohne Authentifizierung erreichbar ist."
             ),
             LocalizedEntry(
+                id: "feat_nmap_nse",
+                title: "Ergänzender nmap-NSE-Scan (zusätzliche Ebene für die aktive Schwachstellenverifizierung) — standardmäßig deaktiviert",
+                summary: "Wenn zusätzlich die aktive Schwachstellenverifizierung aktiviert ist, führt dies mit dem installierten System-nmap NSE-Skripte der Kategorie „safe“ gegen offene Ports aus, um Protokollabdeckung zu ergänzen, die die eigenen Prüfungen dieses Produkts nicht bieten (SSH-Hostschlüssel, SMTP-Banner usw.). Das Ergebnis ist nmaps eigene Einschätzung, nicht unabhängig von diesem Produkt überprüft.",
+                details: """
+                • Aktivierung: Zuerst „Aktive Schwachstellenverifizierung (aktive Erreichbarkeitsprüfung)“ einschalten, dann zusätzlich „🔎 Ergänzender nmap-NSE-Scan“ aktivieren. Ein zweistufiges Opt-in, unabhängig von der bestehenden Einstellung. nmap wird nie automatisch installiert — dies wirkt nur, wenn es bereits auf dem System installiert ist (z. B. über Homebrew); andernfalls geschieht nichts.
+                • Skriptauswahl: `safe and not broadcast and not external`. Die reine Kategorie „safe“ allein reicht nicht aus — `broadcast`-Skripte fragen nicht nur den Zielhost, sondern das gesamte LAN per Multicast/Broadcast ab, und `external`-Skripte (z. B. `vulners.nse`) senden den erkannten Dienst/die Version tatsächlich an einen Dritten wie vulners.com. Beides widerspricht dem eigenen Designprinzip dieses Produkts, nur 127.0.0.1 zu berühren und niemals einen anderen Host oder externen Server — daher der Ausschluss.
+                • Timeout: 15 Sekunden pro Skript (`--script-timeout 15s`). Manche „safe“-Skripte können gegen nicht standardkonforme HTTP-APIs unbegrenzt lange laufen und ohne diese Begrenzung Ergebnisse anderer Ports verdrängen.
+                • Umfang: dieselben bereits bestätigt offenen Ports wie bei der aktiven Schwachstellenverifizierung selbst.
+                """,
+                recommendation: "Behandeln Sie die Befunde von nmap als Referenzinformation — prüfen Sie den Inhalt und handeln Sie nur, wenn er tatsächlich relevant ist."
+            ),
+            LocalizedEntry(
                 id: "feat_usb_keyboard_guard",
                 title: "Physischer Portschutz vor unbefugtem USB / BadUSB (Tastaturgenehmigung & Tastaturanschlags-Timing-Analyse) (Pro)",
                 summary: "Wird eine unbekannte USB-Tastatur oder ein manipuliertes Kabel (Rubber Ducky, O.MG Cable, Flipper Zero u. Ä.) angeschlossen, werden dessen Tastenanschläge blockiert, bis Sie das Gerät genehmigen – so wird automatisierte Befehlseinschleusung verhindert. Zusätzlich werden die Anschlagsintervalle analysiert und gewarnt, wenn sie skriptartig wirken.",

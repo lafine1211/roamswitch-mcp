@@ -159,6 +159,18 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "Attivala solo quando vuoi verificare se Redis, Docker, un LLM locale o simili in esecuzione sul tuo stesso Mac sono davvero raggiungibili senza autenticazione."
             ),
             LocalizedEntry(
+                id: "feat_nmap_nse",
+                title: "Scansione supplementare nmap NSE (livello aggiuntivo per la verifica attiva delle vulnerabilità) — disattivata per impostazione predefinita",
+                summary: "Quando è attiva anche la verifica attiva delle vulnerabilità, esegue gli script NSE della categoria «safe» del nmap installato nel sistema sulle porte esposte per aggiungere una copertura di protocolli che le sonde proprie di questo prodotto non hanno (chiavi host SSH, banner SMTP, ecc.). Il risultato è un giudizio proprio di nmap, non riverificato in modo indipendente da questo prodotto.",
+                details: """
+                • Attivazione: attiva prima «Verifica attiva delle vulnerabilità (verifica attiva della raggiungibilità)», poi attiva in aggiunta «🔎 Scansione supplementare nmap NSE». Un'attivazione in due fasi, indipendente dall'impostazione esistente. nmap non viene mai installato automaticamente — questo ha effetto solo se è già installato nel sistema (ad esempio tramite Homebrew); altrimenti non fa nulla.
+                • Selezione degli script: `safe and not broadcast and not external`. La sola categoria «safe» non basta — gli script `broadcast` interrogano l'intera LAN tramite multicast/broadcast, non solo l'host di destinazione, e gli script `external` (ad es. `vulners.nse`) inviano effettivamente il servizio/la versione rilevati a terze parti come vulners.com. Entrambi contraddicono il principio di progettazione di questo prodotto di toccare solo 127.0.0.1 e mai altri host o server esterni, quindi vengono esclusi.
+                • Timeout: 15 secondi per script (`--script-timeout 15s`). Alcuni script «safe» possono essere eseguiti indefinitamente contro API HTTP non standard, sottraendo risultati alle altre porte senza questo limite.
+                • Ambito: le stesse porte già confermate aperte utilizzate dalla verifica attiva delle vulnerabilità stessa.
+                """,
+                recommendation: "Considera i risultati di nmap come informazioni di riferimento — esamina il contenuto e agisci solo se effettivamente pertinente."
+            ),
+            LocalizedEntry(
                 id: "feat_usb_keyboard_guard",
                 title: "Protezione fisica della porta da USB non autorizzato / BadUSB (Approvazione tastiera e analisi del ritmo di digitazione) (Pro)",
                 summary: "Quando viene collegata una tastiera USB sconosciuta o un cavo modificato (Rubber Ducky, O.MG Cable, Flipper Zero e simili), i tasti premuti da quel dispositivo vengono bloccati finché non lo approvi, impedendo l'iniezione automatizzata di comandi. Analizza anche gli intervalli di digitazione e avvisa quando sembrano scriptati.",

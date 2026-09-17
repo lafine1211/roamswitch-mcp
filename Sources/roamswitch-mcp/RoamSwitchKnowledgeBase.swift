@@ -414,6 +414,7 @@ public struct RoamSwitchKnowledgeBase: Sendable {
             EntryMeta(id: "feat_airgap_containment", topic: t, tags: ["airgap", "air-gap", "containment", "pf", "wifi", "radio", "failsafe", "boot-gate", "emergency", "pro"]),
             EntryMeta(id: "feat_port_anomaly_guard", topic: t, tags: ["port", "devserver", "0.0.0.0", "localhost", "redis", "mongodb", "ollama", "lmstudio", "ai", "llm", "lsof", "isolation", "pro", "default-on-pro"]),
             EntryMeta(id: "feat_active_vuln_scan", topic: t, tags: ["vulnerability", "redis", "memcached", "mongodb", "cors", "path-traversal", "open-redirect", "cve", "opt-in", "mcp", "127.0.0.1"]),
+            EntryMeta(id: "feat_nmap_nse", topic: t, tags: ["nmap", "nse", "vulnerability", "scripting-engine", "safe", "opt-in", "supplementary"]),
             EntryMeta(id: "feat_usb_keyboard_guard", topic: t, tags: ["badusb", "usb", "keyboard", "hid", "rubberducky", "omgcable", "flipper", "keystroke-timing", "seize", "pro", "injection"]),
             EntryMeta(id: "feat_usb_storage_guard", topic: t, tags: ["usb", "badusb", "diskarbitration", "clamav", "whitelist", "allowlist", "read-only", "pro", "storage"]),
             EntryMeta(id: "feat_bluetooth_guard", topic: t, tags: ["bluetooth", "blueutil", "ble", "blueborne", "pro", "homebrew", "lockdown"]),

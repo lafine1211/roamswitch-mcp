@@ -726,7 +726,27 @@ enum ActiveVulnScan {
         // tool call through `runScan`, so neither needs its own wiring.
         if NmapNSE.isEnabled {
             let allPorts = ports.map(\.port)
-            let nseFindings = NmapNSE.runNSESafeScripts(host: "127.0.0.1", ports: allPorts, timeoutSeconds: 120)
+            // A fixed 120s budget silently loses *every* finding, not just
+            // the unfinished tail, on an ordinary dev Mac: nmap's normal-
+            // format stdout is fully buffered until the whole invocation
+            // finishes (confirmed empirically — `Process.terminate()` at
+            // the deadline left only ~70 bytes captured, nowhere near a
+            // parseable per-port result, even though the same single port
+            // alone reliably produces real findings well within 120s).
+            // 13 real listening ports on this machine (nothing exotic, just
+            // the background services any active dev Mac accumulates) blew
+            // straight through a fixed 120s and returned zero findings with
+            // no indication anything was cut short — the exact "looks like
+            // 'checked, nothing found' but was actually 'never finished
+            // checking'" failure mode this product's own probes elsewhere
+            // (see `runScan`'s `inconclusive` tracking, prompted by
+            // https://dev.to/raknaos/my-wait-for-it-wrapper-reported-success-for-a-port-that-never-opened-ga3)
+            // exist specifically to avoid. Scaling with port count keeps a
+            // single/few-port run fast while giving a many-port run enough
+            // wall-clock time to actually finish; capped so a pathological
+            // port list still can't block the audit indefinitely.
+            let nseTimeout = min(300, 30 + 15 * Double(allPorts.count))
+            let nseFindings = NmapNSE.runNSESafeScripts(host: "127.0.0.1", ports: allPorts, timeoutSeconds: nseTimeout)
             for finding in nseFindings {
                 let processName = ports.first { $0.port == finding.port }?.processName ?? ""
                 result.findings.append(Finding(

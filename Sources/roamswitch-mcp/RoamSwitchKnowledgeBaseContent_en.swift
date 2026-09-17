@@ -158,6 +158,18 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "Enable it only when you want to confirm whether Redis, Docker, a local LLM, or similar running on your own Mac is really reachable without authentication."
             ),
             LocalizedEntry(
+                id: "feat_nmap_nse",
+                title: "nmap NSE Supplementary Scan (extra layer for Active Vulnerability Verification) — off by default",
+                summary: "When Active Vulnerability Verification is also enabled, runs the system's installed nmap's \"safe\"-category NSE scripts against exposed ports to add protocol coverage this product's own probes don't have (SSH host keys, SMTP banners, etc.). The result is nmap's own judgment, not independently re-verified by this product.",
+                details: """
+                • Enable: turn on "Active Vulnerability Verification (Active Reachability Check)" first, then additionally turn on "🔎 nmap NSE Supplementary Scan". A two-stage opt-in, independent from the existing setting. nmap is never installed automatically — this only takes effect if it's already installed on the system (e.g. via Homebrew); a no-op otherwise.
+                • Script selection: `safe and not broadcast and not external`. Plain `safe` alone isn't enough — `broadcast` scripts query the whole LAN via multicast/broadcast, not just the target host, and `external` scripts (e.g. `vulners.nse`) actually send the detected service/version to a third party such as vulners.com. Both contradict this product's own design principle of touching only 127.0.0.1 and never any other host or external server, so they're excluded.
+                • Timeout: 15 seconds per script (`--script-timeout 15s`). Some `safe` scripts can run indefinitely against non-standard HTTP APIs, starving results from other ports without this cap.
+                • Scope: the same already-confirmed-open ports as Active Vulnerability Verification itself.
+                """,
+                recommendation: "Treat nmap's findings as reference information — review the content and act on it only if it's actually relevant."
+            ),
+            LocalizedEntry(
                 id: "feat_usb_keyboard_guard",
                 title: "Unauthorized USB / BadUSB Physical Port Guard (Keyboard Approval & Keystroke Timing Analysis) (Pro)",
                 summary: "When an unknown USB keyboard or a modified cable (Rubber Ducky, O.MG Cable, Flipper Zero, and similar) is connected, that device's keystrokes are blocked until you approve it, preventing automated command injection. It also analyzes keystroke intervals and warns when they look scripted.",

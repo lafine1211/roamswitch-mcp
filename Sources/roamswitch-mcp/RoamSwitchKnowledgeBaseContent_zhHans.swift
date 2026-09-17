@@ -159,6 +159,18 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "仅在您想确认自己 Mac 上运行的 Redis、Docker、本地 LLM 等是否确实处于无认证即可访问的状态时启用。"
             ),
             LocalizedEntry(
+                id: "feat_nmap_nse",
+                title: "nmap NSE 补充扫描（实证型漏洞验证的附加层） — 默认关闭",
+                summary: "仅在「实证型漏洞验证」同时启用时，使用系统已安装的 nmap 对暴露端口额外运行「safe」类别的 NSE 脚本，以补充本产品自身探测所不具备的协议覆盖范围（SSH 主机密钥、SMTP 响应等）。结果是 nmap 自身的判定，本产品不做独立验证。",
+                details: """
+                • 启用方式：先开启「实证型漏洞验证（能动可达性验证）」，再额外开启「🔎 nmap NSE 补充扫描」。这是与现有设置相互独立的两阶段选择启用。nmap 不会被自动安装——仅当系统中已安装（例如通过 Homebrew）时才会生效，否则不执行任何操作。
+                • 脚本选择：`safe and not broadcast and not external`。仅靠「safe」类别本身并不足够——`broadcast` 类脚本会以多播/广播方式查询整个局域网，而不仅是目标主机；`external` 类脚本（如 `vulners.nse`）会将检测到的服务/版本实际发送给 vulners.com 等第三方。两者都违背了本产品「仅访问 127.0.0.1、绝不接触任何其他主机或外部服务器」的设计原则，因此被排除。
+                • 超时：每个脚本 15 秒（`--script-timeout 15s`）。部分「safe」脚本针对非标准 HTTP API 可能无限期运行，若无此限制会导致其他端口的结果丢失。
+                • 范围：与实证型漏洞验证自身相同的、已确认开放的端口。
+                """,
+                recommendation: "请将 nmap 的发现仅作为参考信息，核实内容后如确实相关再采取行动。"
+            ),
+            LocalizedEntry(
                 id: "feat_usb_keyboard_guard",
                 title: "非法 USB / BadUSB 物理端口防护（键盘批准 & 按键时序分析） (Pro)",
                 summary: "当连接未知的 USB 键盘或改装 USB 线缆（Rubber Ducky / O.MG Cable / Flipper Zero 等）时，在批准之前拦截该设备的按键输入，防止自动命令注入。此外还会根据按键间隔分析自动脚本的迹象并发出警告。",

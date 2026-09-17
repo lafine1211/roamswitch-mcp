@@ -159,6 +159,18 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "본인 Mac에서 실행 중인 Redis, Docker, 로컬 LLM 등이 정말로 인증 없이 도달 가능한지 확인하고 싶을 때만 켜세요."
             ),
             LocalizedEntry(
+                id: "feat_nmap_nse",
+                title: "nmap NSE 보완 스캔(실증형 취약점 검증의 추가 레이어) — 기본값 꺼짐",
+                summary: "「실증형 취약점 검증」도 활성화된 경우에만, 시스템에 설치된 nmap을 사용해 노출된 포트에 대해 \"safe\" 범주의 NSE 스크립트를 추가로 실행하여 본 제품 자체의 프로브가 갖추지 못한 프로토콜 범위(SSH 호스트 키, SMTP 배너 등)를 보완합니다. 결과는 nmap 자체의 판단이며 본 제품이 독립적으로 재검증하지 않습니다.",
+                details: """
+                • 활성화: 먼저 「실증형 취약점 검증(능동적 도달 확인)」을 켠 다음, 추가로 「🔎 nmap NSE 보완 스캔」을 켭니다. 기존 설정과 독립된 2단계 옵트인입니다. nmap은 자동으로 설치되지 않으며, 시스템에 이미 설치되어 있는 경우(예: Homebrew)에만 작동하고, 그렇지 않으면 아무 작업도 하지 않습니다.
+                • 스크립트 선택: `safe and not broadcast and not external`. 단순한 "safe" 범주만으로는 충분하지 않습니다 — `broadcast` 스크립트는 대상 호스트뿐 아니라 LAN 전체에 멀티캐스트/브로드캐스트로 질의하며, `external` 스크립트(예: `vulners.nse`)는 감지한 서비스/버전을 실제로 vulners.com 같은 제3자에게 전송합니다. 둘 다 127.0.0.1에만 접근하고 다른 호스트나 외부 서버에는 일절 접근하지 않는다는 본 제품의 설계 원칙에 반하므로 제외됩니다.
+                • 시간 제한: 스크립트당 15초(`--script-timeout 15s`). 일부 "safe" 스크립트가 비표준 HTTP API에 대해 무한정 실행되어 이 제한이 없으면 다른 포트의 결과까지 손실될 수 있습니다.
+                • 범위: 실증형 취약점 검증 자체가 사용하는 것과 동일한, 이미 열려 있음이 확인된 포트만 대상으로 합니다.
+                """,
+                recommendation: "nmap의 소견은 어디까지나 참고 정보로 취급하고, 내용을 확인한 후 해당되는 경우에만 대응하세요."
+            ),
+            LocalizedEntry(
                 id: "feat_usb_keyboard_guard",
                 title: "무단 USB / BadUSB 물리 포트 가드 (키보드 승인 & 키 입력 타이밍 분석) (Pro)",
                 summary: "알 수 없는 USB 키보드나 개조된 케이블(Rubber Ducky, O.MG Cable, Flipper Zero 등)이 연결되면 승인할 때까지 해당 기기의 키 입력을 차단하여 자동화된 명령어 주입을 막습니다. 또한 키 입력 간격을 분석하여 스크립트처럼 보이면 경고합니다.",

@@ -159,6 +159,18 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "Activez cette fonction uniquement lorsque vous souhaitez vérifier si Redis, Docker, un LLM local ou similaire fonctionnant sur votre propre Mac est réellement accessible sans authentification."
             ),
             LocalizedEntry(
+                id: "feat_nmap_nse",
+                title: "Analyse complémentaire nmap NSE (couche supplémentaire pour la vérification active des vulnérabilités) — désactivée par défaut",
+                summary: "Lorsque la vérification active des vulnérabilités est également activée, exécute les scripts NSE de la catégorie « safe » du nmap installé sur le système contre les ports exposés afin d'ajouter une couverture de protocoles que les propres sondes de ce produit n'ont pas (clés d'hôte SSH, bannières SMTP, etc.). Le résultat est le propre jugement de nmap, non revérifié indépendamment par ce produit.",
+                details: """
+                • Activation : activez d'abord « Vérification active des vulnérabilités (vérification active de l'accessibilité) », puis activez en plus « 🔎 Analyse complémentaire nmap NSE ». Un opt-in en deux étapes, indépendant du réglage existant. nmap n'est jamais installé automatiquement — cela ne prend effet que s'il est déjà installé sur le système (par ex. via Homebrew) ; sinon, rien ne se passe.
+                • Sélection des scripts : `safe and not broadcast and not external`. La seule catégorie « safe » ne suffit pas — les scripts `broadcast` interrogent tout le réseau local via multidiffusion/diffusion, pas seulement l'hôte cible, et les scripts `external` (par ex. `vulners.nse`) envoient réellement le service/la version détectés à un tiers tel que vulners.com. Les deux contredisent le principe de conception de ce produit consistant à ne toucher que 127.0.0.1 et jamais aucun autre hôte ni serveur externe, d'où leur exclusion.
+                • Délai d'expiration : 15 secondes par script (`--script-timeout 15s`). Certains scripts « safe » peuvent s'exécuter indéfiniment contre des API HTTP non standard, privant les autres ports de résultats sans cette limite.
+                • Portée : les mêmes ports déjà confirmés ouverts que ceux utilisés par la vérification active des vulnérabilités elle-même.
+                """,
+                recommendation: "Considérez les constats de nmap comme des informations de référence : examinez leur contenu et n'agissez que s'ils sont réellement pertinents."
+            ),
+            LocalizedEntry(
                 id: "feat_usb_keyboard_guard",
                 title: "Protection physique du port contre USB non autorisé / BadUSB (Approbation du clavier & analyse du rythme de frappe) (Pro)",
                 summary: "Lorsqu'un clavier USB inconnu ou un câble modifié (Rubber Ducky, O.MG Cable, Flipper Zero et similaires) est branché, les frappes de cet appareil sont bloquées jusqu'à ce que vous l'approuviez, empêchant l'injection automatisée de commandes. Analyse aussi les intervalles de frappe et avertit lorsqu'ils semblent scriptés.",
