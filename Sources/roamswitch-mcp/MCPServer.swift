@@ -204,7 +204,7 @@ enum MCPServer {
             case "get_notification_history":
                 return [result(id: id, callGetNotificationHistory())]
             case "get_port_anomaly_incidents":
-                return [result(id: id, callGetPortAnomalyIncidents())]
+                return [result(id: id, callGetPortAnomalyIncidents(defaults: sharedDefaults))]
             case "get_runtime_threat_status":
                 return [result(id: id, callGetRuntimeThreatStatus())]
             case "get_incident_timeline":
@@ -621,9 +621,13 @@ enum MCPServer {
     /// only. `PortAnomalyGuard` is Pro-only, but the read itself doesn't
     /// gate on license status — an unlicensed install simply has an empty,
     /// disabled history, same as any other guard's status tool.
-    private static func callGetPortAnomalyIncidents() -> [String: Any] {
-        let status = PortAnomalyStatusReader.currentStatus(defaults: sharedDefaults)
-        let incidents = PortAnomalyStatusReader.persistedIncidents(defaults: sharedDefaults)
+    /// `defaults` defaults to the real shared suite in production; the
+    /// fire-drill regression test in `MCPPortAnomalyDrillTests` overrides it
+    /// with a scratch `UserDefaults(suiteName:)` so the test never touches
+    /// the app's real preferences.
+    static func callGetPortAnomalyIncidents(defaults: UserDefaults = sharedDefaults) -> [String: Any] {
+        let status = PortAnomalyStatusReader.currentStatus(defaults: defaults)
+        let incidents = PortAnomalyStatusReader.persistedIncidents(defaults: defaults)
         let iso = ISO8601DateFormatter()
         let payload = MCPPortAnomalyIncidentsPayload(
             incidentsNote: "Timestamped log of past auto-block decisions, newest first, capped at 50. This is the only field in this response that represents a timeline of events.",
