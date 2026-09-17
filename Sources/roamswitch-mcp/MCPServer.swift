@@ -626,8 +626,10 @@ enum MCPServer {
         let incidents = PortAnomalyStatusReader.persistedIncidents(defaults: sharedDefaults)
         let iso = ISO8601DateFormatter()
         let payload = MCPPortAnomalyIncidentsPayload(
+            incidentsNote: "Timestamped log of past auto-block decisions, newest first, capped at 50. This is the only field in this response that represents a timeline of events.",
             isEnabled: status.isEnabled,
             baselineCaptured: status.baselineCaptured,
+            currentPortStateNote: "autoIsolatedPorts is a live snapshot of what's blocked right now, NOT a timeline. A port can sit here indefinitely from a block made long ago; its presence is not evidence of a recent or ongoing event, and it must not be attributed to any entry in incidents without a matching timestamp.",
             autoIsolatedPorts: status.autoIsolatedPorts,
             incidents: incidents.map {
                 MCPPortAnomalyIncidentPayload(
@@ -858,7 +860,7 @@ enum MCPServer {
         ],
         [
             "name": "get_port_anomaly_incidents",
-            "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only local UserDefaults state. Returns whether the Port Anomaly Guard (Pro) is enabled, whether it has captured its baseline of known listening executables yet, which ports are currently auto-isolated from the LAN, and up to the 50 most recent detected incidents (each with timestamp, port, process name, PID, and executable path) — i.e. previously-unseen executables that suddenly started listening on an externally-exposed port and were auto-blocked. Use this to answer 'what triggered a port auto-block' or to triage a possible backdoor/C2 listener, including during an Air-Gap network cutoff.",
+            "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only local UserDefaults state. Returns whether the Port Anomaly Guard (Pro) is enabled, whether it has captured its baseline of known listening executables yet, which ports are currently auto-isolated from the LAN, and up to the 50 most recent detected incidents (each with timestamp, port, process name, PID, and executable path) — i.e. previously-unseen executables that suddenly started listening on an externally-exposed port and were auto-blocked. Use this to answer 'what triggered a port auto-block' or to triage a possible backdoor/C2 listener, including during an Air-Gap network cutoff. `incidents` is the only timestamped timeline in this response; `autoIsolatedPorts` is a present-tense snapshot of what's blocked right now and is NOT a log of recent events — a port can have been isolated at any point in the past, so do not attribute a port in it to a specific incident unless a timestamp in `incidents` actually corroborates it.",
             "inputSchema": ["type": "object", "properties": [String: Any]()],
         ],
         [

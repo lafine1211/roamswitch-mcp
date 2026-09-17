@@ -256,9 +256,19 @@ public struct MCPPortAnomalyIncidentPayload: Codable, Equatable {
     public let executablePath: String?
 }
 
+/// `autoIsolatedPorts` is a present-tense snapshot with no timestamps;
+/// nothing used to distinguish it from the timestamped `incidents` list
+/// once both landed in the same object, which is exactly what let a local
+/// LLM fold a long-isolated, unrelated port into a live incident's
+/// narrative during a fire drill (same bug, same fix, as the Linux
+/// edition). The two `*Note` fields are additive rather than a
+/// restructuring — the existing flat fields are kept as-is so this stays
+/// source-compatible with anything already decoding this type.
 public struct MCPPortAnomalyIncidentsPayload: Codable, Equatable {
+    public let incidentsNote: String
     public let isEnabled: Bool
     public let baselineCaptured: Bool
+    public let currentPortStateNote: String
     public let autoIsolatedPorts: [Int]
     public let incidents: [MCPPortAnomalyIncidentPayload]
 }
