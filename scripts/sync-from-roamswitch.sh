@@ -31,7 +31,7 @@ EOF
 # in-app test suite can reach it) — only `main.swift` is MCPServer-target-only.
 CORE=(AppLanguage TrustedNetwork GatewayFingerprint WiFiSecurityMonitor \
       ARPSpoofMonitor ListeningPortMonitor PortSecurityAuditor ServiceSignatures \
-      ActiveVulnScan ActiveVulnCveMapData SecurityHealthChecker \
+      ActiveVulnScan NmapNSE ActiveVulnCveMapData SecurityHealthChecker \
       LinkSafetyAuditor RoamSwitchKnowledgeBase \
       RoamSwitchKnowledgeBaseContent_ja RoamSwitchKnowledgeBaseContent_en \
       RoamSwitchKnowledgeBaseContent_zhHans RoamSwitchKnowledgeBaseContent_zhHant \

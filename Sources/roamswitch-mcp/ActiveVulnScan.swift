@@ -712,6 +712,33 @@ enum ActiveVulnScan {
             )
         }
 
+        // Phase 4: nmap NSE supplementary layer — opt-in via a second,
+        // independent flag (`NmapNSE.isEnabled`) on top of this function's
+        // own `isEnabled` gate, so an existing install never gets this just
+        // because `nmap` happens to already be present. Targets *every*
+        // port passed in, not just the ones a Phase 2/3 signature matched:
+        // NSE's whole value is covering services this product's hand-
+        // rolled probes above don't — nmap picks which of its scripts apply
+        // per port from its own service detection (see `NmapNSE`'s doc
+        // comment). A no-op (empty result, never an error) if `nmap` isn't
+        // installed. Single shared call site — both the manual "Run Active
+        // Verification" button and `MCPServer`'s `run_active_vuln_scan`
+        // tool call through `runScan`, so neither needs its own wiring.
+        if NmapNSE.isEnabled {
+            let allPorts = ports.map(\.port)
+            let nseFindings = NmapNSE.runNSESafeScripts(host: "127.0.0.1", ports: allPorts, timeoutSeconds: 120)
+            for finding in nseFindings {
+                let processName = ports.first { $0.port == finding.port }?.processName ?? ""
+                result.findings.append(Finding(
+                    port: finding.port,
+                    processName: processName,
+                    title: "\(loc("nmap NSE所見")): \(finding.script)",
+                    description: finding.output,
+                    recommendation: loc("これはnmap自身の検知結果です（RoamSwitch独自の検証は行っていません）。内容を確認し、該当する場合は対応してください。")
+                ))
+            }
+        }
+
         appendProbeLog(logEntries, to: probeLogURL)
         return result
     }

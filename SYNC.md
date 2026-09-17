@@ -28,6 +28,7 @@ All files live in `Sources/roamswitch-mcp/`.
 | `PortSecurityAuditor.swift` | `RoamSwitch/PortSecurityAuditor.swift` |
 | `ServiceSignatures.swift` | `RoamSwitch/ServiceSignatures.swift` |
 | `ActiveVulnScan.swift` | `RoamSwitch/ActiveVulnScan.swift` |
+| `NmapNSE.swift` | `RoamSwitch/NmapNSE.swift` |
 | `ActiveVulnCveMapData.swift` | `RoamSwitch/ActiveVulnCveMapData.swift` |
 | `SecurityHealthChecker.swift` | `RoamSwitch/SecurityHealthChecker.swift` |
 | `LinkSafetyAuditor.swift` | `RoamSwitch/LinkSafetyAuditor.swift` |
