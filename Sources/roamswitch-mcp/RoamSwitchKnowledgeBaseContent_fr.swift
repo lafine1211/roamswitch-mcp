@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.31 (build 88).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.32 (build 89).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -404,7 +404,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "Exécute toutes les heures en arrière-plan la détection d'anomalies de modèle de l'audit des journaux, apprenant en continu le comportement normal des journaux de ce Mac. Lorsqu'elle trouve de nouveaux motifs ou des pics de fréquence, elle vous avertit avec de vraies lignes de journal et une explication en langage clair.",
                 details: """
                 • Calendrier : toutes les heures, en analysant la dernière heure. La première analyse s'exécute environ 10 secondes après l'activation, mais comme elle inclut les propres journaux de démarrage de l'app, cette exécution ne fait qu'apprendre, sans notifier.
-                • Notification : le nombre d'anomalies (réparti en nouveaux motifs et pics), jusqu'à 3 vraies lignes de journal, une note sur la progression de l'apprentissage, et une explication pour les non-experts. Un nouveau motif devient « connu » une fois signalé et n'est plus jamais renotifié pour le même contenu ; un pic cesse d'alerter une fois que la référence propre à ce motif a été apprise.
+                • Notification : le nombre d'anomalies (réparti en nouveaux motifs et pics), jusqu'à 3 vraies lignes de journal, une note sur la progression de l'apprentissage, et une explication pour les non-experts. Un lot comportant un pic de fréquence affiche une alerte dans le Centre de notifications ; un lot composé uniquement de nouveaux motifs est enregistré dans l'historique des notifications sans afficher d'alerte. Un nouveau motif devient « connu » une fois enregistré et n'est plus jamais réenregistré pour le même contenu ; un pic cesse d'alerter une fois que la référence propre à ce motif a été apprise.
                 • Partagé avec l'audit manuel : utilise la même analyse et la même référence apprise que l'Audit des journaux de sécurité Mac manuel et l'outil MCP `audit_security_logs`.
                 • Par défaut : activé automatiquement lors de la première activation de Pro. Menu : Protection contre les malwares → « Audit automatique des journaux (apprend les nouveaux motifs et anomalies de fréquence selon un calendrier) (Pro) ».
                 """,
@@ -538,6 +538,31 @@ extension RoamSwitchKnowledgeBase {
                 • Pour l'ouvrir : onglet « 📦 Vérification CVE des paquets » → « Détection de typosquatting (Pro) », ciblant les mêmes dossiers de projet que l'onglet « Dépendances ». MCP : `run_typosquat_scan` (argument `watchedFolders`, Pro uniquement).
                 """,
                 recommendation: "Vérifiez à nouveau chaque dépendance marquée ⚠️ pour une véritable faute de frappe — soyez particulièrement attentif aux noms de paquets inconnus."
+            ),
+            LocalizedEntry(
+                id: "feat_port_scan_guard",
+                title: "Détection des scans de ports entrants (blocage automatique, Pro)",
+                summary: "Détecte une adresse IP source ayant contacté de nombreux ports différents (15 ou plus) en peu de temps (5 minutes) — la signature classique des outils de reconnaissance comme nmap/masscan — et vous en avertit. Une source de scan détectée est automatiquement bloquée pendant 10 minutes par défaut. Pro uniquement.",
+                details: """
+                • Fonctionnement : le helper privilégié surveille les journaux pf (filtre de paquets) via `tcpdump -i pflog0` et signale une adresse IP source qui atteint suffisamment de ports de destination distincts dans une courte fenêtre. La détection repose uniquement sur les journaux ; elle ne modifie ni n'inspecte jamais le contenu du trafic lui-même. Correspond à `port_scan_detect.rs` de l'édition Linux (nftables `log` + `journalctl`).
+                • Blocage automatique : une source de scan détectée est ajoutée à une règle pf et bloquée pendant 10 minutes par défaut via `PFRulesetCoordinator`. Le blocage automatique peut être activé/désactivé indépendamment de la fonction de détection elle-même.
+                • Notifications : une notification macOS est déclenchée à chaque détection (et blocage), également enregistrée dans la chronologie d'incidents unifiée.
+                • Pour l'ouvrir : barre de menus → « Surveillance des ports et appareils » → « 🔍 Détection des scans de ports entrants (Pro) ». L'activation comme la désactivation passent par une boîte de dialogue de confirmation. Désactivée par défaut.
+                """,
+                recommendation: "Il n'existe pas de liste blanche par IP, et un blocage se lève automatiquement au bout de 10 minutes. Si vous exécutez régulièrement un outil de scan légitime chez vous ou au travail (inventaire d'actifs, scan de vulnérabilités, etc.), envisagez de désactiver le blocage automatique (en conservant uniquement la détection/notification) pendant son exécution, afin d'éviter des blocages répétés dûs à de faux positifs."
+            ),
+            LocalizedEntry(
+                id: "feat_sensor_pairing",
+                title: "Appairage RoamSwitch Sensor (confiance mutuelle mDNS, Pro)",
+                summary: "Gère l'appairage de confiance mutuelle avec un produit distinct, « RoamSwitch Sensor » (un concentrateur d'audit actif dédié), sur le même réseau local. S'annonce via mDNS tout en découvrant des Sensors, mais la simple découverte n'établit aucune confiance — l'appairage nécessite une action explicite de l'opérateur (le même modèle que l'appairage Bluetooth). Pro uniquement.",
+                details: """
+                • Fonctionnement : génère et conserve de façon persistante sa propre paire de clés Ed25519, annonçant sa clé publique via mDNS (type de service `_roamswitch._tcp`) sous forme d'enregistrement TXT `role=endpoint`, tout en découvrant les annonces `role=sensor` du côté Sensor. Pour que le Sensor fasse confiance à cet appareil, sa propre fonction d'appairage doit recevoir séparément la clé publique de cet appareil — la découverte unilatérale seule n'établit jamais une confiance bidirectionnelle.
+                • Appairage manuel : certains points d'accès Wi-Fi relaient le multicast de façon asymétrique, ce qui peut rendre la découverte mutuelle par mDNS peu fiable ; l'appairage manuel — en saisissant directement la clé publique/l'adresse affichée par le Sensor — reste donc toujours disponible (l'appairage lui-même n'échoue pas simplement parce que mDNS ne fonctionne pas).
+                • Effet de l'activation : une fois activé, cet appareil annonce sa propre présence (nom d'hôte, clé publique) sur le réseau local via mDNS. Désactivé (par défaut), aucune annonce de ce type n'a lieu.
+                • Pour l'ouvrir : barre de menus → « Surveillance des ports et appareils » → « 🔍 Appairage RoamSwitch Sensor… ». Affiche la clé publique/l'adresse de cet appareil (avec un bouton de copie), les Sensors découverts (avec un bouton Appairer), les Sensors appairés (avec un bouton Désappairer) et un formulaire d'appairage manuel.
+                • Le protocole de transport (type de service, clés/valeurs de l'enregistrement TXT) correspond exactement à celui de l'édition Linux (`roamswitch-core::sensor_pairing`).
+                """,
+                recommendation: "N'appairez qu'après avoir confirmé qu'il s'agit bien d'un Sensor que vous avez vous-même installé. Si un Sensor inconnu est découvert, ne l'appairez pas — renseignez-vous plutôt auprès de l'administrateur du réseau."
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",

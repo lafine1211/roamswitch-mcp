@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.31 (build 88).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.32 (build 89).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -403,7 +403,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "Runs the log audit's template anomaly detection in the background every hour, continuously learning this Mac's normal log behavior. When it finds new patterns or frequency spikes, it notifies you with real log lines and a plain-language explanation.",
                 details: """
                 • Schedule: every hour, analyzing the last hour. The first scan runs about 10 seconds after enabling, but because it includes the app's own startup logs, that run only learns and never notifies.
-                • Notification: the anomaly count (split into new patterns and spikes), up to 3 real log lines, a learning-progress note, and an explanation for non-experts. A new pattern becomes "known" once reported and is never re-notified for the same content; a spike stops alerting once that pattern's own baseline has been learned.
+                • Notification: the anomaly count (split into new patterns and spikes), up to 3 real log lines, a learning-progress note, and an explanation for non-experts. A batch that includes a frequency spike shows a Notification Center alert; a batch of new patterns only is recorded to notification history without a popup. A new pattern becomes "known" once recorded and is never re-recorded for the same content; a spike stops alerting once that pattern's own baseline has been learned.
                 • Shared with manual audit: uses the same analysis and learned baseline as the manual Mac Security Log Audit and the MCP tool `audit_security_logs`.
                 • Default: turned on automatically the first time Pro is activated. Menu: Malware Protection → "Automatic Log Audit (learns new patterns & frequency anomalies on a schedule) (Pro)".
                 """,
@@ -537,6 +537,31 @@ extension RoamSwitchKnowledgeBase {
                 • How to open: "📦 Package CVE Scan" → "Typosquat Detection (Pro)" tab, targeting the same project folders as the "Dependencies" tab. MCP: `run_typosquat_scan` (`watchedFolders` argument, Pro only).
                 """,
                 recommendation: "Double-check any ⚠️-flagged dependency for an actual typo — pay particular attention to unfamiliar package names."
+            ),
+            LocalizedEntry(
+                id: "feat_port_scan_guard",
+                title: "Incoming Port Scan Detection (Auto-Block, Pro)",
+                summary: "Detects and notifies about a source IP that has connected to many different ports (15 or more) in a short time (5 minutes) — the classic signature of reconnaissance tools like nmap/masscan. A detected scan source is automatically blocked for 10 minutes by default. Pro only.",
+                details: """
+                • How it works: the privileged helper watches pf (packet filter) logs via `tcpdump -i pflog0` and flags a source IP that reaches enough distinct destination ports within a short window. Detection is based purely on log records; it never modifies or inspects the traffic content itself. Corresponds to the Linux edition's `port_scan_detect.rs` (nftables `log` + `journalctl`).
+                • Auto-block: a detected scan source is added to a pf rule and blocked for 10 minutes by default via `PFRulesetCoordinator`. Auto-block can be toggled independently of the detection feature itself.
+                • Notifications: a macOS notification fires on every detection (and block), and it's also recorded in the unified incident timeline.
+                • How to open: menu bar → “Ports & Devices Monitor” → “🔍 Incoming Port Scan Detection (Pro)”. Both enabling and disabling go through a confirmation dialog. Off by default.
+                """,
+                recommendation: "There is no per-IP allowlist, and a block clears automatically after 10 minutes. If you regularly run a legitimate scanning tool at home or work (asset inventory, vulnerability scanning, etc.), consider turning off auto-block (keeping detection/notification only) while it runs, to avoid repeated false-positive blocks."
+            ),
+            LocalizedEntry(
+                id: "feat_sensor_pairing",
+                title: "RoamSwitch Sensor Pairing (mDNS Mutual Trust, Pro)",
+                summary: "Manages mutual-trust pairing with a separate product, “RoamSwitch Sensor” (a dedicated active-audit hub), on the same LAN. Announces itself over mDNS while discovering Sensors, but discovery alone establishes no trust — pairing requires an explicit operator action (the same model as Bluetooth pairing). Pro only.",
+                details: """
+                • How it works: generates and persists this device's own Ed25519 key pair, advertising its public key over mDNS (service type `_roamswitch._tcp`) as a `role=endpoint` TXT record, while discovering `role=sensor` advertisements from the Sensor side. For the Sensor to trust this device, its own pairing feature must separately be told this device's public key — one-sided discovery alone never establishes two-way trust.
+                • Manual pairing: some Wi-Fi access points forward multicast asymmetrically, making mutual mDNS discovery unreliable, so manual pairing — entering the Sensor's displayed public key/address directly — is always available too (pairing itself never fails just because mDNS doesn't work).
+                • Effect of enabling: turning it on makes this device announce its own presence (hostname, public key) on the LAN over mDNS. Off (the default) means no such announcement occurs.
+                • How to open: menu bar → “Ports & Devices Monitor” → “🔍 RoamSwitch Sensor Pairing…”. Shows this device's own public key/address (with a copy button), discovered Sensors (with a Pair button), paired Sensors (with an Unpair button), and a manual-pairing form.
+                • The wire protocol (service type, TXT record keys/values) matches the Linux edition's (`roamswitch-core::sensor_pairing`) exactly.
+                """,
+                recommendation: "Only pair after confirming the Sensor is actually one you set up yourself. If an unfamiliar Sensor is discovered, don't pair with it — check with whoever administers the network instead."
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.31 (build 88).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.32 (build 89).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -116,7 +116,12 @@ enum ActiveVulnScan {
             .appendingPathComponent("active_vuln_scan_log.json")
     }
 
-    private static func loadProbeLog(at url: URL) -> [ProbeRunRecord] {
+    /// Not private: `NativeMenuBarManager`'s CSV-export menu action reads the
+    /// persisted log directly from outside this file. Was `private` while
+    /// this store had no consumer at all — see this file's own doc comment
+    /// above `ProbeRunRecord` ("deliberately NOT wired into any
+    /// reporting/API/UI yet"), now no longer true.
+    static func loadProbeLog(at url: URL = probeLogURL) -> [ProbeRunRecord] {
         guard let data = try? Data(contentsOf: url) else { return [] }
         return (try? JSONDecoder().decode([ProbeRunRecord].self, from: data)) ?? []
     }

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.31 (build 88).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.32 (build 89).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -404,7 +404,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "로그 감사의 템플릿 이상 탐지를 백그라운드에서 매시간 실행하여 이 Mac의 평소 로그 동작을 지속적으로 학습합니다. 새 패턴이나 빈도 급증을 발견하면 실제 로그 줄과 쉬운 언어 설명으로 알립니다.",
                 details: """
                 • 일정: 매시간 지난 한 시간을 분석합니다. 활성화 후 약 10초 뒤 첫 스캔이 실행되지만, 앱 자체의 시작 로그가 포함되어 있어 이 최초 실행은 학습만 하고 알리지 않습니다.
-                • 알림 내용: 이상 건수(신규 패턴과 급증으로 구분), 최대 3개의 실제 로그 줄, 학습 진행 상황, 비전문가를 위한 설명. 신규 패턴은 한 번 보고되면 "알려진" 상태가 되어 같은 내용으로 다시 알리지 않으며, 급증은 해당 패턴 자체의 기준선이 학습되면 더 이상 알리지 않습니다.
+                • 알림 내용: 이상 건수(신규 패턴과 급증으로 구분), 최대 3개의 실제 로그 줄, 학습 진행 상황, 비전문가를 위한 설명. 빈도 급증이 포함된 경우 알림 센터에 표시되지만, 신규 패턴만 있는 경우에는 팝업 없이 통지 기록에만 저장됩니다. 신규 패턴은 한 번 기록되면 "알려진" 상태가 되어 같은 내용으로 다시 기록되지 않으며, 급증은 해당 패턴 자체의 기준선이 학습되면 더 이상 알리지 않습니다.
                 • 수동 감사와 공유: 수동 Mac 보안 로그 감사 및 MCP 도구 `audit_security_logs`와 동일한 분석 및 학습된 기준선을 사용합니다.
                 • 기본값: Pro를 처음 활성화할 때 자동으로 켜집니다. 메뉴: 악성코드 보호 → "자동 로그 감사(정기적으로 새 패턴과 빈도 이상을 학습) (Pro)".
                 """,
@@ -538,6 +538,31 @@ extension RoamSwitchKnowledgeBase {
                 • 여는 방법: "📦 패키지 CVE 대조" → "오타스쿼팅 탐지 (Pro)" 탭에서 "의존성" 탭과 동일한 프로젝트 폴더를 대상으로 합니다. MCP: `run_typosquat_scan`(`watchedFolders` 인자, Pro 전용).
                 """,
                 recommendation: "⚠️가 표시된 의존성은 실제 오타인지 개별적으로 다시 확인하세요 — 낯선 패키지 이름은 특히 주의가 필요합니다."
+            ),
+            LocalizedEntry(
+                id: "feat_port_scan_guard",
+                title: "수신 포트 스캔 탐지 (자동 차단, Pro)",
+                summary: "짧은 시간(5분) 동안 여러 개의 서로 다른 포트(15개 이상)에 접속한 발신 IP를 탐지하여 알려줍니다(nmap/masscan 등 정찰 도구의 전형적인 특징). 탐지된 스캔 발신지는 기본적으로 10분간 자동으로 차단됩니다. Pro 전용.",
+                details: """
+                • 작동 방식: 권한을 가진 헬퍼가 `tcpdump -i pflog0`으로 pf(패쾛 필터) 로그를 감시하여, 짧은 시간 창 안에 충분히 많은 서로 다른 목적지 포트에 도달한 발신 IP를 탐지합니다. 판정은 로그 기록에만 기반하며 통신 내용 자체를 변경하거나 검사하지 않습니다. Linux 버전의 `port_scan_detect.rs`(nftables `log` + `journalctl`)에 해당합니다.
+                • 자동 차단: 탐지된 스캔 발신지는 `PFRulesetCoordinator`를 통해 pf 규칙에 추가되어 기본적으로 10분간 차단됩니다. 자동 차단은 탐지 기능 자체와 별도로 켜고 끈 수 있습니다.
+                • 알림: 탐지(및 차단)할 때마다 macOS 알림이 발송되며, 통합 인시던 타임라인에도 기록됩니다.
+                • 여는 방법: 메뉴 막대 → “포트 및 장치 모니터링” → “🔍 수신 포트 스캔 탐지 (Pro)”. 활성화와 비활성화 모두 확인 대화상자를 거칩니다. 기본값은 꺼짐입니다.
+                """,
+                recommendation: "IP별 허용 목록은 없으며, 차단은 10분 후 자동으로 해제됩니다. 집이나 회사에서 정당한 스캔 도구(자산 관리, 취약점 진단 등)를 정기적으로 실행한다면, 반복적인 오탐 차단을 피하기 위해 실행 중에는 자동 차단만 꺼두고 탐지(알림)만 켜두는 것을 고려하세요."
+            ),
+            LocalizedEntry(
+                id: "feat_sensor_pairing",
+                title: "RoamSwitch Sensor 페어링 (mDNS 상호 신뢰, Pro)",
+                summary: "동일 LAN에 있는 별도 제품인 “RoamSwitch Sensor”(전용 능동 감사 허브)와의 상호 신뢰 페어링을 관리합니다. mDNS로 자신을 알리면서 Sensor를 검색하지만, 검색만으로는 신뢰가 성립되지 않으며 운영자의 명시적인 페어링 작업이 필요합니다(Bluetooth 페어링과 동일한 방식). Pro 전용.",
+                details: """
+                • 작동 방식: 이 기기 자체의 Ed25519 키 쌍을 생성·영구 저장하고, 공개 키를 mDNS(서비스 유형 `_roamswitch._tcp`)의 `role=endpoint` TXT 레코드로 알리는 동시에 Sensor 측의 `role=sensor` 알림을 검색합니다. Sensor가 이 기기를 신뢰하려면 Sensor 자체의 페어링 기능에 이 기기의 공개 키를 별도로 알려줘야 합니다 — 일방적인 검색만으로는 양방향 신뢰가 성립되지 않습니다.
+                • 수동 페어링: 일부 Wi-Fi 액세스 포인트는 멀티캐스트를 비대칭적으로 전달하여 mDNS 상호 검색이 신뢰할 수 없을 수 있으므로, Sensor에 표시된 공개 키/주소를 직접 입력하는 수동 페어링도 항상 사용할 수 있습니다(mDNS가 작동하지 않는다고 페어링 자체가 실패하지는 않습니다).
+                • 활성화의 영향: 켜면 이 기기가 mDNS를 통해 자신의 존재(호스트 이름, 공개 키)를 LAN에 알리게 됩니다. 꺼지면(기본값) 이러한 알림이 발생하지 않습니다.
+                • 여는 방법: 메뉴 막대 → “포트 및 장치 모니터링” → “🔍 RoamSwitch Sensor 페어링…”. 이 기기 자체의 공개 키/주소 표시(복사 버튼 포함), 발견된 Sensor 목록(페어링 버튼), 페어링된 Sensor 목록(해제 버튼), 수동 페어링 양식을 제공합니다.
+                • 전송 프로토콜(서비스 유형, TXT 레코드 키/값)은 Linux 버전(`roamswitch-core::sensor_pairing`)과 완전히 동일합니다.
+                """,
+                recommendation: "실제로 본인이 직접 설치한 Sensor임을 확인한 후에만 페어링하세요. 낯선 Sensor가 발견되면 페어링하지 말고 네트워크 관리자에게 확인하는 것을 권장합니다."
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",

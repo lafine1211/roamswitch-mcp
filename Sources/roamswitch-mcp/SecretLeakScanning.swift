@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.31 (build 88).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.32 (build 89).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -109,7 +109,15 @@ public enum SecretLeakScanning {
         (#"\b(ghp_[a-zA-Z0-9]{36}|github_pat_[a-zA-Z0-9_]{40,})\b"#, .gitHub),
         (#"\bAKIA[0-9A-Z]{16}\b"#, .aws),
         (#"\bhf_[a-zA-Z0-9]{34}\b"#, .huggingFace),
-        (#"\bAIza[0-9A-Za-z\-_]{30,45}\b"#, .googleGemini),
+        // Two live Google key formats: the long-standing `AIzaSy...` format
+        // (Cloud/Maps/Firebase and older Gemini keys) and the newer
+        // `AQ.<token>` format issued by Google AI Studio — confirmed live
+        // (2026-09-16, ported from the Linux fix) that a real AI Studio key
+        // in this second format produced zero findings, since this pattern
+        // previously only matched the `AIza` prefix. Length is a wide, open
+        // bound (not an exact count) since only one real example was
+        // observed and its precise length wasn't confirmed.
+        (#"\b(AIza[0-9A-Za-z\-_]{30,45}|AQ\.[0-9A-Za-z\-_]{30,100})\b"#, .googleGemini),
         (#"-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----"#, .privateKey),
         (#"\bxox[baprs]-[0-9a-zA-Z\-]{10,}\b"#, .slack),
         (#"\b(?:sk|rk)_(?:live|test)_[0-9a-zA-Z]{24,}\b"#, .stripe),

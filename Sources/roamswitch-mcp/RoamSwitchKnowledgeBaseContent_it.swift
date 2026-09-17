@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.31 (build 88).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.32 (build 89).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -404,7 +404,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "Esegue ogni ora, in background, il rilevamento delle anomalie di modello dell'audit dei log, apprendendo continuamente il comportamento normale dei log di questo Mac. Quando trova nuovi pattern o picchi di frequenza, ti avvisa con righe di log reali e una spiegazione in linguaggio semplice.",
                 details: """
                 • Pianificazione: ogni ora, analizzando l'ultima ora. La prima scansione viene eseguita circa 10 secondi dopo l'attivazione, ma poiché include i log di avvio dell'app stessa, quell'esecuzione si limita ad apprendere senza mai notificare.
-                • Notifica: il conteggio delle anomalie (suddiviso in nuovi pattern e picchi), fino a 3 righe di log reali, una nota sul progresso dell'apprendimento, e una spiegazione per i non esperti. Un nuovo pattern diventa «noto» una volta segnalato e non viene più rinotificato per lo stesso contenuto; un picco smette di allertare non appena viene appresa la base di riferimento propria di quel pattern.
+                • Notifica: il conteggio delle anomalie (suddiviso in nuovi pattern e picchi), fino a 3 righe di log reali, una nota sul progresso dell'apprendimento, e una spiegazione per i non esperti. Un lotto che include un picco di frequenza mostra un avviso nel Centro Notifiche; un lotto composto solo da nuovi pattern viene registrato nella cronologia delle notifiche senza mostrare alcun avviso. Un nuovo pattern diventa «noto» una volta registrato e non viene più ri-registrato per lo stesso contenuto; un picco smette di allertare non appena viene appresa la base di riferimento propria di quel pattern.
                 • Condiviso con l'audit manuale: usa la stessa analisi e la stessa base di riferimento appresa dell'Audit registro di sicurezza Mac manuale e dello strumento MCP `audit_security_logs`.
                 • Predefinito: si attiva automaticamente alla prima attivazione di Pro. Menu: Protezione da malware → «Controllo automatico dei log (apprende nuovi pattern e anomalie di frequenza secondo una pianificazione) (Pro)».
                 """,
@@ -538,6 +538,31 @@ extension RoamSwitchKnowledgeBase {
                 • Come aprirlo: scheda «📦 Verifica CVE dei pacchetti» → «Rilevamento typosquatting (Pro)», rivolta alle stesse cartelle di progetto della scheda «Dipendenze». MCP: `run_typosquat_scan` (argomento `watchedFolders`, solo Pro).
                 """,
                 recommendation: "Ricontrolla ogni dipendenza contrassegnata con ⚠️ per un effettivo errore di battitura — presta particolare attenzione ai nomi di pacchetti sconosciuti."
+            ),
+            LocalizedEntry(
+                id: "feat_port_scan_guard",
+                title: "Rilevamento scansioni delle porte in entrata (blocco automatico, Pro)",
+                summary: "Rileva un IP di origine che ha contattato molte porte diverse (15 o più) in poco tempo (5 minuti) — la firma classica di strumenti di ricognizione come nmap/masscan — e invia una notifica. Una sorgente di scansione rilevata viene bloccata automaticamente per 10 minuti per impostazione predefinita. Solo Pro.",
+                details: """
+                • Come funziona: l'helper privilegiato monitora i log di pf (packet filter) tramite `tcpdump -i pflog0` e segnala un IP di origine che raggiunge un numero sufficiente di porte di destinazione diverse in una breve finestra temporale. Il rilevamento si basa esclusivamente sui log; non modifica né ispeziona mai il contenuto del traffico stesso. Corrisponde a `port_scan_detect.rs` dell'edizione Linux (nftables `log` + `journalctl`).
+                • Blocco automatico: una sorgente di scansione rilevata viene aggiunta a una regola pf e bloccata per 10 minuti per impostazione predefinita tramite `PFRulesetCoordinator`. Il blocco automatico può essere attivato/disattivato indipendentemente dalla funzione di rilevamento stessa.
+                • Notifiche: viene inviata una notifica macOS a ogni rilevamento (e blocco), registrata anche nella cronologia unificata degli incidenti.
+                • Come aprirlo: barra dei menu → «Monitoraggio porte e dispositivi» → «🔍 Rilevamento scansioni delle porte in entrata (Pro)». Sia l'attivazione che la disattivazione richiedono una conferma. Disattivato per impostazione predefinita.
+                """,
+                recommendation: "Non esiste una whitelist per IP e un blocco si annulla automaticamente dopo 10 minuti. Se esegui regolarmente uno strumento di scansione legittimo in casa o al lavoro (inventario risorse, scansione vulnerabilità, ecc.), valuta di disattivare il blocco automatico (mantenendo solo rilevamento/notifica) durante l'esecuzione, per evitare blocchi ripetuti per falsi positivi."
+            ),
+            LocalizedEntry(
+                id: "feat_sensor_pairing",
+                title: "Associazione RoamSwitch Sensor (fiducia reciproca mDNS, Pro)",
+                summary: "Gestisce l'associazione di fiducia reciproca con un prodotto separato, «RoamSwitch Sensor» (un hub di controllo attivo dedicato), sulla stessa LAN. Si annuncia tramite mDNS mentre individua i Sensor, ma il solo rilevamento non stabilisce alcuna fiducia — l'associazione richiede un'azione esplicita dell'operatore (lo stesso modello dell'associazione Bluetooth). Solo Pro.",
+                details: """
+                • Come funziona: genera e conserva in modo persistente la propria coppia di chiavi Ed25519 di questo dispositivo, annunciando la propria chiave pubblica tramite mDNS (tipo di servizio `_roamswitch._tcp`) come record TXT `role=endpoint`, mentre individua gli annunci `role=sensor` provenienti dal Sensor. Perché il Sensor si fidi di questo dispositivo, la sua funzione di associazione deve ricevere separatamente la chiave pubblica di questo dispositivo — il solo rilevamento unilaterale non stabilisce mai una fiducia reciproca.
+                • Associazione manuale: alcuni access point Wi-Fi inoltrano il multicast in modo asimmetrico, rendendo talvolta inaffidabile il rilevamento reciproco mDNS; per questo è sempre disponibile anche l'associazione manuale, inserendo direttamente la chiave pubblica/indirizzo mostrati dal Sensor (l'associazione in sé non fallisce solo perché mDNS non funziona).
+                • Effetto dell'attivazione: attivandola, questo dispositivo annuncia la propria presenza (nome host, chiave pubblica) sulla LAN tramite mDNS. Disattivata (l'impostazione predefinita) significa che questo annuncio non avviene.
+                • Come aprirlo: barra dei menu → «Monitoraggio porte e dispositivi» → «🔍 Associazione RoamSwitch Sensor…». Mostra la chiave pubblica/indirizzo di questo dispositivo (con pulsante di copia), i Sensor individuati (con pulsante Associa), i Sensor associati (con pulsante Disassocia) e un modulo di associazione manuale.
+                • Il protocollo di trasporto (tipo di servizio, chiavi/valori del record TXT) corrisponde esattamente a quello dell'edizione Linux (`roamswitch-core::sensor_pairing`).
+                """,
+                recommendation: "Associa solo dopo aver confermato che si tratta effettivamente di un Sensor configurato da te. Se viene individuato un Sensor sconosciuto, non associarlo — verifica invece con chi amministra la rete."
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",

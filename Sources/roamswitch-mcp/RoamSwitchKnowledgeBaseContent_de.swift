@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.31 (build 88).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.32 (build 89).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -404,7 +404,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "Führt die Vorlagen-Anomalie-Erkennung des Protokoll-Audits stündlich im Hintergrund aus und lernt so kontinuierlich das normale Protokollverhalten dieses Mac. Findet sie neue Muster oder Häufigkeitsspitzen, benachrichtigt sie mit echten Protokollzeilen und einer verständlichen Erklärung.",
                 details: """
                 • Zeitplan: Stündlich, analysiert die letzte Stunde. Der erste Lauf erfolgt etwa 10 Sekunden nach der Aktivierung; da er die eigenen Startprotokolle der App enthält, lernt dieser Lauf nur, ohne zu benachrichtigen.
-                • Benachrichtigung: Anzahl der Anomalien (aufgeteilt in neue Muster und Spitzen), bis zu 3 echte Protokollzeilen, ein Hinweis zum Lernfortschritt sowie eine Erklärung für Laien. Ein neues Muster gilt nach der Meldung als „bekannt“ und wird für denselben Inhalt nie erneut gemeldet; eine Spitze wird nicht mehr gemeldet, sobald die eigene Basislinie dieses Musters gelernt wurde.
+                • Benachrichtigung: Anzahl der Anomalien (aufgeteilt in neue Muster und Spitzen), bis zu 3 echte Protokollzeilen, ein Hinweis zum Lernfortschritt sowie eine Erklärung für Laien. Enthält eine Charge eine Häufigkeitsspitze, erscheint eine Meldung im Mitteilungszentrum; besteht sie nur aus neuen Mustern, wird sie ohne Pop-up nur im Benachrichtigungsverlauf festgehalten. Ein neues Muster gilt nach der Erfassung als „bekannt“ und wird für denselben Inhalt nie erneut erfasst; eine Spitze wird nicht mehr gemeldet, sobald die eigene Basislinie dieses Musters gelernt wurde.
                 • Geteilt mit manuellem Audit: Nutzt dieselbe Analyse und gelernte Basislinie wie das manuelle Mac-Sicherheitsprotokoll-Audit und das MCP-Tool `audit_security_logs`.
                 • Standard: Wird bei erstmaliger Aktivierung von Pro automatisch eingeschaltet. Menü: Malware-Schutz → „Automatische Protokollprüfung (lernt neue Muster & Häufigkeitsanomalien nach Zeitplan) (Pro)“.
                 """,
@@ -538,6 +538,31 @@ extension RoamSwitchKnowledgeBase {
                 • Öffnen: Tab „📦 Paket-CVE-Abgleich“ → „Typosquatting-Erkennung (Pro)“, bezogen auf dieselben Projektordner wie der Tab „Abhängigkeiten“. MCP: `run_typosquat_scan` (Argument `watchedFolders`, nur Pro).
                 """,
                 recommendation: "Prüfen Sie jede mit ⚠️ markierte Abhängigkeit noch einmal auf einen tatsächlichen Tippfehler — achten Sie besonders auf unbekannte Paketnamen."
+            ),
+            LocalizedEntry(
+                id: "feat_port_scan_guard",
+                title: "Erkennung eingehender Portscans (Auto-Blockierung, Pro)",
+                summary: "Erkennt eine Quell-IP, die innerhalb kurzer Zeit (5 Minuten) viele verschiedene Ports (15 oder mehr) angesprochen hat — die klassische Signatur von Aufklärungswerkzeugen wie nmap/masscan — und benachrichtigt darüber. Eine erkannte Scan-Quelle wird standardmäßig 10 Minuten lang automatisch blockiert. Nur Pro.",
+                details: """
+                • Funktionsweise: Der privilegierte Helper überwacht die pf-(Paketfilter-)Protokolle über `tcpdump -i pflog0` und markiert eine Quell-IP, die innerhalb eines kurzen Zeitfensters genügend unterschiedliche Zielports erreicht. Die Erkennung basiert ausschließlich auf Protokolleinträgen; der Datenverkehr selbst wird dabei weder verändert noch inspiziert. Entspricht `port_scan_detect.rs` der Linux-Edition (nftables `log` + `journalctl`).
+                • Automatische Blockierung: Eine erkannte Scan-Quelle wird standardmäßig 10 Minuten lang über `PFRulesetCoordinator` per pf-Regel blockiert. Die automatische Blockierung lässt sich unabhängig von der Erkennungsfunktion selbst umschalten.
+                • Benachrichtigungen: Bei jeder Erkennung (und Blockierung) wird eine macOS-Benachrichtigung ausgelöst und zusätzlich in der einheitlichen Vorfall-Zeitleiste festgehalten.
+                • Öffnen: Menüleiste → „Port- & Geräteüberwachung“ → „🔍 Erkennung eingehender Portscans (Pro)“. Sowohl das Aktivieren als auch das Deaktivieren erfordert eine Bestätigung. Standardmäßig deaktiviert.
+                """,
+                recommendation: "Es gibt keine IP-bezogene Positivliste, und eine Blockierung wird nach 10 Minuten automatisch aufgehoben. Wenn Sie zu Hause oder im Unternehmen regelmäßig ein legitimes Scan-Tool (Bestandsaufnahme, Schwachstellenscan usw.) einsetzen, sollten Sie währenddessen die automatische Blockierung deaktivieren (nur Erkennung/Benachrichtigung beibehalten), um wiederholte Fehlalarm-Blockierungen zu vermeiden."
+            ),
+            LocalizedEntry(
+                id: "feat_sensor_pairing",
+                title: "RoamSwitch Sensor-Kopplung (mDNS-Gegenseitiges Vertrauen, Pro)",
+                summary: "Verwaltet die gegenseitige Vertrauenskopplung mit einem separaten Produkt, „RoamSwitch Sensor“ (ein dedizierter aktiver Prüf-Hub), im selben LAN. Gibt sich per mDNS bekannt, während es nach Sensoren sucht, aber die reine Erkennung stellt noch kein Vertrauen her — die Kopplung erfordert eine explizite Aktion des Bedieners (dasselbe Modell wie bei der Bluetooth-Kopplung). Nur Pro.",
+                details: """
+                • Funktionsweise: Erzeugt und speichert ein eigenes Ed25519-Schlüsselpaar dieses Geräts dauerhaft und gibt seinen öffentlichen Schlüssel per mDNS (Diensttyp `_roamswitch._tcp`) als `role=endpoint`-TXT-Eintrag bekannt, während es gleichzeitig nach `role=sensor`-Ankündigungen der Sensor-Seite sucht. Damit der Sensor diesem Gerät vertraut, muss dessen eigene Kopplungsfunktion separat über den öffentlichen Schlüssel dieses Geräts informiert werden — eine einseitige Erkennung allein stellt niemals gegenseitiges Vertrauen her.
+                • Manuelle Kopplung: Manche WLAN-Zugangspunkte leiten Multicast asymmetrisch weiter, wodurch die gegenseitige mDNS-Erkennung unzuverlässig werden kann; daher steht immer auch eine manuelle Kopplung zur Verfügung — durch direkte Eingabe des vom Sensor angezeigten öffentlichen Schlüssels/der Adresse (die Kopplung selbst schlägt nicht allein deshalb fehl, weil mDNS nicht funktioniert).
+                • Auswirkung der Aktivierung: Beim Einschalten gibt dieses Gerät seine eigene Anwesenheit (Hostname, öffentlicher Schlüssel) per mDNS im LAN bekannt. Im Zustand „Aus“ (Standard) erfolgt keine solche Ankündigung.
+                • Öffnen: Menüleiste → „Port- & Geräteüberwachung“ → „🔍 RoamSwitch Sensor-Kopplung …“. Zeigt den eigenen öffentlichen Schlüssel/die Adresse dieses Geräts (mit Kopieren-Schaltfläche), gefundene Sensoren (mit Koppeln-Schaltfläche), gekoppelte Sensoren (mit Entkoppeln-Schaltfläche) und ein Formular für die manuelle Kopplung.
+                • Das Übertragungsprotokoll (Diensttyp, TXT-Eintrag-Schlüssel/-Werte) stimmt exakt mit dem der Linux-Edition (`roamswitch-core::sensor_pairing`) überein.
+                """,
+                recommendation: "Koppeln Sie erst, nachdem Sie bestätigt haben, dass es sich tatsächlich um einen von Ihnen selbst eingerichteten Sensor handelt. Wird ein unbekannter Sensor gefunden, koppeln Sie sich nicht damit — fragen Sie stattdessen bei der zuständigen Netzwerkverwaltung nach."
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",

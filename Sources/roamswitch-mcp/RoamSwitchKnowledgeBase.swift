@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.31 (build 88).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.32 (build 89).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -442,6 +442,8 @@ public struct RoamSwitchKnowledgeBase: Sendable {
             EntryMeta(id: "feat_npm_audit_signatures", topic: t, tags: ["npm", "audit", "signatures", "provenance", "registry", "npmjs.com", "opt-in", "network", "mcp", "pro"]),
             EntryMeta(id: "feat_npm_sandboxed_install", topic: t, tags: ["npm", "pnpm", "sandbox-exec", "seatbelt", "install", "lifecycle-script", "postinstall", "network-outbound", "supply-chain", "cli", "pro"]),
             EntryMeta(id: "feat_typosquat_guard", topic: t, tags: ["npm", "pnpm", "typosquatting", "package.json", "levenshtein", "supply-chain", "mcp", "pro"]),
+            EntryMeta(id: "feat_sensor_pairing", topic: t, tags: ["sensor", "mdns", "bonjour", "pairing", "ed25519", "lan", "trust", "pro"]),
+            EntryMeta(id: "feat_port_scan_guard", topic: t, tags: ["port-scan", "reconnaissance", "nmap", "masscan", "pf", "auto-block", "pro"]),
             EntryMeta(id: "feat_security_health_checker", topic: t, tags: ["audit", "score", "filevault", "sip", "gatekeeper", "firewall", "xprotect", "ssh", "sudo", "accessory", "18-items", "free"]),
             EntryMeta(id: "feat_autonomous_sentinel", topic: t, tags: ["autonomous", "sentinel", "background", "freshclam", "clamav", "scheduled-scan", "pro"]),
             EntryMeta(id: "feat_simulation_self_test", topic: t, tags: ["simulation", "self-test", "test", "ransomware", "airgap", "docker", "eicar"]),

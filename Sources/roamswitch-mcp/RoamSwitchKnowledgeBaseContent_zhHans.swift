@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.31 (build 88).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.32 (build 89).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -404,7 +404,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "每小时在后台执行一次日志审计的模板异常检测，持续学习本 Mac 平常的日志趋势。检测到新模式或频率激增时，会附上实际日志行示例和通俗说明发出通知。",
                 details: """
                 • 执行间隔：每小时分析最近 1 小时的日志。启用约 10 秒后执行首次扫描，但由于其中包含应用自身的启动日志，该次仅进行学习而不发出通知。
-                • 通知内容：异常数量（新模式与频率激增的明细）、最多 3 条实际日志行、学习状态说明，以及面向非专业人士的解释。新模式通知一次后即被视为「已知」，同样的内容不会再次通知。频率激增在该模式学习完成后将不再提醒。
+                • 通知内容：异常数量（新模式与频率激增的明细）、最多 3 条实际日志行、学习状态说明，以及面向非专业人士的解释。包含频率激增时会在通知中心显示提醒；仅有新模式时则不会弹出提醒，只记录到通知历史中。新模式记录一次后即被视为「已知」，同样的内容不会再次记录。频率激增在该模式学习完成后将不再提醒。
                 • 与手动审计的关系：与手动的「Mac 安全日志审计」及 MCP 的 `audit_security_logs` 共享相同的分析和学习数据。
                 • 默认值：首次激活 Pro 许可证时自动开启。菜单「恶意软件防护」→「自动日志审计(定期学习新模式与频率异常) (Pro)」。
                 """,
@@ -538,6 +538,31 @@ extension RoamSwitchKnowledgeBase {
                 • 开启方式：「📦 软件包 CVE 比对」→「打字仿冒检测 (Pro)」标签页，针对与「依赖关系」标签页相同的项目文件夹。MCP：`run_typosquat_scan`（`watchedFolders` 参数，仅限 Pro）。
                 """,
                 recommendation: "请对任何标记 ⚠️ 的依赖逐一核实是否确实是拼写错误——尤其要留意陌生的软件包名称。"
+            ),
+            LocalizedEntry(
+                id: "feat_port_scan_guard",
+                title: "入站端口扫描检测 (自动封锁, Pro)",
+                summary: "检测在短时间(5分钟)内连接了多个不同端口(15个以上)的来源IP并发出通知(这是nmap/masscan等侦察工具的典型特征)。检测到的扫描来源默认会被自动封锐10分钟。仅限 Pro。",
+                details: """
+                • 工作原理：具有特权的Helper通过`tcpdump -i pflog0`监控pf(数据包过滤器)日志，检测在短时间窗口内到达足够多不同目标端口的来源IP。判定仅基于日志记录，绝不会更改或检查通信内容本身。对应Linux版的`port_scan_detect.rs`(nftables `log` + `journalctl`)。
+                • 自动封锁：检测到的扫描来源会通过`PFRulesetCoordinator`加入pf规则，默认封锐10分钟。自动封锁可独立于检测功能本身单独开关。
+                • 通知：每次检测(及封锁)都会发送macOS通知，并记录到统一的事件时间线中。
+                • 开启方式：菜单栏 → 「端口与设备监控」 → 「🔍 入站端口扫描检测 (Pro)」。启用和停用都需要经过确认对话框。默认关闭。
+                """,
+                recommendation: "没有按IP的许可清单，封锁会在10分钟后自动解除。如果您在家庭或公司环境中定期运行合法的扫描工具(资产清点、漏洞扫描等)，建议在其运行期间关闭自动封锁(仅保留检测/通知)，以避免因误报而反复封锁。"
+            ),
+            LocalizedEntry(
+                id: "feat_sensor_pairing",
+                title: "RoamSwitch Sensor 配对 (mDNS 相互信任, Pro)",
+                summary: "管理与同一局域网上的独立产品 “RoamSwitch Sensor”(专用主动审计集线器)之间的相互信任配对。通过 mDNS 广播自身的同时发现 Sensor，但仅发现并不会建立信任——配对需要操作者的明确操作(与蓝牙配对相同的模式)。仅限 Pro。",
+                details: """
+                • 工作原理：生成并持久保存此设备自身的 Ed25519 密钥对，通过 mDNS(服务类型 `_roamswitch._tcp`)以 `role=endpoint` TXT 记录广播其公钥，同时发现来自 Sensor 一方的 `role=sensor` 广播。要让 Sensor 信任此设备，还需在 Sensor 自身的配对功能中单独告知此设备的公钥——仅靠单向发现永远无法建立双向信任。
+                • 手动配对：部分 Wi-Fi 接入点会不对称地转发组播，可能导致 mDNS 相互发现不可靠，因此始终也可以使用手动配对——直接输入 Sensor 显示的公钥/地址(即使 mDNS 不起作用，配对本身也不会因此失败)。
+                • 启用的影响：开启后，此设备会通过 mDNS 在局域网上广播自身的存在(主机名、公钥)。关闭(默认)则不会发生此广播。
+                • 打开方式：菜单栏 → 「端口与设备监控」 → 「🔍 RoamSwitch Sensor 配对…」。显示此设备自身的公钥/地址(附复制按钮)、已发现的 Sensor 列表(配对按钮)、已配对的 Sensor 列表(取消配对按钮)以及手动配对表单。
+                • 传输协议(服务类型、TXT 记录键/值)与 Linux 版(`roamswitch-core::sensor_pairing`)完全一致。
+                """,
+                recommendation: "请仅在确认该 Sensor 确实是您自己设置的之后再配对。如果发现陷生的 Sensor，请勿与其配对——建议向网络管理员核实。"
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",
