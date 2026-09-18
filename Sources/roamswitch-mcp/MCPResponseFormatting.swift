@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.36 (build 93).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.37 (build 94).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -122,6 +122,9 @@ public struct MCPPackageLifecycleScriptFindingPayload: Codable, Equatable {
     /// Reference-only heuristic — see `PackageCveScriptScan`'s doc comment.
     /// Never a threat verdict.
     public let isDangerPattern: Bool
+    /// Which heuristic pattern matched (e.g. "curl | sh"), or nil when
+    /// `isDangerPattern` is false.
+    public let dangerPatternLabel: String?
 }
 
 public struct MCPPackageLifecycleScriptScanResultPayload: Codable, Equatable {

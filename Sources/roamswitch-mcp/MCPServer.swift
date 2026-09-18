@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.36 (build 93).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.37 (build 94).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -426,7 +426,8 @@ enum MCPServer {
                     scriptName: $0.scriptName,
                     scriptCommand: $0.scriptCommand,
                     relativePath: $0.relativePath,
-                    isDangerPattern: $0.isDangerPattern
+                    isDangerPattern: $0.isDangerPattern,
+                    dangerPatternLabel: $0.dangerPatternLabel
                 )
             }
         )
