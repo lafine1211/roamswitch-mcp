@@ -211,6 +211,8 @@ enum MCPServer {
                 return [result(id: id, callGetIncidentTimeline(arguments: arguments))]
             case "get_network_history":
                 return [result(id: id, callGetNetworkHistory(arguments: arguments))]
+            case "get_sensor_audit_results":
+                return [result(id: id, callGetSensorAuditResults())]
             default:
                 return [error(id: id, code: -32602, message: "Unknown tool: \(name)")]
             }
@@ -617,6 +619,35 @@ enum MCPServer {
         return textContentResult(payload)
     }
 
+    /// SENDS NO NETWORK REQUESTS AT ALL — reads only local files
+    /// (`RoamSwitchHelper/SensorPairingManager.swift`'s on-disk trusted-
+    /// Sensor and audit-result stores, via `MCPSensorAuditStatusReader`).
+    /// The audits themselves were requested from a paired RoamSwitch
+    /// Sensor earlier (the app's "Sensorへ監査をリクエスト" action, or the
+    /// Sensor's own scheduled/manual runs) — this tool never triggers one
+    /// itself, it only reports whatever results have already been pulled
+    /// back.
+    private static func callGetSensorAuditResults() -> [String: Any] {
+        let results = MCPSensorAuditStatusReader.auditResults()
+        let payload = MCPSensorAuditResultsPayload(
+            pairedSensorCount: MCPSensorAuditStatusReader.pairedSensorCount(),
+            results: results.map {
+                MCPSensorAuditResultPayload(
+                    requestId: $0.id,
+                    sensorName: $0.sensorName,
+                    requestedAt: $0.requestedAt,
+                    status: $0.status,
+                    pullAttempts: $0.pullAttempts,
+                    findings: $0.findings.map {
+                        MCPSensorAuditFindingPayload(port: $0.port, title: $0.title, recommendation: $0.recommendation)
+                    },
+                    failureReason: $0.failureReason
+                )
+            }
+        )
+        return textContentResult(payload)
+    }
+
     /// SENDS NO NETWORK REQUESTS AT ALL — reads local UserDefaults state
     /// only. `PortAnomalyGuard` is Pro-only, but the read itself doesn't
     /// gate on license status — an unlicensed install simply has an empty,
@@ -897,6 +928,11 @@ enum MCPServer {
                     ],
                 ],
             ],
+        ],
+        [
+            "name": "get_sensor_audit_results",
+            "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only local files. Returns results from active audits this Mac has requested from a paired RoamSwitch Sensor (a separate product — software installed on the operator's own hardware on the same LAN, not a dedicated appliance — that performs external, active reachability verification against this Mac — a genuinely outside-in view, unlike every other tool in this file which inspects this Mac from the inside). Each result has a status (pending / completed / failed), how many pull attempts have been made (results are fetched asynchronously, up to 5 tries 5 minutes apart), when it was requested, and — once completed — the findings (port, title, recommendation) the Sensor found reachable/exposed from its vantage point. A `failed` result carries `failureReason`: `not_paired`/`invalid_signature` means the Sensor explicitly rejected the pull (most often this Mac was unpaired from the Sensor's side after the request was sent — re-pairing is needed, not a retry), `not_found` means the Sensor no longer has the request, `timed_out` means every pull attempt returned pending. `pairedSensorCount` is how many Sensors are currently paired; 0 means Sensor pairing has never been set up. Use this to build an external-exposure picture as input to remediation planning, alongside get_exposed_ports (this Mac's own view of its listening ports) — the two are complementary, not redundant: this tool reflects what a real device on the LAN could actually reach, not just what this Mac believes it's listening on.",
+            "inputSchema": ["type": "object", "properties": [String: Any]()],
         ],
         [
             "name": "get_guard_status",

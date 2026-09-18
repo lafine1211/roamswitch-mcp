@@ -160,10 +160,10 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_nmap_nse",
-                title: "Analyse complémentaire nmap NSE (couche supplémentaire pour la vérification active des vulnérabilités) — désactivée par défaut",
+                title: "Analyse complémentaire nmap NSE (couche supplémentaire pour la vérification active des vulnérabilités)",
                 summary: "Lorsque la vérification active des vulnérabilités est également activée, exécute les scripts NSE de la catégorie « safe » du nmap installé sur le système contre les ports exposés afin d'ajouter une couverture de protocoles que les propres sondes de ce produit n'ont pas (clés d'hôte SSH, bannières SMTP, etc.). Le résultat est le propre jugement de nmap, non revérifié indépendamment par ce produit.",
                 details: """
-                • Activation : activez d'abord « Vérification active des vulnérabilités (vérification active de l'accessibilité) », puis activez en plus « 🔎 Analyse complémentaire nmap NSE ». Un opt-in en deux étapes, indépendant du réglage existant. nmap n'est jamais installé automatiquement — cela ne prend effet que s'il est déjà installé sur le système (par ex. via Homebrew) ; sinon, rien ne se passe.
+                • Inclus automatiquement : s'exécute automatiquement dès que « Vérification active des vulnérabilités (vérification active de l'accessibilité) » est activée ; il n'existe pas de réglage séparé pour cela. nmap n'est jamais installé automatiquement — cela ne prend effet que s'il est déjà installé sur le système (par ex. via Homebrew) ; sinon, rien ne se passe.
                 • Sélection des scripts : `safe and not broadcast and not external`. La seule catégorie « safe » ne suffit pas — les scripts `broadcast` interrogent tout le réseau local via multidiffusion/diffusion, pas seulement l'hôte cible, et les scripts `external` (par ex. `vulners.nse`) envoient réellement le service/la version détectés à un tiers tel que vulners.com. Les deux contredisent le principe de conception de ce produit consistant à ne toucher que 127.0.0.1 et jamais aucun autre hôte ni serveur externe, d'où leur exclusion.
                 • Délai d'expiration : 15 secondes par script (`--script-timeout 15s`). Certains scripts « safe » peuvent s'exécuter indéfiniment contre des API HTTP non standard, privant les autres ports de résultats sans cette limite.
                 • Portée : les mêmes ports déjà confirmés ouverts que ceux utilisés par la vérification active des vulnérabilités elle-même.
@@ -565,16 +565,15 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_sensor_pairing",
-                title: "Appairage RoamSwitch Sensor (confiance mutuelle mDNS, Pro)",
-                summary: "Gère l'appairage de confiance mutuelle avec un produit distinct, « RoamSwitch Sensor » (un concentrateur d'audit actif dédié), sur le même réseau local. S'annonce via mDNS tout en découvrant des Sensors, mais la simple découverte n'établit aucune confiance — l'appairage nécessite une action explicite de l'opérateur (le même modèle que l'appairage Bluetooth). Pro uniquement.",
+                title: "Appairage RoamSwitch Sensor (code d'appairage, Pro)",
+                summary: "Gère l'appairage de confiance mutuelle avec un produit distinct, « RoamSwitch Sensor » (un concentrateur d'audit actif dédié), sur le même réseau local. Utilise un flux d'appairage actif via un code émis par le Sensor — aucune découverte automatique par mDNS, le Sensor étant supposé fonctionner avec une IP fixe. Pro uniquement.",
                 details: """
-                • Fonctionnement : génère et conserve de façon persistante sa propre paire de clés Ed25519, annonçant sa clé publique via mDNS (type de service `_roamswitch._tcp`) sous forme d'enregistrement TXT `role=endpoint`, tout en découvrant les annonces `role=sensor` du côté Sensor. Pour que le Sensor fasse confiance à cet appareil, sa propre fonction d'appairage doit recevoir séparément la clé publique de cet appareil — la découverte unilatérale seule n'établit jamais une confiance bidirectionnelle.
-                • Appairage manuel : certains points d'accès Wi-Fi relaient le multicast de façon asymétrique, ce qui peut rendre la découverte mutuelle par mDNS peu fiable ; l'appairage manuel — en saisissant directement la clé publique/l'adresse affichée par le Sensor — reste donc toujours disponible (l'appairage lui-même n'échoue pas simplement parce que mDNS ne fonctionne pas).
-                • Effet de l'activation : une fois activé, cet appareil annonce sa propre présence (nom d'hôte, clé publique) sur le réseau local via mDNS. Désactivé (par défaut), aucune annonce de ce type n'a lieu.
-                • Pour l'ouvrir : barre de menus → « Surveillance des ports et appareils » → « 🔍 Appairage RoamSwitch Sensor… ». Affiche la clé publique/l'adresse de cet appareil (avec un bouton de copie), les Sensors découverts (avec un bouton Appairer), les Sensors appairés (avec un bouton Désappairer) et un formulaire d'appairage manuel.
-                • Le protocole de transport (type de service, clés/valeurs de l'enregistrement TXT) correspond exactement à celui de l'édition Linux (`roamswitch-core::sensor_pairing`).
+                • Fonctionnement : génère et conserve de façon persistante sa propre paire de clés Ed25519. Pour s'appairer, cet appareil se connecte à l'écouteur TCP du Sensor (port 50543) avec un code d'appairage à usage unique émis par l'opérateur du Sensor (expire 10 minutes après émission), ainsi que l'adresse/le nom d'hôte de cet appareil. Si le code est valide, le Sensor ajoute la clé publique de cet appareil à sa liste de confiance.
+                • Demander un audit : une fois appairé, « Demander un audit au Sensor » demande au Sensor d'exécuter un audit actif (vérification d'accessibilité). Le Sensor générant les résultats de façon asynchrone, l'assistant privilégié toujours actif de cet appareil interroge le résultat toutes les 5 minutes, jusqu'à 5 fois. Les résultats récupérés sont également enregistrés sur cet appareil et affichés sous « Résultats d'audit » dans l'écran des réglages.
+                • Pour l'ouvrir : barre de menus → « Surveillance des ports et appareils » → « 🔍 Appairage RoamSwitch Sensor… ». Affiche la clé publique/l'adresse de cet appareil (avec un bouton de copie), les Sensors appairés (avec un bouton Désappairer), un formulaire de saisie du code d'appairage et la liste des résultats d'audit.
+                • Utilise le même protocole de contrôle TCP que l'édition Linux (`roamswitch-core::sensor_pairing`) — port 50543, JSON délimité par des retours à la ligne, signatures Ed25519.
                 """,
-                recommendation: "N'appairez qu'après avoir confirmé qu'il s'agit bien d'un Sensor que vous avez vous-même installé. Si un Sensor inconnu est découvert, ne l'appairez pas — renseignez-vous plutôt auprès de l'administrateur du réseau."
+                recommendation: "N'utilisez qu'un code d'appairage réellement émis depuis l'écran opérateur d'un Sensor que vous avez vous-même installé. Si l'on vous demande de saisir un code inconnu, n'appairez pas — renseignez-vous plutôt auprès de l'administrateur du réseau."
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",
@@ -627,8 +626,9 @@ extension RoamSwitchKnowledgeBase {
                 • Enregistrement : enregistré via le SMAppService de macOS en tant que LaunchDaemon intégré à l'app. La première utilisation nécessite une approbation sous Réglages Système → Général → Éléments de connexion et extensions. Il ne peut pas être enregistré si l'app n'est pas dans le dossier Applications (faq_install_location).
                 • Démons associés : des LaunchDaemons assistants pour le filet de sécurité de l'Air-Gap (libération automatique après 10 minutes) et la porte de démarrage (jusqu'à 90 secondes) sont également enregistrés.
                 • Vérification : les signatures de code (Team ID) sont vérifiées lors des connexions XPC, rejetant les appels de processus non autorisés.
+                • Nouvelle approbation après une mise à jour : l'app tente automatiquement de basculer vers le nouvel assistant, mais macOS peut tout de même le laisser en attente d'approbation. Dans ce cas, l'icône de la barre de menus passe en avertissement et affiche « ⚠️ Nouvelle approbation requise après la mise à jour », avec en plus une notification.
                 """,
-                recommendation: "Approuvez l'assistant lorsque vous y êtes invité au premier lancement. S'il n'est pas approuvé, le menu affiche « ⚠️ Approuver l'assistant… »."
+                recommendation: "Approuvez l'assistant lorsque vous y êtes invité au premier lancement. S'il n'est pas approuvé, le menu affiche « ⚠️ Approuver l'assistant… ». Si cet avertissement ou cette notification apparaît après une mise à jour, les mêmes étapes (Réglages Système > Général > Éléments d'ouverture et extensions) permettent de l'approuver à nouveau."
             ),
             LocalizedEntry(
                 id: "feat_mcp_server",

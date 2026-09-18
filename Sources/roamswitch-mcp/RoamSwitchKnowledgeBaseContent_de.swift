@@ -160,10 +160,10 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_nmap_nse",
-                title: "Ergänzender nmap-NSE-Scan (zusätzliche Ebene für die aktive Schwachstellenverifizierung) — standardmäßig deaktiviert",
+                title: "Ergänzender nmap-NSE-Scan (zusätzliche Ebene für die aktive Schwachstellenverifizierung)",
                 summary: "Wenn zusätzlich die aktive Schwachstellenverifizierung aktiviert ist, führt dies mit dem installierten System-nmap NSE-Skripte der Kategorie „safe“ gegen offene Ports aus, um Protokollabdeckung zu ergänzen, die die eigenen Prüfungen dieses Produkts nicht bieten (SSH-Hostschlüssel, SMTP-Banner usw.). Das Ergebnis ist nmaps eigene Einschätzung, nicht unabhängig von diesem Produkt überprüft.",
                 details: """
-                • Aktivierung: Zuerst „Aktive Schwachstellenverifizierung (aktive Erreichbarkeitsprüfung)“ einschalten, dann zusätzlich „🔎 Ergänzender nmap-NSE-Scan“ aktivieren. Ein zweistufiges Opt-in, unabhängig von der bestehenden Einstellung. nmap wird nie automatisch installiert — dies wirkt nur, wenn es bereits auf dem System installiert ist (z. B. über Homebrew); andernfalls geschieht nichts.
+                • Automatisch enthalten: läuft automatisch mit, sobald „Aktive Schwachstellenverifizierung (aktive Erreichbarkeitsprüfung)“ aktiviert ist — dafür gibt es keinen eigenen Schalter. nmap wird nie automatisch installiert — dies wirkt nur, wenn es bereits auf dem System installiert ist (z. B. über Homebrew); andernfalls geschieht nichts.
                 • Skriptauswahl: `safe and not broadcast and not external`. Die reine Kategorie „safe“ allein reicht nicht aus — `broadcast`-Skripte fragen nicht nur den Zielhost, sondern das gesamte LAN per Multicast/Broadcast ab, und `external`-Skripte (z. B. `vulners.nse`) senden den erkannten Dienst/die Version tatsächlich an einen Dritten wie vulners.com. Beides widerspricht dem eigenen Designprinzip dieses Produkts, nur 127.0.0.1 zu berühren und niemals einen anderen Host oder externen Server — daher der Ausschluss.
                 • Timeout: 15 Sekunden pro Skript (`--script-timeout 15s`). Manche „safe“-Skripte können gegen nicht standardkonforme HTTP-APIs unbegrenzt lange laufen und ohne diese Begrenzung Ergebnisse anderer Ports verdrängen.
                 • Umfang: dieselben bereits bestätigt offenen Ports wie bei der aktiven Schwachstellenverifizierung selbst.
@@ -565,16 +565,15 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_sensor_pairing",
-                title: "RoamSwitch Sensor-Kopplung (mDNS-Gegenseitiges Vertrauen, Pro)",
-                summary: "Verwaltet die gegenseitige Vertrauenskopplung mit einem separaten Produkt, „RoamSwitch Sensor“ (ein dedizierter aktiver Prüf-Hub), im selben LAN. Gibt sich per mDNS bekannt, während es nach Sensoren sucht, aber die reine Erkennung stellt noch kein Vertrauen her — die Kopplung erfordert eine explizite Aktion des Bedieners (dasselbe Modell wie bei der Bluetooth-Kopplung). Nur Pro.",
+                title: "RoamSwitch Sensor-Kopplung (Kopplungscode, Pro)",
+                summary: "Verwaltet die gegenseitige Vertrauenskopplung mit einem separaten Produkt, „RoamSwitch Sensor“ (ein dedizierter aktiver Prüf-Hub), im selben LAN. Verwendet einen aktiven Kopplungscode-Ablauf, den der Sensor ausstellt — keine automatische mDNS-Erkennung, da ein Sensor mit fester IP-Adresse betrieben wird. Nur Pro.",
                 details: """
-                • Funktionsweise: Erzeugt und speichert ein eigenes Ed25519-Schlüsselpaar dieses Geräts dauerhaft und gibt seinen öffentlichen Schlüssel per mDNS (Diensttyp `_roamswitch._tcp`) als `role=endpoint`-TXT-Eintrag bekannt, während es gleichzeitig nach `role=sensor`-Ankündigungen der Sensor-Seite sucht. Damit der Sensor diesem Gerät vertraut, muss dessen eigene Kopplungsfunktion separat über den öffentlichen Schlüssel dieses Geräts informiert werden — eine einseitige Erkennung allein stellt niemals gegenseitiges Vertrauen her.
-                • Manuelle Kopplung: Manche WLAN-Zugangspunkte leiten Multicast asymmetrisch weiter, wodurch die gegenseitige mDNS-Erkennung unzuverlässig werden kann; daher steht immer auch eine manuelle Kopplung zur Verfügung — durch direkte Eingabe des vom Sensor angezeigten öffentlichen Schlüssels/der Adresse (die Kopplung selbst schlägt nicht allein deshalb fehl, weil mDNS nicht funktioniert).
-                • Auswirkung der Aktivierung: Beim Einschalten gibt dieses Gerät seine eigene Anwesenheit (Hostname, öffentlicher Schlüssel) per mDNS im LAN bekannt. Im Zustand „Aus“ (Standard) erfolgt keine solche Ankündigung.
-                • Öffnen: Menüleiste → „Port- & Geräteüberwachung“ → „🔍 RoamSwitch Sensor-Kopplung …“. Zeigt den eigenen öffentlichen Schlüssel/die Adresse dieses Geräts (mit Kopieren-Schaltfläche), gefundene Sensoren (mit Koppeln-Schaltfläche), gekoppelte Sensoren (mit Entkoppeln-Schaltfläche) und ein Formular für die manuelle Kopplung.
-                • Das Übertragungsprotokoll (Diensttyp, TXT-Eintrag-Schlüssel/-Werte) stimmt exakt mit dem der Linux-Edition (`roamswitch-core::sensor_pairing`) überein.
+                • Funktionsweise: Erzeugt und speichert dauerhaft ein eigenes Ed25519-Schlüsselpaar dieses Geräts. Zur Kopplung verbindet sich dieses Gerät mit dem TCP-Listener des Sensors (Port 50543) und übermittelt einen vom Sensor-Bediener ausgestellten Einmal-Kopplungscode (läuft 10 Minuten nach Ausstellung ab) sowie die eigene Adresse/den eigenen Hostnamen. Ist der Code gültig, nimmt der Sensor den öffentlichen Schlüssel dieses Geräts in seine Vertrauensliste auf.
+                • Prüfung anfordern: Nach der Kopplung kann über „Prüfung beim Sensor anfordern“ eine aktive Prüfung (Erreichbarkeitsverifikation) beim Sensor angestoßen werden. Da der Sensor Ergebnisse asynchron erzeugt, fragt der stets aktive privilegierte Helfer dieses Geräts das Ergebnis alle 5 Minuten, bis zu 5-mal, ab. Abgerufene Ergebnisse werden auch auf diesem Gerät gespeichert und unter „Prüfergebnisse“ in den Einstellungen angezeigt.
+                • Öffnen: Menüleiste → „Port- & Geräteüberwachung“ → „🔍 RoamSwitch Sensor-Kopplung …“. Zeigt den eigenen öffentlichen Schlüssel/die Adresse dieses Geräts (mit Kopieren-Schaltfläche), gekoppelte Sensoren (mit Entkoppeln-Schaltfläche), ein Eingabeformular für den Kopplungscode sowie die Liste der Prüfergebnisse.
+                • Verwendet dasselbe TCP-Steuerprotokoll wie die Linux-Edition (`roamswitch-core::sensor_pairing`) — Port 50543, zeilengetrenntes JSON, Ed25519-Signaturen.
                 """,
-                recommendation: "Koppeln Sie erst, nachdem Sie bestätigt haben, dass es sich tatsächlich um einen von Ihnen selbst eingerichteten Sensor handelt. Wird ein unbekannter Sensor gefunden, koppeln Sie sich nicht damit — fragen Sie stattdessen bei der zuständigen Netzwerkverwaltung nach."
+                recommendation: "Verwenden Sie nur einen Kopplungscode, der tatsächlich über den Bediener-Bildschirm eines von Ihnen selbst eingerichteten Sensors ausgestellt wurde. Werden Sie zur Eingabe eines unbekannten Codes aufgefordert, koppeln Sie sich nicht — fragen Sie stattdessen bei der zuständigen Netzwerkverwaltung nach."
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",
@@ -627,8 +626,9 @@ extension RoamSwitchKnowledgeBase {
                 • Registrierung: Wird über den SMAppService von macOS als in der App gebündelter LaunchDaemon registriert. Die erste Nutzung erfordert eine Genehmigung unter Systemeinstellungen → Allgemein → Anmeldeobjekte & Erweiterungen. Ist die App nicht im Programme-Ordner, kann sie nicht registriert werden (faq_install_location).
                 • Begleitdienste: Auch Helfer-LaunchDaemons für das Air-Gap-Sicherheitsnetz (automatische Freigabe nach 10 Minuten) und das Boot-Gate (bis zu 90 Sekunden) werden registriert.
                 • Verifizierung: Bei XPC-Verbindungen werden Codesignaturen (Team-ID) geprüft, um Aufrufe von nicht autorisierten Prozessen abzulehnen.
+                • Erneute Genehmigung nach einem Update: Die App versucht automatisch, auf den neuen Helfer umzuschalten, aber macOS kann ihn dennoch auf „ausstehende Genehmigung“ belassen. In diesem Fall wechselt das Menüleistensymbol zu einer Warnung mit „⚠️ Nach dem Update ist eine erneute Genehmigung erforderlich“, und Sie erhalten zusätzlich eine Benachrichtigung.
                 """,
-                recommendation: "Genehmigen Sie den Helfer beim ersten Start, wenn Sie dazu aufgefordert werden. Ist er nicht genehmigt, zeigt das Menü „⚠️ Helfer genehmigen…“."
+                recommendation: "Genehmigen Sie den Helfer beim ersten Start, wenn Sie dazu aufgefordert werden. Ist er nicht genehmigt, zeigt das Menü „⚠️ Helfer genehmigen…“. Erscheint dieser Hinweis oder diese Benachrichtigung nach einem Update, genehmigen Sie ihn auf demselben Weg (Systemeinstellungen > Allgemein > Anmeldeobjekte & Erweiterungen) erneut."
             ),
             LocalizedEntry(
                 id: "feat_mcp_server",

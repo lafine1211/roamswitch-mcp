@@ -95,6 +95,13 @@ enum ActiveVulnScan {
         /// or a Phase 3 check name (`"webvuln-cors"`, `"webvuln-traversal"`,
         /// `"webvuln-redirect"`).
         let probeName: String
+        /// `nil` only for rows persisted before this field existed — every
+        /// row written from here on always has one. Without it, several
+        /// ports matching the same signature (e.g. two Redis instances)
+        /// produced identical-looking rows in the CSV export with no way
+        /// to tell them apart, which is exactly what made the exported log
+        /// unreadable on first real use.
+        let port: Int?
         /// ISO 8601, matching `NotificationHistory`'s timestamp convention.
         let lastStartedAt: String
         let lastFinishedAt: String
@@ -603,6 +610,7 @@ enum ActiveVulnScan {
                 let finishedAt = Date()
                 logEntries.append(ProbeRunRecord(
                     probeName: signature.id,
+                    port: port.port,
                     lastStartedAt: probeLogFormatter.string(from: startedAt),
                     lastFinishedAt: probeLogFormatter.string(from: finishedAt),
                     outcome: confirmed == true ? "vulnerable" : (confirmed == false ? "safe" : "inconclusive")
@@ -654,6 +662,7 @@ enum ActiveVulnScan {
             let finishedAt = Date()
             logEntries.append(ProbeRunRecord(
                 probeName: probeName,
+                port: outcome.port,
                 lastStartedAt: probeLogFormatter.string(from: startedAt),
                 lastFinishedAt: probeLogFormatter.string(from: finishedAt),
                 outcome: confirmed == true ? "vulnerable" : (confirmed == false ? "safe" : "inconclusive")
@@ -712,19 +721,18 @@ enum ActiveVulnScan {
             )
         }
 
-        // Phase 4: nmap NSE supplementary layer — opt-in via a second,
-        // independent flag (`NmapNSE.isEnabled`) on top of this function's
-        // own `isEnabled` gate, so an existing install never gets this just
-        // because `nmap` happens to already be present. Targets *every*
-        // port passed in, not just the ones a Phase 2/3 signature matched:
-        // NSE's whole value is covering services this product's hand-
-        // rolled probes above don't — nmap picks which of its scripts apply
-        // per port from its own service detection (see `NmapNSE`'s doc
-        // comment). A no-op (empty result, never an error) if `nmap` isn't
-        // installed. Single shared call site — both the manual "Run Active
-        // Verification" button and `MCPServer`'s `run_active_vuln_scan`
-        // tool call through `runScan`, so neither needs its own wiring.
-        if NmapNSE.isEnabled {
+        // Phase 4: nmap NSE supplementary layer — always runs alongside this
+        // function's own `isEnabled` gate, no separate opt-in of its own.
+        // Targets *every* port passed in, not just the ones a Phase 2/3
+        // signature matched: NSE's whole value is covering services this
+        // product's hand-rolled probes above don't — nmap picks which of
+        // its scripts apply per port from its own service detection (see
+        // `NmapNSE`'s doc comment). A no-op (empty result, never an error)
+        // if `nmap` isn't installed. Single shared call site — both the
+        // manual "Run Active Verification" button and `MCPServer`'s
+        // `run_active_vuln_scan` tool call through `runScan`, so neither
+        // needs its own wiring.
+        do {
             let allPorts = ports.map(\.port)
             // A fixed 120s budget silently loses *every* finding, not just
             // the unfinished tail, on an ordinary dev Mac: nmap's normal-

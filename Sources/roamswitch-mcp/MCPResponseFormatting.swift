@@ -273,6 +273,35 @@ public struct MCPPortAnomalyIncidentsPayload: Codable, Equatable {
     public let incidents: [MCPPortAnomalyIncidentPayload]
 }
 
+/// Field-for-field mirror of `SensorAuditFinding` (`Shared/HelperProtocol.swift`),
+/// itself a mirror of `roamswitch-sensor`'s `ScanFinding`.
+public struct MCPSensorAuditFindingPayload: Codable, Equatable {
+    public let port: Int
+    public let title: String
+    public let recommendation: String
+}
+
+/// One outstanding or completed active-audit request this Mac made to a
+/// paired RoamSwitch Sensor — mirrors `SensorAuditResult`. `status` is
+/// "pending" / "completed" / "failed"; see that type's doc comment.
+public struct MCPSensorAuditResultPayload: Codable, Equatable {
+    public let requestId: String
+    public let sensorName: String
+    public let requestedAt: String
+    public let status: String
+    public let pullAttempts: Int
+    public let findings: [MCPSensorAuditFindingPayload]
+    /// Set only when `status == "failed"`: `"not_paired"` / `"invalid_signature"`
+    /// (the Sensor explicitly rejected the pull — see `SensorAuditResult
+    /// .failureReason`'s doc comment), `"not_found"`, or `"timed_out"`.
+    public let failureReason: String?
+}
+
+public struct MCPSensorAuditResultsPayload: Codable, Equatable {
+    public let pairedSensorCount: Int
+    public let results: [MCPSensorAuditResultPayload]
+}
+
 public struct MCPRuntimeThreatIncidentPayload: Codable, Equatable {
     public let timestamp: String
     public let process: String

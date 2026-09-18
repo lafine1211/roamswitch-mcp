@@ -160,10 +160,10 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_nmap_nse",
-                title: "nmap NSE 补充扫描（实证型漏洞验证的附加层） — 默认关闭",
+                title: "nmap NSE 补充扫描（实证型漏洞验证的附加层）",
                 summary: "仅在「实证型漏洞验证」同时启用时，使用系统已安装的 nmap 对暴露端口额外运行「safe」类别的 NSE 脚本，以补充本产品自身探测所不具备的协议覆盖范围（SSH 主机密钥、SMTP 响应等）。结果是 nmap 自身的判定，本产品不做独立验证。",
                 details: """
-                • 启用方式：先开启「实证型漏洞验证（能动可达性验证）」，再额外开启「🔎 nmap NSE 补充扫描」。这是与现有设置相互独立的两阶段选择启用。nmap 不会被自动安装——仅当系统中已安装（例如通过 Homebrew）时才会生效，否则不执行任何操作。
+                • 自动执行：只要「实证型漏洞验证（能动可达性验证）」已启用即会自动执行，没有独立的开关设置。nmap 不会被自动安装——仅当系统中已安装（例如通过 Homebrew）时才会生效，否则不执行任何操作。
                 • 脚本选择：`safe and not broadcast and not external`。仅靠「safe」类别本身并不足够——`broadcast` 类脚本会以多播/广播方式查询整个局域网，而不仅是目标主机；`external` 类脚本（如 `vulners.nse`）会将检测到的服务/版本实际发送给 vulners.com 等第三方。两者都违背了本产品「仅访问 127.0.0.1、绝不接触任何其他主机或外部服务器」的设计原则，因此被排除。
                 • 超时：每个脚本 15 秒（`--script-timeout 15s`）。部分「safe」脚本针对非标准 HTTP API 可能无限期运行，若无此限制会导致其他端口的结果丢失。
                 • 范围：与实证型漏洞验证自身相同的、已确认开放的端口。
@@ -565,16 +565,15 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_sensor_pairing",
-                title: "RoamSwitch Sensor 配对 (mDNS 相互信任, Pro)",
-                summary: "管理与同一局域网上的独立产品 “RoamSwitch Sensor”(专用主动审计集线器)之间的相互信任配对。通过 mDNS 广播自身的同时发现 Sensor，但仅发现并不会建立信任——配对需要操作者的明确操作(与蓝牙配对相同的模式)。仅限 Pro。",
+                title: "RoamSwitch Sensor 配对 (配对码方式, Pro)",
+                summary: "管理与同一局域网上的独立产品 “RoamSwitch Sensor”(专用主动审计集线器)之间的相互信任配对。采用由 Sensor 签发配对码的主动配对方式，假定 Sensor 以固定 IP 运行，因此不再使用 mDNS 自动发现。仅限 Pro。",
                 details: """
-                • 工作原理：生成并持久保存此设备自身的 Ed25519 密钥对，通过 mDNS(服务类型 `_roamswitch._tcp`)以 `role=endpoint` TXT 记录广播其公钥，同时发现来自 Sensor 一方的 `role=sensor` 广播。要让 Sensor 信任此设备，还需在 Sensor 自身的配对功能中单独告知此设备的公钥——仅靠单向发现永远无法建立双向信任。
-                • 手动配对：部分 Wi-Fi 接入点会不对称地转发组播，可能导致 mDNS 相互发现不可靠，因此始终也可以使用手动配对——直接输入 Sensor 显示的公钥/地址(即使 mDNS 不起作用，配对本身也不会因此失败)。
-                • 启用的影响：开启后，此设备会通过 mDNS 在局域网上广播自身的存在(主机名、公钥)。关闭(默认)则不会发生此广播。
-                • 打开方式：菜单栏 → 「端口与设备监控」 → 「🔍 RoamSwitch Sensor 配对…」。显示此设备自身的公钥/地址(附复制按钮)、已发现的 Sensor 列表(配对按钮)、已配对的 Sensor 列表(取消配对按钮)以及手动配对表单。
-                • 传输协议(服务类型、TXT 记录键/值)与 Linux 版(`roamswitch-core::sensor_pairing`)完全一致。
+                • 工作原理：生成并持久保存此设备自身的 Ed25519 密钥对。配对时，此设备携带 Sensor 操作者签发的一次性配对码(签发后 10 分钟失效)以及此设备自身的地址/主机名，连接到 Sensor 的 TCP 监听器(端口 50543)。若配对码有效，Sensor 会将此设备的公钥加入其信任列表。
+                • 请求审计：配对完成后，可通过「向 Sensor 请求审计」要求 Sensor 执行一次主动审计(可达性验证)。由于 Sensor 是异步生成结果的，此设备侧常驻的特权辅助进程会每隔 5 分钟自动尝试获取结果，最多 5 次。获取到的结果也会保存在此设备上，可在设置界面的「审计结果」列表中查看。
+                • 打开方式：菜单栏 → 「端口与设备监控」 → 「🔍 RoamSwitch Sensor 配对…」。显示此设备自身的公钥/地址(附复制按钮)、已配对的 Sensor 列表(取消配对按钮)、配对码输入表单以及审计结果列表。
+                • 使用与 Linux 版(`roamswitch-core::sensor_pairing`)相同的 TCP 控制协议——端口 50543、换行分隔 JSON、Ed25519 签名。
                 """,
-                recommendation: "请仅在确认该 Sensor 确实是您自己设置的之后再配对。如果发现陷生的 Sensor，请勿与其配对——建议向网络管理员核实。"
+                recommendation: "请仅使用确实由您自己设置的 RoamSwitch Sensor 操作界面所签发的配对码。如果被要求输入陌生的配对码，请勿配对——建议向网络管理员核实。"
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",
@@ -627,8 +626,9 @@ extension RoamSwitchKnowledgeBase {
                 • 注册：通过 macOS 标准的 SMAppService，作为应用内置的 LaunchDaemon 进行注册。首次使用需在「系统设置」→「通用」→「登录项与扩展」中批准。如果应用不在「应用程序」文件夹中，则无法注册（faq_install_location）。
                 • 附属守护进程：还会注册负责气隙隔离故障保护（10 分钟自动解除）和启动闸门（最多 90 秒）的辅助 LaunchDaemon。
                 • 安全验证：XPC 连接时验证代码签名（Team ID），拒绝来自非法进程的调用。
+                • 更新后的重新批准：应用会自动尝试切换到新版辅助程序，但 macOS 有时仍会将其置于待批准状态。此时菜单栏图标会变为警告样式，显示「⚠️ 更新后需要重新批准」，并会同时发送通知提醒。
                 """,
-                recommendation: "请按照首次启动时的引导批准辅助程序。未批准时，菜单中会显示「⚠️ 批准助手…」。"
+                recommendation: "请按照首次启动时的引导批准辅助程序。未批准时，菜单中会显示「⚠️ 批准助手…」。更新后如出现此提示或通知，同样可通过「系统设置」>「通用」>「登录项与扩展」重新批准。"
             ),
             LocalizedEntry(
                 id: "feat_mcp_server",

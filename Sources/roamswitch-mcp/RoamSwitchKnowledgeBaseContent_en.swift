@@ -159,10 +159,10 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_nmap_nse",
-                title: "nmap NSE Supplementary Scan (extra layer for Active Vulnerability Verification) — off by default",
+                title: "nmap NSE Supplementary Scan (extra layer for Active Vulnerability Verification)",
                 summary: "When Active Vulnerability Verification is also enabled, runs the system's installed nmap's \"safe\"-category NSE scripts against exposed ports to add protocol coverage this product's own probes don't have (SSH host keys, SMTP banners, etc.). The result is nmap's own judgment, not independently re-verified by this product.",
                 details: """
-                • Enable: turn on "Active Vulnerability Verification (Active Reachability Check)" first, then additionally turn on "🔎 nmap NSE Supplementary Scan". A two-stage opt-in, independent from the existing setting. nmap is never installed automatically — this only takes effect if it's already installed on the system (e.g. via Homebrew); a no-op otherwise.
+                • Included automatically: runs automatically whenever "Active Vulnerability Verification (Active Reachability Check)" is enabled — there's no separate toggle for it. nmap is never installed automatically — this only takes effect if it's already installed on the system (e.g. via Homebrew); a no-op otherwise.
                 • Script selection: `safe and not broadcast and not external`. Plain `safe` alone isn't enough — `broadcast` scripts query the whole LAN via multicast/broadcast, not just the target host, and `external` scripts (e.g. `vulners.nse`) actually send the detected service/version to a third party such as vulners.com. Both contradict this product's own design principle of touching only 127.0.0.1 and never any other host or external server, so they're excluded.
                 • Timeout: 15 seconds per script (`--script-timeout 15s`). Some `safe` scripts can run indefinitely against non-standard HTTP APIs, starving results from other ports without this cap.
                 • Scope: the same already-confirmed-open ports as Active Vulnerability Verification itself.
@@ -564,16 +564,15 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_sensor_pairing",
-                title: "RoamSwitch Sensor Pairing (mDNS Mutual Trust, Pro)",
-                summary: "Manages mutual-trust pairing with a separate product, “RoamSwitch Sensor” (a dedicated active-audit hub), on the same LAN. Announces itself over mDNS while discovering Sensors, but discovery alone establishes no trust — pairing requires an explicit operator action (the same model as Bluetooth pairing). Pro only.",
+                title: "RoamSwitch Sensor Pairing (Pairing-Code, Pro)",
+                summary: "Manages mutual-trust pairing with a separate product, “RoamSwitch Sensor” (a dedicated active-audit hub), on the same LAN. Uses an active pairing-code flow the Sensor issues — no mDNS auto-discovery, since a Sensor is assumed to run at a fixed IP. Pro only.",
                 details: """
-                • How it works: generates and persists this device's own Ed25519 key pair, advertising its public key over mDNS (service type `_roamswitch._tcp`) as a `role=endpoint` TXT record, while discovering `role=sensor` advertisements from the Sensor side. For the Sensor to trust this device, its own pairing feature must separately be told this device's public key — one-sided discovery alone never establishes two-way trust.
-                • Manual pairing: some Wi-Fi access points forward multicast asymmetrically, making mutual mDNS discovery unreliable, so manual pairing — entering the Sensor's displayed public key/address directly — is always available too (pairing itself never fails just because mDNS doesn't work).
-                • Effect of enabling: turning it on makes this device announce its own presence (hostname, public key) on the LAN over mDNS. Off (the default) means no such announcement occurs.
-                • How to open: menu bar → “Ports & Devices Monitor” → “🔍 RoamSwitch Sensor Pairing…”. Shows this device's own public key/address (with a copy button), discovered Sensors (with a Pair button), paired Sensors (with an Unpair button), and a manual-pairing form.
-                • The wire protocol (service type, TXT record keys/values) matches the Linux edition's (`roamswitch-core::sensor_pairing`) exactly.
+                • How it works: generates and persists this device's own Ed25519 key pair. To pair, this device connects to the Sensor's TCP listener (port 50543) with a one-time pairing code the Sensor operator issued (expires 10 minutes after issue), plus this device's own address/hostname. If the code is valid, the Sensor adds this device's public key to its trusted list.
+                • Requesting an audit: once paired, “Request audit from Sensor” asks the Sensor to run an active audit (reachability verification). Since the Sensor generates results asynchronously, this device's own always-on privileged helper polls for the result every 5 minutes, up to 5 times. Retrieved results are saved on this device too and shown under “Audit Results” in the settings screen.
+                • How to open: menu bar → “Ports & Devices Monitor” → “🔍 RoamSwitch Sensor Pairing…”. Shows this device's own public key/address (with a copy button), paired Sensors (with an Unpair button), a pairing-code entry form, and the audit-results list.
+                • Uses the same TCP control protocol as the Linux edition (`roamswitch-core::sensor_pairing`) — port 50543, newline-delimited JSON, Ed25519 signatures.
                 """,
-                recommendation: "Only pair after confirming the Sensor is actually one you set up yourself. If an unfamiliar Sensor is discovered, don't pair with it — check with whoever administers the network instead."
+                recommendation: "Only use a pairing code that was actually issued from the operator screen of a Sensor you set up yourself. If asked to enter an unfamiliar code, don't pair — check with whoever administers the network instead."
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",
@@ -626,8 +625,9 @@ extension RoamSwitchKnowledgeBase {
                 • Registration: registered via macOS's SMAppService as a LaunchDaemon bundled inside the app. First use requires approval in System Settings → General → Login Items & Extensions. It can't be registered if the app isn't in the Applications folder (faq_install_location).
                 • Companion daemons: helper LaunchDaemons for the air-gap failsafe (auto-release after 10 minutes) and the boot gate (up to 90 seconds) are also registered.
                 • Verification: code signatures (Team ID) are checked on XPC connections, rejecting calls from unauthorized processes.
+                • Re-approval after an update: the app automatically tries to swap in the new helper, but macOS can still leave it pending re-approval. When that happens, the menu bar icon switches to a warning showing “⚠️ Re-approval needed after update”, and a notification tells you as well.
                 """,
-                recommendation: "Approve the helper when prompted on first launch. If it isn't approved, the menu shows “⚠️ Approve the helper…”."
+                recommendation: "Approve the helper when prompted on first launch. If it isn't approved, the menu shows “⚠️ Approve the helper…”. If this warning or notification appears after an update, the same steps (System Settings > General > Login Items & Extensions) re-approve it."
             ),
             LocalizedEntry(
                 id: "feat_mcp_server",

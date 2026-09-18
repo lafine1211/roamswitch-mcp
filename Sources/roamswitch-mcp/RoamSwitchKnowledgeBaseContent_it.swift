@@ -160,10 +160,10 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_nmap_nse",
-                title: "Scansione supplementare nmap NSE (livello aggiuntivo per la verifica attiva delle vulnerabilità) — disattivata per impostazione predefinita",
+                title: "Scansione supplementare nmap NSE (livello aggiuntivo per la verifica attiva delle vulnerabilità)",
                 summary: "Quando è attiva anche la verifica attiva delle vulnerabilità, esegue gli script NSE della categoria «safe» del nmap installato nel sistema sulle porte esposte per aggiungere una copertura di protocolli che le sonde proprie di questo prodotto non hanno (chiavi host SSH, banner SMTP, ecc.). Il risultato è un giudizio proprio di nmap, non riverificato in modo indipendente da questo prodotto.",
                 details: """
-                • Attivazione: attiva prima «Verifica attiva delle vulnerabilità (verifica attiva della raggiungibilità)», poi attiva in aggiunta «🔎 Scansione supplementare nmap NSE». Un'attivazione in due fasi, indipendente dall'impostazione esistente. nmap non viene mai installato automaticamente — questo ha effetto solo se è già installato nel sistema (ad esempio tramite Homebrew); altrimenti non fa nulla.
+                • Incluso automaticamente: viene eseguito automaticamente quando «Verifica attiva delle vulnerabilità (verifica attiva della raggiungibilità)» è attiva, senza un'impostazione separata per questo. nmap non viene mai installato automaticamente — questo ha effetto solo se è già installato nel sistema (ad esempio tramite Homebrew); altrimenti non fa nulla.
                 • Selezione degli script: `safe and not broadcast and not external`. La sola categoria «safe» non basta — gli script `broadcast` interrogano l'intera LAN tramite multicast/broadcast, non solo l'host di destinazione, e gli script `external` (ad es. `vulners.nse`) inviano effettivamente il servizio/la versione rilevati a terze parti come vulners.com. Entrambi contraddicono il principio di progettazione di questo prodotto di toccare solo 127.0.0.1 e mai altri host o server esterni, quindi vengono esclusi.
                 • Timeout: 15 secondi per script (`--script-timeout 15s`). Alcuni script «safe» possono essere eseguiti indefinitamente contro API HTTP non standard, sottraendo risultati alle altre porte senza questo limite.
                 • Ambito: le stesse porte già confermate aperte utilizzate dalla verifica attiva delle vulnerabilità stessa.
@@ -565,16 +565,15 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_sensor_pairing",
-                title: "Associazione RoamSwitch Sensor (fiducia reciproca mDNS, Pro)",
-                summary: "Gestisce l'associazione di fiducia reciproca con un prodotto separato, «RoamSwitch Sensor» (un hub di controllo attivo dedicato), sulla stessa LAN. Si annuncia tramite mDNS mentre individua i Sensor, ma il solo rilevamento non stabilisce alcuna fiducia — l'associazione richiede un'azione esplicita dell'operatore (lo stesso modello dell'associazione Bluetooth). Solo Pro.",
+                title: "Associazione RoamSwitch Sensor (codice di associazione, Pro)",
+                summary: "Gestisce l'associazione di fiducia reciproca con un prodotto separato, «RoamSwitch Sensor» (un hub di controllo attivo dedicato), sulla stessa LAN. Usa un flusso di associazione attiva tramite un codice emesso dal Sensor — nessun rilevamento automatico mDNS, poiché si presume che il Sensor operi con un IP fisso. Solo Pro.",
                 details: """
-                • Come funziona: genera e conserva in modo persistente la propria coppia di chiavi Ed25519 di questo dispositivo, annunciando la propria chiave pubblica tramite mDNS (tipo di servizio `_roamswitch._tcp`) come record TXT `role=endpoint`, mentre individua gli annunci `role=sensor` provenienti dal Sensor. Perché il Sensor si fidi di questo dispositivo, la sua funzione di associazione deve ricevere separatamente la chiave pubblica di questo dispositivo — il solo rilevamento unilaterale non stabilisce mai una fiducia reciproca.
-                • Associazione manuale: alcuni access point Wi-Fi inoltrano il multicast in modo asimmetrico, rendendo talvolta inaffidabile il rilevamento reciproco mDNS; per questo è sempre disponibile anche l'associazione manuale, inserendo direttamente la chiave pubblica/indirizzo mostrati dal Sensor (l'associazione in sé non fallisce solo perché mDNS non funziona).
-                • Effetto dell'attivazione: attivandola, questo dispositivo annuncia la propria presenza (nome host, chiave pubblica) sulla LAN tramite mDNS. Disattivata (l'impostazione predefinita) significa che questo annuncio non avviene.
-                • Come aprirlo: barra dei menu → «Monitoraggio porte e dispositivi» → «🔍 Associazione RoamSwitch Sensor…». Mostra la chiave pubblica/indirizzo di questo dispositivo (con pulsante di copia), i Sensor individuati (con pulsante Associa), i Sensor associati (con pulsante Disassocia) e un modulo di associazione manuale.
-                • Il protocollo di trasporto (tipo di servizio, chiavi/valori del record TXT) corrisponde esattamente a quello dell'edizione Linux (`roamswitch-core::sensor_pairing`).
+                • Come funziona: genera e conserva in modo persistente la propria coppia di chiavi Ed25519 di questo dispositivo. Per associarsi, questo dispositivo si connette al listener TCP del Sensor (porta 50543) con un codice di associazione monouso emesso dall'operatore del Sensor (scade 10 minuti dopo l'emissione), insieme all'indirizzo/nome host di questo dispositivo. Se il codice è valido, il Sensor aggiunge la chiave pubblica di questo dispositivo al proprio elenco di fiducia.
+                • Richiesta di un controllo: dopo l'associazione, «Richiedi controllo al Sensor» chiede al Sensor di eseguire un controllo attivo (verifica di raggiungibilità). Poiché il Sensor genera i risultati in modo asincrono, l'helper privilegiato sempre attivo di questo dispositivo interroga il risultato ogni 5 minuti, fino a 5 volte. I risultati ottenuti vengono salvati anche su questo dispositivo e mostrati in «Risultati controllo» nella schermata delle impostazioni.
+                • Come aprirlo: barra dei menu → «Monitoraggio porte e dispositivi» → «🔍 Associazione RoamSwitch Sensor…». Mostra la chiave pubblica/indirizzo di questo dispositivo (con pulsante di copia), i Sensor associati (con pulsante Disassocia), un modulo per inserire il codice di associazione e l'elenco dei risultati di controllo.
+                • Usa lo stesso protocollo di controllo TCP dell'edizione Linux (`roamswitch-core::sensor_pairing`) — porta 50543, JSON delimitato da a-capo, firme Ed25519.
                 """,
-                recommendation: "Associa solo dopo aver confermato che si tratta effettivamente di un Sensor configurato da te. Se viene individuato un Sensor sconosciuto, non associarlo — verifica invece con chi amministra la rete."
+                recommendation: "Usa solo un codice di associazione effettivamente emesso dalla schermata operatore di un Sensor configurato da te. Se ti viene chiesto di inserire un codice sconosciuto, non associarti — verifica invece con chi amministra la rete."
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",
@@ -627,8 +626,9 @@ extension RoamSwitchKnowledgeBase {
                 • Registrazione: registrato tramite lo SMAppService di macOS come LaunchDaemon incluso nell'app. Il primo utilizzo richiede l'approvazione in Impostazioni di Sistema → Generali → Elementi login ed estensioni. Non può essere registrato se l'app non è nella cartella Applicazioni (faq_install_location).
                 • Demoni collegati: vengono registrati anche i LaunchDaemon helper per la rete di sicurezza dell'Air-Gap (rilascio automatico dopo 10 minuti) e la porta di avvio (fino a 90 secondi).
                 • Verifica: le firme del codice (Team ID) vengono controllate alle connessioni XPC, rifiutando le chiamate da processi non autorizzati.
+                • Nuova approvazione dopo un aggiornamento: l'app tenta automaticamente di passare al nuovo helper, ma macOS può comunque lasciarlo in attesa di approvazione. In tal caso l'icona nella barra dei menu passa a un avviso con «⚠️ È necessaria una nuova approvazione dopo l'aggiornamento», e viene inviata anche una notifica.
                 """,
-                recommendation: "Approva l'helper quando richiesto al primo avvio. Se non è approvato, il menu mostra «⚠️ Approva il helper…»."
+                recommendation: "Approva l'helper quando richiesto al primo avvio. Se non è approvato, il menu mostra «⚠️ Approva il helper…». Se questo avviso o notifica compare dopo un aggiornamento, gli stessi passaggi (Impostazioni di Sistema > Generali > Elementi login ed estensioni) permettono di approvarlo di nuovo."
             ),
             LocalizedEntry(
                 id: "feat_mcp_server",

@@ -25,17 +25,13 @@ import Foundation
 /// each individual script's own runtime (not the whole scan — some `safe`
 /// HTTP scripts run indefinitely long against non-standard HTTP APIs,
 /// starving every other port of the shared external timeout), and `-T4`
-/// speeds up otherwise-conservative default timing. Opt-in only
-/// (`activeVulnScanNseEnabledDefaultsKey`, off by default) on top of
-/// `ActiveVulnScan.isEnabled` itself — nmap being installed must never be a
-/// silent behavior change for an existing install.
+/// speeds up otherwise-conservative default timing. Runs whenever
+/// `ActiveVulnScan.isEnabled` is on — no separate opt-in of its own; a
+/// former second toggle read `UserDefaults.standard` directly, which is
+/// always empty inside the separate-process, separate-bundle-ID
+/// `RoamSwitchMCPServer`, so NSE silently never ran for MCP-triggered
+/// audits even when the menu bar showed it as on.
 enum NmapNSE {
-
-    static let enabledDefaultsKey = "RoamSwitch.ActiveVulnScanNSEEnabled"
-
-    static var isEnabled: Bool {
-        UserDefaults.standard.bool(forKey: enabledDefaultsKey)
-    }
 
     struct NSEFinding {
         let port: Int
