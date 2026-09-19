@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.43 (build 100).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.44 (build 101).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -70,6 +70,48 @@ enum ServiceSignatures {
             title: loc("etcd クラスタストア露出リスク"),
             description: loc("etcdはクライアント認証（--client-cert-auth 等）を明示的に有効化しない限り、既定では未認証で全キーバリューデータへアクセスできます。"),
             recommendation: loc("--client-cert-auth を有効にするか、127.0.0.1 限定でリッスンしてください。")
+        ),
+        Signature(
+            id: "elasticsearch-noauth",
+            processPatterns: ["elasticsearch"],
+            title: loc("Elasticsearch 認証なし公開リスク"),
+            description: loc("Elasticsearch が認証なしでクラスタ情報に応答しました。セキュリティ機能が無効のまま到達可能だと、全インデックスの読み取り・改ざん・削除が誰にでも可能です。"),
+            recommendation: loc("xpack.security.enabled: true を有効にして認証を必須にし、network.host を 127.0.0.1 または管理用ネットワークに限定してください。")
+        ),
+        Signature(
+            id: "couchdb-noauth",
+            processPatterns: ["couchdb"],
+            title: loc("CouchDB 認証なし公開リスク"),
+            description: loc("CouchDB が認証なしでデータベース一覧（_all_dbs）を返しました。管理者アカウントが未設定（Admin Party）のままだと、誰でもデータの読み書きと管理者権限の取得が可能です。"),
+            recommendation: loc("管理者アカウントを作成して認証を必須にし、bind_address を 127.0.0.1 に限定してください。")
+        ),
+        Signature(
+            id: "jenkins-noauth",
+            processPatterns: ["jenkins"],
+            title: loc("Jenkins 認証なし公開リスク"),
+            description: loc("Jenkins が認証なしでジョブ情報（/api/json）を返しました。匿名アクセスが許可されていると、ビルド設定や認証情報の閲覧、さらにスクリプト実行によるサーバー乗っ取りにつながります。"),
+            recommendation: loc("「Manage Jenkins > Security」でセキュリティを有効にし、匿名ユーザーの読み取り権限も外してください。")
+        ),
+        Signature(
+            id: "vnc-noauth",
+            processPatterns: ["Xvnc", "x11vnc", "tigervnc", "vncserver", "wayvnc"],
+            title: loc("VNC 認証なし公開リスク"),
+            description: loc("VNC サーバーが認証方式として「なし（None）」を受け付けました。到達できる相手は誰でも、パスワードなしでこの画面を閲覧・操作できます。"),
+            recommendation: loc("VNC のパスワード認証を必須にするか、SSH トンネル経由に限定して、ポートを外部へ公開しないでください。")
+        ),
+        Signature(
+            id: "smb1-enabled",
+            processPatterns: ["smbd"],
+            title: loc("SMBv1 が有効です"),
+            description: loc("SMB のネゴシエート要求に SMBv1 ヘッダーで応答しました。SMBv1 は EternalBlue/WannaCry 型攻撃（MS17-010）の標的となったプロトコルで、2017年から非推奨です。"),
+            recommendation: loc("SMBv1 を無効化してください（Samba では smb.conf に min protocol = SMB2 を設定）。")
+        ),
+        Signature(
+            id: "smb-signing-not-required",
+            processPatterns: ["smbd"],
+            title: loc("SMB 署名が必須ではありません"),
+            description: loc("SMB2 以降で通信の署名が必須になっていません。同じLAN上の攻撃者が認証を中継する NTLM リレー攻撃で、このホストになりすませます。"),
+            recommendation: loc("SMB 署名を必須にしてください（Samba では server signing = mandatory）。")
         ),
     ]
 

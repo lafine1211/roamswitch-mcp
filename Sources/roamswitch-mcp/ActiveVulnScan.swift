@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.43 (build 100).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.44 (build 101).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -262,6 +262,121 @@ enum ActiveVulnScan {
         _ = semaphore.wait(timeout: .now() + timeout)
         connection.cancel()
         return result
+    }
+
+    // MARK: - Extended probes (HTTP / VNC / SMB)
+    //
+    // Mirrors the Linux client's extended probers in `active_vuln_scan.rs` (ported from
+    // the standalone `vulnsweep` scanner): single connection, read-only, no credentials.
+
+    /// One `GET {path}` and a verdict on the status line + start of the body. `nil` means
+    /// inconclusive (no response at all).
+    private static func probeHTTPBody(port: Int, path: String, timeout: TimeInterval,
+                                      verdict: (Int, String) -> Bool) -> Bool? {
+        let request = "GET \(path) HTTP/1.1\r\nHost: 127.0.0.1:\(port)\r\nAccept: application/json\r\nConnection: close\r\n\r\n"
+        guard let response = sendRawTCP(port: port, payload: Data(request.utf8), timeout: timeout), !response.isEmpty else {
+            return nil
+        }
+        let text = String(decoding: response, as: UTF8.self)
+        guard let statusLine = text.split(separator: "\r\n", maxSplits: 1, omittingEmptySubsequences: false).first,
+              let code = statusLine.split(separator: " ").dropFirst().first.flatMap({ Int($0) }) else {
+            return false
+        }
+        let body = text.components(separatedBy: "\r\n\r\n").dropFirst().joined(separator: "\r\n\r\n")
+        return verdict(code, body)
+    }
+
+    static func probeElasticsearchNoAuth(port: Int, timeout: TimeInterval = 2.0) -> Bool? {
+        probeHTTPBody(port: port, path: "/", timeout: timeout) { $0 == 200 && $1.contains("\"cluster_name\"") }
+    }
+
+    static func probeCouchDBNoAuth(port: Int, timeout: TimeInterval = 2.0) -> Bool? {
+        probeHTTPBody(port: port, path: "/_all_dbs", timeout: timeout) {
+            $0 == 200 && $1.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("[")
+        }
+    }
+
+    static func probeJenkinsNoAuth(port: Int, timeout: TimeInterval = 2.0) -> Bool? {
+        probeHTTPBody(port: port, path: "/api/json", timeout: timeout) { $0 == 200 && $1.contains("\"_class\"") }
+    }
+
+    /// RFB handshake up to the security-type list only; never selects a type, so no
+    /// session is established. `true` when security type 1 ("None") is offered.
+    static func probeVNCNoAuth(port: Int, timeout: TimeInterval = 2.0) -> Bool? {
+        guard let nwPort = NWEndpoint.Port(rawValue: UInt16(port)) else { return nil }
+        let connection = NWConnection(host: "127.0.0.1", port: nwPort, using: .tcp)
+        let queue = DispatchQueue.global(qos: .utility)
+        let done = DispatchSemaphore(value: 0)
+        var result: Bool?
+
+        connection.stateUpdateHandler = { state in
+            switch state {
+            case .ready:
+                connection.receive(minimumIncompleteLength: 12, maximumLength: 12) { data, _, _, _ in
+                    guard let ver = data, ver.count == 12, ver.prefix(4) == Data("RFB ".utf8) else {
+                        result = data == nil ? nil : false
+                        done.signal()
+                        return
+                    }
+                    let minor = Int(String(decoding: ver[8..<11], as: UTF8.self)) ?? 0
+                    let reply = minor < 7 ? "RFB 003.003\n" : "RFB 003.008\n"
+                    connection.send(content: Data(reply.utf8), completion: .contentProcessed { _ in
+                        connection.receive(minimumIncompleteLength: 1, maximumLength: 300) { types, _, _, _ in
+                            defer { done.signal() }
+                            guard let types = types, !types.isEmpty else { return }
+                            if minor < 7 {
+                                result = types.count >= 4 && types.prefix(4) == Data([0, 0, 0, 1])
+                            } else {
+                                let count = Int(types[0])
+                                result = count > 0 && types.dropFirst().prefix(count).contains(1)
+                            }
+                        }
+                    })
+                }
+            case .failed, .cancelled:
+                done.signal()
+            default:
+                break
+            }
+        }
+        connection.start(queue: queue)
+        _ = done.wait(timeout: .now() + timeout)
+        connection.cancel()
+        return result
+    }
+
+    enum SMBNegotiate { case smb1, smb2SigningRequired, smb2SigningNotRequired, notSMB }
+
+    /// One SMB protocol-negotiate exchange offering SMB1 and SMB2 dialects. Never
+    /// authenticates and never opens a share.
+    static func probeSMBNegotiate(port: Int, timeout: TimeInterval = 2.0) -> SMBNegotiate? {
+        let dialects = ["PC NETWORK PROGRAM 1.0", "LANMAN1.0", "Windows for Workgroups 3.1a", "LM1.2X002", "LANMAN2.1", "NT LM 0.12", "SMB 2.002", "SMB 2.???"]
+        var dialectBytes = Data()
+        for d in dialects {
+            dialectBytes.append(0x02)
+            dialectBytes.append(Data(d.utf8))
+            dialectBytes.append(0x00)
+        }
+        var smb = Data([0xFF, 0x53, 0x4D, 0x42, 0x72, 0, 0, 0, 0, 0x18, 0x00, 0x00, 0, 0])
+        smb.append(Data(count: 8))
+        smb.append(Data([0, 0, 0xFF, 0xFF, 0xFF, 0xFF, 0, 0, 0, 0, 0x00]))
+        smb.append(contentsOf: withUnsafeBytes(of: UInt16(dialectBytes.count).littleEndian) { Data($0) })
+        smb.append(dialectBytes)
+        var packet = Data([0x00, UInt8((smb.count >> 16) & 0xFF), UInt8((smb.count >> 8) & 0xFF), UInt8(smb.count & 0xFF)])
+        packet.append(smb)
+
+        guard let response = sendRawTCP(port: port, payload: packet, timeout: timeout), response.count >= 8 else {
+            return nil
+        }
+        let body = response.dropFirst(4)
+        let magic = Array(body.prefix(4))
+        if magic == [0xFF, 0x53, 0x4D, 0x42] { return .smb1 }
+        if magic == [0xFE, 0x53, 0x4D, 0x42], body.count >= 70 {
+            let bytes = Array(body)
+            let mode = UInt16(bytes[66]) | (UInt16(bytes[67]) << 8)
+            return mode & 0x02 != 0 ? .smb2SigningRequired : .smb2SigningNotRequired
+        }
+        return .notSMB
     }
 
     // MARK: - Known-CVE version matching
@@ -575,6 +690,8 @@ enum ActiveVulnScan {
     /// Signatures without a matching prober here are Phase-1-only (flagged passively).
     private static let probeableSignatureIDs: Set<String> = [
         "redis-default-noauth", "memcached-noauth", "mongod-default-noauth",
+        "elasticsearch-noauth", "couchdb-noauth", "jenkins-noauth", "vnc-noauth",
+        "smb1-enabled", "smb-signing-not-required",
     ]
 
     /// Whether `runScan` would attempt anything at all for this port — i.e. it either
@@ -610,6 +727,12 @@ enum ActiveVulnScan {
                 case "redis-default-noauth": confirmed = probeRedisNoAuth(port: port.port)
                 case "memcached-noauth": confirmed = probeMemcachedNoAuth(port: port.port)
                 case "mongod-default-noauth": confirmed = probeMongoDBNoAuth(port: port.port)
+                case "elasticsearch-noauth": confirmed = probeElasticsearchNoAuth(port: port.port)
+                case "couchdb-noauth": confirmed = probeCouchDBNoAuth(port: port.port)
+                case "jenkins-noauth": confirmed = probeJenkinsNoAuth(port: port.port)
+                case "vnc-noauth": confirmed = probeVNCNoAuth(port: port.port)
+                case "smb1-enabled": confirmed = probeSMBNegotiate(port: port.port).map { $0 == .smb1 }
+                case "smb-signing-not-required": confirmed = probeSMBNegotiate(port: port.port).map { $0 == .smb2SigningNotRequired }
                 default: confirmed = nil
                 }
                 let finishedAt = Date()
