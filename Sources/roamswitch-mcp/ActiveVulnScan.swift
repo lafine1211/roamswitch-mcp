@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.40 (build 97).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.41 (build 98).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -592,7 +592,12 @@ enum ActiveVulnScan {
     /// Sequential — no concurrency, matching the Linux implementation's safety
     /// invariants. Confirmed-safe and inconclusive checks are tracked
     /// separately from findings — see `CheckOutcome`.
-    static func runScan(ports: [ListeningPortInfo], probeLogURL: URL = probeLogURL) -> ScanRunResult {
+    /// `includeNmapNSE` exists only so unit tests can exercise Phases 2/3 deterministically:
+    /// with it on, any machine that happens to have `nmap` installed appends several
+    /// "nmap NSE所見" findings for the test's stub-server port (and adds ~15s per scan),
+    /// making count-based assertions depend on the developer's environment. Production
+    /// callers always take the default (on).
+    static func runScan(ports: [ListeningPortInfo], probeLogURL: URL = probeLogURL, includeNmapNSE: Bool = true) -> ScanRunResult {
         var result = ScanRunResult()
         var logEntries: [ProbeRunRecord] = []
 
@@ -732,7 +737,7 @@ enum ActiveVulnScan {
         // manual "Run Active Verification" button and `MCPServer`'s
         // `run_active_vuln_scan` tool call through `runScan`, so neither
         // needs its own wiring.
-        do {
+        if includeNmapNSE {
             let allPorts = ports.map(\.port)
             // A fixed 120s budget silently loses *every* finding, not just
             // the unfinished tail, on an ordinary dev Mac: nmap's normal-
