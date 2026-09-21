@@ -52,6 +52,7 @@ All files live in `Sources/roamswitch-mcp/`.
 | `PackageCveMapLanguagesData.swift` | `RoamSwitch/PackageCveMapLanguagesData.swift` |
 | `PackageCveScriptScan.swift` | `RoamSwitch/PackageCveScriptScan.swift` |
 | `NpmAuditSignatures.swift` | `RoamSwitch/NpmAuditSignatures.swift` |
+| `TyposquatGuard.swift` | `RoamSwitch/TyposquatGuard.swift` |
 | `SecretLeakScanning.swift` | `RoamSwitch/SecretLeakScanning.swift` |
 | `CryptoSecretDetection.swift` | `RoamSwitch/CryptoSecretDetection.swift` |
 | `SecurityLogAuditor.swift` | `RoamSwitch/SecurityLogAuditor.swift` |
@@ -63,11 +64,20 @@ All files live in `Sources/roamswitch-mcp/`.
 | `NotificationHistory.swift` | `RoamSwitch/NotificationHistory.swift` |
 | `ContainmentIncidentTimeline.swift` | `RoamSwitch/ContainmentIncidentTimeline.swift` |
 | `NetworkHistoryGuard.swift` | `RoamSwitch/NetworkHistoryGuard.swift` |
+| `MCPSensorAuditStatusReader.swift` | `RoamSwitch/MCPSensorAuditStatusReader.swift` |
 | `RansomwareSnapshotStatusReader.swift` | `RoamSwitch/RansomwareSnapshotStatusReader.swift` |
-| `RansomwareSnapshotLogic.swift` | `Shared/RansomwareSnapshotLogic.swift` (the only file taken from `Shared/`) |
+| `RansomwareSnapshotLogic.swift` | `Shared/RansomwareSnapshotLogic.swift` (from `Shared/`, see below) |
+| `MCPExecRecorderTools.swift` | `RoamSwitch/MCPExecRecorderTools.swift` |
+| `ExecEventModel.swift` | `Shared/ExecEventModel.swift` (from `Shared/`) |
+| `ExecLogStore.swift` | `Shared/ExecLogStore.swift` (from `Shared/`) |
+| `ExecProcessTree.swift` | `Shared/ExecProcessTree.swift` (from `Shared/`) |
+| `ExecReadAPI.swift` | `Shared/ExecReadAPI.swift` (from `Shared/`) |
 
 This is exactly the source set the app compiles into its `RoamSwitchMCPServer` target
-(see `project.yml` in the app repo).
+(see `project.yml` in the app repo). Five of the files come from the app's `Shared/` folder
+(compiled into the app and the privileged helper too); the sync script keeps them in its `SHARED`
+list, and everything else in its `CORE` list. `Localizable.xcstrings` is also in that target but is
+not mirrored (this package does not use it).
 
 `MCPServer.swift` (the pure parse/dispatch) lives in `RoamSwitch/`, compiled into both
 the app and the `RoamSwitchMCPServer` targets, so the app's own test suite can reach it
@@ -93,6 +103,7 @@ via `@testable import RoamSwitch`. Only `main.swift` (the stdin→stdout pump) i
 | `ARPSpoofMonitorTests.swift` | `RoamSwitchTests/ARPSpoofMonitorTests.swift` |
 | `MCPServerRobustnessTests.swift` | `RoamSwitchTests/MCPServerRobustnessTests.swift` |
 | `ParserRobustnessTests.swift` | `RoamSwitchTests/ParserRobustnessTests.swift` |
+| `TyposquatGuardTests.swift` | `RoamSwitchTests/TyposquatGuardTests.swift` |
 | `RansomwareRecoveryMCPTests.swift` | `RoamSwitchTests/RansomwareRecoveryMCPTests.swift` |
 | `StdioSmokeTests.swift` | **not mirrored** — specific to this repo (drives the built binary over stdio) |
 | `MutationFuzzTests.swift` | **not mirrored** — specific to this repo |
