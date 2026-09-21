@@ -110,6 +110,10 @@ enum ActiveVulnScan {
         /// `CheckOutcome`), just named on the row instead of being implied
         /// by which list it landed in.
         let outcome: String
+        /// Groups the rows written by one scan run (assigned by `appendProbeLog`);
+        /// `nil` for rows saved before this existed. Lets a reader tell two runs
+        /// that hit the same probe in the same minute apart.
+        var scanId: String? = nil
     }
 
     private static let maxProbeLogEntries = 500
@@ -146,6 +150,16 @@ enum ActiveVulnScan {
     /// applicable targets shouldn't touch the file at all).
     static func appendProbeLog(_ records: [ProbeRunRecord], to url: URL = probeLogURL) {
         guard !records.isEmpty else { return }
+        // The app and roamswitch-mcp share this file across processes; hold an exclusive
+        // advisory lock on a sidecar file for the whole read-modify-write, or two appends
+        // racing lose or duplicate rows. Best effort: without the lock the append still runs.
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let lockFD = open(url.appendingPathExtension("lock").path, O_CREAT | O_WRONLY, 0o600)
+        if lockFD >= 0 { flock(lockFD, LOCK_EX) }
+        defer { if lockFD >= 0 { flock(lockFD, LOCK_UN); close(lockFD) } }
+        let scanId = String(Int(Date().timeIntervalSince1970 * 1000), radix: 16) + "-" + String(ProcessInfo.processInfo.processIdentifier, radix: 16)
+        var records = records
+        for i in records.indices where records[i].scanId == nil { records[i].scanId = scanId }
         var entries = loadProbeLog(at: url)
         entries.append(contentsOf: records)
         if entries.count > maxProbeLogEntries {
