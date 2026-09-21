@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.51 (build 108).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.52 (build 113).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -21,6 +21,14 @@ public enum ContainmentIncidentSource: String, Codable {
     case ransomwareCanary
     case runtimeThreat
     case portAnomaly
+    /// `ClickFixGuard`'s command-history heuristic. Added additively:
+    /// existing timeline files never contain it, so they decode unchanged.
+    case clickFix
+    /// `ExecRecorderManager`'s correlation-rule alerts (process-exec recorder,
+    /// notify-only). Added additively like `.clickFix`: older timeline files
+    /// never contain it, so they decode unchanged; a build that predates it
+    /// simply never wrote such records.
+    case execRecorder
 }
 
 /// What a ransomware canary actually observed, as a stable identifier —
@@ -164,6 +172,20 @@ public enum ContainmentIncidentTimeline {
         }
     }
 
+    /// Marks one specific event resolved. Used for records that describe a
+    /// transition rather than an incident (e.g. FULL -> DEGRADED air-gap),
+    /// which are stamped resolved at creation so a later `resolveLatest`
+    /// still lands on the original incident, not on the transition record.
+    public static func resolve(id: UUID, resolution: ContainmentIncidentResolution) {
+        queue.sync {
+            var events = loadAll()
+            guard let idx = events.firstIndex(where: { $0.id == id }) else { return }
+            events[idx].resolvedAt = Date()
+            events[idx].resolution = resolution
+            saveAll(events)
+        }
+    }
+
     public static func loadRecent(limit: Int = 50) -> [ContainmentIncidentEvent] {
         queue.sync { Array(loadAll().prefix(limit)) }
     }
@@ -201,7 +223,7 @@ public enum ContainmentIncidentTimeline {
                 return "T1486" // Data Encrypted for Impact
             }
             return "T1565" // Data Manipulation
-        case .runtimeThreat, .portAnomaly:
+        case .runtimeThreat, .portAnomaly, .clickFix, .execRecorder:
             // XProtect/Gatekeeper/port-anomaly summaries don't carry a
             // Falco-style rule name to pattern-match on macOS, so this
             // stays unmapped rather than guessing.

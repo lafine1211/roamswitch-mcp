@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.9.51 (build 108). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.9.52 (build 113). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -108,8 +108,8 @@ final class MCPResponseFormattingTests: XCTestCase {
         disableDefaultOnGuards()
         let payload = MCPResponseFormatting.makeGuardStatusPayload(gatewayMAC: nil, defaults: defaults)
 
-        XCTAssertEqual(payload.guards.count, 22)
-        XCTAssertEqual(Set(payload.guards.map(\.key)).count, 22, "guard keys must be unique")
+        XCTAssertEqual(payload.guards.count, 23)
+        XCTAssertEqual(Set(payload.guards.map(\.key)).count, 23, "guard keys must be unique")
         XCTAssertTrue(payload.guards.allSatisfy { !$0.enabledInSettings })
         XCTAssertFalse(payload.caveats.isEmpty)
     }

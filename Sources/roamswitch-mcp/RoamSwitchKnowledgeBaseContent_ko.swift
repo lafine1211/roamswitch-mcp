@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.51 (build 108).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.52 (build 113).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -55,7 +55,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • 🟢 신뢰함 (개방 - 보호 해제): 예를 들어 집. 방화벽 해제, 공유 서비스(SSH / SMB / 화면 공유)와 AirDrop 허용.
                 • 🟡 표준 보호 (방화벽과 스텔스): 예를 들어 회사나 테더링. PF 패킷 필터와 스텔스 모드로 외부 탐색을 차단하면서 공유 서비스는 유지.
-                • 🔴 최대 잠금 (공유・AirDrop 정지): 카페, 공용 Wi-Fi, 등록되지 않은 네트워크. 모든 수신 차단, 공유 데몬 정지, AirDrop 비활성화.
+                • 🔴 최대 잠금 (공유·AirDrop 정지): 카페, 공용 Wi-Fi, 등록되지 않은 네트워크. 모든 수신 차단, 공유 데몬 정지, AirDrop 비활성화.
                 • 판단 방식: 네트워크가 변경되면 게이트웨이의 MAC 주소를 읽어 등록된 네트워크와 비교합니다. 게이트웨이가 바뀌지 않는 경로 이벤트(DHCP 갱신, Wi-Fi 로밍)는 전체 재판정을 일으키지 않습니다.
                 • 내부 구조: 특권 헬퍼 `RoamSwitchHelper`(XPC 경유)가 전용 `pfctl` 앵커를 관리하여 커널 수준에서 패킷을 폐기합니다.
                 • 수동 오버라이드: 수동 오버라이드에서 각 등급별로 다음 네트워크 연결 해제 시까지(권장), 1시간 동안, 4시간 동안, 해제할 때까지 유지 중에서 선택할 수 있습니다(set_manual_override 참조).
@@ -81,7 +81,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "같은 네트워크의 공격자가 라우터로 위장하여 트래픽을 도청하거나 변조하는 ARP 스푸핑(중간자 공격)을 탐지합니다. 최대 잠금 네트워크에서는 즉시 네트워크를 차단하고, 다른 등급에서는 알림만 보내고 판단은 사용자에게 맡깁니다.",
                 details: """
                 • 탐지 방식: 기본 게이트웨이의 IP는 그대로인데 MAC 주소가 갑자기 바뀌는 것을 감지합니다. 네트워크 변경 이벤트 외에도 전용 15초 폴링을 통해 세션 도중에 시작되는 공격도 포착합니다.
-                • 대응 방식: 최대 잠금 네트워크에서는 즉시 에어갭 봉쇄(feat_airgap_containment)를 실행합니다. 신뢰함 또는 표준 보호 네트워크에서는 알림만 보내며, 포트・기기 모니터링에서 "ARP 스푸핑 감지 — 지금 전체 차단"을 선택해 수동으로 봉쇄를 실행할 수 있습니다. 이는 라우터 재부팅이나 메시 로밍으로 인한 오작동을 방지하고, 위조된 ARP 패킷 하나로 자체 정전을 유발하는 무기화를 막기 위한 것입니다.
+                • 대응 방식: 최대 잠금 네트워크에서는 즉시 에어갭 봉쇄(feat_airgap_containment)를 실행합니다. 신뢰함 또는 표준 보호 네트워크에서는 알림만 보내며, 포트·기기 모니터링에서 "ARP 스푸핑 감지 — 지금 전체 차단"을 선택해 수동으로 봉쇄를 실행할 수 있습니다. 이는 라우터 재부팅이나 메시 로밍으로 인한 오작동을 방지하고, 위조된 ARP 패킷 하나로 자체 정전을 유발하는 무기화를 막기 위한 것입니다.
                 • 기본값: Pro 라이선스를 처음 활성화할 때 메뉴 항목 "ARP 스푸핑(네트워크 위장) 감지 시 자동 차단 (Pro)"이 자동으로 켜집니다(set_pro_default_guards).
                 • 위치: 이것은 사후 대응입니다. 사전 예방은 게이트웨이 ARP/NDP 고정(feat_gateway_arp_lock)과 VPN 터널(feat_vpn_tunnel)이 담당합니다.
                 • 사고는 MITRE ATT&CK T1557로 사고 타임라인(feat_containment_incident_timeline)에 기록됩니다.
@@ -93,7 +93,7 @@ extension RoamSwitchKnowledgeBase {
                 title: "게이트웨이 ARP/NDP 고정 (예방적) (Pro)",
                 summary: "신뢰할 수 없는 네트워크에 연결하면 게이트웨이, IPv6 라우터, 동일 링크상의 DNS 서버의 MAC 주소를 정적 네이버 캐시 항목으로 고정하여 ARP/NDP 스푸핑에 의한 중간자 공격을 사전에 방지합니다. 기본값은 꺼짐입니다.",
                 details: """
-                • 활성화 방법: 포트・기기 모니터링 → "미신뢰 네트워크에서 게이트웨이 ARP/NDP 고정(예방) (Pro)".
+                • 활성화 방법: 포트·기기 모니터링 → "미신뢰 네트워크에서 게이트웨이 ARP/NDP 고정(예방) (Pro)".
                 • 동작 방식: 연결 시 현재 MAC 주소를 읽고, 헬퍼가 `arp -s` / `ndp -s`로 영구 항목으로 고정합니다. 이후 커널은 해당 IP에 대한 위조 ARP 응답과 네이버 광고를 무시합니다.
                 • 범위: 위 세 가지 항목만 해당합니다. 신뢰함(개방) 네트워크에서는 고정하지 않으므로 집 라우터를 재부팅해도 연결이 끊기지 않습니다. 네트워크가 바뀔 때마다 해제하고 다시 고정합니다.
                 • 한계(최초 사용 시 신뢰): 처음 관측된 MAC을 신뢰하므로, 연결하기 전부터 공격자가 이미 있었다면 그 MAC이 고정될 수 있습니다. 이 전제를 받아들일 수 없다면 VPN 터널을 사용하세요.
@@ -106,7 +106,7 @@ extension RoamSwitchKnowledgeBase {
                 title: "VPN 터널 (WireGuard / Tailscale, 킬 스위치 포함) (Pro)",
                 summary: "신뢰할 수 없는 네트워크에서 암호화된 터널을 자동으로 연결하여 중간자 공격이 암호문만 보게 만듭니다. WireGuard(설정 파일) 또는 Tailscale(exit node)을 백엔드로 선택할 수 있습니다. L2(ARP/NDP)의 무결성에 의존하지 않아 중간자 공격 대책의 핵심입니다. Network Extension 권한이 필요 없습니다.",
                 details: """
-                • 백엔드: 포트・기기 모니터링 → "VPN 터널 (미신뢰 네트워크의 MITM 대응) (Pro)" → 백엔드에서 WireGuard 또는 Tailscale을 선택합니다. 선택한 백엔드만 동작합니다.
+                • 백엔드: 포트·기기 모니터링 → "VPN 터널 (미신뢰 네트워크의 MITM 대응) (Pro)" → 백엔드에서 WireGuard 또는 Tailscale을 선택합니다. 선택한 백엔드만 동작합니다.
                 • WireGuard: Homebrew의 `wireguard-tools`(`brew install wireguard-tools`)가 필요합니다. "WireGuard 설정(.conf) 가져오기…"로 설정 파일을 불러옵니다. 설정 파일은 사용자가 직접 준비해야 합니다(Mullvad, IVPN, Proton VPN, 자체 서버, 회사 제공 등). RoamSwitch는 VPN 서버를 제공하지 않습니다.
                 • WireGuard 킬 스위치: pf가 "block drop all"을 적용하고 lo, 터널 인터페이스, 엔드포인트로의 UDP 핸드셰이크, DHCP, ICMP만 통과시킵니다. 터널이 끊긴 동안에는 어떤 평문도 유출되지 않습니다.
                 • Tailscale: 이미 Tailscale을 사용 중인 사람들을 위한 것입니다. RoamSwitch는 설치나 로그인을 하지 않고 `tailscale status`를 읽어 `tailscale set --exit-node=<노드>`를 실행할 뿐입니다. exit node 지정이 필수입니다(모든 트래픽이 그곳을 거칩니다). 선택한 exit node가 오프라인이면 상태 표시줄에 나타납니다.
@@ -119,12 +119,12 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "feat_airgap_containment",
                 title: "긴급 에어갭 봉쇄 (전체 네트워크 차단, Wi-Fi 무선 끄기, 자동 복구 안전장치)",
-                summary: "심각한 위협(랜섬웨어, XProtect 악성코드 판정, ARP 스푸핑, ClickFix)이 감지되었을 때 사용되는 공통 긴급 봉쇄 기능입니다. 모든 수신 및 송신 트래픽을 차단합니다. 앱이 충돌하거나 재부팅되어도 최대 10분 이내에 네트워크가 자동으로 복구됩니다.",
+                summary: "심각한 위협(랜섬웨어, XProtect 악성코드 판정, ARP 스푸핑, ClickFix)이 감지되었을 때 사용되는 공통 긴급 봉쇄 기능입니다. 모든 수신 및 송신 트래픽을 차단합니다. 이미 열려 있던 연결도 함께 끊습니다. 신뢰도가 낮은 트리거(ClickFix 등)는 앱이 충돌하거나 재부팅되어도 최대 10분 이내에 네트워크가 자동으로 복구됩니다. 신뢰도가 높은 트리거(랜섬웨어 미끼 파일, XProtect 판정, 최대 잠금 네트워크에서의 ARP 스푸핑, ARP 스푸핑 경고에서 「지금 전체 차단」으로 직접 시작한 ARP 봉쇄)는 스스로 열리지 않으며, 최대 1시간의 완전 차단 후 새로운 외부 연결을 계속 차단하는 축소 모드로 전환됩니다.",
                 details: """
                 • 동작 방식: 특권 헬퍼가 pf의 "block drop all"(루프백 제외)을 적용하고 다시 읽어 확인합니다. 송신도 차단되므로 C2 서버로의 키나 데이터 유출도 막습니다. 적용에 실패하면 최대 3회(각 8초 타임아웃) 재시도하고, 그래도 실패하면 "자동 네트워크 차단 실패"라고 명시하고 수동 연결 해제를 요청합니다. 실제로 격리되지 않았는데 격리되었다고 표시하는 일은 없습니다.
                 • Wi-Fi 무선 끄기: pf는 패킷만 폐기할 뿐 어댑터 자체는 연결된 상태로 남으므로, ARP 스푸핑, 랜섬웨어, XProtect 봉쇄는 `networksetup`을 통해 Wi-Fi 무선 자체도 끕니다(기본값 켜짐, 내부 설정 `RoamSwitch.AirGapAutoWiFiKillEnabled`). ClickFix 봉쇄는 무선을 끄지 않습니다.
-                • 해제: 긴급 창이나 알림에서 해제하면 pf 차단이 풀리고 Wi-Fi가 다시 켜집니다.
-                • 안전장치: 앱이 충돌하거나 아무도 해제하지 않으면 헬퍼 측 타이머가 10분 후 에어갭을 강제로 해제하고 Wi-Fi 무선을 복구합니다. 앱을 다시 실행하거나 Mac을 재부팅해도 별도의 수동 조작 없이 복구됩니다.
+                • 해제: 긴급 창이나 알림에서 해제하면 pf 차단이 풀리고 Wi-Fi가 다시 켜집니다. 메뉴 막대의 「Air-Gap 격리 해제」는 무료 버전에서도, 사고 도중 Pro 라이선스가 만료되어도 항상 사용할 수 있습니다. 격리 상태 알림(시작·축소·해제·실패)도 무료 사용자에게 전달되며, 탐지 알림 자체는 계속 Pro 기능입니다.
+                • 안전장치: 아무도 해제하지 않으면(앱 충돌이나 Mac 재부팅 후 포함) 헬퍼 측 타이머가 트리거의 신뢰도에 따라 동작합니다. 신뢰도 낮음(ClickFix, 일반 휴리스틱, 경고 없이 직접 실행한 일반 수동 에어갭): 10분 후 에어갭을 강제로 해제하고 Wi-Fi 무선을 복구합니다. 신뢰도 높음(랜섬웨어 미끼 파일, XProtect 판정, 최대 잠금 네트워크에서의 ARP 스푸핑, ARP 스푸핑 경고에서 「지금 전체 차단」으로 직접 시작한 ARP 봉쇄): 최대 1시간 동안 완전 에어갭을 유지한 뒤 축소 모드로 전환됩니다. 축소 모드에서는 새로운 외부 연결(DHCP 제외)이 계속 차단되지만 어떤 네트워크에 있는지 확인할 수 있도록 Wi-Fi 무선이 다시 켜집니다. 시간이 지나도 자동으로 열리지 않으며, 사용자가 해제하거나 재확인으로 원인이 사라진 것이 확인될 때(예: 의심 프로세스 종료)만 해제됩니다. ARP 봉쇄의 경우 재확인은 트래픽을 보내지 않고 ARP 캐시를 읽으며, 신뢰하는 게이트웨이 MAC이 최소 60초에 걸쳐 연속 3번 확인될 때만 원인이 사라진 것으로 봅니다(MAC 불일치, 항목 없음·미완성, MAC 중복, 읽기 불가는 처음부터 다시 셉니다). 에어갭이 시작될 때와 축소 모드로 전환될 때 이미 열려 있던 연결도 끊습니다.
                 • 부팅 게이트: 부팅 직후 앱이 정책을 적용하기 전까지 기본 거부 pf 부팅 게이트가 작동하며, 최대 90초 후 자동으로 해제됩니다.
                 """,
                 recommendation: "봉쇄가 발동하면 먼저 알림 내용을 확인하고, 의심스러운 앱을 종료한 뒤 검사를 실행하고 나서 해제하세요. 오탐임을 알고 있다면 즉시 해제해도 됩니다."
@@ -149,7 +149,7 @@ extension RoamSwitchKnowledgeBase {
                 title: "실증형 취약점 검증 — 기본값 꺼짐",
                 summary: "이 Mac 자체(127.0.0.1)에서 발견된 서비스가 실제로 인증 없이 응답하는지를 최소한의 읽기 전용 프로브로 확인합니다. 기본값은 꺼짐이며, 명시적으로 켜야 하고 실행할 때마다 확인이 필요합니다.",
                 details: """
-                • 활성화 방법: 포트・기기 모니터링 → "실증형 취약점 검증(능동적 도달 확인)". 이 설정은 포트 진단 화면의 "실증 확인 실행" 버튼을 여는 것일 뿐 그 자체로는 아무것도 전송하지 않으며, 실행할 때마다 "검증 요청을 전송하시겠습니까?"라고 먼저 묻습니다.
+                • 활성화 방법: 포트·기기 모니터링 → "실증형 취약점 검증(능동적 도달 확인)". 이 설정은 포트 진단 화면의 "실증 확인 실행" 버튼을 여는 것일 뿐 그 자체로는 아무것도 전송하지 않으며, 실행할 때마다 "검증 요청을 전송하시겠습니까?"라고 먼저 묻습니다.
                 • 127.0.0.1로만 전송: 다른 호스트로는 절대 전송하지 않습니다.
                 • 비인증 접근: Redis(PING), Memcached(stats), MongoDB(listDatabases)에 단발성, 짧은 타임아웃의 비파괴적 프로브를 보냅니다.
                 • 일반 개발 서버: CORS 설정 오류(자격 증명 포함 Origin 반사), 경로 순회, 오픈 리다이렉트를 확인합니다.
@@ -179,7 +179,7 @@ extension RoamSwitchKnowledgeBase {
                 • 차단 방식: 미승인 기기는 독점적으로 점유(IOHIDDevice seize)되어 해당 기기의 키 입력만 시스템에 도달하지 못하게 됩니다. 다른 키보드는 계속 정상 작동합니다. 점유에 실패한 경우에만 손쉬운 사용 권한을 사용하는 CGEventTap 차단으로 대체합니다.
                 • 승인 방식: 최전면 창에서 "신뢰하고 허용" 또는 "거부하고 차단 유지"를 선택할 수 있습니다. 허용된 키보드는 허용 목록에 추가됩니다.
                 • 키 입력 타이밍 분석: 차단 중에도 해당 기기의 키 입력 간격을 계속 측정합니다. 최소 5회 이상의 간격을 확보한 뒤 평균이 12ms 이하이거나, 평균이 45ms 이하이면서 매우 균일(변동 계수 0.35 이하)하면 "자동 입력(스크립트)의 징후" 경고가 발생합니다. 이는 사람이 낼 수 없는 기계적인 속도와 규칙성을 포착하는 보조 증거일 뿐이며, 차단 여부 판단 자체는 바꾸지 않습니다.
-                • 기본값은 꺼짐입니다. 포트・기기 모니터링 → "무단 USB / BadUSB 물리 포트 가드 (Pro)"에서 활성화하고, "USB / BadUSB 가드 설정…"에서 허용 목록을 관리합니다.
+                • 기본값은 꺼짐입니다. 포트·기기 모니터링 → "무단 USB / BadUSB 물리 포트 가드 (Pro)"에서 활성화하고, "USB / BadUSB 가드 설정…"에서 허용 목록을 관리합니다.
                 """,
                 recommendation: "외장 키보드를 사용한다면 본인이 직접 연결한 것만 신뢰하고 허용으로 등록하세요. 스크립트 입력 경고가 뜬 기기는 항상 거부하고 뽑아 두세요."
             ),
@@ -190,7 +190,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • 모니터링 방식: DiskArbitration이 외장/이동식 볼륨 마운트를 즉시 포착합니다.
                 • 미등록 기기: 안전을 위해 읽기 전용으로 다시 마운트되며 "읽기·쓰기 허용", "읽기 전용으로 허용", "꺼내기"를 제공하는 대화상자가 표시됩니다. 꺼내기를 선택하면 즉시 마운트 해제 및 꺼내기가 실행됩니다.
-                • 허용된 기기: 허용 목록의 권한(읽기 전용/읽기・쓰기)이 자동으로 적용되며, 읽기・쓰기로 승격되기 전에 ClamAV 검사를 실행합니다.
+                • 허용된 기기: 허용 목록의 권한(읽기 전용/읽기·쓰기)이 자동으로 적용되며, 읽기·쓰기로 승격되기 전에 ClamAV 검사를 실행합니다.
                 • 감염: 악성코드가 발견되면 볼륨이 자동으로 꺼내지고 긴급 경보가 발송됩니다.
                 • 재포맷된 드라이브: 볼륨 UUID가 바뀌어도 일련번호를 포함한 하드웨어 식별 정보가 일치하면 승인 정보가 그대로 이어집니다(공급업체/제품 ID만으로는 일치로 간주하지 않습니다).
                 • 범위: 저장장치를 통한 데이터 유출과 악성 페이로드를 방지합니다. 키보드로 위장하는 HID형 BadUSB 기기는 feat_usb_keyboard_guard가 처리합니다.
@@ -367,6 +367,21 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "가짜 오류 페이지나 캡차에 속아 명령어를 실행하게 될까 걱정된다면 활성화를 고려하세요."
             ),
             LocalizedEntry(
+                id: "feat_exec_recorder",
+                title: "프로세스 실행 기록(eslogger, 알림 전용, Pro, 기본값 꺼짐)",
+                summary: "Apple의 /usr/bin/eslogger(macOS 13 이상)로 이 Mac에서 시작된 프로그램을 기록하고, 의심스러운 조합과 일치하는 실행을 알려 드립니다. 실행을 차단하거나 네트워크를 끊지 않으며, 기록은 이 Mac 안에만 남습니다.",
+                details: """
+                • 동작 방식: 권한 있는 헬퍼가 `/usr/bin/eslogger exec fork exit`를 자식 프로세스로 실행하고 그 JSON 스트림을 해석합니다. eslogger는 macOS에 포함된 도구이며 RoamSwitch는 EndpointSecurity 권한(entitlement)을 사용하거나 신청하지 않습니다. 따라서 실행 전 차단이 아니라 사후 관찰입니다.
+                • 필요 조건: macOS 13 이상과 RoamSwitchHelper의 전체 디스크 접근 권한. 권한이 없으면 창에 「실행 기록을 사용할 수 없습니다: RoamSwitchHelper에 전체 디스크 접근 권한이 필요합니다」(또는 eslogger를 찾을 수 없음)라고만 표시하고 상시 폴링으로 대체하지 않습니다. 기록을 켜기 전이나 헬퍼 시작 전의 이벤트는 남지 않습니다.
+                • 상관 규칙(알림 전용, 기본적으로 조용함, 각 규칙에 고정 ID와 MITRE ATT&CK 기법): 브라우저/Office/메일 앱이 셸이나 스크립트 인터프리터를 직접 실행(exec.shell_from_app, T1059) / /tmp, /private/var/tmp 또는 격리 속성이 있는 위치에서 서명 없음·임시(ad-hoc) 서명 바이너리 실행(exec.untrusted_location, T1204.002) / curl/wget을 셸로 넘기는 `sh -c` 한 줄 명령 중 IP 주소 URL, base64, eval, TLS 검증 해제, 브라우저 부모 같은 의심 정황이 함께 있는 것(exec.pipe_to_shell, T1059.004) / `osascript -e`로 do shell script와 base64/eval을 조합한 것(exec.osascript_obfuscated, T1059.002) / `xattr -d com.apple.quarantine` 후 15분 이내에 그 파일을 실행(exec.quarantine_stripped_then_exec, T1553.001) / 최근 24시간 안에 기록된 LaunchAgent/LaunchDaemon에서 서명 없음·임시 서명 바이너리가 launchd를 통해 시작(exec.launchd_untrusted_binary, T1543.001/.004) / Apple 서명이 아닌, 셸이 아닌 조상 프로세스 아래에서 `security find-generic-password -w` 또는 `dump-keychain` 실행(exec.keychain_access, T1555.001). 터미널에서 평범하게 입력한 `curl | sh`는 의도적으로 감지하지 않습니다.
+                • 알림: 알림(Pro)과 인시던트 타임라인 기록(출처 execRecorder, 조치 「알림 전용」). 알림 하나만으로 Air-Gap 등의 격리가 발동되는 일은 없습니다.
+                • 저장: /Library/Application Support/RoamSwitch/exec_log 아래의 세그먼트 분할 JSON Lines(root 전용 0700/0600. 명령줄에 비밀 정보가 포함될 수 있어, 앱·뷰어·MCP 서버는 권한 있는 헬퍼를 통해서만 읽습니다), 기본 200MB·14일(변경 가능), 충돌에도 안전한 로테이션. 세그먼트를 해시 체인으로 연결해 삭제·수정·잘림을 탐지합니다(「체인 검증」). 변조 탐지일 뿐 변조 방지는 아닙니다. 환경 변수는 기록하지 않지만 명령줄 인수에는 민감한 정보가 포함될 수 있습니다.
+                • 부하 대책: 과부하 시 오래된 줄부터 버리는 제한 큐(건수 표시), 지수 백오프 재시작, 끄면 eslogger가 완전히 중지됩니다.
+                • 보기와 내보내기: 메뉴 → 악성코드 방어 → 「프로세스 실행 기록…」(검색, 프로세스 트리, JSON Lines 내보내기). MCP 도구 `search_exec_events`, `get_process_tree`(Pro, 읽기 전용).
+                """,
+                recommendation: "인시던트 조사용 실행 이력이 필요할 때 켜세요. 먼저 RoamSwitchHelper에 전체 디스크 접근 권한을 허용합니다. 알림은 침해의 증거가 아니라 로그에서 확인할 단서로 다뤄 주세요."
+            ),
+            LocalizedEntry(
                 id: "feat_persistence_monitor_guard",
                 title: "신규 자동 실행 등록(LaunchAgent / LaunchDaemon) 감시 (Pro)",
                 summary: "새로운 LaunchAgent / LaunchDaemon 등록을 실시간으로 감시하다가, 셸이나 스크립트 인터프리터를 직접 실행하거나 서명이 유효하지 않은 실행 파일을 등록하면 알립니다.",
@@ -400,7 +415,7 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "feat_critical_path_fim",
                 title: "중요 시스템 파일 변조 감시 (Critical Path FIM) (Pro)",
-                summary: "sudoers, SSH 설정, PAM, hosts처럼 정당한 OS 업데이트나 앱 설치로는 거의 바뀌지 않는 중요 파일의 SHA-256 기준값을 기록하고, 수정・삭제・신규 파일이 생기면 알립니다.",
+                summary: "sudoers, SSH 설정, PAM, hosts처럼 정당한 OS 업데이트나 앱 설치로는 거의 바뀌지 않는 중요 파일의 SHA-256 기준값을 기록하고, 수정·삭제·신규 파일이 생기면 알립니다.",
                 details: """
                 • 대상 파일: `/etc/sudoers`, `/etc/pam.d/sudo`, `/etc/ssh/sshd_config`, `/etc/ssh/sshd_config.d/` 아래의 모든 파일, `/etc/hosts`, 그리고 root의 `~/.ssh/authorized_keys`. 이들은 root 전용이므로 특권 헬퍼가 해시를 계산합니다.
                 • 시점: `/etc`, `/etc/pam.d`, `/etc/ssh`의 FSEvents가 거의 실시간으로 재검사를 유발하며, 매시간 검사가 안전장치로 작동합니다.
@@ -479,7 +494,7 @@ extension RoamSwitchKnowledgeBase {
                 title: "수동 기밀 정보 / API 키 유출 감사 (텍스트 붙여넣기 또는 폴더 전체 검사)",
                 summary: "붙여넣은 텍스트를 즉시 확인하거나 폴더를 재귀적으로 검사하는 온디맨드 감사 도구로, 각 키 유형별 줄 번호, 마스킹된 값, 폐기 절차를 보여줍니다. 무료 버전에서도 사용할 수 있습니다.",
                 details: """
-                • 열기: 악성코드 보호 → "🔑 기밀 정보・API 키 유출 수동 감사…" 또는 MCP 도구 `audit_secrets`(`text` 또는 `path` 지정).
+                • 열기: 악성코드 보호 → "🔑 기밀 정보·API 키 유출 수동 감사…" 또는 MCP 도구 `audit_secrets`(`text` 또는 `path` 지정).
                 • 방식: 정규 표현식과 섀넌 엔트로피 점수를 함께 사용합니다. 탐지된 값은 마스킹되어 표시됩니다.
                 • 폴더 검사: `.git`, `node_modules`, `target`, `vendor`, `dist`, `build`, `__pycache__`, `venv`는 자동으로 건너뛰며, 2MB를 넘는 파일과 바이너리 파일도 마찬가지입니다.
                 • 권한 안내: 데스크탑이나 다운로드 같은 보호 폴더를 선택하면 macOS의 권한 요청 전에 왜 접근이 필요한지, 이 검사가 Zero Telemetry임을 일회성으로 설명합니다.
@@ -587,6 +602,7 @@ extension RoamSwitchKnowledgeBase {
                 • 감사 요청: 페어링 후 “Sensor에 감사 요청”으로 Sensor에 능동 감사(도달 가능성 확인) 실행을 요청할 수 있습니다. 결과는 Sensor 측에서 비동기로 생성되므로, 이 기기 측의 상시 실행되는 권한 있는 헬퍼가 5분 간격으로 최대 5회까지 자동으로 결과를 가져옵니다. 가져온 결과는 이 기기에도 저장되며 설정 화면의 “감사 결과” 목록에서 확인할 수 있습니다.
                 • 여는 방법: 메뉴 막대 → “포트 및 장치 모니터링” → “🔍 RoamSwitch Sensor 페어링…”. 이 기기 자체의 공개 키/주소 표시(복사 버튼 포함), 페어링된 Sensor 목록(해제 버튼), 페어링 코드 입력 양식, 감사 결과 목록을 제공합니다.
                 • Linux 버전(`roamswitch-core::sensor_pairing`)과 동일한 TCP 제어 프로토콜(포트 50543, 줄바꿈으로 구분된 JSON, Ed25519 서명)을 사용합니다.
+                • 통신 보호(TLS): 제어 API는 TLS 1.3으로 연결하며, Sensor 인증서는 지문(인증서의 SHA-256) 고정으로만 신뢰합니다(CA·호스트 이름은 검증하지 않음). 페어링할 때 Sensor 화면에 표시된 지문을 직접 입력해 확인합니다(네트워크로 자동 가져오지 않음). 페어링 요청은 그 지문과 이 기기의 키에 서명으로 묶여 있어, 다른 인증서를 쓰는 중간자는 실패합니다. Sensor가 인증서를 다시 생성(tls rotate)하면 연결이 거부되므로, Sensor 화면의 새 값으로 「지문 등록·갱신」에서 다시 고정해야 합니다(자동 갱신 없음). 지문 고정 이전에 페어링한 Sensor는 평문 통신을 계속 사용하며(창에 경고 표시), TLS가 실패해도 평문으로 자동 전환하지 않습니다.
                 """,
                 recommendation: "실제로 본인이 직접 설치한 RoamSwitch Sensor의 운영자 화면에서 발급된 페어링 코드만 사용하세요. 낯선 코드를 입력하라는 요청을 받으면 페어링하지 말고 네트워크 관리자에게 확인하는 것을 권장합니다."
             ),
@@ -627,7 +643,7 @@ extension RoamSwitchKnowledgeBase {
                 • 🚨 랜섬웨어 방어 시뮬레이션(동작 확인)…: 암호화 시도가 탐지된 경우와 같은 단계를 실행하여 에어갭과 긴급 창을 확인합니다. 어떤 파일도 손상되지 않습니다.
                 • 🚨 멀웨어 감지 연동 Air-Gap 시뮬레이션(동작 확인)…: 실제 XProtect 탐지와 같은 단계를 실행하여 봉쇄와 긴급 창을 확인합니다. 이벤트에는 시뮬레이션이라고 표시됩니다.
                 • ⚠️ Docker 위험 감지 시뮬레이션(동작 확인)…: 특권 컨테이너 알림이 도착하는지 확인합니다. Docker는 건드리지 않습니다.
-                • 참고: 에어갭 테스트는 실제로 네트워크를 일시적으로 차단합니다. 긴급 창에서 해제하세요(10분 안에 스스로 복구되기도 합니다).
+                • 참고: 에어갭 테스트는 실제로 네트워크를 일시적으로 차단합니다. 긴급 창에서 해제하세요(시뮬레이션은 신뢰도가 높은 것으로 취급되어 10분 후 스스로 해제되지 않으며, 최대 1시간 후 축소 모드로 전환됩니다).
                 • 다운로드 보호를 테스트하려면 무해한 EICAR 테스트 파일을 사용할 수 있습니다(배너는 없고 알림 기록에 남습니다).
                 """,
                 recommendation: "Pro를 활성화하거나 설정을 변경한 뒤 한 번 시뮬레이션을 실행하여 알림과 에어갭이 예상대로 동작하는지 확인하세요."
@@ -639,7 +655,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • 권한 분리: 메인 앱은 일반 사용자 권한으로 실행되며, pf 규칙 변경, 공유 데몬 제어, DNS 설정, ARP 고정, 중요 파일 해시 계산 등만 `RoamSwitchHelper`에 위임합니다.
                 • 등록 방식: macOS의 SMAppService를 통해 앱에 내장된 LaunchDaemon으로 등록됩니다. 처음 사용할 때는 시스템 설정 → 일반 → 로그인 항목 및 확장 프로그램에서 승인이 필요합니다. 앱이 응용 프로그램 폴더에 없으면 등록할 수 없습니다(faq_install_location).
-                • 부속 데몬: 에어갭 안전장치(10분 후 자동 해제)와 부팅 게이트(최대 90초)를 위한 헬퍼 LaunchDaemon도 함께 등록됩니다.
+                • 부속 데몬: 에어갭 안전장치(신뢰도 낮음은 10분 후 자동 해제, 신뢰도 높음은 상한 후 축소 모드)와 부팅 게이트(최대 90초)를 위한 헬퍼 LaunchDaemon도 함께 등록됩니다.
                 • 검증: XPC 연결 시 코드 서명(Team ID)을 확인하여 권한 없는 프로세스의 호출을 거부합니다.
                 • 업데이트 후 재승인: 앱이 새 헬퍼로 자동 전환을 시도하지만, macOS가 재승인 대기 상태로 남겨둘 수 있습니다. 이 경우 메뉴 막대 아이콘이 경고 표시로 바뀌며 \u{201C}⚠️ 업데이트 후 재승인이 필요합니다\u{201D}가 표시되고, 알림으로도 안내됩니다.
                 """,
@@ -652,6 +668,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • 전송 방식: 로컬 stdio만 사용합니다. 실행 파일: `/Applications/RoamSwitch.app/Contents/MacOS/RoamSwitchMCPServer`.
                 • 주요 도구: `get_security_report`(보안 진단), `get_exposed_ports`, `get_guard_status`, `audit_url_safety`, `audit_secrets`, `audit_security_logs`, `get_quarantine_status`, `get_notification_history`, `get_canary_status`, `get_port_anomaly_incidents`, `get_runtime_threat_status`, `get_incident_timeline`(봉쇄 사고 타임라인), `get_network_history`(네트워크 이력 학습), `run_package_cve_scan`, `run_package_cve_scan_languages`, `run_active_vuln_scan`(트래픽을 전송하는 유일한 도구로, 127.0.0.1로만 비파괴적 프로브를 보냄), `get_app_help`(이 지식 베이스).
+                • 프로세스 실행 기록(Pro, 읽기 전용): `search_exec_events`(실행 이벤트 검색), `get_process_tree`(프로세스의 조상·자손 트리).
                 • 리소스: `roamswitch://docs/features`, `roamswitch://docs/alerts-and-messages`, `roamswitch://docs/settings-guide`, `roamswitch://docs/troubleshooting`.
                 • 언어: 응답은 앱의 언어 설정을 따릅니다. `get_app_help`는 `language` 인자(ja / en / zh-Hans / zh-Hant / ko / de / fr / es / it / pt-PT)를 받습니다.
                 • 안전성: 읽기 전용이므로 프롬프트 주입에 조작된 AI라도 보호 수준을 바꾸거나 포트를 격리할 수 없습니다.
@@ -787,7 +804,7 @@ extension RoamSwitchKnowledgeBase {
                 • 자동 방어: 읽기 전용으로 다시 마운트되며 "USB 저장장치 '…'을(를) 허용하시겠습니까?" 대화상자가 표시됩니다. 꺼내기를 선택하면 즉시 꺼내지고 "무단 USB 저장장치를 자동 차단함" 알림이 발송됩니다.
                 """,
                 recommendation: """
-                1. 본인의 기기라면 "읽기・쓰기 허용" 또는 "읽기 전용으로 허용"을 선택하세요. 허용 목록에 추가되어 다음번에는 자동으로 적용됩니다.
+                1. 본인의 기기라면 "읽기·쓰기 허용" 또는 "읽기 전용으로 허용"을 선택하세요. 허용 목록에 추가되어 다음번에는 자동으로 적용됩니다.
                 2. 알아볼 수 없다면 "꺼내기"를 선택하세요.
                 3. 허용 목록은 나중에 "USB / BadUSB 가드 설정…"에서 변경할 수 있습니다.
                 """
@@ -795,7 +812,7 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "alert_malware_usb",
                 title: "🚨 USB 저장장치에서 악성코드 감지됨",
-                summary: "USB 저장장치를 읽기・쓰기로 연결하기 전에 실행되는 ClamAV 검사에서 감염된 파일이 발견되었을 때 표시됩니다.",
+                summary: "USB 저장장치를 읽기·쓰기로 연결하기 전에 실행되는 ClamAV 검사에서 감염된 파일이 발견되었을 때 표시됩니다.",
                 details: """
                 • 원인: USB 드라이브에 감염된 파일이 있습니다.
                 • 자동 방어: 볼륨이 즉시 꺼내져 Mac이 감염되지 않도록 합니다.
@@ -943,7 +960,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "Apple의 XProtect / XProtect Remediator가 파일을 악성코드로 판정하여 XProtect 연동 자동 차단이 에어갭 봉쇄를 발동했을 때 표시되는 긴급 창과 알림입니다.",
                 details: """
                 • 원인: Apple의 악성코드 엔진이 다운로드하거나 실행한 파일을 악성으로 판단했습니다.
-                • 자동 방어: 모든 트래픽 차단과 Wi-Fi 무선 끄기가 실행되며, 해제하지 않아도 최대 10분 안에 자동으로 복구됩니다. 탐지한 프로세스, 카테고리, Apple의 탐지 메시지가 기록됩니다.
+                • 자동 방어: 모든 트래픽 차단, Wi-Fi 무선 끄기, 이미 열려 있던 연결 차단이 실행됩니다. XProtect 판정은 신뢰도가 높으므로 10분 후 복구되지 않으며, 최대 1시간의 완전 차단 후 축소 모드(새로운 외부 연결 차단)로 전환되어 사용자가 해제하거나 재확인으로 원인이 사라진 것이 확인될 때까지 유지됩니다. 탐지한 프로세스, 카테고리, Apple의 탐지 메시지가 기록됩니다.
                 """,
                 recommendation: """
                 1. 방금 다운로드하거나 실행한 파일이나 앱을 찾아 삭제하세요.
@@ -1027,7 +1044,7 @@ extension RoamSwitchKnowledgeBase {
                 title: "🔔 로그 감사: 이상 패턴 감지됨",
                 summary: "이 Mac에서 한 번도 본 적 없는 로그 패턴([신규])이나 평소보다 훨씬 잦은 로그([급증 z=…])를 자동 로그 감사가 발견했을 때 발송되는 알림입니다.",
                 details: """
-                • 원인: 대개 새 기기 연결이나 앱・macOS 업데이트에 따른 예상된 변화이지만, 때로는 의심스러운 로그인 시도나 알 수 없는 프로세스 활동일 수도 있습니다.
+                • 원인: 대개 새 기기 연결이나 앱·macOS 업데이트에 따른 예상된 변화이지만, 때로는 의심스러운 로그인 시도나 알 수 없는 프로세스 활동일 수도 있습니다.
                 • 내용: 건수 세부 내역, 최대 3개의 실제 로그 줄, 학습 진행 상황(예: 빈도 학습 중: 지금까지 2/3회 관측), 쉬운 언어 설명.
                 • 자동 방어: 없음(알림만 발송).
                 """,
@@ -1121,12 +1138,12 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "set_usb_whitelist",
                 title: "USB / BadUSB 가드 설정 (키보드 허용 목록 & 저장장치 권한) (Pro)",
-                summary: "신뢰하는 키보드와 업무용 USB 저장장치를 허용 목록으로 관리하고, 저장장치 권한을 읽기 전용이나 읽기・쓰기로 설정합니다.",
+                summary: "신뢰하는 키보드와 업무용 USB 저장장치를 허용 목록으로 관리하고, 저장장치 권한을 읽기 전용이나 읽기·쓰기로 설정합니다.",
                 details: """
-                • 열기: 포트・기기 모니터링 → "USB / BadUSB 가드 설정…".
+                • 열기: 포트·기기 모니터링 → "USB / BadUSB 가드 설정…".
                 • 키보드: 승인 창에서 "신뢰하고 허용"을 선택하면 추가됩니다. 여기서 제거할 수 있습니다.
-                • 저장장치: 연결 대화상자에서 "읽기・쓰기 허용" 또는 "읽기 전용으로 허용"을 선택하면 추가됩니다. 여기서 권한을 바꾸거나 제거할 수 있습니다. 연결되어 있지 않은 기기를 변경했다면 뽑았다 다시 꽂아야 적용됩니다.
-                • 허용된 기기라도 연결 시 ClamAV 검사는 읽기・쓰기로 연결되기 전에 계속 실행됩니다.
+                • 저장장치: 연결 대화상자에서 "읽기·쓰기 허용" 또는 "읽기 전용으로 허용"을 선택하면 추가됩니다. 여기서 권한을 바꾸거나 제거할 수 있습니다. 연결되어 있지 않은 기기를 변경했다면 뽑았다 다시 꽂아야 적용됩니다.
+                • 허용된 기기라도 연결 시 ClamAV 검사는 읽기·쓰기로 연결되기 전에 계속 실행됩니다.
                 """,
                 recommendation: "민감한 데이터를 다루는 Mac에서는 저장장치를 읽기 전용 권한으로 등록하면 데이터 유출 위험을 크게 줄일 수 있습니다."
             ),
@@ -1171,7 +1188,7 @@ extension RoamSwitchKnowledgeBase {
                 title: "VPN 터널 백엔드 설정 (WireGuard / Tailscale) (Pro)",
                 summary: "VPN 터널의 백엔드를 선택하고, WireGuard 설정을 가져오고, Tailscale exit node를 선택하며, 킬 스위치를 설정합니다.",
                 details: """
-                • 열기: 포트・기기 모니터링 → "VPN 터널(미신뢰 네트워크의 MITM 대응) (Pro)" → 백엔드.
+                • 열기: 포트·기기 모니터링 → "VPN 터널(미신뢰 네트워크의 MITM 대응) (Pro)" → 백엔드.
                 • WireGuard: "WireGuard 설정(.conf) 가져오기…" → "미신뢰 네트워크에서 자동 연결". "지금 연결", "연결 끊기", "설정 삭제"도 있습니다. 상태는 예를 들어 "🟢 연결됨(마지막 핸드셰이크 N초 전)"처럼 표시되며 킬 스위치는 항상 켜져 있습니다. `wireguard-tools`가 없으면 설치 안내가 표시됩니다.
                 • Tailscale: "Exit Node"에서 노드를 선택합니다("(없음 — 보호 꺼짐)"으로 비활성화). "후보 새로고침"과 "상태 새로고침"도 있습니다. "킬 스위치: 켬(누출 방지)"은 선택 사항이며 기본값은 꺼짐입니다.
                 • 상태 표시 예: "⚪️ 대기 중(신뢰할 수 없는 네트워크에서 자동 연결)", "🟡 선택한 exit node가 오프라인".
@@ -1243,7 +1260,7 @@ extension RoamSwitchKnowledgeBase {
                 • 배경: macOS에는 앱에서 Bluetooth 전원을 전환할 수 있는 공개 API가 없어 CLI 도구 `blueutil`을 사용합니다.
                 • 단계:
                   1. 터미널에서 `brew install blueutil`을 실행하세요(또는 메뉴의 "📥 Homebrew로 blueutil 설치…" 사용).
-                  2. 포트・기기 모니터링 → "미신뢰 네트워크에서 Bluetooth 자동 끄기 (Pro)"를 활성화하세요.
+                  2. 포트·기기 모니터링 → "미신뢰 네트워크에서 Bluetooth 자동 끄기 (Pro)"를 활성화하세요.
                 • 설치되어 있지 않다면: 다른 기능에는 영향이 없으며, 메뉴에 "🔵 Bluetooth 자동 끄기(미설치)"가 표시됩니다.
                 """,
                 recommendation: "공용 Wi-Fi에서의 전파 추적과 Bluetooth 취약점을 피하려면 `brew install blueutil`을 실행하고 활성화하세요."
@@ -1312,7 +1329,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • 확인 방법: 긴급 창이 떠 있는지, 알림 기록에 긴급 자동 방어, XProtect, ARP 스푸핑, 의심스러운 명령어 실행 같은 경고가 있는지 확인하세요. Wi-Fi 무선이 꺼져 있을 수도 있습니다.
                 • 해제 방법: 긴급 창이나 알림의 해제 버튼을 사용하세요. 네트워크와 Wi-Fi 무선이 돌아옵니다.
-                • 자동 복구: 해제하지 않아도 헬퍼의 안전장치가 10분 안에 네트워크를 복원합니다. 앱 종료, 충돌, 재부팅 후에도 별도의 수동 조작이 필요 없습니다.
+                • 자동 복구: 신뢰도가 낮은 트리거(ClickFix 등)는 해제하지 않아도 헬퍼의 안전장치가 10분 안에 네트워크를 복원합니다. 신뢰도가 높은 트리거(랜섬웨어 미끼 파일, XProtect 판정 등)는 스스로 열리지 않으며, 최대 1시간 후 축소 모드로 전환되어 긴급 창이나 알림에서 해제하거나 재확인으로 원인이 사라진 것이 확인될 때까지 유지됩니다. 앱 종료, 충돌, 재부팅 후에도 동일합니다.
                 • 부팅 직후: 부팅 게이트로 인해 최대 90초 동안 트래픽이 제한될 수 있습니다.
                 • 다른 원인: 최대 잠금은 수신 연결을 차단하지만 웹 서핑 같은 일반적인 송신 사용은 막지 않습니다. VPN 킬 스위치(터널이 끊긴 동안), DNS 위협 보호의 리졸버, 링크 보호의 차단도 확인해 보세요.
                 """,
@@ -1385,7 +1402,7 @@ extension RoamSwitchKnowledgeBase {
                 title: "VPN 터널이 연결되지 않음 / 트래픽이 통과하지 않음",
                 summary: "WireGuard나 Tailscale 백엔드가 작동하지 않을 때 확인할 사항입니다.",
                 details: """
-                • WireGuard: `brew install wireguard-tools`가 설치되어 있고 `.conf`가 가져와졌는지 확인하세요. 상태가 "🟡 응답 없음(마지막 핸드셰이크 …)"이라면 VPN 서버와 설정 파일의 키・엔드포인트를 확인하세요. 킬 스위치가 켜져 있어 터널이 수립되기 전까지는 아무것도 통과하지 못합니다.
+                • WireGuard: `brew install wireguard-tools`가 설치되어 있고 `.conf`가 가져와졌는지 확인하세요. 상태가 "🟡 응답 없음(마지막 핸드셰이크 …)"이라면 VPN 서버와 설정 파일의 키·엔드포인트를 확인하세요. 킬 스위치가 켜져 있어 터널이 수립되기 전까지는 아무것도 통과하지 못합니다.
                 • Tailscale: CLI가 설치되어 로그인되어 있는지(그렇지 않으면 메뉴에 "먼저 Tailscale에 로그인하세요"가 표시됩니다) exit node가 선택되었는지 확인하세요. 선택한 exit node가 오프라인이라면 다른 노드를 선택하세요.
                 • App Store의 Tailscale: 앱 외부에서 exit node를 설정할 수 없으므로 Tailscale 앱에서 선택하세요.
                 • Tailscale 킬 스위치: 일부 네트워크에서는 Tailscale 자체의 연결을 방해할 수 있으므로 연결이 안 된다면 꺼 보세요.

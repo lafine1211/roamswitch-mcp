@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.51 (build 108).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.52 (build 113).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -119,12 +119,12 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "feat_airgap_containment",
                 title: "緊急氣隙圍堵（全面斷網、關閉 Wi-Fi 無線電、自動復原保護機制）",
-                summary: "偵測到重大威脅（勒索軟體、XProtect 惡意軟體判定、ARP 詐騙、ClickFix）時使用的共用緊急圍堵機制，會封鎖所有連入與連出流量。即使發生當機或重新開機，網路最多也會在 10 分鐘內自動恢復。",
+                summary: "偵測到重大威脅（勒索軟體、XProtect 惡意軟體判定、ARP 詐騙、ClickFix）時使用的共用緊急圍堵機制，會封鎖所有連入與連出流量。同時會切斷已經建立的連線。低可信度的觸發（如 ClickFix）即使發生當機或重新開機，網路最多也會在 10 分鐘內自動恢復；高可信度的觸發（勒索軟體誘餌檔案、XProtect 判定、最大防護網路中的 ARP 詐騙、從 ARP 詐騙警告中按下「立即全部斷網」手動啟動的 ARP 圍堵）不會自動放行：完全切斷最長 1 小時後，轉入繼續阻擋新的對外連線的降級模式。",
                 details: """
                 • 運作方式：特權輔助工具載入 pf 的「block drop all」（迴路介面除外）並讀回確認。連出流量也會被切斷，可阻止金鑰或資料外洩至 C2 伺服器。若套用失敗，最多重試 3 次（每次逾時 8 秒）；若仍失敗，會顯示「自動斷網失敗」並要求您手動中斷連線。系統絕不會宣稱已隔離但實際上沒有生效。
                 • 關閉 Wi-Fi 無線電：pf 只能丟棄封包，介面卡本身仍會保持關聯，因此 ARP 詐騙、勒索軟體與 XProtect 圍堵也會透過 `networksetup` 關閉 Wi-Fi 無線電本身（預設開啟；內部設定 `RoamSwitch.AirGapAutoWiFiKillEnabled`）。ClickFix 圍堵則不會關閉無線電。
-                • 解除：從緊急視窗或通知解除後，會移除 pf 封鎖並重新開啟 Wi-Fi。
-                • 保護機制：若應用程式當機或沒有人解除，輔助工具端的計時器會在 10 分鐘後強制解除氣隙並恢復 Wi-Fi 無線電。重新啟動應用程式或重新開機 Mac 也不需要手動操作即可恢復。
+                • 解除：從緊急視窗或通知解除後，會移除 pf 封鎖並重新開啟 Wi-Fi。選單列中的「解除 Air-Gap 隔離」永遠可用，免費版也可以，即使 Pro 授權在事件進行中到期也一樣。隔離狀態通知（已啟動、降級、已解除、失敗）同樣會送達免費使用者；偵測警示本身仍屬於 Pro。
+                • 保護機制：若一直沒有人解除（包括應用程式當機或 Mac 重新開機之後），輔助工具端的計時器會依觸發的可信度處理。低可信度（ClickFix、一般啟發式偵測、沒有警告的一般手動氣隙）：10 分鐘後強制解除氣隙並恢復 Wi-Fi 無線電。高可信度（勒索軟體誘餌檔案、XProtect 判定、最大防護網路中的 ARP 詐騙、從 ARP 詐騙警告中按下「立即全部斷網」手動啟動的 ARP 圍堵）：完全氣隙最長 1 小時，之後轉入降級模式。降級模式下新的對外連線（DHCP 除外）仍被阻擋，但會重新開啟 Wi-Fi 無線電，方便您查看所連的網路；它不會因時間到了而自動放行，只有您手動解除，或再次檢查確認原因已消除（例如可疑程序已結束）時才會解除。對於 ARP 圍堵，再次檢查會在不傳送任何流量的情況下讀取 ARP 快取，只有在至少 60 秒內連續 3 次都看到閘道的可信 MAC 時，才認定原因已消除（MAC 不符、項目遺失或未完成、MAC 重複、無法讀取都會重新計數）。氣隙啟動時以及轉入降級模式時，已建立的連線都會被切斷。
                 • 開機閘：開機後、應用程式尚未套用政策之前，會生效一道預設拒絕的 pf 開機閘，最多 90 秒後自動解除。
                 """,
                 recommendation: "圍堵啟動時，請先閱讀通知內容，結束可疑的應用程式並執行掃描，再進行解除。若確定是誤判，可立即解除。"
@@ -367,6 +367,21 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "若擔心被假錯誤頁面或驗證碼誘騙而執行指令，建議考慮開啟此功能。"
             ),
             LocalizedEntry(
+                id: "feat_exec_recorder",
+                title: "程序執行記錄（eslogger，僅通知，Pro，預設關閉）",
+                summary: "透過 Apple 內建的 /usr/bin/eslogger（macOS 13 以上）記錄這台 Mac 上啟動了哪些程式，並在某次啟動符合可疑組合時通知您。它不會阻擋任何執行，也不會切斷網路；記錄只保留在這台 Mac 上。",
+                details: """
+                • 原理：特權輔助程式把 `/usr/bin/eslogger exec fork exit` 當作子程序執行並解析其 JSON 串流。eslogger 隨 macOS 提供；RoamSwitch 不使用也不申請 EndpointSecurity 權限（entitlement），因此這是事後觀察，而不是執行前攔截。
+                • 前提：macOS 13 以上，並為 RoamSwitchHelper 授予「完整磁碟取用權限」。沒有該權限時，視窗只會顯示「無法使用執行記錄：RoamSwitchHelper 需要「完整磁碟取用權限」」（或找不到 eslogger），不會改用持續輪詢。啟用記錄之前、輔助程式啟動之前的事件不會被記錄。
+                • 關聯規則（僅通知，預設保持安靜，每條規則都有固定 ID 和 MITRE ATT&CK 技術編號）：瀏覽器/Office/郵件 App 直接啟動 Shell 或指令碼直譯器（exec.shell_from_app，T1059）；從 /tmp、/private/var/tmp 或帶隔離屬性的位置執行未簽署/臨時簽署的二進位檔（exec.untrusted_location，T1204.002）；將 curl/wget 傳給 Shell 的 `sh -c` 單行指令，並伴有 IP 直連 URL、base64、eval、關閉 TLS 驗證或瀏覽器作為父程序等加重因素（exec.pipe_to_shell，T1059.004）；`osascript -e` 把 do shell script 與 base64/eval 結合（exec.osascript_obfuscated，T1059.002）；`xattr -d com.apple.quarantine` 之後 15 分鐘內執行該檔案（exec.quarantine_stripped_then_exec，T1553.001）；launchd 從最近 24 小時內寫入的 LaunchAgent/LaunchDaemon 啟動未簽署/臨時簽署的二進位檔（exec.launchd_untrusted_binary，T1543.001/.004）；在非 Shell 且非 Apple 簽署的祖先程序之下執行 `security find-generic-password -w` 或 `dump-keychain`（exec.keychain_access，T1555.001）。在「終端機」裡正常輸入的 `curl | sh` 不會被刻意標記。
+                • 通知：一則通知（Pro）加上事件時間軸中的一筆記錄（來源 execRecorder，處置「僅通知」）。通知本身絕不會觸發 Air-Gap 等隔離。
+                • 儲存：分段的 JSON Lines，位於 /Library/Application Support/RoamSwitch/exec_log（僅 root 可讀：0700/0600，因為命令列可能包含機密；App、檢視器與 MCP 伺服器只能透過具權限的 Helper 讀取），預設 200 MB·14 天（可變更），當機安全的輪替。各分段以雜湊鏈相連，可發現被刪除、編輯或截斷的分段（「驗證雜湊鏈」）；這是竄改偵測，而非竄改防護。不會記錄環境變數，但命令列引數中可能包含敏感資訊。
+                • 負載控制：有界佇列，過載時丟棄最舊的行（計數並顯示），指數退避重新啟動，關閉後 eslogger 會被完全停止。
+                • 檢視與匯出：選單 → 惡意軟體防護 →「程序執行記錄…」（搜尋、程序樹、匯出為 JSON Lines）。MCP 工具 `search_exec_events` 和 `get_process_tree`（Pro，唯讀）。
+                """,
+                recommendation: "如果需要用於事件調查的執行歷程，可以啟用，並請先為 RoamSwitchHelper 授予「完整磁碟取用權限」。請把通知當作需要在記錄中查證的線索，而不是入侵的證據。"
+            ),
+            LocalizedEntry(
                 id: "feat_persistence_monitor_guard",
                 title: "監控新增自動啟動註冊（LaunchAgent / LaunchDaemon）(Pro)",
                 summary: "即時監控新的 LaunchAgent / LaunchDaemon 註冊，當有項目直接啟動殼層或指令碼直譯器，或註冊了簽署無效的執行檔時通知您。",
@@ -587,6 +602,7 @@ extension RoamSwitchKnowledgeBase {
                 • 請求稽核：配對完成後，可透過「向 Sensor 請求稽核」要求 Sensor 執行一次主動稽核(可達性驗證)。由於 Sensor 是非同步產生結果，此裝置端常駐的特權輔助程序會每隔 5 分鐘自動嘗試取得結果，最多 5 次。取得的結果也會保存在此裝置上，可於設定畫面的「稽核結果」清單中查看。
                 • 開啟方式：選單列 → 「連接埠與裝置監控」 → 「🔍 RoamSwitch Sensor 配對…」。顯示此裝置自身的公開金鑰/位址(附複製按鈕)、已配對的 Sensor 清單(取消配對按鈕)、配對碼輸入表單以及稽核結果清單。
                 • 使用與 Linux 版(`roamswitch-core::sensor_pairing`)相同的 TCP 控制協定——連接埠 50543、換行分隔 JSON、Ed25519 簽章。
+                • 通訊保護（TLS）：控制 API 透過 TLS 1.3 連線，Sensor 憑證僅透過固定其指紋（憑證的 SHA-256）來信任（不驗證 CA 與主機名稱）。配對時需手動輸入 Sensor 螢幕上顯示的指紋（絕不透過網路自動取得）。配對請求透過簽章與該指紋及本裝置的金鑰綁定，因此使用其他憑證的中間人會失敗。若 Sensor 重新產生憑證（tls rotate），連線會被拒絕，需要以 Sensor 螢幕上的新值透過「登錄／更新指紋」重新固定（絕不自動更新）。在指紋固定功能出現之前配對的舊 Sensor 仍使用明文通訊（視窗中會顯示警告）；TLS 失敗時不會自動退回明文。
                 """,
                 recommendation: "請僅使用確實由您自己設定的 RoamSwitch Sensor 操作畫面所核發的配對碼。如果被要求輸入陌生的配對碼，請勿配對——建議向網路管理員核實。"
             ),
@@ -627,7 +643,7 @@ extension RoamSwitchKnowledgeBase {
                 • 🚨 勒索軟體防禦模擬測試（驗證運作）…：執行與偵測到加密行為相同的步驟，檢查氣隙與緊急視窗是否正常運作。不會傷害任何檔案。
                 • 🚨 惡意軟體偵測聯動 Air-Gap 模擬（功能測試）…：執行與真實 XProtect 偵測相同的步驟，檢查圍堵與緊急視窗的運作。事件會被標記為模擬。
                 • ⚠️ Docker 風險偵測模擬（驗證運作）…：檢查特權容器通知是否會送達，不會實際觸碰 Docker。
-                • 注意：氣隙測試會真的暫時斷網。請從緊急視窗解除（也會在 10 分鐘內自行恢復）。
+                • 注意：氣隙測試會真的暫時斷網。請從緊急視窗解除（模擬測試視為高可信度，不會在 10 分鐘後自動解除，最長 1 小時後轉入降級模式）。
                 • 若要測試下載保護，可使用無害的 EICAR 測試檔（不會出現橫幅，會記錄於通知歷史）。
                 """,
                 recommendation: "在啟用 Pro 或變更設定後執行一次模擬，確認通知與氣隙按預期運作。"
@@ -639,7 +655,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • 特權分離：主應用程式以一般使用者權限執行，僅將 pf 規則變更、共享常駐程式控制、DNS 設定、ARP 固定、重要檔案雜湊計算等交由 `RoamSwitchHelper` 處理。
                 • 註冊方式：透過 macOS 的 SMAppService 以應用程式內建的 LaunchDaemon 形式註冊。首次使用需要在「系統設定」→「一般」→「登入項目與延伸功能」中核准。若應用程式不在「應用程式」資料夾中，則無法註冊（faq_install_location）。
-                • 附屬常駐程式：也會註冊用於氣隙保護機制（10 分鐘後自動解除）與開機閘（最多 90 秒）的輔助 LaunchDaemon。
+                • 附屬常駐程式：也會註冊用於氣隙保護機制（低可信度 10 分鐘後自動解除，高可信度達上限後轉入降級模式）與開機閘（最多 90 秒）的輔助 LaunchDaemon。
                 • 驗證機制：XPC 連線時會檢查程式碼簽署（Team ID），拒絕來自未經授權程序的呼叫。
                 • 更新後的重新核准：應用程式會自動嘗試切換為新版輔助工具，但 macOS 有時仍會將其設為待核准狀態。此時選單列圖示會變為警告樣式，顯示「⚠️ 更新後需要重新核准」，並會同時發出通知提醒。
                 """,
@@ -652,6 +668,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • 傳輸方式：僅限本機 stdio。執行檔位置：`/Applications/RoamSwitch.app/Contents/MacOS/RoamSwitchMCPServer`。
                 • 主要工具：`get_security_report`（安全稽核）、`get_exposed_ports`、`get_guard_status`、`audit_url_safety`、`audit_secrets`、`audit_security_logs`、`get_quarantine_status`、`get_notification_history`、`get_canary_status`、`get_port_anomaly_incidents`、`get_runtime_threat_status`、`get_incident_timeline`（圍堵事件時間軸）、`get_network_history`（網路歷史學習）、`run_package_cve_scan`、`run_package_cve_scan_languages`、`run_active_vuln_scan`（唯一會傳送流量的工具，僅為非破壞性探測至 127.0.0.1），以及 `get_app_help`（本知識庫）。
+                • 程序執行記錄（Pro，唯讀）：`search_exec_events`（搜尋啟動事件）和 `get_process_tree`（某程序的祖先與後代）。
                 • 資源：`roamswitch://docs/features`、`roamswitch://docs/alerts-and-messages`、`roamswitch://docs/settings-guide`、`roamswitch://docs/troubleshooting`。
                 • 語言：回答依應用程式的語言設定而定。`get_app_help` 接受 `language` 參數（ja / en / zh-Hans / zh-Hant / ko / de / fr / es / it / pt-PT）。
                 • 安全性：由於是唯讀，即使 AI 遭提示注入操縱，也無法變更保護等級或隔離連接埠。
@@ -943,7 +960,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "顯示於 Apple 的 XProtect / XProtect Remediator 判定某檔案為惡意軟體，且 XProtect 連動自動斷網已啟動氣隙圍堵時的緊急視窗與通知。",
                 details: """
                 • 原因：Apple 的惡意軟體引擎判定您下載或執行的檔案為惡意。
-                • 自動防禦：切斷所有流量並關閉 Wi-Fi 無線電，若未解除則最多 10 分鐘內自動恢復。會記錄偵測到的程序、類別與 Apple 的偵測訊息。
+                • 自動防禦：切斷所有流量、關閉 Wi-Fi 無線電，並切斷已建立的連線。XProtect 判定屬於高可信度，因此不會在 10 分鐘後自動恢復：完全切斷最長 1 小時後轉入降級模式（阻擋新的對外連線），直到您解除或再次檢查確認原因已消除。會記錄偵測到的程序、類別與 Apple 的偵測訊息。
                 """,
                 recommendation: """
                 1. 找出您剛下載或執行的檔案或應用程式並將其刪除。
@@ -1312,7 +1329,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • 檢查方式：查看是否有緊急視窗，並檢查通知歷史中是否有【緊急自動防護】、XProtect、ARP 詐騙或可疑指令執行等警示。Wi-Fi 無線電也可能已被關閉。
                 • 解除方式：使用緊急視窗或通知中的解除按鈕。網路與 Wi-Fi 無線電會恢復。
-                • 自動恢復：即使沒有解除，輔助工具的保護機制也會在 10 分鐘內恢復網路。結束應用程式、當機或重新開機後都不需要手動操作。
+                • 自動恢復：低可信度的觸發（如 ClickFix）即使沒有解除，輔助工具的保護機制也會在 10 分鐘內恢復網路。高可信度的觸發（勒索軟體誘餌檔案、XProtect 判定等）不會自動放行：最長 1 小時後轉入降級模式，直到您從緊急視窗或通知解除，或再次檢查確認原因已消除。結束應用程式、當機或重新開機後亦同。
                 • 剛開機後：開機閘最多可能在 90 秒內限制網路流量。
                 • 其他原因：最大鎖定會封鎖連入連線，但不會阻止一般的連出使用，例如瀏覽網頁。也請檢查 VPN 終止開關（隧道中斷期間）、DNS 威脅防護的解析設定，以及連結保護的封鎖情況。
                 """,

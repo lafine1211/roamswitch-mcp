@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.51 (build 108).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.52 (build 113).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -90,6 +90,12 @@ enum GatewayFingerprint {
         return String(output[range])
             .replacingOccurrences(of: "at ", with: "")
             .lowercased()
+    }
+
+    /// The kernel ARP cache as `arp -an` prints it. Read-only and numeric: it
+    /// resolves nothing and sends no packets, so it works under a pf air-gap.
+    static func arpCacheDump() -> String? {
+        runShell("/usr/sbin/arp", ["-an"])
     }
 
     private static func runShell(_ launchPath: String, _ arguments: [String]) -> String? {

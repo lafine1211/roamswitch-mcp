@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.51 (build 108).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.52 (build 113).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -211,6 +211,10 @@ enum MCPServer {
                 return [result(id: id, callGetRuntimeThreatStatus())]
             case "get_incident_timeline":
                 return [result(id: id, callGetIncidentTimeline(arguments: arguments))]
+            case "search_exec_events":
+                return [result(id: id, callSearchExecEvents(arguments: arguments))]
+            case "get_process_tree":
+                return [result(id: id, callGetProcessTree(arguments: arguments))]
             case "get_network_history":
                 return [result(id: id, callGetNetworkHistory(arguments: arguments))]
             case "get_sensor_audit_results":
@@ -734,6 +738,27 @@ enum MCPServer {
         return textContentResult(MCPResponseFormatting.makeIncidentTimelinePayload(events: events))
     }
 
+    /// SENDS NO NETWORK REQUESTS AT ALL — read-only search over the process-exec
+    /// recorder's local log (Pro). Never writes, never starts/stops the recorder.
+    private static func callSearchExecEvents(arguments: [String: Any]) -> [String: Any] {
+        guard sharedDefaults.bool(forKey: "RoamSwitch.IsProCache") else {
+            return textContentResult(["error": loc(MCPExecRecorderTools.proRequiredMessage)], isError: true)
+        }
+        return textContentResult(MCPExecRecorderTools.search(arguments: arguments, defaults: sharedDefaults))
+    }
+
+    /// SENDS NO NETWORK REQUESTS AT ALL — read-only process tree (ancestors and
+    /// descendants) rebuilt from the process-exec recorder's local log (Pro).
+    private static func callGetProcessTree(arguments: [String: Any]) -> [String: Any] {
+        guard sharedDefaults.bool(forKey: "RoamSwitch.IsProCache") else {
+            return textContentResult(["error": loc(MCPExecRecorderTools.proRequiredMessage)], isError: true)
+        }
+        guard let payload = MCPExecRecorderTools.processTree(arguments: arguments, defaults: sharedDefaults) else {
+            return textContentResult(["error": loc("必須引数 'pid' が指定されていません。")], isError: true)
+        }
+        return textContentResult(payload)
+    }
+
     /// SENDS NO NETWORK REQUESTS AT ALL — reads `network_history.json`
     /// directly (never instantiates `NetworkHistoryGuard.shared`, whose
     /// `observe` writes). Gateway MACs are reduced to counts before output.
@@ -941,6 +966,37 @@ enum MCPServer {
             ],
         ],
         [
+            "name": "search_exec_events",
+            "description": "Pro only (returns an error when Pro is not active). SENDS NO NETWORK REQUESTS AT ALL — read-only search over RoamSwitch's local process-exec recorder log (macOS's own /usr/bin/eslogger exec events, recorded by the privileged helper into a root-owned, hash-chained JSON Lines log; the tool never writes and cannot start or stop the recorder). Returns matching exec events newest first: time, pid/ppid, executable path, command-line arguments (environment variables are never recorded; arguments can still contain secrets), cwd, code-signature class (platform = Apple, developer = signed with a Team ID, adhoc, unsigned), signing ID, Team ID, cdhash. Also returns the recorder state (running / needsFullDiskAccess / esloggerMissing / backoff / stopped, with a localized label) and counters (recorded, dropped, malformed, alerts). Limits: eslogger is a post-hoc observer (no blocking), needs Full Disk Access for RoamSwitchHelper, and events from before the recorder was enabled or the helper started do not exist; the log is root-only (it may contain secrets), so it is read through the running RoamSwitch app and its privileged helper — if the app is not running (or Pro / the helper is unavailable), logReadable=false and unavailableReason says why. Use this to answer 'what did this process run', 'was anything launched from /tmp', 'what did that installer execute'. Works during an Air-Gap.",
+            "inputSchema": [
+                "type": "object",
+                "properties": [
+                    "query": ["type": "string", "description": "Case-insensitive substring matched against the executable path, arguments, signing ID, Team ID and cwd."],
+                    "pid": ["type": "integer", "description": "Only events of this process id."],
+                    "ppid": ["type": "integer", "description": "Only events whose parent process id is this."],
+                    "since": ["type": "string", "description": "Lower time bound: ISO-8601 or relative age such as 30m, 2h, 7d."],
+                    "until": ["type": "string", "description": "Upper time bound: ISO-8601 or relative age such as 30m, 2h, 7d."],
+                    "kind": ["type": "string", "enum": ["exec", "fork", "exit"], "description": "Event kind. Only exec is stored unless fork/exit persistence was enabled."],
+                    "signature": ["type": "string", "enum": ["platform", "developer", "adhoc", "unsigned"], "description": "Only executables with this code-signature class."],
+                    "teamID": ["type": "string", "description": "Only executables signed with this Apple Team ID."],
+                    "limit": ["type": "integer", "description": "Maximum number of events (1-200). Defaults to 50."],
+                ],
+            ],
+        ],
+        [
+            "name": "get_process_tree",
+            "description": "Pro only (returns an error when Pro is not active). SENDS NO NETWORK REQUESTS AT ALL — read-only. Rebuilds the process tree around one pid from RoamSwitch's local process-exec recorder log: the chain of ancestors (root-most first), the process itself, and its descendants (breadth-first, depth-numbered), each with path, arguments, signature class and time. Only processes the recorder actually saw are known: a process that started before recording began simply ends the chain. pid reuse is disambiguated by time, so pass `at` (ISO-8601 or relative age like 2h) when asking about an old process. Same recorder state, limits and privacy caveats as search_exec_events (notify-only eslogger data, arguments may contain secrets). Works during an Air-Gap.",
+            "inputSchema": [
+                "type": "object",
+                "properties": [
+                    "pid": ["type": "integer", "description": "Process id to build the tree around (required)."],
+                    "at": ["type": "string", "description": "Time the process was running: ISO-8601 or relative age such as 30m, 2h, 7d. Defaults to now."],
+                    "lookbackHours": ["type": "integer", "description": "How far back to read the log before `at` (1-168). Defaults to 24."],
+                ],
+                "required": ["pid"],
+            ],
+        ],
+        [
             "name": "get_network_history",
             "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only a local JSON file. Summarizes RoamSwitch's cross-session network identity memory (its always-on Evil-Twin detector): each remembered Wi-Fi SSID with how many distinct gateway devices have answered for it and when it was last seen (gateway MAC addresses themselves are never returned), plus lookalikePairs — remembered SSIDs whose names are a suspicious near-miss of each other with no gateway device in common, i.e. past Evil-Twin access point candidates. Use this to answer 'have I joined a look-alike network' or 'have I used this Wi-Fi before'.",
             "inputSchema": [
@@ -955,12 +1011,12 @@ enum MCPServer {
         ],
         [
             "name": "get_sensor_audit_results",
-            "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only local files. Returns results from active audits this Mac has requested from a paired RoamSwitch Sensor (a separate product — software installed on the operator's own hardware on the same LAN, not a dedicated appliance — that performs external, active reachability verification against this Mac — a genuinely outside-in view, unlike every other tool in this file which inspects this Mac from the inside). Each result has a status (pending / completed / failed), how many pull attempts have been made (results are fetched asynchronously, up to 5 tries 5 minutes apart), when it was requested, and — once completed — the findings (port, title, recommendation) the Sensor found reachable/exposed from its vantage point. A `failed` result carries `failureReason`: `not_paired`/`invalid_signature` means the Sensor explicitly rejected the pull (most often this Mac was unpaired from the Sensor's side after the request was sent — re-pairing is needed, not a retry), `not_found` means the Sensor no longer has the request, `timed_out` means every pull attempt returned pending. `pairedSensorCount` is how many Sensors are currently paired; 0 means Sensor pairing has never been set up. Use this to build an external-exposure picture as input to remediation planning, alongside get_exposed_ports (this Mac's own view of its listening ports) — the two are complementary, not redundant: this tool reflects what a real device on the LAN could actually reach, not just what this Mac believes it's listening on.",
+            "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only local files. Returns results from active audits this Mac has requested from a paired RoamSwitch Sensor (a separate product — software installed on the operator's own hardware on the same LAN, not a dedicated appliance — that performs external, active reachability verification against this Mac — a genuinely outside-in view, unlike every other tool in this file which inspects this Mac from the inside). Each result has a status (pending / completed / failed), how many pull attempts have been made (results are fetched asynchronously, up to 5 tries 5 minutes apart), when it was requested, and — once completed — the findings (port, title, recommendation) the Sensor found reachable/exposed from its vantage point. A `failed` result carries `failureReason`: `not_paired`/`invalid_signature` means the Sensor explicitly rejected the pull (most often this Mac was unpaired from the Sensor's side after the request was sent — re-pairing is needed, not a retry), `not_found` means the Sensor no longer has the request, `timed_out` means every pull attempt returned pending. `stale_timestamp` means this Mac's and the Sensor's clocks differ by more than 5 minutes, `replayed_nonce` means the Sensor saw the signed request as a replay, and `legacy_signature_refused` means the Sensor no longer accepts legacy signatures (these come from the Sensor's v2 signature checks). `pairedSensorCount` is how many Sensors are currently paired; 0 means Sensor pairing has never been set up. Use this to build an external-exposure picture as input to remediation planning, alongside get_exposed_ports (this Mac's own view of its listening ports) — the two are complementary, not redundant: this tool reflects what a real device on the LAN could actually reach, not just what this Mac believes it's listening on.",
             "inputSchema": ["type": "object", "properties": [String: Any]()],
         ],
         [
             "name": "get_guard_status",
-            "description": "Reports the Settings on/off state of every RoamSwitch protection readable from its preferences — port anomaly auto-block, ARP spoofing auto-containment, USB keyboard/storage guards, Bluetooth guard, Web/Mail download guard (with AI Pickle model protection), DNS threat guard, runtime threat containment (XProtect Air-Gap), ransomware canary, ClickFix guard, Docker event guard, critical-path FIM, persistence monitor, gateway ARP lock, scheduled log audit, clipboard secret-leak auditor, Air-Gap auto Wi-Fi kill, WireGuard VPN, Tailscale kill-switch, Link Guard and its feed updates, active vuln scan opt-in — each flagged `usingDefault` when the user never toggled it. Also returns Link Guard mode (off / warn = pause and ask, blocked if unanswered / block), VPN backend (wireguard / tailscale), DNS threat guard provider and scope, isolated dev-server ports, USB storage allowlist size, the active security level and trusted-network status. Settings state only: Pro license state and live VPN tunnel / kill-switch state are not readable from this process. Use this to answer 'are my automatic protections turned on'.",
+            "description": "Reports the Settings on/off state of every RoamSwitch protection readable from its preferences — port anomaly auto-block, ARP spoofing auto-containment, USB keyboard/storage guards, Bluetooth guard, Web/Mail download guard (with AI Pickle model protection), DNS threat guard, runtime threat containment (XProtect Air-Gap), ransomware canary, ClickFix guard, process-exec recorder, Docker event guard, critical-path FIM, persistence monitor, gateway ARP lock, scheduled log audit, clipboard secret-leak auditor, Air-Gap auto Wi-Fi kill, WireGuard VPN, Tailscale kill-switch, Link Guard and its feed updates, active vuln scan opt-in — each flagged `usingDefault` when the user never toggled it. Also returns Link Guard mode (off / warn = pause and ask, blocked if unanswered / block), VPN backend (wireguard / tailscale), DNS threat guard provider and scope, isolated dev-server ports, USB storage allowlist size, the active security level and trusted-network status. Settings state only: Pro license state and live VPN tunnel / kill-switch state are not readable from this process. Use this to answer 'are my automatic protections turned on'.",
             "inputSchema": ["type": "object", "properties": [String: Any]()],
         ],
         [

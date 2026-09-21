@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.51 (build 108).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.52 (build 113).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -119,12 +119,12 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "feat_airgap_containment",
                 title: "紧急气隙隔离（全面断网、关闭 Wi-Fi 无线、自动恢复故障保护）",
-                summary: "在检测到勒索软件、XProtect 恶意软件检测、ARP 欺骗、ClickFix 等严重威胁时，阻断所有网络收发的通用紧急隔离机制。即使发生崩溃或重启，最多 10 分钟后通信也会自动恢复。",
+                summary: "在检测到勒索软件、XProtect 恶意软件检测、ARP 欺骗、ClickFix 等严重威胁时，阻断所有网络收发的通用紧急隔离机制。同时会切断已经建立的连接。低置信度的触发（如 ClickFix）即使发生崩溃或重启，最多 10 分钟后通信也会自动恢复；高置信度的触发（勒索软件诱饵文件、XProtect 检测、最大防护网络中的 ARP 欺骗、从 ARP 欺骗警告中点击“立即全部断网”手动发起的 ARP 隔离）不会自动放开：完全阻断最长 1 小时后，转入继续阻止新的对外连接的降级模式。",
                 details: """
                 • 阻断方式：特权辅助程序向 pf 加载 `block drop all`（仅允许回环），并回读以确认已生效。不仅阻断入站，也阻断出站，可防止密钥或数据被外传至 C2 服务器。如果应用失败，最多重试 3 次（每次超时 8 秒）；仍失败时会明确提示「自动断网失败」并引导手动断网（绝不会在未隔离的情况下显示为已隔离）。
                 • 同时关闭 Wi-Fi 无线：pf 阻断只是拦截数据包，无线网卡本身仍保持连接。因此在 ARP 欺骗、勒索软件、XProtect 联动的隔离中，还会通过 `networksetup` 关闭 Wi-Fi 无线本身（默认开启，内部设置 `RoamSwitch.AirGapAutoWiFiKillEnabled`）。ClickFix 防护触发的隔离不会关闭无线。
-                • 解除：从紧急弹窗或通知中解除后，pf 阻断和 Wi-Fi 无线都会恢复。
-                • 故障保护：即使应用崩溃或长时间未解除，辅助程序端的计时器也会在 10 分钟后强制解除阻断并恢复 Wi-Fi 无线。应用重启或 Mac 重启后也无需手动操作即可恢复。
+                • 解除：从紧急弹窗或通知中解除后，pf 阻断和 Wi-Fi 无线都会恢复。菜单栏中的“解除 Air-Gap 隔离”始终可用，免费版也可以，即使 Pro 许可在事件进行中过期也一样。隔离状态通知（已启动、降级、已解除、失败）同样会发送给免费用户；检测告警本身仍属于 Pro。
+                • 故障保护：如果一直无人解除（包括应用崩溃或 Mac 重启之后），辅助程序端的计时器会按触发的置信度处理。低置信度（ClickFix、通用启发式检测、没有警告的普通手动气隙）：10 分钟后强制解除阻断并恢复 Wi-Fi 无线。高置信度（勒索软件诱饵文件、XProtect 检测、最大防护网络中的 ARP 欺骗、从 ARP 欺骗警告中点击“立即全部断网”手动发起的 ARP 隔离）：完全气隙最长 1 小时，之后转入降级模式。降级模式下新的对外连接（DHCP 除外）仍被阻止，但会重新打开 Wi-Fi 无线，方便您查看所连网络；它不会因时间到达而自动放开，只有您手动解除，或再次检查确认原因已消除（例如可疑进程已退出）时才会解除。对于 ARP 隔离，再次检查会在不发送任何流量的情况下读取 ARP 缓存，只有在至少 60 秒内连续 3 次都看到网关的可信 MAC 时，才认为原因已消除（MAC 不一致、条目缺失或未完成、MAC 重复、无法读取都会重新计数）。气隙启动时以及转入降级模式时，已建立的连接都会被切断。
                 • 启动闸门：Mac 刚启动、应用尚未应用策略期间，启动闸门（默认拒绝的 pf 规则）会生效，最多 90 秒后自动解除。
                 """,
                 recommendation: "隔离触发后，请先确认通知内容，结束可疑应用或进行扫描后再解除。若已确认是误报，可以立即解除。"
@@ -296,7 +296,7 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_link_safety_auditor",
-                title: "链接安全性诊断（手动检查・Zero Telemetry）",
+                title: "链接安全性诊断（手动检查·Zero Telemetry）",
                 summary: "在浏览器中打开可疑 URL 之前，仅在本机进行分析，根据 Unicode 同形异义字仿冒、子域名仿冒、高风险 TLD、明文 HTTP、直接使用 IP 等因素，以 100 分制诊断危险程度。免费版即可使用。",
                 details: """
                 • 打开方式：菜单「恶意软件防护」→「🔗 手动检查链接…」，或 MCP 工具 `audit_url_safety`。
@@ -353,7 +353,7 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_clickfix_guard",
-                title: "ClickFix 防护 — 检测到可疑终端命令时自动阻断 (Pro・默认关闭)",
+                title: "ClickFix 防护 — 检测到可疑终端命令时自动阻断 (Pro·默认关闭)",
                 summary: "通过 Shell 历史记录检测「ClickFix」手法（伪造的 CAPTCHA 或错误页面诱导用户自己粘贴并执行命令），并紧急断网以阻止正在进行的多阶段攻击。",
                 details: """
                 • 监视对象：仅 `~/.zsh_history` 和 `~/.bash_history` 中新追加的行（已有历史记录不在范围内）。
@@ -365,6 +365,21 @@ extension RoamSwitchKnowledgeBase {
                 • 默认关闭：这是会自动断网的相对较新的启发式功能，因此需手动启用。
                 """,
                 recommendation: "如果希望防范被伪造错误页面或伪造 CAPTCHA 诱导执行命令的风险，请考虑启用。"
+            ),
+            LocalizedEntry(
+                id: "feat_exec_recorder",
+                title: "进程执行记录（eslogger，仅通知，Pro，默认关闭）",
+                summary: "通过 Apple 自带的 /usr/bin/eslogger（macOS 13 及以上）记录这台 Mac 上启动了哪些程序，并在某次启动符合可疑组合时通知您。它不会阻止任何执行，也不会切断网络；记录只保留在这台 Mac 上。",
+                details: """
+                • 原理：特权辅助程序把 `/usr/bin/eslogger exec fork exit` 作为子进程运行并解析其 JSON 流。eslogger 随 macOS 提供；RoamSwitch 不使用也不申请 EndpointSecurity 权限（entitlement），因此这是事后观察，而不是执行前拦截。
+                • 前提：macOS 13 及以上，并为 RoamSwitchHelper 授予“完全磁盘访问权限”。没有该权限时，窗口只会显示“无法使用执行记录：RoamSwitchHelper 需要“完全磁盘访问权限””（或找不到 eslogger），不会改用持续轮询。启用记录之前、辅助程序启动之前的事件不会被记录。
+                • 关联规则（仅通知，默认保持安静，每条规则都有固定 ID 和 MITRE ATT&CK 技术编号）：浏览器/Office/邮件应用直接启动 Shell 或脚本解释器（exec.shell_from_app，T1059）；从 /tmp、/private/var/tmp 或带隔离属性的位置运行未签名/临时签名的二进制文件（exec.untrusted_location，T1204.002）；将 curl/wget 传给 Shell 的 `sh -c` 单行命令，并伴有 IP 直连 URL、base64、eval、关闭 TLS 验证或浏览器作为父进程等加重因素（exec.pipe_to_shell，T1059.004）；`osascript -e` 把 do shell script 与 base64/eval 结合（exec.osascript_obfuscated，T1059.002）；`xattr -d com.apple.quarantine` 之后 15 分钟内运行该文件（exec.quarantine_stripped_then_exec，T1553.001）；launchd 从最近 24 小时内写入的 LaunchAgent/LaunchDaemon 启动未签名/临时签名的二进制文件（exec.launchd_untrusted_binary，T1543.001/.004）；在非 Shell 且非 Apple 签名的祖先进程之下运行 `security find-generic-password -w` 或 `dump-keychain`（exec.keychain_access，T1555.001）。在“终端”里正常输入的 `curl | sh` 不会被有意标记。
+                • 通知：一条通知（Pro）加上事件时间线中的一条记录（来源 execRecorder，处置“仅通知”）。通知本身绝不会触发 Air-Gap 等隔离。
+                • 存储：分段的 JSON Lines，位于 /Library/Application Support/RoamSwitch/exec_log（仅 root 可读：0700/0600，因为命令行可能包含机密；应用、查看器和 MCP 服务器只能通过特权 Helper 读取），默认 200 MB·14 天（可更改），崩溃安全的轮转。各分段以哈希链相连，可发现被删除、编辑或截断的分段（“验证哈希链”）；这是篡改检测，而非篡改防护。不会记录环境变量，但命令行参数中可能包含敏感信息。
+                • 负载控制：有界队列，过载时丢弃最旧的行（计数并显示），指数退避重启，关闭后 eslogger 会被完全停止。
+                • 查看与导出：菜单 → 恶意软件防护 →“进程执行记录…”（搜索、进程树、导出为 JSON Lines）。MCP 工具 `search_exec_events` 和 `get_process_tree`（Pro，只读）。
+                """,
+                recommendation: "如果需要用于事件排查的执行历史，可以启用，并请先为 RoamSwitchHelper 授予“完全磁盘访问权限”。请把通知当作需要在日志中核实的线索，而不是入侵的证据。"
             ),
             LocalizedEntry(
                 id: "feat_persistence_monitor_guard",
@@ -380,7 +395,7 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_docker_event_guard",
-                title: "Docker 特权容器与 docker.sock 挂载检测 (Pro・默认关闭)",
+                title: "Docker 特权容器与 docker.sock 挂载检测 (Pro·默认关闭)",
                 summary: "在新容器启动时，检测以 `--privileged` 启动的容器或挂载了 `/var/run/docker.sock` 的容器等可能导致容器逃逸的危险 Docker 配置，并发出通知。",
                 details: """
                 • 工作方式：每 20 秒通过 `docker ps` 仅检查新启动的容器，并用 `docker inspect` 检查其配置。由于使用与 Linux 版相同的判定格式，两个操作系统会检测相同的条件。
@@ -413,7 +428,7 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_security_log_audit",
-                title: "Mac 安全日志审计（手动・模板异常检测・复制供 AI 咨询）",
+                title: "Mac 安全日志审计（手动·模板异常检测·复制供 AI 咨询）",
                 summary: "从 macOS 统一日志中提取并分析 sudo 失败、SSH 连接、Gatekeeper 拦截、XProtect 检测和认证事件，同时列出新出现的日志模式和频率激增（模板异常）。免费版即可使用。",
                 details: """
                 • 打开方式：菜单「Mac 安全综合诊断」→「📜 Mac 安全日志审计…」，或 MCP 工具 `audit_security_logs`。
@@ -439,7 +454,7 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_containment_incident_timeline",
-                title: "遏制事件历史（统一时间线・MITRE ATT&CK 分类）",
+                title: "遏制事件历史（统一时间线·MITRE ATT&CK 分类）",
                 summary: "将 ARP 欺骗、勒索软件诱饵文件、XProtect 联动阻断、未知端口自动阻止这 4 种自动响应汇总为一条时间顺序记录并保存在本机。可事后回顾何时发生了什么、如何响应以及何时解除。",
                 details: """
                 • 记录内容：发生时间、检测来源、严重程度、概要、进程名称和 PID（如可获取）、执行的响应、解除时间和解除原因（手动解除 / 超时自动解除 / 加入允许列表）。
@@ -489,7 +504,7 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_package_cve_scan",
-                title: "软件包 CVE 照合（Homebrew + npm / PyPI / crates.io 等 7 个生态系统・Zero Telemetry）",
+                title: "软件包 CVE 照合（Homebrew + npm / PyPI / crates.io 等 7 个生态系统·Zero Telemetry）",
                 summary: "将已安装的 Homebrew 软件包，以及指定项目文件夹中的依赖锁定文件，与本机保存的已知 CVE 映射进行比对。扫描本身完全不进行网络通信。免费版即可使用。",
                 details: """
                 • 打开方式：菜单「恶意软件防护」→「📦 软件包CVE照合（Homebrew）…」。依赖关系请在「依赖关系」标签页中添加项目文件夹。
@@ -587,12 +602,13 @@ extension RoamSwitchKnowledgeBase {
                 • 请求审计：配对完成后，可通过「向 Sensor 请求审计」要求 Sensor 执行一次主动审计(可达性验证)。由于 Sensor 是异步生成结果的，此设备侧常驻的特权辅助进程会每隔 5 分钟自动尝试获取结果，最多 5 次。获取到的结果也会保存在此设备上，可在设置界面的「审计结果」列表中查看。
                 • 打开方式：菜单栏 → 「端口与设备监控」 → 「🔍 RoamSwitch Sensor 配对…」。显示此设备自身的公钥/地址(附复制按钮)、已配对的 Sensor 列表(取消配对按钮)、配对码输入表单以及审计结果列表。
                 • 使用与 Linux 版(`roamswitch-core::sensor_pairing`)相同的 TCP 控制协议——端口 50543、换行分隔 JSON、Ed25519 签名。
+                • 通信保护（TLS）：控制 API 通过 TLS 1.3 连接，Sensor 证书仅通过固定其指纹（证书的 SHA-256）来信任（不验证 CA 和主机名）。配对时需手动输入 Sensor 屏幕上显示的指纹（绝不通过网络自动获取）。配对请求通过签名与该指纹及本设备的密钥绑定，因此使用其他证书的中间人会失败。若 Sensor 重新生成证书（tls rotate），连接会被拒绝，需要用 Sensor 屏幕上的新值通过“登记/更新指纹”重新固定（绝不自动更新）。在指纹固定功能出现之前配对的旧 Sensor 仍使用明文通信（窗口中会显示警告）；TLS 失败时不会自动回退到明文。
                 """,
                 recommendation: "请仅使用确实由您自己设置的 RoamSwitch Sensor 操作界面所签发的配对码。如果被要求输入陌生的配对码，请勿配对——建议向网络管理员核实。"
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",
-                title: "Mac 安全综合诊断（18 个项目・评分 & 改进步骤）",
+                title: "Mac 安全综合诊断（18 个项目·评分 & 改进步骤）",
                 summary: "检查系统健壮性、网络防御、身份验证与访问控制、端口暴露、恶意软件防护、物理设备防御 6 个领域共 18 个项目，并显示 100 分制的评分、等级和改进步骤。免费版即可使用。",
                 details: """
                 • 系统健壮性：1. FileVault，2. SIP（系统完整性保护），3. Gatekeeper，4. 自动安全更新，5. Apple XProtect。
@@ -627,19 +643,19 @@ extension RoamSwitchKnowledgeBase {
                 • 🚨 勒索软件防御模拟测试（验证运行）…：按照检测到加密迹象时的相同流程，测试 Air-Gap 隔离和紧急弹窗是否正常工作。不会造成文件损坏等后果。
                 • 🚨 恶意软件检测联动 Air-Gap 模拟（功能测试）…：按照 XProtect 实际检测到恶意软件时的相同流程，测试隔离和紧急弹窗。事件中会明确标注「[模拟]」。
                 • ⚠️ Docker 风险检测模拟（验证运行）…：测试是否会收到与检测到特权容器时相同的通知。不会访问 Docker。
-                • 注意：Air-Gap 类测试会实际暂时阻断网络。请从紧急弹窗中解除（即使不解除，最多 10 分钟后也会自动恢复）。
+                • 注意：Air-Gap 类测试会实际暂时阻断网络。请从紧急弹窗中解除（模拟测试按高置信度处理，不会在 10 分钟后自动解除，最长 1 小时后转入降级模式）。
                 • 确认下载保护时，也可以使用无害的 EICAR 测试文件（不会发出通知，而是记录到通知历史中）。
                 """,
                 recommendation: "建议在刚激活 Pro 或更改设置后运行一次模拟，确认通知和 Air-Gap 的运行情况，这样更为安心。"
             ),
             LocalizedEntry(
                 id: "feat_privileged_helper",
-                title: "特权辅助程序（RoamSwitchHelper・XPC）",
+                title: "特权辅助程序（RoamSwitchHelper·XPC）",
                 summary: "PF 防火墙、共享服务、DNS、气隙隔离等需要 root 权限的操作，仅由经过权限分离的 LaunchDaemon 辅助程序通过 XPC 执行。",
                 details: """
                 • 权限分离：主应用以普通用户权限运行，仅将 pf 规则变更、共享守护进程控制、DNS 设置、ARP 固定、重要文件哈希计算等操作委托给 `RoamSwitchHelper`。
                 • 注册：通过 macOS 标准的 SMAppService，作为应用内置的 LaunchDaemon 进行注册。首次使用需在「系统设置」→「通用」→「登录项与扩展」中批准。如果应用不在「应用程序」文件夹中，则无法注册（faq_install_location）。
-                • 附属守护进程：还会注册负责气隙隔离故障保护（10 分钟自动解除）和启动闸门（最多 90 秒）的辅助 LaunchDaemon。
+                • 附属守护进程：还会注册负责气隙隔离故障保护（低置信度 10 分钟后自动解除，高置信度达到上限后转入降级模式）和启动闸门（最多 90 秒）的辅助 LaunchDaemon。
                 • 安全验证：XPC 连接时验证代码签名（Team ID），拒绝来自非法进程的调用。
                 • 更新后的重新批准：应用会自动尝试切换到新版辅助程序，但 macOS 有时仍会将其置于待批准状态。此时菜单栏图标会变为警告样式，显示「⚠️ 更新后需要重新批准」，并会同时发送通知提醒。
                 """,
@@ -652,6 +668,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • 通信：仅使用本地标准输入输出（stdio）。二进制文件为 `/Applications/RoamSwitch.app/Contents/MacOS/RoamSwitchMCPServer`。
                 • 主要工具：`get_security_report`（综合诊断）、`get_exposed_ports`、`get_guard_status`、`audit_url_safety`、`audit_secrets`、`audit_security_logs`、`get_quarantine_status`、`get_notification_history`、`get_canary_status`、`get_port_anomaly_incidents`、`get_runtime_threat_status`、`get_incident_timeline`（遏制事件历史）、`get_network_history`（网络历史学习）、`run_package_cve_scan`、`run_package_cve_scan_languages`、`run_active_vuln_scan`（唯一会向 127.0.0.1 发送非破坏性探测的工具）、`get_app_help`（本知识库）。
+                • 进程执行记录（Pro，只读）：`search_exec_events`（搜索启动事件）和 `get_process_tree`（某进程的祖先与后代）。
                 • 资源：`roamswitch://docs/features`、`roamswitch://docs/alerts-and-messages`、`roamswitch://docs/settings-guide`、`roamswitch://docs/troubleshooting`。
                 • 语言：回答遵循应用的语言设置。`get_app_help` 可通过 `language` 参数（ja / en / zh-Hans / zh-Hant / ko / de / fr / es / it / pt-PT）指定语言。
                 • 安全设计：由于是只读的，即使 AI 因提示注入而被滥用，也无法更改保护级别或隔离端口等。
@@ -660,7 +677,7 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_license_pro_tier",
-                title: "Pro 永久许可证（一次性买断・最多 2 台）",
+                title: "Pro 永久许可证（一次性买断·最多 2 台）",
                 summary: "Pro 版为一次性买断的永久许可证（¥2,980 / $19.99），一个许可证最多可在 2 台 Mac 上使用。许可证令牌经 Ed25519 电子签名并在本机验证，因此激活后可离线运行。",
                 details: """
                 • Pro 可用功能：菜单中标有「(Pro)」的自动防御（勒索软件诱饵文件检测、XProtect 联动阻断、未知端口自动阻止与开发服务器隔离、ARP 欺骗自动阻断、网关 ARP/NDP 固定、VPN 隧道、BadUSB / USB 存储防护、网页与邮件保护、DNS 威胁防护、链接保护、Bluetooth 自动关闭、ClickFix 防护、自动启动注册监控、Docker 风险检测、重要文件篡改监控、自动日志审计）、实时威胁通知、自主巡查的警告与定期扫描、日志 CSV 导出等。
@@ -943,7 +960,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "Apple 内置的 XProtect / XProtect Remediator 检测到恶意软件（判定为恶意），并由 XProtect 联动的自动阻断触发气隙隔离时显示的紧急弹窗和通知。",
                 details: """
                 • 触发原因：下载或执行的文件被 Apple 的恶意软件检测引擎判定为恶意。
-                • 自动防御：阻断所有收发＋关闭 Wi-Fi 无线。即使不解除，最多 10 分钟后也会自动恢复。会记录检测到的进程、类别以及 Apple 的检测消息。
+                • 自动防御：阻断所有收发、关闭 Wi-Fi 无线，并切断已建立的连接。XProtect 检测属于高置信度，因此不会在 10 分钟后自动恢复：完全阻断最长 1 小时后转入降级模式（阻止新的对外连接），直到您解除或再次检查确认原因已消除。会记录检测到的进程、类别以及 Apple 的检测消息。
                 """,
                 recommendation: """
                 1. 请检查刚刚下载或执行的文件和应用，并将其删除。
@@ -971,8 +988,8 @@ extension RoamSwitchKnowledgeBase {
                 summary: "检测到在终端中执行了（通过 Shell 历史记录检测）或复制到剪贴板中的命令符合 ClickFix 手法时发出的警告。",
                 details: """
                 • 触发原因：被伪造的 CAPTCHA 或「要修复问题，请运行此命令」之类的伪造错误页面诱导。检测对象为反向 Shell 的典型命令，以及将 Base64 解码后直接传给 Shell / osascript 的模式。
-                • 自动防御（终端执行时・Pro・默认关闭）：气隙隔离（不关闭 Wi-Fi 无线，最多 10 分钟后自动恢复）。
-                • 自动防御（复制时・默认开启）：立即删除剪贴板中的内容。
+                • 自动防御（终端执行时·Pro·默认关闭）：气隙隔离（不关闭 Wi-Fi 无线，最多 10 分钟后自动恢复）。
+                • 自动防御（复制时·默认开启）：立即删除剪贴板中的内容。
                 """,
                 recommendation: """
                 1. 如果只是复制了命令，请关闭该网页。请勿粘贴或执行。
@@ -1181,7 +1198,7 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "set_language",
                 title: "显示语言设置（应用与 MCP 的回答语言）",
-                summary: "RoamSwitch 的显示语言可从 10 种语言（日本語・English・简体中文・繁體中文・한국어・Deutsch・Français・Español・Italiano・Português）中选择。MCP 服务器的回答和本知识库也会以相同语言返回。",
+                summary: "RoamSwitch 的显示语言可从 10 种语言（日本語·English·简体中文·繁體中文·한국어·Deutsch·Français·Español·Italiano·Português）中选择。MCP 服务器的回答和本知识库也会以相同语言返回。",
                 details: """
                 • 设置：从菜单「语言 / Language」中选择。选择「跟随系统设置」时将使用 macOS 的首选语言。
                 • MCP：MCP 服务器会读取应用中选择的语言。在跟随系统设置且系统语言不受支持时，将以英语回答。
@@ -1209,7 +1226,7 @@ extension RoamSwitchKnowledgeBase {
                 • 软件包 CVE 照合、实证型漏洞验证、Mac 安全日志审计、通知历史
                 • ClamAV 手动扫描与隔离文件管理
                 • MCP 服务器集成
-                【Pro 永久版（一次性买断 ¥2,980 / $19.99・最多 2 台）】
+                【Pro 永久版（一次性买断 ¥2,980 / $19.99·最多 2 台）】
                 • 勒索软件诱饵文件检测＆气隙隔离、XProtect 联动自动阻断、ClickFix 防护
                 • 自动阻止未知监听端口、开发服务器外部隔离
                 • ARP 欺骗自动阻断、网关 ARP/NDP 固定、VPN 隧道（WireGuard / Tailscale）、Evil Twin 警告
@@ -1307,12 +1324,12 @@ extension RoamSwitchKnowledgeBase {
         return [
             LocalizedEntry(
                 id: "faq_network_cut_off",
-                title: "突然无法连接互联网（气隙隔离・保护级别）",
+                title: "突然无法连接互联网（气隙隔离·保护级别）",
                 summary: "可能是 RoamSwitch 的紧急气隙隔离或最大锁定导致通信中断。以下是确认原因的方法和解除步骤。",
                 details: """
                 • 确认：请查看是否显示了紧急弹窗，以及通知历史中是否有「紧急自动防护触发」「XProtect」「ARP 欺骗」「检测到可疑命令执行」等通知。Wi-Fi 无线也可能已被关闭。
                 • 解除：请通过紧急弹窗中的解除按钮或通知进行解除。通信和 Wi-Fi 无线将会恢复。
-                • 自动恢复：即使不解除，辅助程序的故障保护也会在最多 10 分钟后自动恢复。应用退出、崩溃或 Mac 重启时也无需手动操作。
+                • 自动恢复：低置信度的触发（如 ClickFix）即使不解除，辅助程序的故障保护也会在最多 10 分钟后自动恢复。高置信度的触发（勒索软件诱饵文件、XProtect 检测等）不会自动放开：最长 1 小时后转入降级模式，直到您从紧急弹窗或通知中解除，或再次检查确认原因已消除。应用退出、崩溃或 Mac 重启后同样如此。
                 • 刚启动时：Mac 刚启动后，最多 90 秒内可能会因启动闸门而限制通信。
                 • 隔离以外的原因：最大锁定会阻止入站连接，但不会妨碍正常的出站通信（如浏览网页）。另请检查 VPN 的终止开关（隧道断开期间）、DNS 威胁防护的 DNS 以及链接保护的拦截。
                 """,

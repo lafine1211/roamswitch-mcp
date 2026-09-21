@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.51 (build 108).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.52 (build 113).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -118,12 +118,12 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "feat_airgap_containment",
                 title: "緊急エアギャップ隔離（ネットワーク全遮断・Wi-Fi無線オフ・自動復旧フェイルセーフ）",
-                summary: "ランサムウェア検知・XProtectのマルウェア検知・ARPスプーフィング・ClickFixなど重大な脅威を検知した際に、ネットワークの送受信をすべて遮断する共通の緊急隔離機構です。クラッシュや再起動が起きても最大10分で自動的に通信が復旧します。",
+                summary: "ランサムウェア検知・XProtectのマルウェア検知・ARPスプーフィング・ClickFixなど重大な脅威を検知した際に、ネットワークの送受信をすべて遮断する共通の緊急隔離機構です。すでに確立済みの接続も切断します。確度の低い検知(ClickFixなど)は、クラッシュや再起動が起きても最大10分で自動的に通信が復旧します。確度の高い検知(ランサムウェアおとり・XProtectの検知・最大防御ネットワークでのARPスプーフィング)は自動では開放されず、最長1時間の全遮断のあと、新規の外向き通信だけを止め続ける縮退モードに移ります。",
                 details: """
                 • 遮断方法: 特権ヘルパーが pf に `block drop all`（ループバックのみ許可）を読み込み、読み戻して適用を確認。受信だけでなく送信も止まるため、C2サーバーへの鍵やデータの持ち出しを防ぎます。適用に失敗した場合は最大3回（1回8秒のタイムアウト）再試行し、それでも失敗したら「自動ネットワーク遮断に失敗しました」と明示して手動での切断を促します（隔離できていないのに隔離済みと表示することはありません）。
                 • Wi-Fi無線もオフ: pf の遮断はパケットを止めるだけで無線アダプタ自体は接続したままのため、ARPスプーフィング・ランサムウェア・XProtect連動の隔離では `networksetup` で Wi-Fi 無線そのものも切断します（既定オン、内部設定 `RoamSwitch.AirGapAutoWiFiKillEnabled`）。ClickFix対策の隔離では無線は切断しません。
-                • 解除: 緊急モーダルや通知から解除すると、pf の遮断とWi-Fi無線が復旧します。
-                • フェイルセーフ: アプリがクラッシュしたり解除されないまま放置された場合も、ヘルパー側のタイマーが10分経過で遮断を強制解除し、Wi-Fi無線も戻します。アプリの再起動・Macの再起動でも手動操作なしで復旧します。
+                • 解除: 緊急モーダルや通知から解除すると、pf の遮断とWi-Fi無線が復旧します。メニューバーの「Air-Gap隔離を解除する」は無料版でも、Proライセンスが隔離中に失効した場合でも常に使えます。隔離の状態通知（開始・縮退・解除・失敗）も無料版に届きます（検知そのものの通知はProのままです）。
+                • フェイルセーフ: 解除されないまま放置された場合(アプリのクラッシュ・Macの再起動を含む)、ヘルパー側のタイマーが検知の確度に応じて動作します。確度の低い検知(ClickFix・汎用のヒューリスティック・警告を伴わない通常の手動Air-Gapなど)は10分経過で遮断を強制解除し、Wi-Fi無線も戻します。確度の高い検知(ランサムウェアおとり・XProtectの検知・最大防御ネットワークでのARPスプーフィング・ARP警告の「今すぐ全遮断」から手動で発動した隔離)は最長1時間の全遮断のあと縮退モードに移ります。縮退モードでは新規の外向き通信(DHCPを除く)を引き続き遮断しつつ、接続先を確認できるようWi-Fi無線を戻します。時間経過では自動開放されず、ユーザーが解除するか、原因の解消を再確認できた場合(疑わしいプロセスが終了したなど)にのみ解除されます。ARPスプーフィングの隔離では、通信を送らずにARPキャッシュを読み取り、ゲートウェイの信頼済みMACアドレスが連続3回・60秒以上にわたって確認できたときだけ「解消」とみなします（不一致・項目なし・未解決・MAC重複・読み取り不可はやり直し）。エアギャップの開始時と縮退モードへの移行時に、確立済みの接続も切断されます。
                 • 起動時ゲート: Mac起動直後、アプリがポリシーを適用するまでの間はブートゲート（既定拒否のpfルール）が働き、最大90秒で自動解除されます。
                 """,
                 recommendation: "隔離が発動したら、まず通知の内容を確認し、不審なアプリの終了やスキャンを行ってから解除してください。誤検知と判明している場合はすぐに解除して構いません。"
@@ -366,6 +366,21 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "偽エラーページや偽CAPTCHAに誘導されてコマンドを実行してしまうリスクに備えたい場合は、有効化を検討してください。"
             ),
             LocalizedEntry(
+                id: "feat_exec_recorder",
+                title: "プロセス実行の記録(eslogger・通知のみ・Pro・初期設定オフ)",
+                summary: "macOS標準の/usr/bin/eslogger(macOS 13以降)でこのMacで起動したプログラムを記録し、不審な組み合わせに一致した起動を通知します。実行をブロックすることも通信を遮断することもなく、記録はこのMacの中だけに残ります。",
+                details: """
+                • 仕組み: 特権ヘルパーが `/usr/bin/eslogger exec fork exit` を子プロセスとして起動し、そのJSONストリームを解析します。esloggerはmacOSに同梱のツールで、RoamSwitchはEndpointSecurityエンタイトルメントを使わず申請もしません。そのため実行前ブロックではなく事後の観測です。
+                • 必要条件: macOS 13以降と、RoamSwitchHelperへのフルディスクアクセスの許可。許可がない場合は「実行記録は利用できません: RoamSwitchHelperにフルディスクアクセスが必要です」(またはesloggerが見つからない旨)と表示するだけで、代わりの常時ポーリングは行いません。記録を有効にする前・ヘルパー起動前のイベントは残りません。
+                • 相関ルール(通知のみ・初期設定では静か・各ルールに固定IDとMITRE ATT&CK技術ID): ブラウザ/Office/メールアプリが直接シェルやスクリプト処理系を起動(exec.shell_from_app, T1059)／/tmp・/private/var/tmpや隔離属性付きの場所から署名なし・アドホック署名のバイナリを実行(exec.untrusted_location, T1204.002)／curl/wgetをシェルへ渡す `sh -c` ワンライナーのうち、生IPのURL・base64・eval・TLS検証無効・ブラウザ等が親といった不審な事情を伴うもの(exec.pipe_to_shell, T1059.004)／`osascript -e` でdo shell scriptとbase64/evalを組み合わせたもの(exec.osascript_obfuscated, T1059.002)／`xattr -d com.apple.quarantine` の後15分以内にそのファイルを実行(exec.quarantine_stripped_then_exec, T1553.001)／直近24時間に書き込まれたLaunchAgent/LaunchDaemonから署名なし・アドホックのバイナリがlaunchd経由で起動(exec.launchd_untrusted_binary, T1543.001/.004)／Apple署名でないシェル以外の祖先プロセスによる `security find-generic-password -w` や `dump-keychain`(exec.keychain_access, T1555.001)。Terminalで普通に打った `curl | sh` は意図的に検知しません。
+                • 通知: 通知(Pro)とインシデントタイムラインへの記録(発生源 execRecorder、対応「通知のみ」)。通知が単独でAir-Gapなどの隔離を発動することはありません。
+                • 保存: /Library/Application Support/RoamSwitch/exec_log にセグメント分割のJSON Lines(root専用の0700/0600。コマンドライン引数に機密が含まれ得るため、アプリ・ビューア・MCPサーバーは特権ヘルパー経由でのみ読み取ります)。既定200MB・14日(変更可)、クラッシュ安全なローテーション。セグメント間をハッシュチェーンで連結し、削除・編集・切り詰めを検出します(「チェーンを検証」)。改ざん検知であり改ざん防止ではありません。環境変数は記録しませんが、コマンドライン引数に機密が含まれる場合があります。
+                • 負荷対策: 過負荷時は古い行から捨てる有界キュー(件数を表示)、指数バックオフでの再起動、オフにするとesloggerを完全に停止します。
+                • 閲覧とエクスポート: メニュー→マルウェア対策→「プロセス実行の記録…」(検索・プロセスツリー・JSON Linesエクスポート)。MCPツール `search_exec_events` と `get_process_tree`(Pro・読み取り専用)。
+                """,
+                recommendation: "インシデント調査用の実行履歴が欲しい場合に有効にしてください。先にRoamSwitchHelperへフルディスクアクセスを許可します。通知は侵害の証拠ではなく、ログで確認する手がかりとして扱ってください。"
+            ),
+            LocalizedEntry(
                 id: "feat_persistence_monitor_guard",
                 title: "新規の自動起動登録（LaunchAgent / LaunchDaemon）の監視 (Pro)",
                 summary: "新しい LaunchAgent / LaunchDaemon の登録をリアルタイムに監視し、シェルやスクリプトインタプリタを直接起動する登録や、署名が無効な実行ファイルを登録したものを検知して通知します。",
@@ -586,6 +601,7 @@ extension RoamSwitchKnowledgeBase {
                 • 監査リクエスト: ペアリング後、「Sensorへ監査をリクエスト」でSensorに能動監査(到達確認)の実行を依頼できる。結果はSensor側で非同期に生成されるため、この端末側(特権ヘルパー、常駐)が5分間隔・最大5回まで自動的に結果を取得しに行く。取得した結果はこの端末にも保存され、設定画面の「監査結果」一覧で確認できる。
                 • 開き方: メニューバーの「ポート・デバイス監視」→「🔍 RoamSwitch Sensor ペアリング…」。この端末自身の公開鍵/アドレス表示(コピーボタン付き)、ペアリング済みSensor一覧(解除ボタン)、ペアリングコード入力フォーム、監査結果一覧を持つ。
                 • Linux版(`roamswitch-core::sensor_pairing`)と同一のTCP制御プロトコル(ポート50543、改行区切りJSON、Ed25519署名)を使用する。
+                • 通信の保護(TLS): 制御APIはTLS 1.3で接続し、Sensorの証明書はフィンガープリント(証明書のSHA-256)のピン留めで信頼する(CA・ホスト名は検証しない)。ペアリング時はSensorの画面に表示されているフィンガープリントを手で入力して確認する(ネットワーク経由での自動取得はしない)。ペアリング要求はそのフィンガープリントとこの端末の鍵に署名で結び付けられ、別の証明書を使った中間者は失敗する。Sensorが証明書を再生成(tls rotate)した場合は接続が拒否されるので、「フィンガープリントを登録・更新」でSensor画面の新しい値を入力して再ピン留めする(自動更新はしない)。ピン留め前にペアリングした旧Sensorは平文通信のまま(画面に警告を表示)で、TLSが失敗しても平文へ自動フォールバックはしない。
                 """,
                 recommendation: "ペアリングコードは、実際に自分が設置したRoamSwitch Sensorのオペレーター画面で発行したものだけを使ってください。見慣れないコードの入力を求められた場合はペアリングせず、ネットワーク上の管理者に確認することを推奨します。"
             ),
@@ -626,7 +642,7 @@ extension RoamSwitchKnowledgeBase {
                 • 🚨 ランサムウェア防護シミュレーション (動作確認)…: 暗号化の兆候を検知した場合と同じ手順で、Air-Gap隔離と緊急モーダルが動作するかをテスト。ファイルの破壊などは発生しません。
                 • 🚨 マルウェア検知連動Air-Gapのシミュレーション (動作確認)…: XProtectが実際にマルウェアを検知した場合と同じ手順で、隔離と緊急モーダルをテスト。イベントには「[シミュレーション]」と明記されます。
                 • ⚠️ Dockerリスク検知のシミュレーション (動作確認)…: 特権コンテナ検知時と同じ通知が届くかをテスト。Dockerへのアクセスは発生しません。
-                • 注意: Air-Gap系のテストでは実際に一時的にネットワークが遮断されます。緊急モーダルから解除してください（解除しなくても最大10分で自動復旧）。
+                • 注意: Air-Gap系のテストでは実際に一時的にネットワークが遮断されます。緊急モーダルから解除してください（模擬テストは確度が高い扱いのため10分では自動解除されず、最長1時間後に縮退モードへ移ります）。
                 • ダウンロード保護の確認には、無害なEICARテストファイルも使えます（通知は出ず、通知履歴に記録されます）。
                 """,
                 recommendation: "Proを有効化した直後や設定を変えた後に一度シミュレーションを実行し、通知とAir-Gapの動作を確認しておくと安心です。"
@@ -638,7 +654,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • 特権分離: メインアプリは通常ユーザー権限で動作し、pfルールの変更・共有デーモンの制御・DNS設定・ARP固定・重要ファイルのハッシュ計算などだけを `RoamSwitchHelper` に委譲します。
                 • 登録: macOS標準の SMAppService により、アプリ内に同梱されたLaunchDaemonとして登録されます。初回は「システム設定」→「一般」→「ログイン項目とApp機能拡張」での承認が必要です。アプリが「アプリケーション」フォルダにない場合は登録できません（faq_install_location）。
-                • 付随するデーモン: エアギャップのフェイルセーフ（10分で自動解除）と起動時ゲート（最大90秒）を担う補助のLaunchDaemonも登録されます。
+                • 付随するデーモン: エアギャップのフェイルセーフ（確度の低い検知は10分で自動解除、確度の高い検知は上限後に縮退モード）と起動時ゲート（最大90秒）を担う補助のLaunchDaemonも登録されます。
                 • セキュリティ検証: XPC接続時にコード署名（Team ID）を検証し、不正なプロセスからの呼び出しを拒否します。
                 • アップデート後の再承認: 新しいヘルパーへの入れ替えをアプリが自動で試みますが、macOS側の判断で再承認待ち（未承認）状態になることがあります。この場合、メニューバーのアイコンが警告表示に変わり「⚠️ アップデート後の再承認が必要です」と表示され、通知でもお知らせします。
                 """,
@@ -651,6 +667,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • 通信: ローカルの標準入出力（stdio）のみ。バイナリは `/Applications/RoamSwitch.app/Contents/MacOS/RoamSwitchMCPServer`。
                 • 主なツール: `get_security_report`（総合診断）、`get_exposed_ports`、`get_guard_status`、`audit_url_safety`、`audit_secrets`、`audit_security_logs`、`get_quarantine_status`、`get_notification_history`、`get_canary_status`、`get_port_anomaly_incidents`、`get_runtime_threat_status`、`get_incident_timeline`（封じ込めインシデント履歴）、`get_network_history`（ネットワーク履歴学習）、`run_package_cve_scan`、`run_package_cve_scan_languages`、`run_active_vuln_scan`（127.0.0.1への非破壊プローブを送る唯一のツール）、`get_app_help`（このナレッジベース）。
+                • プロセス実行の記録(Pro・読み取り専用): `search_exec_events`(起動イベントの検索)、`get_process_tree`(祖先・子孫のプロセスツリー)。
                 • リソース: `roamswitch://docs/features`、`roamswitch://docs/alerts-and-messages`、`roamswitch://docs/settings-guide`、`roamswitch://docs/troubleshooting`。
                 • 言語: 回答はアプリの言語設定に従います。`get_app_help` は `language` 引数（ja / en / zh-Hans / zh-Hant / ko / de / fr / es / it / pt-PT）で言語を指定できます。
                 • 安全設計: 読み取り専用のため、プロンプトインジェクションでAIに悪用されても保護レベルの変更やポート隔離などは実行できません。
@@ -942,7 +959,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "Apple純正の XProtect / XProtect Remediator がマルウェアを検知（有罪判定）し、XProtect連動の自動遮断によってエアギャップ隔離が発動した際の緊急モーダルと通知です。",
                 details: """
                 • 発生原因: ダウンロードや実行したファイルを、Appleのマルウェア検知エンジンが悪性と判定した。
-                • 自動防御: 送受信の全遮断＋Wi-Fi無線オフ。解除しない場合も最大10分で自動復旧します。検知したプロセス・カテゴリ・Appleの検知メッセージが記録されます。
+                • 自動防御: 送受信の全遮断＋Wi-Fi無線オフ＋確立済みの接続の切断。XProtectの検知は確度が高いため10分では自動復旧せず、最長1時間の全遮断のあと縮退モード(新規の外向き通信を遮断)に移り、ユーザーが解除するか原因の解消を再確認できるまで続きます。検知したプロセス・カテゴリ・Appleの検知メッセージが記録されます。
                 """,
                 recommendation: """
                 1. 直前にダウンロード・実行したファイルやアプリを確認し、削除してください。
@@ -1311,7 +1328,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • 確認: 緊急モーダルが表示されていないか、通知履歴に「緊急自動防護発動」「XProtect」「ARPスプーフィング」「不審なコマンド実行」などの通知がないか確認してください。Wi-Fi無線がオフになっている場合もあります。
                 • 解除: 緊急モーダルの解除ボタン、または通知から解除してください。通信とWi-Fi無線が復旧します。
-                • 自動復旧: 解除しなくても、ヘルパーのフェイルセーフにより最大10分で自動的に復旧します。アプリの終了・クラッシュ・Macの再起動でも手動操作は不要です。
+                • 自動復旧: 確度の低い検知(ClickFixなど)は、解除しなくてもヘルパーのフェイルセーフにより最大10分で自動的に復旧します。確度の高い検知(ランサムウェアおとり・XProtectの検知など)は自動では開放されず、最長1時間後に縮退モードへ移り、緊急モーダルや通知から解除するか、原因の解消が確認されるまで続きます。アプリの終了・クラッシュ・Macの再起動後も同じ動作です。
                 • 起動直後: Mac起動直後は最大90秒間、起動時ゲートで通信が制限されることがあります。
                 • 隔離以外の原因: 最大ロックダウンは受信を遮断しますが、通常の送信（Web閲覧など）は妨げません。VPNのキルスイッチ（トンネル切断中）、DNS脅威保護のDNS、リンク保護による遮断も確認してください。
                 """,

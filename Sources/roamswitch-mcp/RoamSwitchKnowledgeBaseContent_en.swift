@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.51 (build 108).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.52 (build 113).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -118,12 +118,12 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "feat_airgap_containment",
                 title: "Emergency Air-Gap Containment (Full Network Cut, Wi-Fi Radio Off, Auto-Restore Failsafe)",
-                summary: "The shared emergency containment used when a serious threat is detected (ransomware, an XProtect malware finding, ARP spoofing, ClickFix). It blocks all inbound and outbound traffic. Even after a crash or reboot, networking comes back automatically within 10 minutes at most.",
+                summary: "The shared emergency containment used when a serious threat is detected (ransomware, an XProtect malware finding, ARP spoofing, ClickFix). It blocks all inbound and outbound traffic. It also cuts connections that were already open. For low-confidence triggers (such as ClickFix), networking comes back automatically within 10 minutes at most, even after a crash or reboot. High-confidence triggers (a ransomware bait file, an XProtect finding, ARP spoofing on a Maximum Lockdown network, ARP containment started with “Cut all network now” from the spoof warning) never reopen by themselves: after up to 1 hour of full cutoff they drop to a degraded mode that keeps blocking new outbound connections.",
                 details: """
                 • How: the privileged helper loads pf `block drop all` (loopback excepted) and reads it back to confirm. Outbound is cut too, which stops exfiltration of keys or data to a C2 server. If applying fails it retries up to 3 times (8-second timeout each); if it still fails it says "Automatic network cutoff failed" and asks you to disconnect manually. It never claims isolation that isn't real.
                 • Wi-Fi radio off: pf only drops packets while the adapter stays associated, so ARP-spoofing, ransomware, and XProtect containment also turn the Wi-Fi radio itself off via `networksetup` (on by default; internal setting `RoamSwitch.AirGapAutoWiFiKillEnabled`). ClickFix containment does not turn the radio off.
-                • Release: releasing from the emergency window or notification removes the pf block and turns Wi-Fi back on.
-                • Failsafe: if the app crashes or nobody releases it, a helper-side timer force-releases the air-gap after 10 minutes and restores the Wi-Fi radio. Relaunching the app or rebooting the Mac also recovers without manual steps.
+                • Release: releasing from the emergency window or notification removes the pf block and turns Wi-Fi back on. The menu bar item “Release Air-Gap isolation” is always available, on the Free tier too and even if a Pro licence lapses mid-incident. Notices about the isolation state (started, degraded, released, failed) also reach Free users; detection alerts themselves stay Pro.
+                • Failsafe: if nobody releases it (including after an app crash or a Mac reboot), a helper-side timer acts according to the trigger's confidence. Low confidence (ClickFix, generic heuristics, a plain manual Air-Gap with no warning): the air-gap is force-released after 10 minutes and the Wi-Fi radio restored. High confidence (ransomware bait file, XProtect finding, ARP spoofing on a Maximum Lockdown network, ARP containment started with “Cut all network now” from the spoof warning): full air-gap for up to 1 hour, then a degraded mode. In degraded mode new outbound connections (except DHCP) stay blocked but the Wi-Fi radio is back on so you can see which network you are on; it never opens on a timer, only when you release it or a re-check verifies the cause is gone (for example the suspect process has exited). For ARP containment the re-check reads the ARP cache without sending any traffic and counts the cause as gone only when the trusted gateway MAC shows on 3 consecutive checks spanning at least 60 seconds (a different MAC, a missing or incomplete entry, a duplicate MAC or an unreadable cache starts over). Connections that were already open are cut when the air-gap engages and again when it degrades.
                 • Boot gate: right after boot, until the app applies its policy, a default-deny pf boot gate is in effect; it releases itself after 90 seconds at most.
                 """,
                 recommendation: "When containment fires, read the notification first, quit suspicious apps and run a scan, then release. If you know it's a false positive, release it right away."
@@ -366,6 +366,21 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "Consider enabling it if you're worried about being tricked by fake error pages or CAPTCHAs into running commands."
             ),
             LocalizedEntry(
+                id: "feat_exec_recorder",
+                title: "Process Execution Recording (eslogger, Notify-Only, Pro, Off by Default)",
+                summary: "Records which programs start on this Mac using Apple's own /usr/bin/eslogger (macOS 13+), and notifies you when a launch matches a suspicious combination. It never blocks an execution and never cuts the network; the log stays on this Mac.",
+                details: """
+                • How: the privileged helper runs `/usr/bin/eslogger exec fork exit` as a child process and parses its JSON stream. eslogger ships with macOS; RoamSwitch does not use or apply for the EndpointSecurity entitlement, so this is after-the-fact observation, not pre-execution blocking.
+                • Requirements: macOS 13 or later and Full Disk Access for RoamSwitchHelper. Without it the window shows “Execution recording unavailable: RoamSwitchHelper needs Full Disk Access” (or that eslogger was not found) and nothing else is done; there is no fallback to constant polling. Events from before recording was enabled or the helper started are not recorded.
+                • Correlation rules (notify-only, quiet by default, each with a stable id and a MITRE ATT&CK technique): a shell or script interpreter launched directly by a browser, Office or mail app (exec.shell_from_app, T1059); an unsigned or ad-hoc-signed binary run from /tmp, /private/var/tmp or carrying the download quarantine flag (exec.untrusted_location, T1204.002); a `sh -c` one-liner piping curl/wget into a shell together with an aggravating fact such as a raw-IP URL, base64, eval, disabled TLS verification or a browser parent (exec.pipe_to_shell, T1059.004); `osascript -e` combining do shell script with base64/eval (exec.osascript_obfuscated, T1059.002); `xattr -d com.apple.quarantine` followed by running that file within 15 minutes (exec.quarantine_stripped_then_exec, T1553.001); an unsigned or ad-hoc binary started by launchd from a LaunchAgent/LaunchDaemon written within the last 24 hours (exec.launchd_untrusted_binary, T1543.001/.004); `security find-generic-password -w` or `dump-keychain` run under a non-shell ancestor that is not Apple-signed (exec.keychain_access, T1555.001). A plain `curl | sh` typed in Terminal is deliberately not flagged.
+                • Alerts: a notification (Pro) plus an entry in the incident timeline (source execRecorder, action “notify only”). An alert never triggers the air-gap or any other isolation by itself.
+                • Storage: segmented JSON Lines under /Library/Application Support/RoamSwitch/exec_log (root-only: 0700/0600, because command lines can contain secrets; the app, viewer and MCP server read only through the privileged helper), 200 MB / 14 days by default (changeable), crash-safe rotation. Segments are hash-chained so deleted, edited or truncated segments are detected (“Verify chain”); this is tamper-evident, not tamper-proof. Environment variables are never recorded, but command-line arguments can contain secrets.
+                • Load control: a bounded queue that drops the oldest lines when overloaded (counted and shown), exponential-backoff restarts, and turning it off stops eslogger completely.
+                • Viewer and export: menu → Malware Protection → “Process Execution Log…” (search, process tree, export to JSON Lines). MCP tools `search_exec_events` and `get_process_tree` (Pro, read-only).
+                """,
+                recommendation: "Turn it on if you want an execution history for incident triage, and grant Full Disk Access to RoamSwitchHelper first. Treat alerts as leads to check in the log, not as proof of compromise."
+            ),
+            LocalizedEntry(
                 id: "feat_persistence_monitor_guard",
                 title: "Watch for New Auto-Launch Registrations (LaunchAgent / LaunchDaemon) (Pro)",
                 summary: "Watches for new LaunchAgent / LaunchDaemon registrations in real time and notifies you when one launches a shell or script interpreter directly, or registers an executable with an invalid signature.",
@@ -586,6 +601,7 @@ extension RoamSwitchKnowledgeBase {
                 • Requesting an audit: once paired, “Request audit from Sensor” asks the Sensor to run an active audit (reachability verification). Since the Sensor generates results asynchronously, this device's own always-on privileged helper polls for the result every 5 minutes, up to 5 times. Retrieved results are saved on this device too and shown under “Audit Results” in the settings screen.
                 • How to open: menu bar → “Ports & Devices Monitor” → “🔍 RoamSwitch Sensor Pairing…”. Shows this device's own public key/address (with a copy button), paired Sensors (with an Unpair button), a pairing-code entry form, and the audit-results list.
                 • Uses the same TCP control protocol as the Linux edition (`roamswitch-core::sensor_pairing`) — port 50543, newline-delimited JSON, Ed25519 signatures.
+                • Transport protection (TLS): the control API is reached over TLS 1.3 and the Sensor's certificate is trusted only by pinning its fingerprint (SHA-256 of the certificate; no CA or host-name validation). When pairing, you type in the fingerprint shown on the Sensor's own screen (it is never fetched over the network). The pair request is bound to that fingerprint and to this device's key with a signature, so a man-in-the-middle presenting a different certificate fails. If the Sensor regenerates its certificate (tls rotate), connections are refused and you must re-pin with “Register / update fingerprint” using the new value from the Sensor's screen (never automatic). A Sensor paired before pinning existed keeps using plaintext (with a warning in the window); there is no automatic fallback to plaintext when TLS fails.
                 """,
                 recommendation: "Only use a pairing code that was actually issued from the operator screen of a Sensor you set up yourself. If asked to enter an unfamiliar code, don't pair — check with whoever administers the network instead."
             ),
@@ -626,7 +642,7 @@ extension RoamSwitchKnowledgeBase {
                 • 🚨 Ransomware Defense Simulation (Test Mode)…: runs the same steps as a detected encryption attempt to check the air-gap and emergency window. No files are harmed.
                 • 🚨 Simulate Malware-Detection Air-Gap (Test)…: runs the same steps as a real XProtect detection to check containment and the emergency window. The event is labeled as a simulation.
                 • ⚠️ Docker Risk Detection Simulation (Test Mode)…: checks that the privileged-container notification arrives. Docker isn't touched.
-                • Note: the air-gap tests really do cut the network temporarily. Release from the emergency window (it also restores itself within 10 minutes).
+                • Note: the air-gap tests really do cut the network temporarily. Release from the emergency window (the simulations count as high confidence, so they do not release themselves after 10 minutes; after up to 1 hour they drop to degraded mode).
                 • To test download protection you can use a harmless EICAR test file (no banner; it's recorded in notification history).
                 """,
                 recommendation: "Run a simulation once after activating Pro or changing settings to confirm notifications and the air-gap behave as expected."
@@ -638,7 +654,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • Privilege separation: the main app runs with normal user rights and delegates only pf rule changes, sharing daemon control, DNS settings, ARP pinning, critical-file hashing, and similar tasks to `RoamSwitchHelper`.
                 • Registration: registered via macOS's SMAppService as a LaunchDaemon bundled inside the app. First use requires approval in System Settings → General → Login Items & Extensions. It can't be registered if the app isn't in the Applications folder (faq_install_location).
-                • Companion daemons: helper LaunchDaemons for the air-gap failsafe (auto-release after 10 minutes) and the boot gate (up to 90 seconds) are also registered.
+                • Companion daemons: helper LaunchDaemons for the air-gap failsafe (auto-release after 10 minutes for low-confidence triggers, degraded mode after the cap for high-confidence ones) and the boot gate (up to 90 seconds) are also registered.
                 • Verification: code signatures (Team ID) are checked on XPC connections, rejecting calls from unauthorized processes.
                 • Re-approval after an update: the app automatically tries to swap in the new helper, but macOS can still leave it pending re-approval. When that happens, the menu bar icon switches to a warning showing “⚠️ Re-approval needed after update”, and a notification tells you as well.
                 """,
@@ -651,6 +667,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • Transport: local stdio only. Binary: `/Applications/RoamSwitch.app/Contents/MacOS/RoamSwitchMCPServer`.
                 • Main tools: `get_security_report` (security audit), `get_exposed_ports`, `get_guard_status`, `audit_url_safety`, `audit_secrets`, `audit_security_logs`, `get_quarantine_status`, `get_notification_history`, `get_canary_status`, `get_port_anomaly_incidents`, `get_runtime_threat_status`, `get_incident_timeline` (containment incident timeline), `get_network_history` (network history learning), `run_package_cve_scan`, `run_package_cve_scan_languages`, `run_active_vuln_scan` (the only tool that sends traffic, non-destructive probes to 127.0.0.1), and `get_app_help` (this knowledge base).
+                • Process execution log (Pro, read-only): `search_exec_events` (search launch events) and `get_process_tree` (ancestors and descendants of a process).
                 • Resources: `roamswitch://docs/features`, `roamswitch://docs/alerts-and-messages`, `roamswitch://docs/settings-guide`, `roamswitch://docs/troubleshooting`.
                 • Language: answers follow the app's language setting. `get_app_help` accepts a `language` argument (ja / en / zh-Hans / zh-Hant / ko / de / fr / es / it / pt-PT).
                 • Safety: because it's read-only, even an AI manipulated by prompt injection can't change the protection level or isolate ports.
@@ -942,7 +959,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "The emergency window and notification shown when Apple's XProtect / XProtect Remediator convicted a file as malware and the XProtect-linked auto-cutoff engaged air-gap containment.",
                 details: """
                 • Cause: Apple's malware engine judged a file you downloaded or ran to be malicious.
-                • Automatic defense: all traffic cut plus Wi-Fi radio off, restored automatically within 10 minutes if not released. The detecting process, category, and Apple's detection message are recorded.
+                • Automatic defense: all traffic cut, Wi-Fi radio off, and connections that were already open are cut. An XProtect finding is high confidence, so it is not restored after 10 minutes: after up to 1 hour of full cutoff it drops to a degraded mode (no new outbound connections) until you release it or a re-check verifies the cause is gone. The detecting process, category, and Apple's detection message are recorded.
                 """,
                 recommendation: """
                 1. Identify the files or apps you just downloaded or ran and delete them.
@@ -1311,7 +1328,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • Check: look for an emergency window, and check notification history for alerts such as CRITICAL AUTO-DEFENSE, XProtect, ARP spoofing, or suspicious command execution. The Wi-Fi radio may also have been turned off.
                 • Release: use the release button in the emergency window or the notification. Networking and the Wi-Fi radio come back.
-                • Auto-restore: even without releasing, the helper's failsafe restores networking within 10 minutes. No manual steps are needed after quitting, a crash, or rebooting.
+                • Auto-restore: for low-confidence triggers (such as ClickFix), the helper's failsafe restores networking within 10 minutes even without releasing. For high-confidence triggers (a ransomware bait file, an XProtect finding) networking does not reopen by itself: after up to 1 hour it drops to degraded mode until you release it from the emergency window or notification, or a re-check verifies the cause is gone. The same applies after quitting, a crash, or rebooting.
                 • Right after boot: traffic may be restricted by the boot gate for up to 90 seconds.
                 • Other causes: Maximum Lockdown blocks inbound but doesn't prevent normal outbound use such as web browsing. Also check the VPN kill switch (while the tunnel is down), DNS Threat Protection's resolver, and Link Guard blocks.
                 """,

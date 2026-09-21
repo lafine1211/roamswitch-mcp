@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.51 (build 108).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.52 (build 113).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -359,7 +359,7 @@ public struct MCPGuardStatusPayload: Codable, Equatable {
 public struct MCPIncidentTimelineEventPayload: Codable, Equatable {
     public let id: String
     public let timestamp: String
-    /// "arpSpoof" | "ransomwareCanary" | "runtimeThreat" | "portAnomaly"
+    /// "arpSpoof" | "ransomwareCanary" | "runtimeThreat" | "portAnomaly" | "clickFix"
     public let source: String
     public let sourceLabel: String
     public let severity: String
@@ -423,6 +423,7 @@ public enum MCPResponseFormatting {
     // file named in the trailing comment); defaults mirror that guard's getter.
     static let ransomwareCanaryGuardKey = "RoamSwitch.RansomwareCanaryGuardEnabled"   // RansomwareCanaryGuard — false; Pro default-on
     static let clickFixGuardKey = "RoamSwitch.ClickFixGuardEnabled"                   // ClickFixGuard — false
+    static let execRecorderKey = "RoamSwitch.ExecRecorder.Enabled"                    // ExecRecorderManager — false (Pro, opt-in)
     static let dockerEventGuardKey = "RoamSwitch.DockerEventGuardEnabled"             // DockerEventGuard — false
     static let criticalPathFimKey = "RoamSwitch.CriticalPathFimEnabled"               // CriticalPathFimGuard — false; Pro default-on
     static let lockfileTamperGuardKey = "RoamSwitch.LockfileTamperGuardEnabled"       // LockfileTamperGuard — false; Pro default-on
@@ -574,6 +575,7 @@ public enum MCPResponseFormatting {
         guards.append(entry("runtimeThreatContainment", runtimeThreatContainmentKey, defaultWhenUnset: false))
         guards.append(entry("ransomwareCanaryGuard", ransomwareCanaryGuardKey, defaultWhenUnset: false))
         guards.append(entry("clickFixGuard", clickFixGuardKey, defaultWhenUnset: false))
+        guards.append(entry("execRecorder", execRecorderKey, defaultWhenUnset: false))
         guards.append(entry("dockerEventGuard", dockerEventGuardKey, defaultWhenUnset: false))
         guards.append(entry("criticalPathFim", criticalPathFimKey, defaultWhenUnset: false))
         guards.append(entry("persistenceMonitor", persistenceMonitorKey, defaultWhenUnset: true))
@@ -636,6 +638,8 @@ public enum MCPResponseFormatting {
         case .ransomwareCanary: return loc("ランサムウェア・カナリアガード")
         case .runtimeThreat: return loc("ランタイム脅威封じ込め (XProtect連動)")
         case .portAnomaly: return loc("ポート異常ガード")
+        case .clickFix: return loc("ClickFixガード（不審なコマンド検知）")
+        case .execRecorder: return loc("プロセス実行レコーダー（相関ルール）")
         }
     }
 
@@ -643,6 +647,8 @@ public enum MCPResponseFormatting {
         switch action {
         case "air_gap": return loc("ネットワーク全遮断 (Air-Gap)")
         case "port_block": return loc("ポートのLAN公開を遮断")
+        case "notify_only": return loc("通知のみ（遮断は行わない）")
+        case "air_gap_degraded": return loc("Air-Gapを縮退モードへ移行（新規の外部通信は遮断を継続）")
         default: return action
         }
     }
