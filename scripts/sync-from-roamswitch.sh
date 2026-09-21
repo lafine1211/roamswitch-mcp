@@ -43,7 +43,11 @@ CORE=(AppLanguage TrustedNetwork GatewayFingerprint WiFiSecurityMonitor \
       PackageCveScriptScan NpmAuditSignatures TyposquatGuard \
       SecretLeakScanning CryptoSecretDetection SecurityLogAuditor LogTemplateAnalyzer QuarantineManager CanaryStatusReader \
       PortAnomalyStatusReader RuntimeThreatStatusReader NotificationHistory \
-      ContainmentIncidentTimeline NetworkHistoryGuard MCPSensorAuditStatusReader)
+      ContainmentIncidentTimeline NetworkHistoryGuard MCPSensorAuditStatusReader \
+      RansomwareSnapshotStatusReader)
+
+# Sources that live in the app's Shared/ folder (also compiled into the helper).
+SHARED=(RansomwareSnapshotLogic)
 
 # App test files that only exercise types present in this repo. Their
 # `@testable import RoamSwitch` is rewritten to this package's module name.
@@ -52,12 +56,15 @@ CORE=(AppLanguage TrustedNetwork GatewayFingerprint WiFiSecurityMonitor \
 # repo and is not touched by the sync.
 TESTS=(LinkSafetyAuditorTests CryptoSecretDetectionTests MCPKnowledgeBaseTests MCPProtocolTests \
        MCPResponseFormattingTests ARPSpoofMonitorTests MCPServerRobustnessTests ParserRobustnessTests \
-       TyposquatGuardTests)
+       TyposquatGuardTests RansomwareRecoveryMCPTests)
 
 TDST="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/Tests/roamswitch-mcpTests"
 
 for f in "${CORE[@]}"; do
   { printf '%s\n' "$HEADER"; cat "$SRC/RoamSwitch/$f.swift"; } > "$DST/$f.swift"
+done
+for f in "${SHARED[@]}"; do
+  { printf '%s\n' "$HEADER"; cat "$SRC/Shared/$f.swift"; } > "$DST/$f.swift"
 done
 for f in main; do
   { printf '%s\n' "$HEADER"; cat "$SRC/RoamSwitchMCPServer/$f.swift"; } > "$DST/$f.swift"
@@ -68,5 +75,5 @@ for f in "${TESTS[@]}"; do
     sed 's/@testable import RoamSwitch/@testable import roamswitch_mcp/' "$SRC/RoamSwitchTests/$f.swift"; } > "$TDST/$f.swift"
 done
 
-echo "Synced $((${#CORE[@]}+1)) source files and ${#TESTS[@]} test files from RoamSwitch $VER (build $BUILD)."
+echo "Synced $((${#CORE[@]}+${#SHARED[@]}+1)) source files and ${#TESTS[@]} test files from RoamSwitch $VER (build $BUILD)."
 echo "Next: swift test && git commit -am 'Sync from RoamSwitch $VER' && git tag v$VER"

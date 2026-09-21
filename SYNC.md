@@ -63,6 +63,8 @@ All files live in `Sources/roamswitch-mcp/`.
 | `NotificationHistory.swift` | `RoamSwitch/NotificationHistory.swift` |
 | `ContainmentIncidentTimeline.swift` | `RoamSwitch/ContainmentIncidentTimeline.swift` |
 | `NetworkHistoryGuard.swift` | `RoamSwitch/NetworkHistoryGuard.swift` |
+| `RansomwareSnapshotStatusReader.swift` | `RoamSwitch/RansomwareSnapshotStatusReader.swift` |
+| `RansomwareSnapshotLogic.swift` | `Shared/RansomwareSnapshotLogic.swift` (the only file taken from `Shared/`) |
 
 This is exactly the source set the app compiles into its `RoamSwitchMCPServer` target
 (see `project.yml` in the app repo).
@@ -91,6 +93,7 @@ via `@testable import RoamSwitch`. Only `main.swift` (the stdin→stdout pump) i
 | `ARPSpoofMonitorTests.swift` | `RoamSwitchTests/ARPSpoofMonitorTests.swift` |
 | `MCPServerRobustnessTests.swift` | `RoamSwitchTests/MCPServerRobustnessTests.swift` |
 | `ParserRobustnessTests.swift` | `RoamSwitchTests/ParserRobustnessTests.swift` |
+| `RansomwareRecoveryMCPTests.swift` | `RoamSwitchTests/RansomwareRecoveryMCPTests.swift` |
 | `StdioSmokeTests.swift` | **not mirrored** — specific to this repo (drives the built binary over stdio) |
 | `MutationFuzzTests.swift` | **not mirrored** — specific to this repo |
 
