@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.49 (build 106).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.50 (build 107).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -321,6 +321,21 @@ extension RoamSwitchKnowledgeBase {
                 • Predefinição: ativa-se automaticamente na primeira ativação da Pro. Histórico de incidentes através da ferramenta MCP `get_canary_status`. Teste em segurança com «Simulação de defesa contra ransomware (Modo de teste)» no menu.
                 """,
                 recommendation: "Mantenha-a ativa para proteger dados importantes de ransomware desconhecido, e não elimine os ficheiros-isco ocultos."
+            ),
+            LocalizedEntry(
+                id: "feat_ransomware_recovery",
+                title: "Recuperação de ransomware (extrair ficheiros de um instantâneo prévio)",
+                summary: "Para voltar ao estado anterior à cifragem, o RoamSwitch cria instantâneos locais APFS periodicamente e permite extrair apenas os ficheiros necessários para outro local. Os seus ficheiros atuais nunca são substituídos.",
+                details: """
+                • Instantâneos prévios: criados por predefinição a cada 6 horas (desligado / 1 / 3 / 6 / 12 / 24 horas), independentemente de qualquer deteção. Um instantâneo criado depois de uma deteção pode já conter ficheiros cifrados.
+                • Instantâneos de deteção: também criados quando o guarda de iscos é acionado, mas podem conter ficheiros cifrados e não são recomendados como origem de recuperação.
+                • Modo de retenção: enquanto um instantâneo de deteção for o mais recente (até 7 dias), os novos instantâneos prévios e a limpeza dos anteriores ficam em pausa, para que a última geração anterior à cifragem não seja empurrada para fora.
+                • Extração: em «Recuperação de ransomware…» no menu, os ficheiros ou pastas do instantâneo recomendado (o prévio mais recente que ainda existe) são copiados para `~/RoamSwitch-Recovered/<ID do instantâneo>/`. Os ficheiros existentes nunca são substituídos e não existe restauro completo do volume. A recuperação é sempre manual.
+                • Limites: o macOS pode eliminar os instantâneos locais por si só após cerca de 24 horas (mais cedo se houver pouco espaço livre), e uma geração que já não existe não pode ser usada. A extração exige Acesso Total ao Disco para o auxiliar do RoamSwitch (a criação não).
+                • MCP: a ferramenta só de leitura `get_ransomware_recovery_snapshots` mostra a lista e a recomendação (não consegue restaurar nada).
+                • Pro: Esta janela (lista e extração de ficheiros) e a ferramenta MCP são funcionalidades Pro. A criação dos snapshots em si funciona também sem Pro.
+                """,
+                recommendation: "Mantenha os instantâneos prévios ativados. Se notar danos, corte primeiro a rede e extraia os ficheiros do instantâneo prévio recomendado, não do de deteção."
             ),
             LocalizedEntry(
                 id: "feat_runtime_threat_containment",

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.49 (build 106).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.50 (build 107).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -748,4 +748,63 @@ public struct MCPLinkAuditPayload: Codable, Equatable {
     public let riskLevel: String
     public let isHTTPS: Bool
     public let riskFactors: [MCPLinkRiskFactorPayload]
+}
+
+
+// MARK: - get_ransomware_recovery_snapshots
+
+/// One snapshot as `get_ransomware_recovery_snapshots` reports it.
+public struct MCPRansomwareSnapshotPayload: Codable, Equatable {
+    public let id: String
+    /// `pre_damage`, `detection` or `manual`.
+    public let kind: String
+    public let createdAt: String
+    /// False once macOS (or anyone) removed the snapshot.
+    public let exists: Bool
+    /// True for the one snapshot to recover from: the newest pre-damage one that still exists.
+    public let recommended: Bool
+    /// Present where the kind needs explaining (a detection snapshot may already hold encrypted files).
+    public let note: String?
+}
+
+public struct MCPRansomwareRecoverySnapshotsPayload: Codable, Equatable {
+    /// Hours between scheduled pre-damage snapshots; 0 means they are turned off.
+    public let scheduledIntervalHours: Int
+    /// True while a detection snapshot is newer than the last pre-damage one: new
+    /// scheduled snapshots and pruning are paused so the encrypted state cannot
+    /// push out the last good generation.
+    public let retentionMode: Bool
+    public let recommendedSnapshotId: String?
+    public let snapshots: [MCPRansomwareSnapshotPayload]
+    public let notes: [String]
+}
+
+enum MCPRansomwareRecoveryFormatting {
+    static let detectionNote = "Taken when a detection fired, so it may already contain files encrypted before the detection. It is NOT a source to recover pre-encryption data from; use the recommended pre-damage snapshot."
+
+    static let generalNotes: [String] = [
+        "Read-only: this tool never creates, deletes or mounts a snapshot, and there is no MCP tool that restores anything. Recovery is always manual and file-level, from the RoamSwitch Ransomware Recovery window: files are copied to ~/RoamSwitch-Recovered/<snapshot id>/, and current files are never overwritten. A whole-volume restore is not offered.",
+        "macOS may delete local snapshots on its own after about 24 hours, and sooner when free space is low; `exists` is re-checked against the disk on every call.",
+        "Taking files out of a snapshot needs the RoamSwitch helper to have Full Disk Access (creating snapshots does not).",
+    ]
+
+    static func payload(_ status: RansomwareSnapshotStatusReader.Status) -> MCPRansomwareRecoverySnapshotsPayload {
+        let iso = ISO8601DateFormatter()
+        return MCPRansomwareRecoverySnapshotsPayload(
+            scheduledIntervalHours: status.intervalHours,
+            retentionMode: status.retentionMode,
+            recommendedSnapshotId: status.recommendedID,
+            snapshots: status.snapshots.map {
+                MCPRansomwareSnapshotPayload(
+                    id: $0.id,
+                    kind: $0.kind.rawValue,
+                    createdAt: iso.string(from: $0.createdAt),
+                    exists: $0.exists,
+                    recommended: $0.id == status.recommendedID,
+                    note: $0.kind == .detection ? detectionNote : nil
+                )
+            },
+            notes: generalNotes
+        )
+    }
 }

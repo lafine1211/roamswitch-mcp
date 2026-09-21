@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.49 (build 106).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.50 (build 107).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -320,6 +320,21 @@ extension RoamSwitchKnowledgeBase {
                 • 既定値: Proライセンスの初回有効化時に自動でオン。検知履歴はMCPの `get_canary_status` で確認できます。メニューの「ランサムウェア防護シミュレーション (動作確認)」で安全にテストできます。
                 """,
                 recommendation: "未知のランサムウェアから重要データを守るため、有効のままにしてください。おとりファイル（隠しファイル）は削除しないでください。"
+            ),
+            LocalizedEntry(
+                id: "feat_ransomware_recovery",
+                title: "ランサムウェア復旧（事前スナップショットからのファイル単位の取り出し）",
+                summary: "暗号化される前の状態に戻すため、APFSのローカルスナップショットを定期的に取り、必要なファイルだけを別の場所へ取り出します。現在のファイルは上書きしません。",
+                details: """
+                • 事前スナップショット: 検知とは無関係に、既定で6時間ごと（無効/1/3/6/12/24時間から選択）に取ります。検知の後に取ったものには、すでに暗号化されたファイルが入っているためです。
+                • 検知時スナップショット: おとりファイルの検知時にも取りますが、暗号化済みのファイルを含む場合があり、復旧元としては勧めません。
+                • 保持モード: 検知時のスナップショットが最新の間（最大7日）は、新しい事前スナップショットの取得と古い世代の整理を止め、暗号化前の最後の世代が押し出されないようにします。
+                • 取り出し: メニューの「ランサムウェア復旧…」から、推奨（残っている最新の事前スナップショット）のファイルやフォルダを `~/RoamSwitch-Recovered/<スナップショットID>/` へコピーします。既存のファイルは上書きせず、全体の巻き戻しは提供しません。復旧は常に手動です。
+                • 制約: macOSはローカルスナップショットを約24時間で自動的に削除することがあり（空き容量が少ないとさらに早く）、残っていない世代は使えません。取り出しには、RoamSwitchのヘルパーにフルディスクアクセスの許可が必要です（作成には不要）。
+                • MCP: 読み取り専用の `get_ransomware_recovery_snapshots` で、一覧と推奨を確認できます（復元は行えません）。
+                • Pro: この画面（一覧と取り出し）とMCPツールはPro版の機能です。事前スナップショットの取得そのものは、Pro版でなくても動きます。
+                """,
+                recommendation: "ランサムウェアの被害に備えて、事前スナップショットは有効のままにしてください。被害に気づいたら、まずネットワークを切り、検知時ではなく「推奨」の事前スナップショットからファイルを取り出してください。"
             ),
             LocalizedEntry(
                 id: "feat_runtime_threat_containment",

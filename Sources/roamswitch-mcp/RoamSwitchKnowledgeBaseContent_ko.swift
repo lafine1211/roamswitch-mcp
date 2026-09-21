@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.49 (build 106).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.50 (build 107).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -321,6 +321,21 @@ extension RoamSwitchKnowledgeBase {
                 • 기본값: Pro를 처음 활성화할 때 자동으로 켜집니다. 사고 기록은 MCP 도구 `get_canary_status`로 확인할 수 있습니다. 메뉴의 "랜섬웨어 방어 시뮬레이션(동작 확인)"으로 안전하게 테스트할 수 있습니다.
                 """,
                 recommendation: "알 수 없는 랜섬웨어로부터 중요한 데이터를 보호하려면 계속 켜 두고, 숨겨진 미끼 파일은 삭제하지 마세요."
+            ),
+            LocalizedEntry(
+                id: "feat_ransomware_recovery",
+                title: "랜섬웨어 복구(사전 스냅샷에서 파일 단위로 꺼내기)",
+                summary: "암호화되기 전 상태로 돌아가기 위해 RoamSwitch는 APFS 로컬 스냅샷을 주기적으로 만들고, 필요한 파일만 다른 위치로 꺼내 복사합니다. 현재 파일은 덮어쓰지 않습니다.",
+                details: """
+                • 사전 스냅샷: 감지와 무관하게 기본 6시간마다 만듭니다(끔/1/3/6/12/24시간 중 선택). 감지 이후에 만든 스냅샷에는 이미 암호화된 파일이 들어 있을 수 있기 때문입니다.
+                • 감지 시 스냅샷: 미끼 파일이 감지될 때도 만들지만, 암호화된 파일을 포함할 수 있어 복구 원본으로는 권장하지 않습니다.
+                • 보존 모드: 감지 시 스냅샷이 가장 최근인 동안(최대 7일)에는 새 사전 스냅샷 생성과 오래된 스냅샷 정리를 멈춰, 암호화 이전의 마지막 세대가 밀려나지 않게 합니다.
+                • 꺼내기: 메뉴의 "랜섬웨어 복구…"에서 권장 스냅샷(남아 있는 가장 최근 사전 스냅샷)의 파일이나 폴더를 `~/RoamSwitch-Recovered/<스냅샷 ID>/`로 복사합니다. 기존 파일은 덮어쓰지 않으며, 전체 되돌리기는 제공하지 않습니다. 복구는 항상 수동입니다.
+                • 제약: macOS는 로컬 스냅샷을 약 24시간 뒤에 자동으로 삭제할 수 있으며(여유 공간이 적으면 더 빨리), 남아 있지 않은 세대는 사용할 수 없습니다. 파일을 꺼내려면 RoamSwitch 헬퍼에 전체 디스크 접근 권한이 필요합니다(스냅샷 생성에는 불필요).
+                • MCP: 읽기 전용 `get_ransomware_recovery_snapshots`로 목록과 권장 항목을 확인할 수 있습니다(복원은 할 수 없습니다).
+                • Pro: 이 화면(목록 및 파일 꺼내기)과 MCP 도구는 Pro 기능입니다. 스냅샷 촬영 자체는 Pro가 아니어도 동작합니다.
+                """,
+                recommendation: "랜섬웨어 피해에 대비해 사전 스냅샷을 켜 두세요. 피해를 발견하면 먼저 네트워크를 끊고, 감지 시 스냅샷이 아니라 '권장' 사전 스냅샷에서 파일을 꺼내세요."
             ),
             LocalizedEntry(
                 id: "feat_runtime_threat_containment",

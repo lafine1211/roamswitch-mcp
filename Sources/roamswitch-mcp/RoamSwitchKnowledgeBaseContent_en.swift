@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.49 (build 106).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.50 (build 107).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -320,6 +320,21 @@ extension RoamSwitchKnowledgeBase {
                 • Default: turned on automatically the first time Pro is activated. Incident history via the MCP tool `get_canary_status`. Test safely with "Ransomware Defense Simulation (Test Mode)" in the menu.
                 """,
                 recommendation: "Keep it on to protect important data from unknown ransomware, and don't delete the hidden bait files."
+            ),
+            LocalizedEntry(
+                id: "feat_ransomware_recovery",
+                title: "Ransomware recovery (taking files out of a pre-damage snapshot)",
+                summary: "To get back to the state before anything was encrypted, RoamSwitch takes APFS local snapshots on a schedule and lets you take only the files you need out to another place. Your current files are never overwritten.",
+                details: """
+                • Pre-damage snapshots: taken every 6 hours by default (off / 1 / 3 / 6 / 12 / 24 hours), independent of any detection. A snapshot taken after a detection can already hold files that were encrypted.
+                • Detection snapshots: also taken when the canary guard fires, but they may contain encrypted files and are not recommended as a recovery source.
+                • Retention mode: while a detection snapshot is the newest one (up to 7 days), new pre-damage snapshots and clean-up of older ones are paused so the last pre-encryption generation is not pushed out.
+                • Taking files out: use "Ransomware Recovery…" in the menu. Files or folders are copied from the recommended snapshot (the newest pre-damage one that still exists) to `~/RoamSwitch-Recovered/<snapshot id>/`. Existing files are never overwritten and there is no whole-volume restore. Recovery is always manual.
+                • Limits: macOS may delete local snapshots by itself after about 24 hours (sooner when free space is low), and a generation that is gone cannot be used. Taking files out needs Full Disk Access for the RoamSwitch helper (creating snapshots does not).
+                • MCP: the read-only `get_ransomware_recovery_snapshots` shows the list and the recommendation (it cannot restore anything).
+                • Pro: This window (listing and taking files out) and the MCP tool are Pro features. Taking the snapshots themselves works without Pro.
+                """,
+                recommendation: "Keep the pre-damage snapshots turned on. If you notice damage, cut the network first and take files out of the recommended pre-damage snapshot, not the detection one."
             ),
             LocalizedEntry(
                 id: "feat_runtime_threat_containment",

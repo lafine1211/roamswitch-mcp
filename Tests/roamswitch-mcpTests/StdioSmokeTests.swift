@@ -63,7 +63,7 @@ final class StdioSmokeTests: XCTestCase {
                         "run_package_lifecycle_script_scan", "run_npm_audit_signatures",
                         "run_typosquat_scan",
                         "audit_secrets", "audit_security_logs", "get_quarantine_status",
-                        "get_canary_status", "get_port_anomaly_incidents",
+                        "get_canary_status", "get_ransomware_recovery_snapshots", "get_port_anomaly_incidents",
                         "get_runtime_threat_status", "get_notification_history",
                         "get_incident_timeline", "get_network_history",
                         "get_sensor_audit_results"])

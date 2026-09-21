@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.49 (build 106).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.50 (build 107).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -321,6 +321,21 @@ extension RoamSwitchKnowledgeBase {
                 • 預設值：首次啟用 Pro 時自動開啟。事件記錄可透過 MCP 工具 `get_canary_status` 取得，並可在選單中使用「勒索軟體防禦模擬測試（驗證運作）」安全地測試。
                 """,
                 recommendation: "為保護重要資料免受未知勒索軟體侵害，請保持開啟，且不要刪除隱藏的誘餌檔案。"
+            ),
+            LocalizedEntry(
+                id: "feat_ransomware_recovery",
+                title: "勒索軟體復原（從事前快照中逐檔取出）",
+                summary: "為了回到加密之前的狀態，RoamSwitch 會定期建立 APFS 本機快照，只把需要的檔案取出並複製到其他位置。不會覆蓋目前的檔案。",
+                details: """
+                • 事前快照：與偵測無關，預設每 6 小時建立一次（可選：關閉/1/3/6/12/24 小時）。偵測之後建立的快照，可能已經包含被加密的檔案。
+                • 偵測時快照：誘餌檔案被觸發時也會建立，但可能包含已加密的檔案，不建議作為復原來源。
+                • 保留模式：當偵測時快照是最新的快照時（最長 7 天），會暫停建立新的事前快照並暫停清理舊快照，避免加密前的最後一代被擠掉。
+                • 取出：在選單中選擇「勒索軟體復原…」，即可把建議快照（仍然存在的最新事前快照）中的檔案或檔案夾複製到 `~/RoamSwitch-Recovered/<快照ID>/`。不會覆蓋既有檔案，也不提供整體回復。復原一律由人工手動進行。
+                • 限制：macOS 可能會在約 24 小時後自動刪除本機快照（可用空間不足時更早），已經不存在的快照無法使用。取出檔案需要 RoamSwitch 輔助程式擁有「完整磁碟取用權限」（建立快照不需要）。
+                • MCP：唯讀的 `get_ransomware_recovery_snapshots` 可查看清單與建議項（無法執行復原）。
+                • Pro: 此視窗（清單與取出檔案）和 MCP 工具屬於 Pro 功能。快照的建立本身在非 Pro 下也會執行。
+                """,
+                recommendation: "為防範勒索軟體，請保持事前快照開啟。發現受損後，請先中斷網路，再從「建議」的事前快照（而非偵測時快照）中取出檔案。"
             ),
             LocalizedEntry(
                 id: "feat_runtime_threat_containment",

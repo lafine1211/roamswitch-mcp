@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.49 (build 106).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.50 (build 107).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -321,6 +321,21 @@ extension RoamSwitchKnowledgeBase {
                 • Standard: Wird bei erstmaliger Aktivierung von Pro automatisch eingeschaltet. Der Vorfallsverlauf ist über das MCP-Tool `get_canary_status` abrufbar. Testen Sie sicher mit „Ransomware-Abwehr-Simulation (Testmodus)“ im Menü.
                 """,
                 recommendation: "Lassen Sie diese Funktion aktiviert, um wichtige Daten vor unbekannter Ransomware zu schützen, und löschen Sie die versteckten Köderdateien nicht."
+            ),
+            LocalizedEntry(
+                id: "feat_ransomware_recovery",
+                title: "Ransomware-Wiederherstellung (Dateien aus einem Vorab-Snapshot herausholen)",
+                summary: "Um den Zustand vor einer Verschlüsselung wiederzuerlangen, erstellt RoamSwitch regelmäßig lokale APFS-Snapshots und kopiert nur die benötigten Dateien an einen anderen Ort. Ihre aktuellen Dateien werden nie überschrieben.",
+                details: """
+                • Vorab-Snapshots: werden unabhängig von jeder Erkennung standardmäßig alle 6 Stunden erstellt (aus / 1 / 3 / 6 / 12 / 24 Stunden). Ein Snapshot nach einer Erkennung kann bereits verschlüsselte Dateien enthalten.
+                • Erkennungs-Snapshots: werden auch beim Auslösen des Köder-Wächters erstellt, können aber verschlüsselte Dateien enthalten und werden nicht als Quelle empfohlen.
+                • Aufbewahrungsmodus: Solange ein Erkennungs-Snapshot der neueste ist (bis zu 7 Tage), sind neue Vorab-Snapshots und das Aufräumen älterer pausiert, damit die letzte unverschlüsselte Generation nicht verdrängt wird.
+                • Herausholen: Über „Ransomware-Wiederherstellung…“ im Menü werden Dateien oder Ordner aus dem empfohlenen Snapshot (dem neuesten noch vorhandenen Vorab-Snapshot) nach `~/RoamSwitch-Recovered/<Snapshot-ID>/` kopiert. Vorhandene Dateien werden nie überschrieben; ein Zurücksetzen des gesamten Volumes gibt es nicht. Die Wiederherstellung erfolgt immer manuell.
+                • Grenzen: macOS kann lokale Snapshots nach etwa 24 Stunden selbst löschen (bei wenig freiem Speicher früher); eine verschwundene Generation ist nicht nutzbar. Das Herausholen erfordert den Vollzugriff auf die Festplatte für den RoamSwitch-Helper (das Erstellen nicht).
+                • MCP: Das schreibgeschützte `get_ransomware_recovery_snapshots` zeigt die Liste und die Empfehlung (es kann nichts wiederherstellen).
+                • Pro: Dieses Fenster (Liste und Dateien herausholen) und das MCP-Tool sind Pro-Funktionen. Das Anlegen der Snapshots selbst funktioniert auch ohne Pro.
+                """,
+                recommendation: "Lassen Sie die Vorab-Snapshots eingeschaltet. Bei einem Schaden trennen Sie zuerst das Netzwerk und holen die Dateien aus dem empfohlenen Vorab-Snapshot, nicht aus dem Erkennungs-Snapshot."
             ),
             LocalizedEntry(
                 id: "feat_runtime_threat_containment",

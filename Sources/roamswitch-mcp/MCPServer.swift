@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.49 (build 106).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.50 (build 107).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -201,6 +201,8 @@ enum MCPServer {
                 return [result(id: id, callGetQuarantineStatus())]
             case "get_canary_status":
                 return [result(id: id, callGetCanaryStatus())]
+            case "get_ransomware_recovery_snapshots":
+                return [result(id: id, callGetRansomwareRecoverySnapshots())]
             case "get_notification_history":
                 return [result(id: id, callGetNotificationHistory())]
             case "get_port_anomaly_incidents":
@@ -598,6 +600,19 @@ enum MCPServer {
 
     /// SENDS NO NETWORK REQUESTS AT ALL — reads local UserDefaults + disk
     /// state only.
+    /// Read-only. Reads the snapshot records RoamSwitch keeps and re-checks which
+    /// snapshots still exist with the local `tmutil`; creates, deletes and mounts nothing.
+    /// Pro-gated like the recovery window in the app UI: re-checked here so a
+    /// direct MCP call can't bypass it (same plain-UserDefaults mirror as
+    /// `callRunPackageLifecycleScriptScan`).
+    private static func callGetRansomwareRecoverySnapshots() -> [String: Any] {
+        guard sharedDefaults.bool(forKey: "RoamSwitch.IsProCache") else {
+            return textContentResult(["error": loc("この機能はPro版限定です。RoamSwitchでPro版を有効化してください。")], isError: true)
+        }
+        let status = RansomwareSnapshotStatusReader.currentStatus(defaults: sharedDefaults)
+        return textContentResult(MCPRansomwareRecoveryFormatting.payload(status))
+    }
+
     private static func callGetCanaryStatus() -> [String: Any] {
         let status = CanaryStatusReader.currentStatus(defaults: sharedDefaults)
         let incidents = CanaryStatusReader.persistedIncidents(defaults: sharedDefaults)
@@ -761,6 +776,9 @@ enum MCPServer {
 
     // MARK: - Static catalogs
 
+    /// The tool catalog, for tests that check what a client would be shown.
+    static func toolDefinitionsForTesting() -> [[String: Any]] { toolDefinitions }
+
     private static let toolDefinitions: [[String: Any]] = [
         [
             "name": "get_security_report",
@@ -892,6 +910,11 @@ enum MCPServer {
         [
             "name": "get_canary_status",
             "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only local UserDefaults and disk state. Returns whether the Ransomware Canary Guard (Pro) is enabled, how many of its decoy bait files currently exist on disk (out of the expected set), and up to the 50 most recent detected incidents (each with timestamp, bait file name, detected action such as deletion/rename/tampering, suspected process if known, and any real user files that may also have been touched). Use this to answer 'has ransomware-like activity been detected on this Mac' — including during an Air-Gap network cutoff, since it reads local state only.",
+            "inputSchema": ["type": "object", "properties": [String: Any]()],
+        ],
+        [
+            "name": "get_ransomware_recovery_snapshots",
+            "description": "Pro only (returns an error when Pro is not active). SENDS NO NETWORK REQUESTS AT ALL — reads only local UserDefaults state and asks the local `tmutil` which APFS local snapshots still exist; it creates, deletes and mounts nothing, and no MCP tool restores anything. Returns the ransomware recovery snapshots RoamSwitch has taken (newest first): id, kind, createdAt, whether it still exists on disk, and which one is recommended, plus the schedule (scheduledIntervalHours; 0 = off) and retentionMode. Kinds: `pre_damage` (taken on a schedule, independent of any detection — the ONLY kind to recover pre-encryption files from; the recommended one is the newest that still exists), `detection` (taken when the canary guard fired, so it may already contain files encrypted before the detection — NOT a recovery source), `manual`. retentionMode=true means a detection snapshot is newer than the last pre-damage one, so new scheduled snapshots and pruning are paused. macOS may delete local snapshots on its own after about 24 hours (sooner when space is low), hence `exists`. Recovery is always manual and file-level from the RoamSwitch Ransomware Recovery window (files are copied to ~/RoamSwitch-Recovered/<id>/; current files are never overwritten; no whole-volume restore; needs the helper to have Full Disk Access). Same JSON contract as the Linux edition's snapshot listing. Works during an Air-Gap.",
             "inputSchema": ["type": "object", "properties": [String: Any]()],
         ],
         [

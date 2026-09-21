@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.49 (build 106).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.50 (build 107).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -321,6 +321,21 @@ extension RoamSwitchKnowledgeBase {
                 • Predefinito: si attiva automaticamente alla prima attivazione di Pro. Cronologia degli incidenti tramite lo strumento MCP `get_canary_status`. Provala in sicurezza con «Simulazione difesa ransomware (Modalità test)» nel menu.
                 """,
                 recommendation: "Tienila attiva per proteggere i dati importanti da ransomware sconosciuti, e non eliminare i file esca nascosti."
+            ),
+            LocalizedEntry(
+                id: "feat_ransomware_recovery",
+                title: "Ripristino da ransomware (estrarre file da uno snapshot preventivo)",
+                summary: "Per tornare allo stato precedente alla cifratura, RoamSwitch crea periodicamente snapshot locali APFS e permette di estrarre solo i file necessari in un altro posto. I file attuali non vengono mai sovrascritti.",
+                details: """
+                • Snapshot preventivi: creati per impostazione predefinita ogni 6 ore (disattivati / 1 / 3 / 6 / 12 / 24 ore), indipendentemente da qualsiasi rilevamento. Uno snapshot creato dopo un rilevamento può contenere già file cifrati.
+                • Snapshot di rilevamento: creati anche quando scatta la guardia delle esche, ma possono contenere file cifrati e non sono consigliati come origine del ripristino.
+                • Modalità di conservazione: finché uno snapshot di rilevamento è il più recente (fino a 7 giorni), i nuovi snapshot preventivi e la pulizia di quelli vecchi sono sospesi, per non spingere fuori l'ultima generazione precedente alla cifratura.
+                • Estrazione: da «Ripristino da ransomware…» nel menu, i file o le cartelle dello snapshot consigliato (il più recente snapshot preventivo ancora presente) vengono copiati in `~/RoamSwitch-Recovered/<ID dello snapshot>/`. I file esistenti non vengono mai sovrascritti e non è previsto il ripristino dell'intero volume. Il ripristino è sempre manuale.
+                • Limiti: macOS può eliminare da solo gli snapshot locali dopo circa 24 ore (prima se lo spazio libero è poco) e una generazione scomparsa non è utilizzabile. L'estrazione richiede l'Accesso completo al disco per l'helper di RoamSwitch (la creazione no).
+                • MCP: lo strumento di sola lettura `get_ransomware_recovery_snapshots` mostra l'elenco e il consiglio (non può ripristinare nulla).
+                • Pro: Questa finestra (elenco ed estrazione dei file) e lo strumento MCP sono funzioni Pro. La creazione degli snapshot funziona anche senza Pro.
+                """,
+                recommendation: "Mantenga attivi gli snapshot preventivi. Se nota un danno, scolleghi prima la rete ed estragga i file dallo snapshot preventivo consigliato, non da quello di rilevamento."
             ),
             LocalizedEntry(
                 id: "feat_runtime_threat_containment",
