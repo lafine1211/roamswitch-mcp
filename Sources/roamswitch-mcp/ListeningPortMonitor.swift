@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.53 (build 114).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.9.54 (build 115).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -81,6 +81,48 @@ final class ListeningPortMonitor {
         } catch {
             return []
         }
+    }
+
+    /// The first non-flag argument on a process's command line — usually the
+    /// script it's running when the process is an interpreter, e.g. `wsdd`
+    /// for `python3 /usr/bin/wsdd --discovery`. Reads `KERN_PROCARGS2` via
+    /// `sysctl`, which macOS restricts to the calling user's own processes
+    /// (or root): `nil` for another user's process, one that has already
+    /// exited, or one with no such argument (inline code, a bare REPL).
+    static func firstCommandLineArgument(pid: Int) -> String? {
+        var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, Int32(pid)]
+        var size = 0
+        guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > MemoryLayout<Int32>.size else { return nil }
+        var buffer = [UInt8](repeating: 0, count: size)
+        guard sysctl(&mib, 3, &buffer, &size, nil, 0) == 0, size > MemoryLayout<Int32>.size else { return nil }
+
+        // Layout: argc (Int32), then the exec path (NUL-terminated) padded
+        // with extra NULs to alignment, then argv[0]..argv[argc-1], each
+        // NUL-terminated with no further padding, then envp.
+        let argc = Int(buffer.withUnsafeBytes { $0.load(as: Int32.self) })
+        guard argc > 0 else { return nil }
+        var offset = MemoryLayout<Int32>.size
+        while offset < size, buffer[offset] != 0 { offset += 1 }
+        while offset < size, buffer[offset] == 0 { offset += 1 }
+
+        var args: [String] = []
+        var start = offset
+        var i = offset
+        while i < size, args.count < argc {
+            if buffer[i] == 0 {
+                args.append(String(decoding: buffer[start..<i], as: UTF8.self))
+                start = i + 1
+            }
+            i += 1
+        }
+
+        let inlineFlags: Set<String> = ["-c", "-e", "-E", "-m", "-r", "-R", "-F", "--eval", "--print", "-p", "-i"]
+        for arg in args.dropFirst() { // skip argv[0], the interpreter itself
+            if inlineFlags.contains(arg) { return nil }
+            if arg.hasPrefix("-") { continue }
+            return arg
+        }
+        return nil
     }
 
     func getProcessPath(pid: Int) -> String? {
