@@ -4,6 +4,7 @@
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
 // ─────────────────────────────────────────────────────────────────────────────
+
 import Foundation
 import CoreWLAN
 
@@ -152,6 +153,14 @@ enum MCPServer {
             guard let params = message["params"] as? [String: Any], let uri = params["uri"] as? String else {
                 return [error(id: id, code: -32602, message: "Missing resource uri")]
             }
+            // Skill documents are static and deliberately English-only
+            // (agentskills.io convention), so they bypass the localized
+            // RoamSwitchKnowledgeBase lookup below.
+            if let skillContent = RoamSwitchMCPSkillsContent.skillsByURI[uri] {
+                return [result(id: id, [
+                    "contents": [["uri": uri, "mimeType": "text/markdown", "text": skillContent]],
+                ])]
+            }
             if let content = RoamSwitchKnowledgeBase.shared.resource(for: uri, language: RoamSwitchKnowledgeBase.activeLanguageCode()) {
                 return [result(id: id, [
                     "contents": [["uri": uri, "mimeType": "text/markdown", "text": content]],
@@ -201,6 +210,16 @@ enum MCPServer {
                 return [result(id: id, callGetQuarantineStatus())]
             case "get_canary_status":
                 return [result(id: id, callGetCanaryStatus())]
+            case "get_ransomware_entropy_guard_status":
+                return [result(id: id, callGetRansomwareEntropyGuardStatus())]
+            case "get_forensic_evidence_bundles":
+                return [result(id: id, callGetForensicEvidenceBundles())]
+            case "get_vulnerability_scan_history":
+                return [result(id: id, callGetVulnerabilityScanHistory())]
+            case "get_honeytoken_status":
+                return [result(id: id, callGetHoneytokenStatus())]
+            case "get_browser_credential_watch_status":
+                return [result(id: id, callGetBrowserCredentialWatchStatus())]
             case "get_ransomware_recovery_snapshots":
                 return [result(id: id, callGetRansomwareRecoverySnapshots())]
             case "get_notification_history":
@@ -639,6 +658,63 @@ enum MCPServer {
         return textContentResult(payload)
     }
 
+    private static func callGetForensicEvidenceBundles() -> [String: Any] {
+        let payload = MCPForensicEvidenceBundlesPayload(bundles: ForensicCaptureManager.listBundles())
+        return textContentResult(payload)
+    }
+
+    private static func callGetVulnerabilityScanHistory() -> [String: Any] {
+        let payload = MCPVulnerabilityScanHistoryPayload(probes: ActiveVulnScan.probeStatusSummary())
+        return textContentResult(payload)
+    }
+
+    private static func callGetBrowserCredentialWatchStatus() -> [String: Any] {
+        let isEnabled = BrowserCredentialWatchStatusReader.isEnabled(defaults: sharedDefaults)
+        let events = BrowserCredentialWatchStatusReader.persistedEvents(defaults: sharedDefaults)
+        let iso = ISO8601DateFormatter()
+        let payload = MCPBrowserCredentialWatchStatusPayload(
+            isEnabled: isEnabled,
+            recentEventsAvailable: !events.isEmpty,
+            recentEvents: events.map {
+                MCPBrowserCredentialEventPayload(timestamp: iso.string(from: $0.timestamp), path: $0.path, suspectedProcess: $0.suspectedProcess)
+            }
+        )
+        return textContentResult(payload)
+    }
+
+    private static func callGetHoneytokenStatus() -> [String: Any] {
+        let isEnabled = HoneytokenStatusReader.isEnabled(defaults: sharedDefaults)
+        let events = HoneytokenStatusReader.persistedEvents(defaults: sharedDefaults)
+        let iso = ISO8601DateFormatter()
+        let payload = MCPHoneytokenStatusPayload(
+            isEnabled: isEnabled,
+            recentEventsAvailable: !events.isEmpty,
+            recentEvents: events.map {
+                MCPHoneytokenEventPayload(timestamp: iso.string(from: $0.timestamp), path: $0.path, kind: $0.kind, suspectedProcess: $0.suspectedProcess)
+            }
+        )
+        return textContentResult(payload)
+    }
+
+    private static func callGetRansomwareEntropyGuardStatus() -> [String: Any] {
+        let isEnabled = RansomwareEntropyStatusReader.isEnabled(defaults: sharedDefaults)
+        let alerts = RansomwareEntropyStatusReader.persistedAlerts(defaults: sharedDefaults)
+        let iso = ISO8601DateFormatter()
+        let payload = MCPRansomwareEntropyStatusPayload(
+            isEnabled: isEnabled,
+            recentAlertsAvailable: !alerts.isEmpty,
+            recentAlerts: alerts.map {
+                MCPRansomwareEntropyAlertPayload(
+                    timestamp: iso.string(from: $0.timestamp),
+                    processLabel: $0.processLabel,
+                    affectedFilePaths: $0.affectedFilePaths,
+                    averageEntropy: $0.averageEntropy
+                )
+            }
+        )
+        return textContentResult(payload)
+    }
+
     /// SENDS NO NETWORK REQUESTS AT ALL — reads only local files
     /// (`RoamSwitchHelper/SensorPairingManager.swift`'s on-disk trusted-
     /// Sensor and audit-result stores, via `MCPSensorAuditStatusReader`).
@@ -938,6 +1014,31 @@ enum MCPServer {
             "inputSchema": ["type": "object", "properties": [String: Any]()],
         ],
         [
+            "name": "get_ransomware_entropy_guard_status",
+            "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only local UserDefaults state. Returns whether the general (non-canary-file-dependent) Ransomware Entropy Guard (Pro) is enabled, and up to the 50 most recent detected mass-encryption bursts (each with timestamp, best-effort suspected process, up to 50 affected file paths, and the average Shannon entropy observed). Unlike get_canary_status, this guard detects ransomware activity anywhere in the watched folders (Documents/Desktop/Downloads/Pictures), not only against a fixed set of decoy files — use it alongside get_canary_status for a fuller ransomware picture.",
+            "inputSchema": ["type": "object", "properties": [String: Any]()],
+        ],
+        [
+            "name": "get_forensic_evidence_bundles",
+            "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only local disk state under ~/Library/Application Support/RoamSwitch/incident-evidence/. Lists up to the 20 most recent forensic evidence bundles RoamSwitch automatically captured alongside a ransomware/runtime-threat containment (process list snapshot, network connections snapshot, recently-modified files in the watched folders, and the suspected process's open files if one was identified) — each bundle's manifest is integrity-verifiable via per-artifact SHA-256. This does not include a packet capture or a full process memory/fd snapshot (unlike the Linux/roamswitch-os editions) — macOS has no unprivileged equivalent. No tool captures a NEW bundle on demand; bundles are only created automatically by the containment managers themselves.",
+            "inputSchema": ["type": "object", "properties": [String: Any]()],
+        ],
+        [
+            "name": "get_vulnerability_scan_history",
+            "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only the local heartbeat log run_active_vuln_scan itself writes to ~/Library/Application Support/RoamSwitch/active_vuln_scan_log.json. Returns the CURRENT STATUS of every probe this Mac has ever recorded a result for (one row per distinct probeName+port, most-stale first): probeName, port, the last outcome (vulnerable/safe/inconclusive), the ISO 8601 timestamp it was last checked, and passAgeDays — whole days since that check. There is no scheduled/background scanner, so passAgeDays reflects only however irregularly run_active_vuln_scan has actually been invoked; a probe with no row at all has simply never been checked, which this tool cannot distinguish from 'not applicable'. Same wire shape as the Linux edition's equivalent tool. Use this to answer 'what needs re-checking' rather than re-running the scan just to see what's stale.",
+            "inputSchema": ["type": "object", "properties": [String: Any]()],
+        ],
+        [
+            "name": "get_honeytoken_status",
+            "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only local UserDefaults state. Returns whether the Credential Honeytoken Guard (Pro) is enabled, and up to the 50 most recent detected accesses of a planted decoy credential file (~/.aws/credentials, ~/.ssh/id_rsa, ~/.docker/config.json — each with timestamp, kind, path, and best-effort suspected process). Any real access is a strong signal of active credential-harvesting reconnaissance (MITRE T1552) — this guard only notifies/records, it never triggers network containment the way the ransomware guards do.",
+            "inputSchema": ["type": "object", "properties": [String: Any]()],
+        ],
+        [
+            "name": "get_browser_credential_watch_status",
+            "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only local UserDefaults state. Returns whether the Browser Credential Watch Guard (Pro, opt-in, disabled by default) is enabled, and up to the 50 most recent detected non-browser accesses of a saved-password/session-cookie database (Chrome/Brave/Edge/Vivaldi/Chromium's Login Data/Cookies, Firefox's logins.json/key4.db/cookies.sqlite) — each with timestamp, path, and best-effort suspected process. A real hit (MITRE T1539) suggests credential-harvesting malware reading the browser's store directly off disk instead of through its APIs. Notify-only, never triggers containment.",
+            "inputSchema": ["type": "object", "properties": [String: Any]()],
+        ],
+        [
             "name": "get_ransomware_recovery_snapshots",
             "description": "Pro only (returns an error when Pro is not active). SENDS NO NETWORK REQUESTS AT ALL — reads only local UserDefaults state and asks the local `tmutil` which APFS local snapshots still exist; it creates, deletes and mounts nothing, and no MCP tool restores anything. Returns the ransomware recovery snapshots RoamSwitch has taken (newest first): id, kind, createdAt, whether it still exists on disk, and which one is recommended, plus the schedule (scheduledIntervalHours; 0 = off) and retentionMode. Kinds: `pre_damage` (taken on a schedule, independent of any detection — the ONLY kind to recover pre-encryption files from; the recommended one is the newest that still exists), `detection` (taken when the canary guard fired, so it may already contain files encrypted before the detection — NOT a recovery source), `manual`. retentionMode=true means a detection snapshot is newer than the last pre-damage one, so new scheduled snapshots and pruning are paused. macOS may delete local snapshots on its own after about 24 hours (sooner when space is low), hence `exists`. Recovery is always manual and file-level from the RoamSwitch Ransomware Recovery window (files are copied to ~/RoamSwitch-Recovered/<id>/; current files are never overwritten; no whole-volume restore; needs the helper to have Full Disk Access). Same JSON contract as the Linux edition's snapshot listing. Works during an Air-Gap.",
             "inputSchema": ["type": "object", "properties": [String: Any]()],
@@ -1082,5 +1183,7 @@ enum MCPServer {
             "description": "Authoritative guidance for Free vs Pro, helper disconnection and install location, ClamAV/Homebrew and blueutil setup, network cut off by Air-Gap, false positives (quarantine, Link Guard, blocked dev servers, keyboards), EICAR test behavior, system extension approval, VPN issues, repeated log audit alerts, MCP setup, and Zero Telemetry privacy design, in the app's language.",
             "mimeType": "text/markdown",
         ],
-    ]
+    ] + RoamSwitchMCPSkillsContent.catalogEntries.map { entry in
+        ["uri": entry.uri, "name": entry.name, "description": entry.description, "mimeType": "text/markdown"]
+    }
 }

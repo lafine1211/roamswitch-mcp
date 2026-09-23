@@ -62,12 +62,22 @@ public struct ExecEventRecord: Codable, Equatable {
     public var isPlatform: Bool?
     public var csFlags: UInt32?
     public var exitStatus: Int32?
+    /// exec only: the value of `DYLD_INSERT_LIBRARIES` if that environment
+    /// variable was set for this exec, `nil` otherwise. The ONE deliberate,
+    /// narrow exception to this recorder never reading `event.exec.env`
+    /// (see `ESLoggerParser`'s header comment) — dylib injection via this
+    /// variable is a well-known macOS LOTL technique (T1574.006) worth
+    /// detecting, and its *value* (a library path) is not itself typically
+    /// a secret the way arbitrary env values can be. No other environment
+    /// variable is ever read, and the full `env` array is never kept.
+    public var dyldInsertLibraries: String?
 
     public init(
         seq: UInt64 = 0, time: Double, kind: String, pid: Int32, ppid: Int32, uid: UInt32? = nil,
         path: String, args: [String]? = nil, cwd: String? = nil, priorPath: String? = nil,
         signingID: String? = nil, teamID: String? = nil, cdhash: String? = nil,
-        isPlatform: Bool? = nil, csFlags: UInt32? = nil, exitStatus: Int32? = nil
+        isPlatform: Bool? = nil, csFlags: UInt32? = nil, exitStatus: Int32? = nil,
+        dyldInsertLibraries: String? = nil
     ) {
         self.seq = seq
         self.time = time
@@ -85,6 +95,7 @@ public struct ExecEventRecord: Codable, Equatable {
         self.isPlatform = isPlatform
         self.csFlags = csFlags
         self.exitStatus = exitStatus
+        self.dyldInsertLibraries = dyldInsertLibraries
     }
 
     public var signatureClass: ExecSignatureClass {
@@ -425,9 +436,20 @@ public struct ESLineSplitter {
 ///   event.fork.child                       the child process (same fields)
 ///   event.exit.stat                        Int
 ///
-/// Unknown fields are ignored, `event.exec.env` is never read or kept
-/// (secrets), malformed input yields `.malformed` — never a crash. NOTE: not
-/// yet verified against real eslogger output on a Mac (see docs/EXEC_RECORDER.md).
+/// Unknown fields are ignored, malformed input yields `.malformed` — never a
+/// crash. NOTE: not yet verified against real eslogger output on a Mac (see
+/// docs/EXEC_RECORDER.md).
+///
+/// `event.exec.env` (confirmed present in eslogger's exec JSON — a
+/// third-party Swift eslogger-JSON parser, github.com/nubcoxyz/ESLogger,
+/// models it as `env: [String]?` on its exec event struct) is still never
+/// kept wholesale: arbitrary environment variables can carry credentials.
+/// The ONE deliberate exception is `DYLD_INSERT_LIBRARIES` specifically —
+/// its *value* is a library path, not itself typically a secret, and its
+/// presence is a well-known macOS dylib-injection LOTL technique
+/// (`ExecEventRecord.dyldInsertLibraries`, `ExecCorrelationRules`'s
+/// `dyldInsertLibraries` rule) — every other name in the `env` array is
+/// discarded immediately after this one lookup.
 public enum ESLoggerParser {
     public static let maxLineBytes = ESLineSplitter.defaultMaxLineBytes
     public static let maxArgs = 64
@@ -460,10 +482,12 @@ public enum ESLoggerParser {
                 args = raw.prefix(maxArgs).compactMap { str($0, max: maxArgChars, allowEmpty: true) }
             }
             let cwd = (exec["cwd"] as? [String: Any]).flatMap { str($0["path"], max: maxPathChars) }
+            let dyldInsertLibraries = dyldInsertLibrariesValue(from: exec["env"])
             return .record(ExecEventRecord(
                 seq: seq, time: time, kind: "exec", pid: pid, ppid: t.ppid ?? acting.ppid ?? 0,
                 uid: t.uid ?? acting.uid, path: path, args: args, cwd: cwd, priorPath: acting.path,
-                signingID: t.signingID, teamID: t.teamID, cdhash: t.cdhash, isPlatform: t.isPlatform, csFlags: t.csFlags
+                signingID: t.signingID, teamID: t.teamID, cdhash: t.cdhash, isPlatform: t.isPlatform, csFlags: t.csFlags,
+                dyldInsertLibraries: dyldInsertLibraries
             ))
         }
         if let fork = event["fork"] as? [String: Any] {
@@ -523,6 +547,25 @@ public enum ESLoggerParser {
         guard let s = v as? String else { return nil }
         if s.isEmpty && !allowEmpty { return nil }
         return s.count > max ? String(s.prefix(max)) : s
+    }
+
+    /// Scans `event.exec.env` (an array of `"NAME=value"` strings) for
+    /// `DYLD_INSERT_LIBRARIES` ONLY and returns its value, bounded to
+    /// `maxPathChars` (an injected library path, same order of magnitude as
+    /// the other path fields this parser already caps). Every other name in
+    /// the array — and the array itself — is discarded once this one lookup
+    /// is done; nothing else from `env` is ever read or kept, per this
+    /// file's header comment.
+    private static func dyldInsertLibrariesValue(from envField: Any?) -> String? {
+        guard let raw = envField as? [Any] else { return nil }
+        let prefix = "DYLD_INSERT_LIBRARIES="
+        for entry in raw {
+            guard let s = entry as? String, s.hasPrefix(prefix) else { continue }
+            let value = String(s.dropFirst(prefix.count))
+            guard !value.isEmpty else { return nil }
+            return value.count > maxPathChars ? String(value.prefix(maxPathChars)) : value
+        }
+        return nil
     }
 
     private static func int(_ v: Any?) -> Int64? {

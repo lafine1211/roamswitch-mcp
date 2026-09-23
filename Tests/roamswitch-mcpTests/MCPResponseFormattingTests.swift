@@ -108,8 +108,8 @@ final class MCPResponseFormattingTests: XCTestCase {
         disableDefaultOnGuards()
         let payload = MCPResponseFormatting.makeGuardStatusPayload(gatewayMAC: nil, defaults: defaults)
 
-        XCTAssertEqual(payload.guards.count, 23)
-        XCTAssertEqual(Set(payload.guards.map(\.key)).count, 23, "guard keys must be unique")
+        XCTAssertEqual(payload.guards.count, 26)
+        XCTAssertEqual(Set(payload.guards.map(\.key)).count, 26, "guard keys must be unique")
         XCTAssertTrue(payload.guards.allSatisfy { !$0.enabledInSettings })
         XCTAssertFalse(payload.caveats.isEmpty)
     }

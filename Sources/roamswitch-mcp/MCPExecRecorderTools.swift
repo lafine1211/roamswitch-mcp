@@ -51,6 +51,10 @@ struct MCPExecEventPayload: Encodable {
     let teamID: String?
     let cdhash: String?
     let exitStatus: Int32?
+    /// The value of `DYLD_INSERT_LIBRARIES` when set on this exec, `nil`
+    /// otherwise — the one deliberate exception to this recorder never
+    /// reading environment variables (see `ExecEventRecord`'s doc comment).
+    let dyldInsertLibraries: String?
 }
 
 struct MCPExecSearchPayload: Encodable {
@@ -104,7 +108,7 @@ enum MCPExecRecorderTools {
     static func caveats() -> [String] {
         [
             loc("記録はmacOS標準のesloggerによる事後の観測で、実行のブロックはできません。ヘルパー起動前のプロセスや、記録を有効にする前のイベントは含まれません。"),
-            loc("コマンドライン引数には機密情報が含まれる場合があります(環境変数は記録されません)。"),
+            loc("コマンドライン引数には機密情報が含まれる場合があります(環境変数は、DYLD_INSERT_LIBRARIES一つを除いて記録されません)。"),
             loc("時刻は記録時のもので、署名区分は platform=Apple / developer=Team ID付き / adhoc=アドホック / unsigned=署名なし です。"),
         ]
     }
@@ -146,7 +150,8 @@ enum MCPExecRecorderTools {
         return MCPExecEventPayload(
             seq: r.seq, time: iso.string(from: Date(timeIntervalSince1970: r.time)), kind: r.kind, pid: r.pid, ppid: r.ppid,
             uid: r.uid, path: r.path, args: r.args, cwd: r.cwd, signature: r.signatureClass.rawValue,
-            signingID: r.signingID, teamID: r.teamID, cdhash: r.cdhash, exitStatus: r.exitStatus
+            signingID: r.signingID, teamID: r.teamID, cdhash: r.cdhash, exitStatus: r.exitStatus,
+            dyldInsertLibraries: r.dyldInsertLibraries
         )
     }
 

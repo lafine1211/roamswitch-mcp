@@ -46,6 +46,11 @@ All files live in `Sources/roamswitch-mcp/`.
 | `MCPResponseFormatting.swift` | `RoamSwitch/MCPResponseFormatting.swift` |
 | `MCPProtocol.swift` | `RoamSwitch/MCPProtocol.swift` |
 | `MCPServer.swift` | `RoamSwitch/MCPServer.swift` |
+| `RoamSwitchMCPSkillsContent.swift` | `RoamSwitch/RoamSwitchMCPSkillsContent.swift` |
+| `RansomwareEntropyStatusReader.swift` | `RoamSwitch/RansomwareEntropyStatusReader.swift` |
+| `ForensicCaptureManager.swift` | `RoamSwitch/ForensicCaptureManager.swift` |
+| `HoneytokenStatusReader.swift` | `RoamSwitch/HoneytokenStatusReader.swift` |
+| `BrowserCredentialWatchStatusReader.swift` | `RoamSwitch/BrowserCredentialWatchStatusReader.swift` |
 | `PackageCveScan.swift` | `RoamSwitch/PackageCveScan.swift` |
 | `PackageCveMapData.swift` | `RoamSwitch/PackageCveMapData.swift` |
 | `PackageCveScanLanguages.swift` | `RoamSwitch/PackageCveScanLanguages.swift` |
@@ -105,6 +110,8 @@ via `@testable import RoamSwitch`. Only `main.swift` (the stdin→stdout pump) i
 | `ParserRobustnessTests.swift` | `RoamSwitchTests/ParserRobustnessTests.swift` |
 | `TyposquatGuardTests.swift` | `RoamSwitchTests/TyposquatGuardTests.swift` |
 | `RansomwareRecoveryMCPTests.swift` | `RoamSwitchTests/RansomwareRecoveryMCPTests.swift` |
+| `RoamSwitchMCPSkillsContentTests.swift` | `RoamSwitchTests/RoamSwitchMCPSkillsContentTests.swift` |
+| `ActiveVulnScanTests.swift` | `RoamSwitchTests/ActiveVulnScanTests.swift` (was previously not mirrored — added 2026-09, see this repo's history) |
 | `StdioSmokeTests.swift` | **not mirrored** — specific to this repo (drives the built binary over stdio) |
 | `MutationFuzzTests.swift` | **not mirrored** — specific to this repo |
 

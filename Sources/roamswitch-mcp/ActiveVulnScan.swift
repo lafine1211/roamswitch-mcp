@@ -4,6 +4,7 @@
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
 // ─────────────────────────────────────────────────────────────────────────────
+
 import Foundation
 import Network
 
@@ -166,6 +167,58 @@ enum ActiveVulnScan {
             entries.removeFirst(entries.count - maxProbeLogEntries)
         }
         saveProbeLog(entries, to: url)
+    }
+
+    // MARK: - SLA / staleness surfacing (`passAge`)
+    //
+    // The reservation above is now implemented — mirrors Linux RoamSwitch's
+    // `active_vuln_scan.rs::probe_status_summary` exactly (same grouping,
+    // same "no scheduler, so this is bounded by however irregularly the
+    // scan has actually been run" caveat).
+
+    struct ProbeStatus: Codable, Equatable {
+        let probeName: String
+        let port: Int?
+        let lastOutcome: String
+        let lastFinishedAt: String
+        /// Whole days since `lastFinishedAt`, floored (0 for anything
+        /// within the last 24h). `nil` only if `lastFinishedAt` fails to
+        /// parse (should not happen for a row this file wrote itself).
+        let passAgeDays: Int?
+    }
+
+    /// Groups every persisted row by `(probeName, port)` and keeps the most
+    /// recent (`lastFinishedAt`) row per group, with `passAgeDays` computed
+    /// against `now`. Exposed as `_at` so the aging computation itself can
+    /// be unit-tested without depending on the real clock or the real log
+    /// file — mirrors the Linux edition's `probe_status_summary_at`.
+    static func probeStatusSummary(from entries: [ProbeRunRecord], now: Date = Date()) -> [ProbeStatus] {
+        var latest: [String: ProbeRunRecord] = [:]
+        for r in entries {
+            let key = "\(r.probeName)|\(r.port.map(String.init) ?? "-")"
+            if let existing = latest[key], existing.lastFinishedAt >= r.lastFinishedAt { continue }
+            latest[key] = r
+        }
+        var out = latest.values.map { r -> ProbeStatus in
+            let passAgeDays: Int?
+            if let finished = probeLogFormatter.date(from: r.lastFinishedAt) {
+                let days = Calendar.current.dateComponents([.day], from: finished, to: now).day ?? 0
+                passAgeDays = max(0, days)
+            } else {
+                passAgeDays = nil
+            }
+            return ProbeStatus(probeName: r.probeName, port: r.port, lastOutcome: r.outcome, lastFinishedAt: r.lastFinishedAt, passAgeDays: passAgeDays)
+        }
+        // Most-stale first, matching the Linux edition's sort order.
+        out.sort { ($0.passAgeDays ?? 0, $0.probeName) > ($1.passAgeDays ?? 0, $1.probeName) }
+        return out
+    }
+
+    /// Current status of every probe this Mac has ever recorded a result
+    /// for. Safe to call from `RoamSwitchMCPServer` — reads only local
+    /// disk state, no dependency on `LicenseManager`/AppKit.
+    static func probeStatusSummary(at url: URL = probeLogURL) -> [ProbeStatus] {
+        probeStatusSummary(from: loadProbeLog(at: url))
     }
 
     // MARK: - Phase 2: known-service raw-TCP probes

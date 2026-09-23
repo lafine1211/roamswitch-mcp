@@ -38,10 +38,12 @@ CORE=(AppLanguage TrustedNetwork GatewayFingerprint WiFiSecurityMonitor \
       RoamSwitchKnowledgeBaseContent_ko RoamSwitchKnowledgeBaseContent_de \
       RoamSwitchKnowledgeBaseContent_fr RoamSwitchKnowledgeBaseContent_es \
       RoamSwitchKnowledgeBaseContent_it RoamSwitchKnowledgeBaseContent_ptPT \
-      MCPResponseFormatting MCPProtocol MCPServer \
+      MCPResponseFormatting MCPProtocol MCPServer RoamSwitchMCPSkillsContent \
       PackageCveScan PackageCveMapData PackageCveScanLanguages PackageCveMapLanguagesData \
       PackageCveScriptScan NpmAuditSignatures TyposquatGuard \
       SecretLeakScanning CryptoSecretDetection SecurityLogAuditor LogTemplateAnalyzer QuarantineManager CanaryStatusReader \
+      RansomwareEntropyStatusReader ForensicCaptureManager HoneytokenStatusReader \
+      BrowserCredentialWatchStatusReader \
       PortAnomalyStatusReader RuntimeThreatStatusReader NotificationHistory \
       ContainmentIncidentTimeline NetworkHistoryGuard MCPSensorAuditStatusReader \
       RansomwareSnapshotStatusReader MCPExecRecorderTools)
@@ -56,7 +58,8 @@ SHARED=(RansomwareSnapshotLogic ExecEventModel ExecLogStore ExecProcessTree Exec
 # repo and is not touched by the sync.
 TESTS=(LinkSafetyAuditorTests CryptoSecretDetectionTests MCPKnowledgeBaseTests MCPProtocolTests \
        MCPResponseFormattingTests ARPSpoofMonitorTests MCPServerRobustnessTests ParserRobustnessTests \
-       TyposquatGuardTests RansomwareRecoveryMCPTests)
+       TyposquatGuardTests RansomwareRecoveryMCPTests RoamSwitchMCPSkillsContentTests \
+       ActiveVulnScanTests)
 
 TDST="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/Tests/roamswitch-mcpTests"
 

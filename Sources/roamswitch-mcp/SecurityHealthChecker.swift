@@ -21,8 +21,24 @@ public struct SecurityAuditItem: Identifiable, Equatable {
     /// the score's numerator/denominator so choosing a trusted network on
     /// purpose doesn't read as a security regression.
     public let isApplicable: Bool
+    /// Stable machine identifier for this specific check (e.g.
+    /// `"luks_encryption"`), independent of the localized `title`, and
+    /// shared with the Linux client's `SecurityAuditItem.check_id` where
+    /// both platforms implement the same real-world control. Empty string
+    /// means "no stable identifier assigned yet".
+    public let checkId: String
+    /// A CIS Controls v8 safeguard number this check corresponds to (e.g.
+    /// `"3.11"`), when confident — same "confident mapping or omit" policy
+    /// `ContainmentIncidentTimeline.attackTechnique(for:context:)` uses for
+    /// MITRE ATT&CK tags. `nil` is not "not compliance-relevant", just "not
+    /// confidently mappable to a single control number".
+    public let cisControlID: String?
+    /// NIST CSF 2.0 subcategory codes (e.g. `["PR.DS-01"]`) this check
+    /// relates to. Same "confident or omit" policy; a check can map to more
+    /// than one subcategory, so this is an array, unlike `cisControlID`.
+    public let nistCsfCategories: [String]
 
-    public init(category: String, title: String, isPassed: Bool, statusText: String, detail: String, recommendation: String, settingsURL: String?, isApplicable: Bool = true) {
+    public init(category: String, title: String, isPassed: Bool, statusText: String, detail: String, recommendation: String, settingsURL: String?, isApplicable: Bool = true, checkId: String = "", cisControlID: String? = nil, nistCsfCategories: [String] = []) {
         self.category = category
         self.title = title
         self.isPassed = isPassed
@@ -31,6 +47,9 @@ public struct SecurityAuditItem: Identifiable, Equatable {
         self.recommendation = recommendation
         self.settingsURL = settingsURL
         self.isApplicable = isApplicable
+        self.checkId = checkId
+        self.cisControlID = cisControlID
+        self.nistCsfCategories = nistCsfCategories
     }
 }
 
@@ -110,7 +129,10 @@ final class SecurityHealthChecker {
             statusText: health.isFileVaultEnabled ? loc("有効 (暗号化保護中)") : loc("無効 (未保護)"),
             detail: loc("MacのSSD/HDDストレージ全体をXTS-AES 128暗号で暗号化し、盗難や紛失時のデータ抜き取りを防ぎます。"),
             recommendation: health.isFileVaultEnabled ? loc("設定は万全です。") : loc("システム設定 > プライバシーとセキュリティからFileVaultをオンにしてください。"),
-            settingsURL: "x-apple.systempreferences:com.apple.preference.security?FileVault"
+            settingsURL: "x-apple.systempreferences:com.apple.preference.security?FileVault",
+            checkId: "luks_encryption",
+            cisControlID: "3.11",
+            nistCsfCategories: ["PR.DS-01"]
         ))
 
         items.append(SecurityAuditItem(
@@ -120,7 +142,9 @@ final class SecurityHealthChecker {
             statusText: health.isSIPEnabled ? loc("有効 (システム保護中)") : loc("無効 (危険)"),
             detail: loc("root権限を持つプロセスであってもmacOSの重要システムファイルやカーネルの改ざんを禁止します。"),
             recommendation: health.isSIPEnabled ? loc("設定は万全です。") : loc("リカバリーモードで起動し、csrutil enable を実行してSIPを有効化してください。"),
-            settingsURL: nil
+            settingsURL: nil,
+            checkId: "lsm_active",
+            nistCsfCategories: ["PR.PS-01"]
         ))
 
         items.append(SecurityAuditItem(
@@ -130,7 +154,10 @@ final class SecurityHealthChecker {
             statusText: health.isGatekeeperEnabled ? loc("有効 (悪質アプリ遮断)") : loc("無効 (危険)"),
             detail: loc("Apple公認の開発者署名がない未承認アプリや改ざんされたバイナリの起動を自動ブロックします。"),
             recommendation: health.isGatekeeperEnabled ? loc("設定は万全です。") : loc("システム設定 > プライバシーとセキュリティからアプリの実行許可を適切に設定してください。"),
-            settingsURL: "x-apple.systempreferences:com.apple.preference.security"
+            settingsURL: "x-apple.systempreferences:com.apple.preference.security",
+            checkId: "gatekeeper_app_verification",
+            cisControlID: "2.5",
+            nistCsfCategories: ["PR.PS-05"]
         ))
 
         items.append(SecurityAuditItem(
@@ -140,7 +167,10 @@ final class SecurityHealthChecker {
             statusText: health.isAutoUpdateEnabled ? loc("有効 (最新パッチ自動適用)") : loc("無効 (推奨設定外)"),
             detail: loc("緊急セキュリティ対応（RSR）やシステム脆弱性パッチを自動的にバックグラウンドでダウンロード・適用します。"),
             recommendation: health.isAutoUpdateEnabled ? loc("設定は万全です。") : loc("システム設定 > 一般 > ソフトウェアアップデートから自動更新を有効にしてください。"),
-            settingsURL: "x-apple.systempreferences:com.apple.Software-Update-Settings.extension"
+            settingsURL: "x-apple.systempreferences:com.apple.Software-Update-Settings.extension",
+            checkId: "auto_security_updates",
+            cisControlID: "7.3",
+            nistCsfCategories: ["PR.PS-02"]
         ))
 
         items.append(SecurityAuditItem(
@@ -150,7 +180,10 @@ final class SecurityHealthChecker {
             statusText: health.isXProtectActive ? loc("稼働中 (常時監視)") : loc("停止中"),
             detail: loc("Apple公式のシグネチャベースのマルウェア検知およびRemediator自動駆除エンジンが常時稼働しています。"),
             recommendation: loc("定期的に最新のmacOSアップデートを適用することで定義が最新に保たれます。"),
-            settingsURL: nil
+            settingsURL: nil,
+            checkId: "os_builtin_malware_detection",
+            cisControlID: "10.1",
+            nistCsfCategories: ["DE.CM-09"]
         ))
 
         // MARK: - 2. Network Defense (ネットワーク防御)
@@ -170,7 +203,10 @@ final class SecurityHealthChecker {
             detail: loc("外部からの未承認な着信TCP/UDPパケットをカーネルのパケットフィルタ層で自動破棄します。"),
             recommendation: isTrustedOpenNetwork ? loc("信頼ネットワークのため意図的に保護を解除しています。公衆Wi-Fi等、信頼できない場所では別の保護レベルを選んでください。") : (activeSecurityLevel.firewallBlockAll ? loc("外部接続は完全に遮断されています。") : loc("外出先では最大ロックダウンまたは標準保護への設定を推奨します。")),
             settingsURL: "x-apple.systempreferences:com.apple.preference.security?Firewall",
-            isApplicable: !isTrustedOpenNetwork
+            isApplicable: !isTrustedOpenNetwork,
+            checkId: "host_firewall",
+            cisControlID: "4.4",
+            nistCsfCategories: ["PR.IR-01"]
         ))
 
         let isStealthPassed = activeSecurityLevel.firewallBlockAll
@@ -182,7 +218,9 @@ final class SecurityHealthChecker {
             detail: loc("ネットワークスキャンやPing（ICMP）に対して無応答にすることで、外部からMacの存在自体を隠蔽します。"),
             recommendation: isTrustedOpenNetwork ? loc("信頼ネットワークのため意図的に保護を解除しています。") : (isStealthPassed ? loc("外部スキャンから保護されています。") : loc("公衆Wi-Fi接続時はステルスモードの有効化を推奨します。")),
             settingsURL: nil,
-            isApplicable: !isTrustedOpenNetwork
+            isApplicable: !isTrustedOpenNetwork,
+            checkId: "network_stealth_mode",
+            nistCsfCategories: ["PR.IR-01"]
         ))
 
         let isWiFiPassed = wifiInfo.securityLevel.isSafe
@@ -193,7 +231,9 @@ final class SecurityHealthChecker {
             statusText: wifiInfo.securityLevel.label,
             detail: loc("接続中のWi-Fiアクセスポイントが強力な暗号化（WPA2-AES / WPA3）で通信を保護しているかを検証します。"),
             recommendation: isWiFiPassed ? loc("通信は安全に暗号化されています。") : loc("暗号化のないOpen Wi-Fiや古いWEPは盗聴の危険があるため、VPNまたはロックダウンを使用してください。"),
-            settingsURL: "x-apple.systempreferences:com.apple.wifi-settings-extension"
+            settingsURL: "x-apple.systempreferences:com.apple.wifi-settings-extension",
+            checkId: "wifi_encryption_strength",
+            nistCsfCategories: ["PR.IR-01"]
         ))
 
         let isARPPassed = !arpStatus.isSpoofingDetected
@@ -204,7 +244,9 @@ final class SecurityHealthChecker {
             statusText: isARPPassed ? loc("正常 (盗聴未検知)") : loc("⚠️ スプーフィング疑い検知"),
             detail: loc("同一LAN内の悪意ある端末がルーターになりすまして通信を盗聴・改ざんする中間者攻撃（MitM）を監視します。"),
             recommendation: isARPPassed ? loc("中間者攻撃の兆候はありません。") : loc("直ちにネットワークから切断し、信頼できる接続に変更してください。"),
-            settingsURL: nil
+            settingsURL: nil,
+            checkId: "arp_spoof_monitor",
+            nistCsfCategories: ["DE.CM-01"]
         ))
 
         items.append(SecurityAuditItem(
@@ -214,7 +256,9 @@ final class SecurityHealthChecker {
             statusText: gatewayARPLockEnabled ? loc("有効 (ゲートウェイMACを固定中)") : loc("無効"),
             detail: loc("カフェ等の未信頼ネットワーク接続時、ルーターのMACアドレスをARPテーブルに静的固定し、ARPスプーフィングによる中間者攻撃を検知ではなく未然に防止します。"),
             recommendation: gatewayARPLockEnabled ? loc("予防的なMITM対策が有効です。") : loc("未信頼ネットワークを頻繁に使う場合は、メニューバーからゲートウェイARP固定を有効化してください。"),
-            settingsURL: nil
+            settingsURL: nil,
+            checkId: "gateway_arp_lock",
+            nistCsfCategories: ["PR.IR-01"]
         ))
 
         // MARK: - 2.5. Authentication & Access Control (認証・アクセス制御)
@@ -234,7 +278,10 @@ final class SecurityHealthChecker {
                     ? loc("設定は万全です。")
                     : loc("`/etc/ssh/sshd_config`で`PermitRootLogin no`・`PasswordAuthentication no`（鍵認証必須）を設定してください。")),
             settingsURL: "x-apple.systempreferences:com.apple.preferences.sharing",
-            isApplicable: isRemoteLoginEnabled
+            isApplicable: isRemoteLoginEnabled,
+            checkId: "ssh_hardening",
+            cisControlID: "4.1",
+            nistCsfCategories: ["PR.AA-01"]
         ))
 
         let sudoAudit = sudoAuditIsHardened
@@ -251,7 +298,10 @@ final class SecurityHealthChecker {
                 ? loc("心当たりのない`NOPASSWD`設定があれば、`sudo visudo`で削除してください。")
                 : loc("設定は万全です。"),
             settingsURL: nil,
-            isApplicable: sudoAudit != nil
+            isApplicable: sudoAudit != nil,
+            checkId: "sudo_hygiene",
+            cisControlID: "5.4",
+            nistCsfCategories: ["PR.AA-05"]
         ))
 
         // MARK: - 3. Services & Ports (サービス・ポート露出)
@@ -265,7 +315,10 @@ final class SecurityHealthChecker {
             statusText: portStatusStr,
             detail: loc("外部からの接続を待ち受けているTCP/UDPポートを検査します。ファイアウォール有効時は全ポートが保護されます。"),
             recommendation: isPortPassed ? loc("外部からの不正アクセスは遮断されています。") : loc("不要な開発サーバーを停止するか、ファイアウォールを有効にしてください。"),
-            settingsURL: nil
+            settingsURL: nil,
+            checkId: "exposed_ports",
+            cisControlID: "4.4",
+            nistCsfCategories: ["DE.CM-01"]
         ))
 
         // MARK: - 4. Malware & Download Protection (マルウェア・ダウンロード保護)
@@ -290,7 +343,10 @@ final class SecurityHealthChecker {
             statusText: downloadStatusStr,
             detail: loc("Webブラウザやメール、メッセージングアプリから保存されたファイルをFSEventsでリアルタイム検知し、ClamAVで自動スキャン・隔離します。"),
             recommendation: isDownloadGuardPassed ? loc("ダウンロードファイルはリアルタイムに保護されています。") : (isClamInstalled ? loc("メニューバーよりWeb・メール保護を有効にしてください。") : loc("ClamAVをインストールしてダウンロード自動保護を有効化してください。")),
-            settingsURL: nil
+            settingsURL: nil,
+            checkId: "malware_scanning",
+            cisControlID: "10.1",
+            nistCsfCategories: ["DE.CM-09"]
         ))
 
         let isDNSGuardEnabled = UserDefaults.standard.object(forKey: "RoamSwitch.DNSThreatGuardEnabled") == nil ? true : UserDefaults.standard.bool(forKey: "RoamSwitch.DNSThreatGuardEnabled")
@@ -311,7 +367,10 @@ final class SecurityHealthChecker {
             statusText: dnsStatusStr,
             detail: loc("マルウェアのC2サーバー、ランサムウェア配布ドメイン、フィッシング詐欺サイトへの名前解決をDNSレイヤーで未然に遮断します。"),
             recommendation: isDNSGuardEnabled ? loc("DNS脅威保護は正常に構成されています。") : loc("公衆Wi-Fi接続時はメニューバーよりDNS脅威保護を有効にしてください。"),
-            settingsURL: nil
+            settingsURL: nil,
+            checkId: "dns_threat_guard",
+            cisControlID: "9.2",
+            nistCsfCategories: ["DE.CM-01"]
         ))
 
         // Check Safari Fraud Warning via CFPreferences
@@ -325,7 +384,9 @@ final class SecurityHealthChecker {
             statusText: isSafariFraudActive ? loc("有効 (詐欺サイト警告・リンク診断)") : loc("警告無効"),
             detail: loc("Safariの詐欺Webサイト警告機能およびRoamSwitchリンク安全性診断により、巧妙なフィッシングURLやUnicode偽装ドメインを遮断・解析します。"),
             recommendation: isSafariFraudActive ? loc("ブラウザおよびリンク保護は万全です。") : loc("Safari > 設定 > セキュリティから「詐欺Webサイト警告」をオンにしてください。"),
-            settingsURL: nil
+            settingsURL: nil,
+            checkId: "browser_phishing_protection",
+            nistCsfCategories: ["PR.IR-01"]
         ))
 
         // MARK: - 5. Physical Port & Device Defense (物理ポート・デバイス防御)
@@ -351,7 +412,9 @@ final class SecurityHealthChecker {
             statusText: badUSBStatusStr,
             detail: loc("未承認のキーボード・改造USBケーブル（O.MG / Rubber Ducky）からの自動キーストローク注入や、不正な外部ストレージのデータ持ち出しを水際で遮断します。"),
             recommendation: isBadUSBGuardActive ? loc("物理ポートの防御は万全です。") : loc("メニューバーのUSB設定より、不正USB / BadUSB物理ポートガードを有効化してください。"),
-            settingsURL: nil
+            settingsURL: nil,
+            checkId: "usb_zero_trust",
+            nistCsfCategories: ["PR.PS-01"]
         ))
 
         // Check Apple Silicon / macOS Accessory Protection
@@ -372,7 +435,9 @@ final class SecurityHealthChecker {
             detail: loc("新しいUSB/Thunderboltアクセサリが接続された際、Macがロックされている場合はデータ通信をOSハードウェア層で未然に遮断します。"),
             recommendation: loc("システム設定 > プライバシーとセキュリティ > アクセサリの接続を許可 が適切に設定されていることを推奨します。"),
             settingsURL: "x-apple.systempreferences:com.apple.preference.security",
-            isApplicable: isAppleSilicon && accessoryPolicy != nil
+            isApplicable: isAppleSilicon && accessoryPolicy != nil,
+            checkId: "accessory_connection_protection",
+            nistCsfCategories: ["PR.PS-01"]
         ))
 
         // Score & Grade Calculation — excludes not-applicable items (see

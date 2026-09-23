@@ -4,6 +4,7 @@
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
 // ─────────────────────────────────────────────────────────────────────────────
+
 import Foundation
 
 /// Unified, cross-manager incident record — the macOS counterpart of Linux
@@ -29,6 +30,19 @@ public enum ContainmentIncidentSource: String, Codable {
     /// never contain it, so they decode unchanged; a build that predates it
     /// simply never wrote such records.
     case execRecorder
+    /// `RansomwareEntropyGuard`'s general (non-canary-file-dependent)
+    /// mass-encryption detection. Added additively like `.execRecorder`:
+    /// older timeline files never contain it.
+    case ransomwareEntropy
+    /// `CredentialHoneytokenGuard` detected real access to a planted decoy
+    /// credential file. Always maps to T1552 (Unsecured Credentials).
+    /// Added additively, same as the cases above.
+    case honeytoken
+    /// `BrowserCredentialWatchGuard` detected a non-browser process
+    /// accessing a browser's saved-password/session-cookie store. Always
+    /// maps to T1539 (Steal Web Session Cookie). Added additively, same as
+    /// the cases above.
+    case browserCredentialWatch
 }
 
 /// What a ransomware canary actually observed, as a stable identifier —
@@ -223,6 +237,12 @@ public enum ContainmentIncidentTimeline {
                 return "T1486" // Data Encrypted for Impact
             }
             return "T1565" // Data Manipulation
+        case .ransomwareEntropy:
+            return "T1486" // Data Encrypted for Impact — current callers always pass this explicitly anyway
+        case .honeytoken:
+            return "T1552" // Unsecured Credentials — current callers always pass this explicitly anyway
+        case .browserCredentialWatch:
+            return "T1539" // Steal Web Session Cookie — current callers always pass this explicitly anyway
         case .runtimeThreat, .portAnomaly, .clickFix, .execRecorder:
             // XProtect/Gatekeeper/port-anomaly summaries don't carry a
             // Falco-style rule name to pattern-match on macOS, so this

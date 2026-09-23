@@ -4,6 +4,7 @@
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
 // ─────────────────────────────────────────────────────────────────────────────
+
 import Foundation
 
 // MARK: - Payload DTOs (serialized as JSON tool responses by RoamSwitchMCPServer)
@@ -17,6 +18,9 @@ public struct MCPSecurityAuditItemPayload: Codable, Equatable {
     public let recommendation: String
     public let settingsURL: String?
     public let isApplicable: Bool
+    public let checkId: String
+    public let cisControl: String?
+    public let nistCsf: [String]
 }
 
 public struct MCPSecurityReportPayload: Codable, Equatable {
@@ -242,6 +246,74 @@ public struct MCPCanaryStatusPayload: Codable, Equatable {
     public let recentIncidents: [MCPCanaryIncidentPayload]
 }
 
+/// Status for `RansomwareEntropyGuard` — general, non-canary-dependent
+/// mass-encryption detection. Distinct tool/payload from
+/// `MCPCanaryStatusPayload`: the canary guard reports fixed bait-file
+/// tamper events, this one reports Shannon-entropy burst alerts anywhere in
+/// the watched folders.
+public struct MCPRansomwareEntropyStatusPayload: Codable, Equatable {
+    public let isEnabled: Bool
+    public let recentAlertsAvailable: Bool
+    public let recentAlerts: [MCPRansomwareEntropyAlertPayload]
+}
+
+public struct MCPRansomwareEntropyAlertPayload: Codable, Equatable {
+    public let timestamp: String
+    public let processLabel: String
+    public let affectedFilePaths: [String]
+    public let averageEntropy: Double
+}
+
+/// Wraps `ForensicBundleSummary` (see `ForensicCaptureManager.swift`) for
+/// the `get_forensic_evidence_bundles` MCP tool.
+public struct MCPForensicEvidenceBundlesPayload: Codable, Equatable {
+    public let bundles: [ForensicBundleSummary]
+}
+
+/// Wraps `ActiveVulnScan.ProbeStatus` for the
+/// `get_vulnerability_scan_history` MCP tool — same wire shape
+/// (`{"probes": [...]}`) as the Linux edition's equivalent tool, so a
+/// consumer reading both doesn't need platform-specific parsing.
+public struct MCPVulnerabilityScanHistoryPayload: Codable, Equatable {
+    public let probes: [ActiveVulnScan.ProbeStatus]
+}
+
+/// Wraps `PersistedHoneytokenEvent` for the `get_honeytoken_status` MCP tool.
+public struct MCPHoneytokenStatusPayload: Codable, Equatable {
+    public let isEnabled: Bool
+    public let recentEventsAvailable: Bool
+    public let recentEvents: [MCPHoneytokenEventPayload]
+}
+
+public struct MCPHoneytokenEventPayload: Codable, Equatable {
+    public let timestamp: String
+    public let path: String
+    public let kind: String
+    public let suspectedProcess: String
+}
+
+/// Wraps `PersistedBrowserCredentialEvent` for the
+/// `get_browser_credential_watch_status` MCP tool.
+public struct MCPBrowserCredentialWatchStatusPayload: Codable, Equatable {
+    public let isEnabled: Bool
+    public let recentEventsAvailable: Bool
+    public let recentEvents: [MCPBrowserCredentialEventPayload]
+}
+
+public struct MCPBrowserCredentialEventPayload: Codable, Equatable {
+    public let timestamp: String
+    public let path: String
+    public let suspectedProcess: String
+}
+
+extension ForensicBundleSummary: Equatable {
+    public static func == (lhs: ForensicBundleSummary, rhs: ForensicBundleSummary) -> Bool {
+        lhs.bundleDir == rhs.bundleDir && lhs.capturedAt == rhs.capturedAt && lhs.reason == rhs.reason
+            && lhs.suspectedPID == rhs.suspectedPID && lhs.capturedArtifactCount == rhs.capturedArtifactCount
+            && lhs.skippedArtifactCount == rhs.skippedArtifactCount
+    }
+}
+
 /// The history of notifications RoamSwitch has sent over the past 7 days,
 /// most recent first — `NotificationHistoryEntry` mirrors
 /// `roamswitch_core::notification_history::NotificationHistoryEntry` in the
@@ -422,6 +494,9 @@ public enum MCPResponseFormatting {
     // Keys below are verified against each guard's own `enabledKey` (see the
     // file named in the trailing comment); defaults mirror that guard's getter.
     static let ransomwareCanaryGuardKey = "RoamSwitch.RansomwareCanaryGuardEnabled"   // RansomwareCanaryGuard — false; Pro default-on
+    static let ransomwareEntropyGuardKey = "RoamSwitch.RansomwareEntropyGuardEnabled" // RansomwareEntropyGuard — false; Pro default-on
+    static let credentialHoneytokenGuardKey = "RoamSwitch.CredentialHoneytokenGuardEnabled" // CredentialHoneytokenGuard — false; Pro default-on
+    static let browserCredentialWatchGuardKey = "RoamSwitch.BrowserCredentialWatchGuardEnabled" // BrowserCredentialWatchGuard — false; opt-in even for Pro
     static let clickFixGuardKey = "RoamSwitch.ClickFixGuardEnabled"                   // ClickFixGuard — false
     static let execRecorderKey = "RoamSwitch.ExecRecorder.Enabled"                    // ExecRecorderManager — false (Pro, opt-in)
     static let dockerEventGuardKey = "RoamSwitch.DockerEventGuardEnabled"             // DockerEventGuard — false
@@ -473,7 +548,10 @@ public enum MCPResponseFormatting {
                     detail: $0.detail,
                     recommendation: $0.recommendation,
                     settingsURL: $0.settingsURL,
-                    isApplicable: $0.isApplicable
+                    isApplicable: $0.isApplicable,
+                    checkId: $0.checkId,
+                    cisControl: $0.cisControlID,
+                    nistCsf: $0.nistCsfCategories
                 )
             },
             caveats: caveats,
@@ -574,6 +652,9 @@ public enum MCPResponseFormatting {
         guards.append(entry("dnsThreatGuard", dnsThreatGuardKey, defaultWhenUnset: true))
         guards.append(entry("runtimeThreatContainment", runtimeThreatContainmentKey, defaultWhenUnset: false))
         guards.append(entry("ransomwareCanaryGuard", ransomwareCanaryGuardKey, defaultWhenUnset: false))
+        guards.append(entry("ransomwareEntropyGuard", ransomwareEntropyGuardKey, defaultWhenUnset: false))
+        guards.append(entry("credentialHoneytokenGuard", credentialHoneytokenGuardKey, defaultWhenUnset: false))
+        guards.append(entry("browserCredentialWatchGuard", browserCredentialWatchGuardKey, defaultWhenUnset: false))
         guards.append(entry("clickFixGuard", clickFixGuardKey, defaultWhenUnset: false))
         guards.append(entry("execRecorder", execRecorderKey, defaultWhenUnset: false))
         guards.append(entry("dockerEventGuard", dockerEventGuardKey, defaultWhenUnset: false))
