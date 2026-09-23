@@ -4,7 +4,6 @@
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
 // ─────────────────────────────────────────────────────────────────────────────
-
 import Foundation
 
 /// Static, English-only agentskills.io-style "skill" documents served over MCP

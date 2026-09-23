@@ -4,7 +4,6 @@
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
 // ─────────────────────────────────────────────────────────────────────────────
-
 import Foundation
 import CryptoKit
 import os
@@ -252,11 +251,11 @@ struct ForensicManifest: Codable {
     let artifacts: [ForensicArtifactRecord]
 }
 
-struct ForensicBundleSummary: Codable {
-    let bundleDir: String
-    let capturedAt: String
-    let reason: String
-    let suspectedPID: Int32?
-    let capturedArtifactCount: Int
-    let skippedArtifactCount: Int
+public struct ForensicBundleSummary: Codable, Equatable {
+    public let bundleDir: String
+    public let capturedAt: String
+    public let reason: String
+    public let suspectedPID: Int32?
+    public let capturedArtifactCount: Int
+    public let skippedArtifactCount: Int
 }

@@ -4,7 +4,6 @@
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
 // ─────────────────────────────────────────────────────────────────────────────
-
 import Foundation
 
 /// Minimal, dependency-free reader for `BrowserCredentialWatchGuard`'s

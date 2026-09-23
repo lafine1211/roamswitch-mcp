@@ -4,7 +4,6 @@
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
 // ─────────────────────────────────────────────────────────────────────────────
-
 import Foundation
 
 // MARK: - Payload DTOs (serialized as JSON tool responses by RoamSwitchMCPServer)
@@ -304,14 +303,6 @@ public struct MCPBrowserCredentialEventPayload: Codable, Equatable {
     public let timestamp: String
     public let path: String
     public let suspectedProcess: String
-}
-
-extension ForensicBundleSummary: Equatable {
-    public static func == (lhs: ForensicBundleSummary, rhs: ForensicBundleSummary) -> Bool {
-        lhs.bundleDir == rhs.bundleDir && lhs.capturedAt == rhs.capturedAt && lhs.reason == rhs.reason
-            && lhs.suspectedPID == rhs.suspectedPID && lhs.capturedArtifactCount == rhs.capturedArtifactCount
-            && lhs.skippedArtifactCount == rhs.skippedArtifactCount
-    }
 }
 
 /// The history of notifications RoamSwitch has sent over the past 7 days,
@@ -721,6 +712,9 @@ public enum MCPResponseFormatting {
         case .portAnomaly: return loc("ポート異常ガード")
         case .clickFix: return loc("ClickFixガード（不審なコマンド検知）")
         case .execRecorder: return loc("プロセス実行レコーダー（相関ルール）")
+        case .ransomwareEntropy: return loc("汎用ランサムウェア検知（エントロピー解析）")
+        case .honeytoken: return loc("認証情報ハニートークン")
+        case .browserCredentialWatch: return loc("ブラウザ認証情報アクセス監視")
         }
     }
 

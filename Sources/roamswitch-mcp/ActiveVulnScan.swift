@@ -4,7 +4,6 @@
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
 // ─────────────────────────────────────────────────────────────────────────────
-
 import Foundation
 import Network
 
@@ -26,7 +25,7 @@ import Network
 /// - Disabled unless `UserDefaults.standard.bool(forKey: "RoamSwitch.ActiveVulnScanEnabled")`
 ///   is true (opt-in, off by default) — callers must check this before invoking anything
 ///   here; this file performs no work on its own.
-enum ActiveVulnScan {
+public enum ActiveVulnScan {
 
     static let enabledDefaultsKey = "RoamSwitch.ActiveVulnScanEnabled"
 
@@ -176,15 +175,15 @@ enum ActiveVulnScan {
     // same "no scheduler, so this is bounded by however irregularly the
     // scan has actually been run" caveat).
 
-    struct ProbeStatus: Codable, Equatable {
-        let probeName: String
-        let port: Int?
-        let lastOutcome: String
-        let lastFinishedAt: String
+    public struct ProbeStatus: Codable, Equatable {
+        public let probeName: String
+        public let port: Int?
+        public let lastOutcome: String
+        public let lastFinishedAt: String
         /// Whole days since `lastFinishedAt`, floored (0 for anything
         /// within the last 24h). `nil` only if `lastFinishedAt` fails to
         /// parse (should not happen for a row this file wrote itself).
-        let passAgeDays: Int?
+        public let passAgeDays: Int?
     }
 
     /// Groups every persisted row by `(probeName, port)` and keeps the most
