@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.2 (build 120).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.3 (build 121).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -256,6 +256,23 @@ public enum SecretLeakScanning {
     ]
     private static let scanMaxFileBytes = 2 * 1024 * 1024
 
+    /// 2026-09-24: `CredentialHoneytokenGuard` が設置する囮ファイルの(ホーム相対パス → バイト数)。
+    /// 内容を読まずに判別するため(読むこと自体が検知を誘発する)サイズで照合する。内容変更時は同ガードと揃えること。
+    /// 旧版が設置済みの囮(`[default]`のAWS、Docker Hub宛のDocker、`.ssh/id_rsa`)も、移行されるまで読まない。
+    static let honeytokenDecoySizes: [String: [Int]] = [
+        ".aws/credentials": [135, 130],
+        ".ssh/id_rsa_backup": [192],
+        ".ssh/id_rsa": [192],
+        ".docker/config.json": [146, 131],
+    ]
+
+    /// 2026-09-24: 本物の同名ファイル(サイズが異なる)は従来どおり監査対象に残す。
+    static func isHoneytokenDecoy(path: String, size: Int, home: String) -> Bool {
+        let prefix = home.hasSuffix("/") ? home : home + "/"
+        guard path.hasPrefix(prefix) else { return false }
+        return honeytokenDecoySizes[String(path.dropFirst(prefix.count))]?.contains(size) ?? false
+    }
+
     /// Recursively audits every text file under `root`, skipping VCS/build/dependency
     /// directories and files that are too large or look binary (a NUL byte in the
     /// first 8KB). Purely local — never touches the network. Intended to run off the
@@ -278,6 +295,8 @@ public enum SecretLeakScanning {
                 continue
             }
             guard let size = values?.fileSize, size > 0, size <= scanMaxFileBytes else { continue }
+            // 2026-09-24: 自前のハニートークン囮を読むと、読み取り検知(atime)が自分自身を誤報するため除外する。
+            if isHoneytokenDecoy(path: url.path, size: size, home: fm.homeDirectoryForCurrentUser.path) { continue }
             guard let data = try? Data(contentsOf: url) else { continue }
             let sniffLen = min(data.count, 8192)
             if data.prefix(sniffLen).contains(0) { continue }

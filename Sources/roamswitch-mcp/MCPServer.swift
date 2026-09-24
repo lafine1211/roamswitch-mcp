@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.2 (build 120).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.3 (build 121).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -1029,7 +1029,7 @@ enum MCPServer {
         ],
         [
             "name": "get_honeytoken_status",
-            "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only local UserDefaults state. Returns whether the Credential Honeytoken Guard (Pro) is enabled, and up to the 50 most recent detected accesses of a planted decoy credential file (~/.aws/credentials, ~/.ssh/id_rsa, ~/.docker/config.json — each with timestamp, kind, path, and best-effort suspected process). Any real access is a strong signal of active credential-harvesting reconnaissance (MITRE T1552) — this guard only notifies/records, it never triggers network containment the way the ransomware guards do.",
+            "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only local UserDefaults state. Returns whether the Credential Honeytoken Guard (Pro) is enabled, and up to the 50 most recent detected accesses of a planted decoy credential file (~/.aws/credentials, ~/.ssh/id_rsa_backup, ~/.docker/config.json — each with timestamp, kind, path, and best-effort suspected process). Any real access is a strong signal of active credential-harvesting reconnaissance (MITRE T1552) — this guard only notifies/records, it never triggers network containment the way the ransomware guards do.",
             "inputSchema": ["type": "object", "properties": [String: Any]()],
         ],
         [
