@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.4 (build 122).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.5 (build 123).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -20,6 +20,8 @@ public struct ARPMonitorStatus: Equatable {
 final class ARPSpoofMonitor {
     static let shared = ARPSpoofMonitor()
 
+    /// Guards the baseline: the gateway ARP lock reads it from a background queue.
+    private let baselineLock = NSLock()
     private var lastObservedGatewayIP: String?
     private var lastObservedGatewayMAC: String?
     /// SSID observed alongside the last accepted (gatewayIP, gatewayMAC)
@@ -67,15 +69,39 @@ final class ARPSpoofMonitor {
             }
         }
 
+        baselineLock.lock()
         lastObservedGatewayIP = ip
         lastObservedGatewayMAC = mac
         lastObservedSSID = currentSSID
+        baselineLock.unlock()
         return ARPMonitorStatus(isSpoofingDetected: false, message: loc("正常（スプーフィング未検知）"), previousMAC: nil, currentMAC: nil)
     }
 
+    /// Keeps the trusted gateway as the baseline (instead of adopting whatever is there now), for a release
+    /// or a recovery that could not verify the cause is gone. A gateway that differs keeps being reported.
+    func keepBaseline(trustedMAC: String, gatewayIP: String?, ssid: String?) {
+        baselineLock.lock()
+        lastObservedGatewayMAC = trustedMAC
+        lastObservedGatewayIP = gatewayIP
+        lastObservedSSID = ssid
+        baselineLock.unlock()
+    }
+
+    /// True when the baseline for this gateway address is a different hardware address than `mac`: what is
+    /// answering for the gateway now is not what was accepted before. Anything that would copy the current
+    /// ARP entry into something durable (the gateway ARP lock) must not do so while this is true.
+    func differsFromBaseline(gatewayIP ip: String, mac: String) -> Bool {
+        baselineLock.lock()
+        defer { baselineLock.unlock() }
+        guard lastObservedGatewayIP == ip, let baseline = lastObservedGatewayMAC else { return false }
+        return baseline.caseInsensitiveCompare(mac) != .orderedSame
+    }
+
     func reset() {
+        baselineLock.lock()
         lastObservedGatewayIP = nil
         lastObservedGatewayMAC = nil
         lastObservedSSID = nil
+        baselineLock.unlock()
     }
 }
