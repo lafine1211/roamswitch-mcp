@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.6 (build 124).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.7 (build 125).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -616,8 +616,8 @@ extension RoamSwitchKnowledgeBase {
                 • Autenticación y control de acceso: 11. configuración de inicio de sesión SSH remoto (inicio de sesión root desactivado, solo autenticación por clave), 12. escalada de privilegios sudo (auditoría `NOPASSWD`).
                 • Servicios y exposición de puertos: 13. puertos expuestos.
                 • Protección contra malware y descargas: 14. Protección web y correo, 15. Protección contra amenazas DNS, 16. protección contra phishing y enlaces maliciosos (aviso de sitio fraudulento de Safari).
-                • Puertos físicos y dispositivos: 17. Protección física del puerto contra USB no autorizado / BadUSB, 18. protección de conexión de accesorios de macOS (Apple Silicon).
-                • No aplicable: el cortafuegos y el modo sigiloso en una red de confianza, el SSH cuando el inicio de sesión remoto está desactivado, la auditoría sudo antes de conectar el asistente, y la protección de accesorios en los Mac Intel se excluyen de la puntuación.
+                • Puertos físicos y dispositivos: 17. Protección física del puerto contra USB no autorizado / BadUSB, 18. protección de conexión de accesorios de macOS.
+                • No aplicable: el cortafuegos y el modo sigiloso en una red de confianza, el SSH cuando el inicio de sesión remoto está desactivado, y la auditoría sudo antes de conectar el asistente se excluyen de la puntuación.
                 • Notas: 100 = S, 85-99 = A, 70-84 = B, por debajo de 70 = C. También disponible mediante la herramienta MCP `get_security_report`.
                 """,
                 recommendation: "Abre el informe de auditoría con regularidad, resuelve los puntos marcados con ⚠️ siguiendo los pasos de corrección, y mantén al menos la nota A."

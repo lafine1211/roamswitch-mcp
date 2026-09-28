@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.6 (build 124).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.7 (build 125).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -417,25 +417,19 @@ final class SecurityHealthChecker {
             nistCsfCategories: ["PR.PS-01"]
         ))
 
-        // Check Apple Silicon / macOS Accessory Protection
-        let isAppleSilicon: Bool = {
-            var size = 0
-            sysctlbyname("hw.optional.arm64", nil, &size, nil, 0)
-            var val: Int32 = 0
-            sysctlbyname("hw.optional.arm64", &val, &size, nil, 0)
-            return val == 1
-        }()
-
-        let accessoryPolicy = isAppleSilicon ? Self.readAccessoryConnectionPolicy() : nil
+        // macOS Accessory Connection Protection. RoamSwitch is Apple Silicon
+        // only (see README's "Apple Silicon 専用"), so there is no Intel Mac
+        // left to gate this on — it just runs.
+        let accessoryPolicy = Self.readAccessoryConnectionPolicy()
         items.append(SecurityAuditItem(
             category: loc("物理ポート・デバイス防御"),
             title: loc("macOS アクセサリ接続保護"),
             isPassed: accessoryPolicy?.isPassed ?? false,
-            statusText: accessoryPolicy?.statusText ?? loc("対象外 (Intel Mac)"),
+            statusText: accessoryPolicy?.statusText ?? loc("状態を確認できませんでした"),
             detail: loc("新しいUSB/Thunderboltアクセサリが接続された際、Macがロックされている場合はデータ通信をOSハードウェア層で未然に遮断します。"),
             recommendation: loc("システム設定 > プライバシーとセキュリティ > アクセサリの接続を許可 が適切に設定されていることを推奨します。"),
             settingsURL: "x-apple.systempreferences:com.apple.preference.security",
-            isApplicable: isAppleSilicon && accessoryPolicy != nil,
+            isApplicable: accessoryPolicy != nil,
             checkId: "accessory_connection_protection",
             nistCsfCategories: ["PR.PS-01"]
         ))

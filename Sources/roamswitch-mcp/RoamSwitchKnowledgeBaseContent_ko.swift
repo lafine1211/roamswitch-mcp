@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.6 (build 124).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.7 (build 125).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -616,8 +616,8 @@ extension RoamSwitchKnowledgeBase {
                 • 인증 및 접근 제어: 11. SSH 원격 로그인 설정(root 로그인 비활성화, 키 전용 인증), 12. sudo 권한 상승(`NOPASSWD` 감사).
                 • 서비스 및 포트 노출: 13. 노출된 포트.
                 • 악성코드 및 다운로드 보호: 14. 웹 및 이메일 보호, 15. DNS 위협 보호, 16. 피싱 및 악성 링크 보호(Safari 사기 웹사이트 경고).
-                • 물리적 포트 및 기기: 17. 무단 USB / BadUSB 물리 포트 가드, 18. macOS 액세서리 연결 보호(Apple 실리콘).
-                • 해당 없음 처리: 신뢰 네트워크에서의 방화벽과 스텔스 모드, 원격 로그인이 꺼져 있을 때의 SSH, 헬퍼 연결 전의 sudo 감사, Intel Mac의 액세서리 보호는 점수 계산에서 제외됩니다.
+                • 물리적 포트 및 기기: 17. 무단 USB / BadUSB 물리 포트 가드, 18. macOS 액세서리 연결 보호.
+                • 해당 없음 처리: 신뢰 네트워크에서의 방화벽과 스텔스 모드, 원격 로그인이 꺼져 있을 때의 SSH, 헬퍼 연결 전의 sudo 감사는 점수 계산에서 제외됩니다.
                 • 등급: 100점은 S, 85~99점은 A, 70~84점은 B, 70점 미만은 C입니다. MCP 도구 `get_security_report`로도 확인할 수 있습니다.
                 """,
                 recommendation: "정기적으로 진단 보고서를 열어 ⚠️로 표시된 항목을 제시된 개선 단계에 따라 처리하고 A 등급 이상을 유지하세요."

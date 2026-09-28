@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.6 (build 124).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.7 (build 125).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -616,8 +616,8 @@ extension RoamSwitchKnowledgeBase {
                 • Autenticação e controlo de acesso: 11. configuração de início de sessão SSH remoto (início de sessão root desativado, apenas autenticação por chave), 12. escalonamento de privilégios sudo (verificação `NOPASSWD`).
                 • Serviços e exposição de portas: 13. portas expostas.
                 • Proteção contra malware e descargas: 14. Proteção Web e E-mail, 15. Proteção contra ameaças DNS, 16. proteção contra phishing e links maliciosos (aviso de site fraudulento do Safari).
-                • Portas físicas e dispositivos: 17. Proteção física da porta contra USB não autorizado / BadUSB, 18. proteção de ligação de acessórios do macOS (Apple Silicon).
-                • Não aplicável: a firewall e o modo furtivo numa rede fidedigna, o SSH quando o início de sessão remoto está desativado, a verificação sudo antes de ligar o auxiliar, e a proteção de acessórios em Macs Intel são excluídos da pontuação.
+                • Portas físicas e dispositivos: 17. Proteção física da porta contra USB não autorizado / BadUSB, 18. proteção de ligação de acessórios do macOS.
+                • Não aplicável: a firewall e o modo furtivo numa rede fidedigna, o SSH quando o início de sessão remoto está desativado, e a verificação sudo antes de ligar o auxiliar são excluídos da pontuação.
                 • Notas: 100 = S, 85-99 = A, 70-84 = B, abaixo de 70 = C. Também disponível através da ferramenta MCP `get_security_report`.
                 """,
                 recommendation: "Abra o relatório de auditoria regularmente, resolva os pontos marcados com ⚠️ seguindo os passos de correção, e mantenha pelo menos a nota A."

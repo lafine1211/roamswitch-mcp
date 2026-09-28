@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.6 (build 124).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.7 (build 125).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -616,8 +616,8 @@ extension RoamSwitchKnowledgeBase {
                 • Authentifizierung & Zugriffskontrolle: 11. SSH-Fernanmeldungskonfiguration (Root-Anmeldung deaktiviert, nur Schlüsselauthentifizierung), 12. sudo-Rechteausweitung (`NOPASSWD`-Prüfung).
                 • Dienste & Portexposition: 13. offengelegte Ports.
                 • Malware- & Download-Schutz: 14. Web- & E-Mail-Schutz, 15. DNS-Bedrohungsschutz, 16. Phishing- und Malware-Link-Schutz (Safari-Betrugsseiten-Warnung).
-                • Physische Ports & Geräte: 17. Physischer Portschutz vor unbefugtem USB / BadUSB, 18. macOS-Zubehörverbindungsschutz (Apple Silicon).
-                • Nicht anwendbar: Firewall und Tarnmodus in einem vertrauenswürdigen Netzwerk, SSH bei deaktivierter Fernanmeldung, die sudo-Prüfung vor Verbindung des Helfers sowie der Zubehörschutz auf Intel-Macs werden von der Punktzahl ausgeschlossen.
+                • Physische Ports & Geräte: 17. Physischer Portschutz vor unbefugtem USB / BadUSB, 18. macOS-Zubehörverbindungsschutz.
+                • Nicht anwendbar: Firewall und Tarnmodus in einem vertrauenswürdigen Netzwerk, SSH bei deaktivierter Fernanmeldung sowie die sudo-Prüfung vor Verbindung des Helfers werden von der Punktzahl ausgeschlossen.
                 • Noten: 100 = S, 85–99 = A, 70–84 = B, unter 70 = C. Auch über das MCP-Tool `get_security_report` abrufbar.
                 """,
                 recommendation: "Öffnen Sie den Prüfbericht regelmäßig, arbeiten Sie die mit ⚠️ markierten Punkte anhand der Korrekturschritte ab und halten Sie mindestens Note A."

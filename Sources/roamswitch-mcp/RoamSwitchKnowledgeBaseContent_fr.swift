@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.6 (build 124).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.7 (build 125).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -616,8 +616,8 @@ extension RoamSwitchKnowledgeBase {
                 • Authentification et contrôle d'accès : 11. configuration de la connexion SSH distante (connexion root désactivée, authentification par clé uniquement), 12. élévation de privilège sudo (audit `NOPASSWD`).
                 • Services et exposition des ports : 13. ports exposés.
                 • Protection contre les malwares et les téléchargements : 14. Protection Web et E-mail, 15. Protection DNS contre les menaces, 16. protection contre l'hameçonnage et les liens malveillants (avertissement de site frauduleux de Safari).
-                • Ports physiques et appareils : 17. Protection physique du port contre USB non autorisé / BadUSB, 18. protection de connexion d'accessoire macOS (Apple Silicon).
-                • Non applicable : le pare-feu et le mode furtif sur un réseau fiable, le SSH lorsque la connexion distante est désactivée, l'audit sudo avant la connexion de l'assistant, et la protection des accessoires sur les Mac Intel sont exclus du score.
+                • Ports physiques et appareils : 17. Protection physique du port contre USB non autorisé / BadUSB, 18. protection de connexion d'accessoire macOS.
+                • Non applicable : le pare-feu et le mode furtif sur un réseau fiable, le SSH lorsque la connexion distante est désactivée, et l'audit sudo avant la connexion de l'assistant sont exclus du score.
                 • Notes : 100 = S, 85-99 = A, 70-84 = B, en dessous de 70 = C. Aussi disponible via l'outil MCP `get_security_report`.
                 """,
                 recommendation: "Ouvrez régulièrement le rapport d'audit, traitez les points marqués ⚠️ en suivant les étapes de correction, et maintenez au moins la note A."

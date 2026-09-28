@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.6 (build 124).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.7 (build 125).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -615,8 +615,8 @@ extension RoamSwitchKnowledgeBase {
                 • Authentication & access control: 11. SSH remote login configuration (root login disabled, key-only auth), 12. sudo privilege escalation (`NOPASSWD` audit).
                 • Services & port exposure: 13. exposed ports.
                 • Malware & download protection: 14. Web & Mail Protection, 15. DNS Threat Protection, 16. phishing & malicious link protection (Safari fraudulent website warning).
-                • Physical ports & devices: 17. Unauthorized USB / BadUSB physical port guard, 18. macOS accessory connection protection (Apple silicon).
-                • Not applicable: firewall and stealth on a trusted network, SSH when remote login is off, the sudo audit before the helper connects, and accessory protection on Intel Macs are excluded from the score.
+                • Physical ports & devices: 17. Unauthorized USB / BadUSB physical port guard, 18. macOS accessory connection protection.
+                • Not applicable: firewall and stealth on a trusted network, SSH when remote login is off, and the sudo audit before the helper connects are excluded from the score.
                 • Grades: 100 = S, 85-99 = A, 70-84 = B, below 70 = C. Also available via the MCP tool `get_security_report`.
                 """,
                 recommendation: "Open the audit report regularly, work through the ⚠️ items using the fix steps, and keep grade A or better."

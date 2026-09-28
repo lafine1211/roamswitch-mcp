@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.6 (build 124).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.7 (build 125).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -616,8 +616,8 @@ extension RoamSwitchKnowledgeBase {
                 • 驗證與存取控制：11. SSH 遠端登入設定（是否停用 root 登入、僅限金鑰驗證）、12. sudo 權限提升（`NOPASSWD` 稽核）。
                 • 服務與連接埠曝露：13. 公開連接埠。
                 • 惡意軟體與下載保護：14. 網頁與郵件保護、15. DNS 威脅防護、16. 釣魚與惡意連結防護（Safari 詐騙網站警告）。
-                • 實體連接埠與裝置：17. 非法 USB / BadUSB 實體連接埠防護、18. macOS 配件連線保護（Apple 晶片）。
-                • 不適用項目：受信任網路上的防火牆與隱形模式、遠端登入關閉時的 SSH 檢查、輔助工具連線前的 sudo 稽核，以及 Intel Mac 的配件保護，都會排除在分數計算之外。
+                • 實體連接埠與裝置：17. 非法 USB / BadUSB 實體連接埠防護、18. macOS 配件連線保護。
+                • 不適用項目：受信任網路上的防火牆與隱形模式、遠端登入關閉時的 SSH 檢查，以及輔助工具連線前的 sudo 稽核，都會排除在分數計算之外。
                 • 等級：100 分為 S、85 至 99 分為 A、70 至 84 分為 B、低於 70 分為 C。也可透過 MCP 工具 `get_security_report` 取得。
                 """,
                 recommendation: "定期開啟稽核報告，依照顯示的修正步驟處理標示 ⚠️ 的項目，並維持在 A 級以上。"

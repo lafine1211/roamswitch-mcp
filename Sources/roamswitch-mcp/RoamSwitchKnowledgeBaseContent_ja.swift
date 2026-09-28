@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.6 (build 124).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.7 (build 125).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -615,8 +615,8 @@ extension RoamSwitchKnowledgeBase {
                 • 認証・アクセス制御: 11. SSH リモートログイン設定（rootログイン禁止・鍵認証必須か）、12. Sudo 権限昇格設定（`NOPASSWD` の監査）。
                 • サービス・ポート露出: 13. 外部公開ポート。
                 • マルウェア・ダウンロード保護: 14. Web・メール保護、15. DNS脅威保護、16. フィッシング・悪質リンク保護（Safariの詐欺Webサイト警告）。
-                • 物理ポート・デバイス防御: 17. 不正USB / BadUSB 物理ポートガード、18. macOS アクセサリ接続保護（Apple シリコン）。
-                • 対象外の扱い: 信頼ネットワークでのファイアウォール・ステルス、リモートログイン無効時のSSH、ヘルパー未接続時のSudo監査、Intel MacのアクセサリはN/Aとしてスコア計算から除外します。
+                • 物理ポート・デバイス防御: 17. 不正USB / BadUSB 物理ポートガード、18. macOS アクセサリ接続保護。
+                • 対象外の扱い: 信頼ネットワークでのファイアウォール・ステルス、リモートログイン無効時のSSH、ヘルパー未接続時のSudo監査は、N/Aとしてスコア計算から除外します。
                 • ランク: 100点 = S、85〜99点 = A、70〜84点 = B、70点未満 = C。MCPツール `get_security_report` でも取得できます。
                 """,
                 recommendation: "定期的に「総合診断レポート」を開き、⚠️ の項目を改善手順に沿って対応して、ランクA以上を維持してください。"

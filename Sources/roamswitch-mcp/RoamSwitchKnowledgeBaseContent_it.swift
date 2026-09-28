@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.6 (build 124).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.7 (build 125).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -616,8 +616,8 @@ extension RoamSwitchKnowledgeBase {
                 • Autenticazione e controllo degli accessi: 11. configurazione dell'accesso SSH remoto (accesso root disattivato, solo autenticazione con chiave), 12. escalation dei privilegi sudo (verifica `NOPASSWD`).
                 • Servizi ed esposizione delle porte: 13. porte esposte.
                 • Protezione da malware e download: 14. Protezione Web ed e-mail, 15. Protezione dalle minacce DNS, 16. protezione da phishing e link dannosi (avviso di sito fraudolento di Safari).
-                • Porte fisiche e dispositivi: 17. Protezione fisica della porta da USB non autorizzato / BadUSB, 18. protezione connessione accessori macOS (Apple Silicon).
-                • Non applicabile: firewall e modalità invisibile su una rete attendibile, SSH quando l'accesso remoto è disattivato, la verifica sudo prima della connessione dell'helper, e la protezione degli accessori sui Mac Intel sono esclusi dal punteggio.
+                • Porte fisiche e dispositivi: 17. Protezione fisica della porta da USB non autorizzato / BadUSB, 18. protezione connessione accessori macOS.
+                • Non applicabile: firewall e modalità invisibile su una rete attendibile, SSH quando l'accesso remoto è disattivato, e la verifica sudo prima della connessione dell'helper sono esclusi dal punteggio.
                 • Voti: 100 = S, 85-99 = A, 70-84 = B, sotto 70 = C. Disponibile anche tramite lo strumento MCP `get_security_report`.
                 """,
                 recommendation: "Apri regolarmente il rapporto di audit, risolvi i punti contrassegnati con ⚠️ seguendo i passaggi di correzione, e mantieni almeno il voto A."

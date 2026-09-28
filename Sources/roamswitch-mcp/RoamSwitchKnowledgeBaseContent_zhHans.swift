@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.6 (build 124).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.7 (build 125).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -616,8 +616,8 @@ extension RoamSwitchKnowledgeBase {
                 • 身份验证与访问控制：11. SSH 远程登录设置（是否禁止 root 登录、是否强制密钥认证），12. Sudo 权限提升设置（审计 `NOPASSWD`）。
                 • 服务与端口暴露：13. 外部公开端口。
                 • 恶意软件与下载保护：14. 网页与邮件保护，15. DNS 威胁防护，16. 钓鱼与恶意链接防护（Safari 的欺诈网站警告）。
-                • 物理端口与设备防御：17. 非法 USB / BadUSB 物理端口防护，18. macOS 配件连接保护（Apple 芯片）。
-                • 不适用项的处理：受信任网络上的防火墙和隐身模式、远程登录禁用时的 SSH、辅助程序未连接时的 Sudo 审计、Intel Mac 的配件保护将标记为 N/A，并从评分计算中排除。
+                • 物理端口与设备防御：17. 非法 USB / BadUSB 物理端口防护，18. macOS 配件连接保护。
+                • 不适用项的处理：受信任网络上的防火墙和隐身模式、远程登录禁用时的 SSH、辅助程序未连接时的 Sudo 审计将标记为 N/A，并从评分计算中排除。
                 • 等级：100 分 = S，85～99 分 = A，70～84 分 = B，低于 70 分 = C。也可通过 MCP 工具 `get_security_report` 获取。
                 """,
                 recommendation: "请定期打开「综合诊断报告」，按照改进步骤处理带 ⚠️ 的项目，保持 A 级以上。"
