@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.7 (build 125).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.8 (build 126).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -116,7 +116,14 @@ final class SecurityHealthChecker {
         /// `GatewayARPLockManager.shared.isEnabled` — passed in rather than
         /// read here so this stays a pure function of its inputs, matching
         /// the other pre-fetched parameters.
-        gatewayARPLockEnabled: Bool = false
+        gatewayARPLockEnabled: Bool = false,
+        /// `DevServerIsolator.shared.isolatedPorts` — a port the user (or
+        /// `PortAnomalyGuard`'s auto-isolation) already pf-blocked is not a
+        /// real exposure, the same distinction Linux RoamSwitch's
+        /// `PortScanner::scan_ports` already makes via `is_isolated`. Passed
+        /// in rather than read here for the same pure-function reason as
+        /// `gatewayARPLockEnabled` above — `DevServerIsolator` is `@MainActor`.
+        isolatedDevPorts: Set<Int> = []
     ) -> ComprehensiveSecurityReport {
         let health = checkHealth()
         var items: [SecurityAuditItem] = []
@@ -305,7 +312,10 @@ final class SecurityHealthChecker {
         ))
 
         // MARK: - 3. Services & Ports (サービス・ポート露出)
-        let exposedCount = listeningPorts.filter { $0.isGloballyExposed }.count
+        // A port `DevServerIsolator`(またはその自動検知の`PortAnomalyGuard`)が
+        // 既にpfでブロック済みの場合、外部到達不能なので露出として数えない —
+        // Linux版`PortScanner::scan_ports`の`is_isolated`除外と同じ扱い。
+        let exposedCount = listeningPorts.filter { $0.isGloballyExposed && !isolatedDevPorts.contains($0.port) }.count
         let isPortPassed = exposedCount == 0 || activeSecurityLevel.firewallBlockAll
         let portStatusStr = activeSecurityLevel.firewallBlockAll ? loc("🛡️ ファイアウォール遮断中 (安全)") : (exposedCount == 0 ? loc("公開ポートなし (安全)") : String(format: loc("⚠️ %d個のポートが露出中"), exposedCount))
         items.append(SecurityAuditItem(
@@ -314,7 +324,7 @@ final class SecurityHealthChecker {
             isPassed: isPortPassed,
             statusText: portStatusStr,
             detail: loc("外部からの接続を待ち受けているTCP/UDPポートを検査します。ファイアウォール有効時は全ポートが保護されます。"),
-            recommendation: isPortPassed ? loc("外部からの不正アクセスは遮断されています。") : loc("不要な開発サーバーを停止するか、ファイアウォールを有効にしてください。"),
+            recommendation: isPortPassed ? loc("外部からの不正アクセスは遮断されています。") : loc("不要な開発サーバーを停止するか、Dev Server Isolatorでそのポートを個別に遮断するか、ファイアウォールを有効にしてください。"),
             settingsURL: nil,
             checkId: "exposed_ports",
             cisControlID: "4.4",

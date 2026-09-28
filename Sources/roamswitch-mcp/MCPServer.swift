@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.7 (build 125).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.8 (build 126).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -276,11 +276,18 @@ enum MCPServer {
         let arp = arpMonitor.inspectGateway(currentIP: ip, currentMAC: mac, currentSSID: wifi.ssid)
         let ports = ListeningPortMonitor.shared.scanListeningPorts()
         let level = MCPResponseFormatting.resolveActiveSecurityLevel(gatewayMAC: mac, defaults: sharedDefaults)
+        // `DevServerIsolator` is `@MainActor` and this is a separate process
+        // (com.tetsuharu.RoamSwitch.MCPServer) from the main app anyway, so
+        // its singleton can't be read directly — go straight to the same
+        // UserDefaults key it persists via `sharedDefaults`, exactly like
+        // `resolveActiveSecurityLevel` above does for other app-owned state.
+        let isolatedPorts = Set((sharedDefaults.array(forKey: "RoamSwitch.IsolatedDevPorts") as? [Int]) ?? [])
         let report = SecurityHealthChecker.shared.generateComprehensiveReport(
             wifiInfo: wifi,
             arpStatus: arp,
             listeningPorts: ports,
-            activeSecurityLevel: level
+            activeSecurityLevel: level,
+            isolatedDevPorts: isolatedPorts
         )
         let interfacePresent = CWWiFiClient.shared().interface() != nil
         let payload = MCPResponseFormatting.makeSecurityReportPayload(

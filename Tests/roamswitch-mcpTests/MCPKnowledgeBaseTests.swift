@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.10.7 (build 125). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.10.8 (build 126). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -64,5 +64,41 @@ final class MCPKnowledgeBaseTests: XCTestCase {
         }
 
         XCTAssertNil(kb.resource(for: "roamswitch://docs/nonexistent"))
+    }
+
+    /// Regression guard: `feat_exec_recorder`'s KB text lists every
+    /// `exec.*` correlation rule by id, but nothing enforced that — rules 8
+    /// (`interpreter_inline_obfuscated`) and 9 (`dyld_insert_libraries`)
+    /// shipped without ever being added to this text, in every language,
+    /// and rule 10 (`ransomware_recovery_tampering`) almost repeated it.
+    /// This ties the two together mechanically: add a rule to
+    /// `ExecRuleID.all` (`Shared/ExecCorrelationRules.swift`) without
+    /// mentioning its id here (in all 10 languages), and this test fails
+    /// instead of the KB doc silently going stale again.
+    ///
+    /// The ids are duplicated as string literals rather than referencing
+    /// `ExecRuleID.all` directly: this test file is mirrored verbatim into
+    /// the `roamswitch-mcp` package (see that repo's `SYNC.md`), whose
+    /// smaller module never links `ExecCorrelationRules.swift` (the live
+    /// eslogger-driven engine has no place in a read-only log reader) —
+    /// syncing that file over just for this one test would pull real-time
+    /// detection logic into a context that intentionally never runs it.
+    /// Keep this list in sync with `ExecRuleID.all` by hand.
+    func testEveryExecRuleIDIsMentionedInTheKnowledgeBaseInEveryLanguage() {
+        let allExecRuleIDs = [
+            "exec.shell_from_app", "exec.untrusted_location", "exec.pipe_to_shell", "exec.osascript_obfuscated",
+            "exec.quarantine_stripped_then_exec", "exec.launchd_untrusted_binary", "exec.keychain_access",
+            "exec.interpreter_inline_obfuscated", "exec.dyld_insert_libraries", "exec.ransomware_recovery_tampering",
+        ]
+        for code in RoamSwitchKnowledgeBase.supportedLanguageCodes {
+            let entries = RoamSwitchKnowledgeBase.localizedEntries(for: code)
+            guard let entry = entries.first(where: { $0.id == "feat_exec_recorder" }) else {
+                XCTFail("feat_exec_recorder entry missing for language \(code)")
+                continue
+            }
+            for ruleID in allExecRuleIDs {
+                XCTAssertTrue(entry.details.contains(ruleID), "\(code): feat_exec_recorder details is missing \(ruleID)")
+            }
+        }
     }
 }
