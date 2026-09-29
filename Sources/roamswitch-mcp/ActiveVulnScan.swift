@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.9 (build 127).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.10 (build 128).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -208,8 +208,30 @@ public enum ActiveVulnScan {
             }
             return ProbeStatus(probeName: r.probeName, port: r.port, lastOutcome: r.outcome, lastFinishedAt: r.lastFinishedAt, passAgeDays: passAgeDays)
         }
-        // Most-stale first, matching the Linux edition's sort order.
-        out.sort { ($0.passAgeDays ?? 0, $0.probeName) > ($1.passAgeDays ?? 0, $1.probeName) }
+        // Most-stale first, matching the Linux edition's sort order. Sorting on `passAgeDays` alone
+        // (floored to whole days) ties every probe checked the same calendar day, and `latest` is a
+        // Dictionary, whose iteration order is unspecified — those ties fell back to that unspecified
+        // order, a different, meaningless order on every run rather than anything a viewer could make
+        // sense of. Comparing the actual timestamp first fixes that: same-day entries still land
+        // oldest-first, and probeName/port only matter for the now-vanishingly rare case of two rows
+        // with the identical instant. Mirrors the same fix in the Linux edition's
+        // `probe_status_summary_at`.
+        out.sort { a, b in
+            switch (probeLogFormatter.date(from: a.lastFinishedAt), probeLogFormatter.date(from: b.lastFinishedAt)) {
+            case let (.some(ta), .some(tb)) where ta != tb:
+                return ta < tb
+            case (.none, .some):
+                // Unparsable (shouldn't happen — this file wrote it) sorts as if it just finished,
+                // same as `passAgeDays`' `?? 0` treated it before.
+                return false
+            case (.some, .none):
+                return true
+            default:
+                break
+            }
+            if a.probeName != b.probeName { return a.probeName < b.probeName }
+            return (a.port ?? Int.min) < (b.port ?? Int.min)
+        }
         return out
     }
 

@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.10.9 (build 127). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.10.10 (build 128). Do not edit here; see SYNC.md.
 
 import XCTest
 import Network
@@ -605,6 +605,23 @@ final class ActiveVulnScanTests: XCTestCase {
 
     func testProbeStatusSummaryOfEmptyLogIsEmpty() {
         XCTAssertTrue(ActiveVulnScan.probeStatusSummary(from: [], now: Date()).isEmpty)
+    }
+
+    /// All finish within the same UTC day, so passAgeDays alone ties every one of them — the Linux
+    /// GUI's mirrored panel showed exactly this shape as a seemingly random order (see the bug this
+    /// guards against: sorting fell through to Dictionary iteration order on a tie).
+    func testProbeStatusSummaryOrdersSameDayTiesDeterministicallyByExactTimestamp() {
+        let now = Date()
+        let today = Calendar.current.date(byAdding: .hour, value: -1, to: now)!
+        let entries = [
+            record("z-probe", port: 3, outcome: "safe", finishedAt: Calendar.current.date(byAdding: .minute, value: -5, to: today)!),
+            record("a-probe", port: 1, outcome: "safe", finishedAt: Calendar.current.date(byAdding: .minute, value: -20, to: today)!),
+            record("m-probe", port: 2, outcome: "safe", finishedAt: Calendar.current.date(byAdding: .minute, value: -10, to: today)!),
+        ]
+        for _ in 0..<20 {
+            let statuses = ActiveVulnScan.probeStatusSummary(from: entries, now: now)
+            XCTAssertEqual(statuses.map(\.probeName), ["a-probe", "m-probe", "z-probe"], "oldest exact timestamp must sort first even when passAgeDays ties")
+        }
     }
 
 }
