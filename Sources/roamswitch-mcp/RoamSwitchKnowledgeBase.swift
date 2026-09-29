@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.11 (build 129).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.12 (build 130).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -434,6 +434,7 @@ public struct RoamSwitchKnowledgeBase: Sendable {
             EntryMeta(id: "feat_security_log_audit", topic: t, tags: ["log", "audit", "unified-logging", "sudo", "ssh", "gatekeeper", "xprotect", "template-anomaly", "csv", "mcp", "free"]),
             EntryMeta(id: "feat_scheduled_log_audit", topic: t, tags: ["log", "audit", "scheduled", "template-anomaly", "z-score", "baseline", "learning", "pro", "default-on-pro"]),
             EntryMeta(id: "feat_containment_incident_timeline", topic: t, tags: ["incident", "timeline", "forensics", "mitre", "att&ck", "airgap", "canary", "port-anomaly", "arp", "runtime-threat"]),
+            EntryMeta(id: "feat_security_activity_log", topic: t, tags: ["log", "search", "filter", "timeline", "chart", "drilldown", "history", "audit", "incident", "csv", "free"]),
             EntryMeta(id: "feat_notification_history", topic: t, tags: ["notification", "history", "7-days", "eicar", "mcp", "free"]),
             EntryMeta(id: "feat_secret_leak_auditor", topic: t, tags: ["secret", "apikey", "clipboard", "openai", "anthropic", "github", "aws", "stripe", "clickfix", "zerotelemetry", "free"]),
             EntryMeta(id: "feat_secret_leak_audit_tool", topic: t, tags: ["secret", "apikey", "folder-scan", "audit", "zerotelemetry", "tcc", "permission", "mcp", "free"]),

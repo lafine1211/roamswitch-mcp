@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.11 (build 129).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.12 (build 130).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -359,6 +359,7 @@ extension RoamSwitchKnowledgeBase {
                 • 監控範圍：僅監控 `~/.zsh_history` 與 `~/.bash_history` 新增的行（既有歷史記錄不列入監控）。
                 • 判斷模式：（1）已知的反向殼一行指令（與靜態特徵碼檢查共用）（2）將 Base64 解碼的內容直接透過管線傳給殼層或 `osascript` 的雙重間接手法。像 Homebrew 等合法安裝程式所使用的單純 `curl ... | bash` 刻意不會被標記。
                 • 回應方式：氣隙圍堵（不會關閉 Wi-Fi 無線電），最多 10 分鐘後自動恢復。通知會建議您檢查 Keychain、瀏覽器儲存的密碼與加密貨幣錢包。
+                • 已知安裝程式例外：若指令中的 URL 與 rustup、Docker、Homebrew、uv(astral)、deno、bun、nvm 等已知官方安裝程式相符,則只會發送提示性通知（ℹ️）而不斷網,避免開發者的正常安裝作業被誤判為氣隙圍堵。
                 • 為何是事後處理：指令出現在歷史記錄時已經執行過了，但立即斷網仍可能阻止正在進行中的第二階段下載、即時反向殼連線或憑證外洩。
                 • 為何 Gatekeeper 無法阻止：這是您自己合法的殼層，完全依照您輸入的內容執行，因此程序本身看不出任何異常。
                 • 互補功能：剪貼簿保護（feat_secret_leak_auditor）會在複製當下就攔截該指令，涵蓋貼到指令碼編輯器、Spotlight 等 Terminal 以外的位置。
@@ -463,6 +464,21 @@ extension RoamSwitchKnowledgeBase {
                 • MCP 工具 `get_incident_timeline` 可取得這份統一時間軸（在氣隙期間可用於協助本機 AI 進行事件分析）。個別防護的歷史也可透過 `get_canary_status`、`get_port_anomaly_incidents` 與 `get_runtime_threat_status` 取得。
                 """,
                 recommendation: "發生自動斷網後，請將此時間軸與通知歷史一併檢視，以找出原因並避免再次發生。"
+            ),
+            LocalizedEntry(
+                id: "feat_security_activity_log",
+                title: "安全活動記錄(搜尋·篩選·時間軸圖表橫向檢視所有事件)",
+                summary: "將圍堵事件時間軸與已確認的郵件附件惡意軟體偵測結果整合到同一畫面,可透過關鍵字搜尋、分類/嚴重程度篩選,並透過時間序列圖表向下鑽研查看。",
+                details: """
+                • 開啟方式:選單「Mac安全綜合診斷」→「📈 安全活動記錄…」。
+                • 資料來源:圍堵事件時間軸(feat_containment_incident_timeline,最新200筆)與網頁郵件下載防護(feat_webmail_download_guard)中已確認的惡意軟體偵測結果的合併清單。
+                • 篩選條件:分類(ARP詐騙、勒索軟體誘餌檔案、XProtect連動Air-Gap、連接埠異常、ClickFix、執行記錄、勒索軟體熵值偵測、蜜罐憑證、瀏覽器憑證存取監控、危險下載)、嚴重程度(全部/info/warning/critical)、時間範圍(過去24小時/過去3天/過去7天/所有時間)、自由文字搜尋(對摘要、詳情、分類名稱進行不區分大小寫的子字串比對)。
+                • 時間序列圖表:以長條圖顯示所選時間範圍內的偵測件數——時間跨度在72小時以內時以小時為單位,超過則以天為單位,自動切換。點擊某根長條可將清單縮小到該時段,再次點擊可取消篩選。
+                • 顯示上限:最多顯示最新500筆(超出時會顯示提示訊息並建議縮小篩選範圍)。
+                • 匯出:CSV匯出(Pro)。
+                • 與相似畫面的差異:「Mac安全記錄稽核」針對的是另一個資料來源——macOS自身的統一記錄(sudo、SSH、Gatekeeper、XProtect)。「通知歷史」是RoamSwitch發出過的所有通知橫幅的7天記錄。本畫面是唯一可以橫向搜尋RoamSwitch自身圍堵判斷的地方。
+                """,
+                recommendation: "在發生自動斷網後用它回顧發生了什麼,或依分類、時間範圍比較偵測趨勢。"
             ),
             LocalizedEntry(
                 id: "feat_notification_history",
@@ -988,7 +1004,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "顯示於在 Terminal 中執行（從殼層歷史記錄偵測）或複製到剪貼簿的指令符合 ClickFix 手法時。",
                 details: """
                 • 原因：您被誘導至假的驗證碼或假錯誤頁面，並被要求「執行此指令來修復」。反向殼一行指令，以及將 Base64 解碼內容傳給殼層或 osascript 的行為都會被標記。
-                • 自動防禦（於 Terminal 執行時，Pro，預設關閉）：氣隙圍堵（不會關閉 Wi-Fi 無線電），最多 10 分鐘內自動恢復。
+                • 自動防禦（於 Terminal 執行時，Pro，預設關閉）：氣隙圍堵（不會關閉 Wi-Fi 無線電），最多 10 分鐘內自動恢復。但若指令中的 URL 與 rustup、Docker、Homebrew、uv(astral)、deno、bun、nvm 等已知官方安裝程式相符,則只會發送提示性通知而不斷網。
                 • 自動防禦（複製時，預設開啟）：立即清除剪貼簿。
                 """,
                 recommendation: """

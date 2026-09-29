@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.11 (build 129).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.12 (build 130).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -357,7 +357,8 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • 監視対象: `~/.zsh_history` と `~/.bash_history` の新たに追記された行のみ（既存の履歴は対象外）。
                 • 検知パターン: ①既知のリバースシェル定型コマンド（静的シグネチャ検査と共通）②Base64でデコードした内容をシェルや `osascript` に直接渡す二重の迂回パターン。Homebrewなど正規インストーラーが使う単純な `curl ... | bash` は対象外です。
-                • 自動対応: エアギャップ隔離（Wi-Fi無線は切断しない）。最大10分で自動復旧します。通知ではKeychain・ブラウザ保存パスワード・暗号資産ウォレットの安全確認を推奨します。
+                • 自動対応: エアギャップ隔離(Wi-Fi無線は切断しない)。最大10分で自動復旧します。通知ではKeychain・ブラウザ保存パスワード・暗号資産ウォレットの安全確認を推奨します。
+                • 既知のインストーラー例外: コマンド中のURLが rustup・Docker・Homebrew・uv(astral)・deno・bun・nvm など既知の公式インストーラーのものと一致する場合は、遮断せず通知のみ(ℹ️)を送ります。開発者の通常のインストール作業で誤って遮断しないための例外です。
                 • 事後対応である理由: 履歴に記録された時点でコマンドは実行済みですが、二段目のダウンロード・リバースシェル接続・認証情報の持ち出しなどが進行中なら、即座の遮断で被害拡大を止められます。
                 • Gatekeeperでは防げない理由: ユーザーの正規のシェルが入力どおりに実行しているだけなので、プロセス自体に不審な点がありません。
                 • 補完: コピーした時点で検知するクリップボード保護（feat_secret_leak_auditor）もあり、Script EditorやSpotlightなどTerminal以外への貼り付けにも対応します。
@@ -462,6 +463,21 @@ extension RoamSwitchKnowledgeBase {
                 • MCPツール `get_incident_timeline` でこの統合タイムラインを取得できます（Air-Gap中にローカルのAIで原因を調べる用途にも使えます）。個別の履歴は `get_canary_status`、`get_port_anomaly_incidents`、`get_runtime_threat_status` でも確認できます。
                 """,
                 recommendation: "自動遮断が発生した後は、この履歴と通知履歴を合わせて確認し、原因の特定と再発防止に役立ててください。"
+            ),
+            LocalizedEntry(
+                id: "feat_security_activity_log",
+                title: "セキュリティアクティビティログ(検索・フィルタ・時系列グラフで横断確認)",
+                summary: "封じ込めインシデント履歴と、確定したメール添付マルウェアの検知結果を1つの画面に統合し、キーワード検索・カテゴリ/重要度フィルタ・時系列グラフのドリルダウンで振り返れます。",
+                details: """
+                • 開き方: メニュー「Macセキュリティ総合診断」→「📈 セキュリティアクティビティログ…」。
+                • データソース: 封じ込めインシデント履歴(feat_containment_incident_timeline、最新200件)と、メール添付ダウンロード保護(feat_webmail_download_guard)で確定したマルウェア検知を統合した一覧です。
+                • フィルタ: カテゴリ(ARPスプーフィング・おとりファイル・XProtect連動Air-Gap・ポート異常・ClickFix・実行記録・エントロピー検知・ハニートークン・ブラウザ認証情報監視・危険なダウンロード)、重要度(すべて/info/warning/critical)、期間(過去24時間・過去3日間・過去7日間・すべての期間)、フリーテキスト検索(概要・詳細・カテゴリ名を対象に大文字小文字を区別せず部分一致)。
+                • 時系列グラフ: 選択した期間の検知件数を棒グラフで表示します。期間が72時間以内なら1時間単位、それを超えると1日単位に自動で切り替わります。バーをクリックするとその時間帯だけに絞り込め、もう一度クリックすると解除されます。
+                • 表示件数: 最新500件まで一覧表示(超過時は件数と絞り込みを促すメッセージを表示)。
+                • エクスポート: CSVエクスポート(Pro)。
+                • 他の画面との違い: 「Macセキュリティログ監査」はmacOS自体の統合ログ(sudo・SSH・Gatekeeper・XProtectなど)が対象の別データソースです。「通知履歴」はRoamSwitchが送った通知バナーの7日間分の記録です。本画面はRoamSwitchが自ら下した封じ込め判断だけを横断的に検索できる画面です。
+                """,
+                recommendation: "自動遮断が発生した後の振り返りや、過去の検知傾向をカテゴリ・期間で見比べたいときに使ってください。"
             ),
             LocalizedEntry(
                 id: "feat_notification_history",
@@ -987,7 +1003,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "ClickFix手口に一致するコマンドを、Terminalで実行した（シェル履歴で検知）、またはクリップボードにコピーしたことを検知した際の警告です。",
                 details: """
                 • 発生原因: 偽のCAPTCHAや「修正するにはこのコマンドを実行してください」という偽エラー画面に誘導された。リバースシェルの定型コマンドや、Base64をデコードしてシェル / osascript に直接渡すパターンが対象です。
-                • 自動防御（Terminal実行時・Pro・既定オフ）: エアギャップ隔離（Wi-Fi無線は切断しない、最大10分で自動復旧）。
+                • 自動防御（Terminal実行時・Pro・既定オフ）: エアギャップ隔離（Wi-Fi無線は切断しない、最大10分で自動復旧）。ただし検知したコマンド中のURLが rustup・Docker・Homebrew・uv(astral)・deno・bun・nvm など既知の公式インストーラーのものと一致する場合は、遮断せず通知のみです。
                 • 自動防御（コピー時・既定オン）: クリップボードの内容を即座に削除。
                 """,
                 recommendation: """

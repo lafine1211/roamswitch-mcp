@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.11 (build 129).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.12 (build 130).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -134,11 +134,19 @@ public struct ExecAlert: Codable, Equatable {
     /// program" needs; absent (nil) in alerts written by older builds.
     public var parentTeamID: String?
     public var keychainService: String?
+    /// A short, rule-specific fact worth showing a human reviewing the
+    /// notification — a URL, script snippet, plist path, injected library
+    /// path, or tmutil arguments, depending on `ruleID`. `detail` itself is
+    /// an internal, English, non-localized fact string never shown as-is;
+    /// this is the one piece of its underlying data that is. nil for rules
+    /// that don't have one, and for alerts written by older builds.
+    public var userFact: String?
 
     public init(
         alertSeq: UInt64 = 0, id: String = UUID().uuidString, time: Double, ruleID: String, technique: String,
         severity: String, eventSeq: UInt64, pid: Int32, ppid: Int32, path: String, args: [String]?,
-        parentPath: String?, detail: String, parentTeamID: String? = nil, keychainService: String? = nil
+        parentPath: String?, detail: String, parentTeamID: String? = nil, keychainService: String? = nil,
+        userFact: String? = nil
     ) {
         self.alertSeq = alertSeq
         self.id = id
@@ -155,6 +163,7 @@ public struct ExecAlert: Codable, Equatable {
         self.detail = detail
         self.parentTeamID = parentTeamID
         self.keychainService = keychainService
+        self.userFact = userFact
     }
 }
 

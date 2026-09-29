@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.11 (build 129).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.12 (build 130).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -358,6 +358,7 @@ extension RoamSwitchKnowledgeBase {
                 • Watched: only newly appended lines of `~/.zsh_history` and `~/.bash_history` (existing history is ignored).
                 • Patterns: (1) known reverse-shell one-liners (shared with the static signature check), and (2) double indirection that pipes Base64-decoded content straight into a shell or `osascript`. A plain `curl ... | bash`, as used by legitimate installers such as Homebrew, is deliberately not flagged.
                 • Response: air-gap containment (the Wi-Fi radio is not turned off), restored automatically within 10 minutes. The notification recommends checking your Keychain, browser-saved passwords, and crypto wallets.
+                • Known-installer exception: if the URL in the command matches a known official installer — rustup, Docker, Homebrew, uv (astral), deno, bun, or nvm — it sends a notify-only alert (ℹ️) instead of cutting the network, so an ordinary developer install doesn't get air-gapped by mistake.
                 • Why after the fact: by the time a line is in history the command has already run, but cutting the network immediately can still stop a second-stage download, a live reverse shell, or credential exfiltration in progress.
                 • Why Gatekeeper can't stop it: it's your own legitimate shell running exactly what you typed, so nothing about the process looks unusual.
                 • Complement: clipboard protection (feat_secret_leak_auditor) catches the command at copy time, covering pastes into Script Editor, Spotlight, and other places besides Terminal.
@@ -462,6 +463,21 @@ extension RoamSwitchKnowledgeBase {
                 • The MCP tool `get_incident_timeline` returns this unified timeline (useful for triage with a local AI during an Air-Gap). Per-guard history is also available via `get_canary_status`, `get_port_anomaly_incidents`, and `get_runtime_threat_status`.
                 """,
                 recommendation: "After an automatic cutoff, review this timeline together with the notification history to find the cause and prevent a recurrence."
+            ),
+            LocalizedEntry(
+                id: "feat_security_activity_log",
+                title: "Security Activity Log (Search, Filter, and a Time-Series Chart Across Every Incident)",
+                summary: "Unifies the containment incident timeline and confirmed email-attachment malware detections into one screen you can search by keyword, filter by category/severity, and drill into via a time-series chart.",
+                details: """
+                • Open it: menu "Comprehensive Mac Security Diagnostics" → "📈 Security Activity Log…".
+                • Data sources: the containment incident timeline (feat_containment_incident_timeline, latest 200 entries) unioned with confirmed malware detections from webmail download protection (feat_webmail_download_guard).
+                • Filters: category (ARP spoofing, ransomware bait file, XProtect-linked Air-Gap, port anomaly, ClickFix, exec recorder, ransomware entropy detection, honeytoken, browser credential watch, dangerous download), severity (all/info/warning/critical), time range (past 24 hours / past 3 days / past 7 days / all time), and free-text search (case-insensitive substring match across the summary, detail, and category name).
+                • Time-series chart: a bar chart of detection counts across the selected range — hourly bars for a 72-hour window or less, daily bars beyond that, switched automatically. Click a bar to narrow the list to just that time window; click it again to clear the drill-down.
+                • Display limit: shows up to the latest 500 entries (a message tells you when more exist and to narrow the filters).
+                • Export: CSV export (Pro).
+                • How it differs from similar screens: "Security Log Audit" covers a different data source — macOS's own Unified Logging (sudo, SSH, Gatekeeper, XProtect). "Notification History" is the 7-day record of every notification banner RoamSwitch sent. This screen is the one place to search across RoamSwitch's own containment decisions.
+                """,
+                recommendation: "Use it to review what happened after an automatic cutoff, or to compare detection trends by category and time range."
             ),
             LocalizedEntry(
                 id: "feat_notification_history",
@@ -987,7 +1003,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "Shown when a command matching the ClickFix technique was run in Terminal (detected from shell history) or copied to the clipboard.",
                 details: """
                 • Cause: you were led to a fake CAPTCHA or a fake error page saying "run this command to fix it". Reverse-shell one-liners and Base64-decoded content piped into a shell or osascript are flagged.
-                • Automatic defense (run in Terminal, Pro, off by default): air-gap containment (Wi-Fi radio not turned off), restored automatically within 10 minutes.
+                • Automatic defense (run in Terminal, Pro, off by default): air-gap containment (Wi-Fi radio not turned off), restored automatically within 10 minutes. If the command's URL matches a known official installer (rustup, Docker, Homebrew, uv/astral, deno, bun, or nvm), it sends a notify-only alert instead of cutting the network.
                 • Automatic defense (copied, on by default): the clipboard is cleared immediately.
                 """,
                 recommendation: """

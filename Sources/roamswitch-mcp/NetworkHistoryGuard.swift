@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.11 (build 129).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.12 (build 130).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -145,6 +145,13 @@ final class NetworkHistoryGuard {
             save()
             return signal
         }
+    }
+
+    /// When `ssid` was last recorded, or nil if it has never been seen. Used
+    /// by the Evil-Twin lookalike alert to say how stale/urgent the
+    /// impersonated network's own last sighting was.
+    func lastSeen(for ssid: String) -> Date? {
+        queue.sync { entries[ssid]?.lastSeen }
     }
 
     private func evictOldestIfOverCapacity() {

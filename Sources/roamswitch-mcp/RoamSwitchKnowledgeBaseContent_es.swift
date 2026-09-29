@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.11 (build 129).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.12 (build 130).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -359,6 +359,7 @@ extension RoamSwitchKnowledgeBase {
                 • Vigilado: solo las líneas nuevas añadidas a `~/.zsh_history` y `~/.bash_history` (el historial existente se ignora).
                 • Patrones: (1) frases conocidas de reverse shell (compartidas con la comprobación de firma estática), y (2) doble indirección que canaliza contenido decodificado en Base64 directamente a un shell o a `osascript`. Un simple `curl ... | bash`, como el que usan instaladores legítimos como Homebrew, se omite deliberadamente.
                 • Respuesta: contención Air-Gap (no se desactiva el Wi-Fi), restaurada automáticamente en un máximo de 10 minutos. La notificación recomienda revisar tu llavero, las contraseñas guardadas en el navegador y tus carteras de criptomonedas.
+                • Excepción de instalador conocido: si la URL del comando coincide con un instalador oficial conocido (rustup, Docker, Homebrew, uv/astral, deno, bun o nvm), envía una alerta solo informativa (ℹ️) en lugar de cortar la red, para que una instalación normal de un desarrollador no active el Air-Gap por error.
                 • Por qué a posteriori: cuando una línea aparece en el historial, el comando ya se ejecutó, pero cortar la red de inmediato aún puede detener una segunda descarga en curso, una conexión de reverse shell activa, o una exfiltración de credenciales en marcha.
                 • Por qué Gatekeeper no puede evitarlo: es tu propio shell legítimo ejecutando exactamente lo que escribiste, así que nada en el proceso en sí parece inusual.
                 • Complemento: la protección del portapapeles (feat_secret_leak_auditor) intercepta el comando al copiarlo, cubriendo los pegados en el Editor de scripts, Spotlight y otros lugares además de Terminal.
@@ -463,6 +464,21 @@ extension RoamSwitchKnowledgeBase {
                 • La herramienta MCP `get_incident_timeline` devuelve esta cronología unificada (útil para triaje con una IA local durante un Air-Gap). El historial por protección también está disponible mediante `get_canary_status`, `get_port_anomaly_incidents` y `get_runtime_threat_status`.
                 """,
                 recommendation: "Después de un corte automático, revisa esta cronología junto con el historial de notificaciones para encontrar la causa y evitar que se repita."
+            ),
+            LocalizedEntry(
+                id: "feat_security_activity_log",
+                title: "Registro de actividad de seguridad (búsqueda, filtros y un gráfico temporal en todos los incidentes)",
+                summary: "Unifica la cronología de incidentes de contención y las detecciones confirmadas de malware en archivos adjuntos de correo en una sola pantalla que puedes buscar por palabra clave, filtrar por categoría/gravedad y explorar mediante un gráfico temporal.",
+                details: """
+                • Cómo abrirlo: menú «Diagnóstico de seguridad integral de Mac» → «📈 Registro de actividad de seguridad…».
+                • Fuentes de datos: la cronología de incidentes de contención (feat_containment_incident_timeline, los 200 más recientes) combinada con las detecciones de malware confirmadas por la protección de descargas de webmail (feat_webmail_download_guard).
+                • Filtros: categoría (suplantación ARP, archivo señuelo de ransomware, Air-Gap vinculado a XProtect, anomalía de puerto, ClickFix, registro de ejecución, detección de entropía de ransomware, honeytoken, vigilancia de credenciales del navegador, descarga peligrosa), gravedad (todas/info/warning/critical), período (últimas 24 horas / últimos 3 días / últimos 7 días / todo el período), y búsqueda de texto libre (coincidencia de subcadena sin distinguir mayúsculas en el resumen, el detalle y el nombre de categoría).
+                • Gráfico temporal: gráfico de barras con el número de detecciones en el período seleccionado — barras por hora si el intervalo es de 72 horas o menos, por día si es mayor, cambiando automáticamente. Haz clic en una barra para limitar la lista a esa franja horaria; vuelve a hacer clic para quitar el filtro.
+                • Límite de visualización: muestra hasta las 500 entradas más recientes (un mensaje te avisa si hay más y sugiere filtrar).
+                • Exportación: exportación a CSV (Pro).
+                • Diferencia con pantallas similares: «Auditoría de registro de seguridad» cubre otra fuente de datos, el propio registro unificado de macOS (sudo, SSH, Gatekeeper, XProtect). «Historial de notificaciones» es el registro de 7 días de cada notificación enviada por RoamSwitch. Esta pantalla es el único lugar para buscar en las propias decisiones de contención de RoamSwitch.
+                """,
+                recommendation: "Utilízalo para revisar qué ocurrió tras un corte automático, o para comparar tendencias de detección por categoría y período."
             ),
             LocalizedEntry(
                 id: "feat_notification_history",
@@ -988,7 +1004,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "Aparece cuando se ejecutó en Terminal un comando que coincide con la técnica ClickFix (detectado desde el historial del shell) o se copió en el portapapeles.",
                 details: """
                 • Causa: te llevaron a una falsa verificación o una falsa página de error que decía «ejecuta este comando para solucionarlo». Se señalan las frases de reverse shell y el contenido decodificado en Base64 que se canaliza directamente a un shell u osascript.
-                • Defensa automática (ejecutado en Terminal, Pro, desactivada por defecto): contención Air-Gap (el Wi-Fi no se desactiva), restaurada automáticamente en un máximo de 10 minutos.
+                • Defensa automática (ejecutado en Terminal, Pro, desactivada por defecto): contención Air-Gap (el Wi-Fi no se desactiva), restaurada automáticamente en un máximo de 10 minutos. Si la URL del comando coincide con un instalador oficial conocido (rustup, Docker, Homebrew, uv/astral, deno, bun o nvm), envía una alerta solo informativa en lugar de cortar la red.
                 • Defensa automática (copiado, activada por defecto): el portapapeles se vacía de inmediato.
                 """,
                 recommendation: """

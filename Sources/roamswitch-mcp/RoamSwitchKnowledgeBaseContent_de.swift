@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.11 (build 129).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.12 (build 130).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -359,6 +359,7 @@ extension RoamSwitchKnowledgeBase {
                 • Überwacht: Nur neu angehängte Zeilen von `~/.zsh_history` und `~/.bash_history` (bestehender Verlauf wird ignoriert).
                 • Muster: (1) bekannte Reverse-Shell-Einzeiler (geteilt mit der statischen Signaturprüfung) und (2) doppelte Indirektion, die Base64-dekodierten Inhalt direkt in eine Shell oder `osascript` leitet. Ein einfaches `curl ... | bash`, wie es legitime Installer wie Homebrew nutzen, wird bewusst nicht gemeldet.
                 • Reaktion: Air-Gap-Eindämmung (der WLAN-Funk wird nicht ausgeschaltet), automatisch nach maximal 10 Minuten wiederhergestellt. Die Benachrichtigung empfiehlt, Schlüsselbund, im Browser gespeicherte Passwörter und Krypto-Wallets zu überprüfen.
+                • Ausnahme für bekannte Installer: Stimmt die URL im Befehl mit einem bekannten offiziellen Installer überein (rustup, Docker, Homebrew, uv/astral, deno, bun oder nvm), wird nur eine informative Benachrichtigung (ℹ️) gesendet statt das Netzwerk zu trennen — damit eine gewöhnliche Entwickler-Installation nicht versehentlich zum Air-Gap führt.
                 • Warum nachträglich: Sobald eine Zeile im Verlauf steht, wurde der Befehl bereits ausgeführt, doch das sofortige Trennen des Netzwerks kann einen laufenden zweiten Download, eine aktive Reverse-Shell-Verbindung oder eine Zugangsdaten-Exfiltration noch stoppen.
                 • Warum Gatekeeper es nicht verhindern kann: Es ist Ihre eigene legitime Shell, die genau das ausführt, was Sie eingegeben haben, sodass am Prozess selbst nichts ungewöhnlich wirkt.
                 • Ergänzung: Der Zwischenablage-Schutz (feat_secret_leak_auditor) erkennt den Befehl bereits beim Kopieren und deckt so auch das Einfügen in Skripteditor, Spotlight und andere Stellen außer Terminal ab.
@@ -463,6 +464,21 @@ extension RoamSwitchKnowledgeBase {
                 • Das MCP-Tool `get_incident_timeline` liefert diese einheitliche Zeitleiste (nützlich zur Triage mit einer lokalen KI während eines Air-Gap). Verlaufsdaten je Schutzfunktion sind auch über `get_canary_status`, `get_port_anomaly_incidents` und `get_runtime_threat_status` verfügbar.
                 """,
                 recommendation: "Prüfen Sie nach einer automatischen Trennung diese Zeitleiste zusammen mit dem Benachrichtigungsverlauf, um die Ursache zu finden und eine Wiederholung zu verhindern."
+            ),
+            LocalizedEntry(
+                id: "feat_security_activity_log",
+                title: "Sicherheitsaktivitätsprotokoll (Suche, Filter und ein Zeitverlaufsdiagramm über alle Vorfälle)",
+                summary: "Vereint die Eindämmungs-Vorfall-Zeitleiste und bestätigte Malware-Erkennungen in E-Mail-Anhängen in einem Bildschirm, den Sie nach Stichwort durchsuchen, nach Kategorie/Schweregrad filtern und über ein Zeitverlaufsdiagramm untersuchen können.",
+                details: """
+                • Öffnen: Menü „Umfassende Mac-Sicherheitsdiagnose" → „📈 Sicherheitsaktivitätsprotokoll…".
+                • Datenquellen: die Eindämmungs-Vorfall-Zeitleiste (feat_containment_incident_timeline, die neuesten 200) vereint mit bestätigten Malware-Erkennungen aus dem Webmail-Download-Schutz (feat_webmail_download_guard).
+                • Filter: Kategorie (ARP-Spoofing, Ransomware-Köderdatei, XProtect-gebundener Air-Gap, Port-Anomalie, ClickFix, Ausführungsprotokollierung, Ransomware-Entropie-Erkennung, Honeytoken, Browser-Zugangsdaten-Überwachung, gefährlicher Download), Schweregrad (alle/info/warning/critical), Zeitraum (letzte 24 Stunden / letzte 3 Tage / letzte 7 Tage / gesamter Zeitraum) und Freitextsuche (Groß-/Kleinschreibung ignorierende Teilstring-Suche in Zusammenfassung, Detail und Kategoriename).
+                • Zeitverlaufsdiagramm: Balkendiagramm der Erkennungsanzahl im gewählten Zeitraum — stündliche Balken bei einem Fenster von 72 Stunden oder weniger, sonst tägliche, automatisch umgeschaltet. Klicken Sie auf einen Balken, um die Liste auf dieses Zeitfenster einzugrenzen; erneutes Klicken hebt die Eingrenzung auf.
+                • Anzeigelimit: zeigt bis zu den neuesten 500 Einträgen (eine Meldung weist auf weitere hin und schlägt vor, die Filter einzugrenzen).
+                • Export: CSV-Export (Pro).
+                • Unterschied zu ähnlichen Bildschirmen: „Sicherheitsprotokoll-Audit" deckt eine andere Datenquelle ab, macOS' eigenes Unified Logging (sudo, SSH, Gatekeeper, XProtect). „Benachrichtigungsverlauf" ist die 7-Tage-Aufzeichnung jeder von RoamSwitch gesendeten Benachrichtigung. Dieser Bildschirm ist der einzige Ort, um ausschließlich in RoamSwitchs eigenen Eindämmungsentscheidungen zu suchen.
+                """,
+                recommendation: "Nutzen Sie es, um nach einer automatischen Trennung zu überprüfen, was passiert ist, oder um Erkennungstrends nach Kategorie und Zeitraum zu vergleichen."
             ),
             LocalizedEntry(
                 id: "feat_notification_history",
@@ -988,7 +1004,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "Wird angezeigt, wenn ein Befehl, der der ClickFix-Technik entspricht, im Terminal ausgeführt wurde (aus dem Shell-Verlauf erkannt) oder in die Zwischenablage kopiert wurde.",
                 details: """
                 • Ursache: Sie wurden zu einem gefälschten Captcha oder einer gefälschten Fehlerseite geführt, die sagte „Führen Sie diesen Befehl aus, um das Problem zu beheben“. Erkannt werden Reverse-Shell-Einzeiler und Base64-dekodierter Inhalt, der in eine Shell oder osascript geleitet wird.
-                • Automatische Abwehr (bei Ausführung im Terminal, Pro, standardmäßig deaktiviert): Air-Gap-Eindämmung (WLAN-Funk wird nicht ausgeschaltet), automatisch nach maximal 10 Minuten wiederhergestellt.
+                • Automatische Abwehr (bei Ausführung im Terminal, Pro, standardmäßig deaktiviert): Air-Gap-Eindämmung (WLAN-Funk wird nicht ausgeschaltet), automatisch nach maximal 10 Minuten wiederhergestellt. Stimmt die URL im Befehl mit einem bekannten offiziellen Installer überein (rustup, Docker, Homebrew, uv/astral, deno, bun oder nvm), wird stattdessen nur eine informative Benachrichtigung gesendet.
                 • Automatische Abwehr (beim Kopieren, standardmäßig aktiviert): Die Zwischenablage wird sofort geleert.
                 """,
                 recommendation: """

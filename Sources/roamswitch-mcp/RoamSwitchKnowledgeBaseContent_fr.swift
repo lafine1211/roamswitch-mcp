@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.11 (build 129).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.12 (build 130).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -359,6 +359,7 @@ extension RoamSwitchKnowledgeBase {
                 • Surveillé : uniquement les lignes nouvellement ajoutées à `~/.zsh_history` et `~/.bash_history` (l'historique existant est ignoré).
                 • Motifs : (1) les lignes de shell inversé connues (partagées avec la vérification de signature statique), et (2) une double indirection qui envoie un contenu décodé en Base64 directement dans un shell ou `osascript`. Un simple `curl ... | bash`, comme utilisé par des installateurs légitimes tels que Homebrew, n'est délibérément pas signalé.
                 • Réponse : confinement Air-Gap (le Wi-Fi n'est pas désactivé), rétabli automatiquement en 10 minutes maximum. La notification recommande de vérifier votre trousseau, les mots de passe enregistrés dans le navigateur et vos portefeuilles de cryptomonnaies.
+                • Exception pour installateur connu : si l'URL de la commande correspond à un installateur officiel connu (rustup, Docker, Homebrew, uv/astral, deno, bun ou nvm), une alerte simplement informative (ℹ️) est envoyée au lieu de couper le réseau, pour qu'une installation habituelle d'un développeur ne déclenche pas l'Air-Gap par erreur.
                 • Pourquoi après coup : au moment où une ligne apparaît dans l'historique, la commande a déjà été exécutée, mais couper le réseau immédiatement peut encore arrêter un téléchargement de deuxième étape, une connexion de shell inversé active, ou une exfiltration d'identifiants en cours.
                 • Pourquoi Gatekeeper ne peut pas l'empêcher : c'est votre propre shell légitime qui exécute exactement ce que vous avez tapé, donc rien dans le processus lui-même ne semble inhabituel.
                 • Complément : la protection du presse-papiers (feat_secret_leak_auditor) intercepte la commande dès la copie, couvrant les collages dans l'Éditeur de scripts, Spotlight, et ailleurs qu'au Terminal.
@@ -463,6 +464,21 @@ extension RoamSwitchKnowledgeBase {
                 • L'outil MCP `get_incident_timeline` renvoie cette chronologie unifiée (utile pour un tri avec une IA locale pendant un Air-Gap). L'historique par protection est également disponible via `get_canary_status`, `get_port_anomaly_incidents` et `get_runtime_threat_status`.
                 """,
                 recommendation: "Après une coupure automatique, consultez cette chronologie avec l'historique des notifications pour trouver la cause et éviter une récidive."
+            ),
+            LocalizedEntry(
+                id: "feat_security_activity_log",
+                title: "Journal d'activité de sécurité (recherche, filtres et graphique temporel sur tous les incidents)",
+                summary: "Unifie la chronologie des incidents de confinement et les détections confirmées de logiciels malveillants dans les pièces jointes des e-mails en un seul écran, consultable par mot-clé, filtrable par catégorie/gravité, et explorable via un graphique temporel.",
+                details: """
+                • Pour l'ouvrir : menu « Diagnostic de sécurité Mac complet » → « 📈 Journal d'activité de sécurité… ».
+                • Sources de données : la chronologie des incidents de confinement (feat_containment_incident_timeline, les 200 plus récents) combinée aux détections de logiciels malveillants confirmées par la protection des téléchargements webmail (feat_webmail_download_guard).
+                • Filtres : catégorie (usurpation ARP, fichier leurre de rançongiciel, Air-Gap lié à XProtect, anomalie de port, ClickFix, enregistrement d'exécution, détection d'entropie de rançongiciel, honeytoken, surveillance des identifiants du navigateur, téléchargement dangereux), gravité (toutes/info/warning/critical), période (dernières 24 heures / 3 derniers jours / 7 derniers jours / toute la période), et recherche en texte libre (correspondance de sous-chaîne insensible à la casse sur le résumé, le détail et le nom de catégorie).
+                • Graphique temporel : histogramme du nombre de détections sur la période choisie — barres horaires pour une fenêtre de 72 heures ou moins, journalières au-delà, la bascule étant automatique. Cliquez sur une barre pour limiter la liste à cette tranche horaire ; cliquez à nouveau pour annuler.
+                • Limite d'affichage : affiche jusqu'aux 500 entrées les plus récentes (un message vous prévient s'il y en a davantage et suggère d'affiner les filtres).
+                • Export : export CSV (Pro).
+                • Différence avec les écrans voisins : « Audit du journal de sécurité » porte sur une autre source, le journal unifié de macOS lui-même (sudo, SSH, Gatekeeper, XProtect). « Historique des notifications » est le registre de 7 jours de chaque bannière envoyée par RoamSwitch. Cet écran est le seul endroit pour rechercher dans les décisions de confinement propres à RoamSwitch.
+                """,
+                recommendation: "Utilisez-le pour revoir ce qui s'est passé après une coupure automatique, ou pour comparer les tendances de détection par catégorie et par période."
             ),
             LocalizedEntry(
                 id: "feat_notification_history",
@@ -988,7 +1004,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "Affichée lorsqu'une commande correspondant à la technique ClickFix a été exécutée dans Terminal (détectée depuis l'historique du shell) ou copiée dans le presse-papiers.",
                 details: """
                 • Cause : vous avez été amené à une fausse vérification ou une fausse page d'erreur disant « exécutez cette commande pour résoudre le problème ». Les lignes de shell inversé et le contenu décodé en Base64 envoyé directement dans un shell ou osascript sont signalés.
-                • Défense automatique (exécutée dans Terminal, Pro, désactivée par défaut) : confinement Air-Gap (le Wi-Fi n'est pas désactivé), rétabli automatiquement en 10 minutes maximum.
+                • Défense automatique (exécutée dans Terminal, Pro, désactivée par défaut) : confinement Air-Gap (le Wi-Fi n'est pas désactivé), rétabli automatiquement en 10 minutes maximum. Si l'URL de la commande correspond à un installateur officiel connu (rustup, Docker, Homebrew, uv/astral, deno, bun ou nvm), une alerte simplement informative est envoyée au lieu de couper le réseau.
                 • Défense automatique (copiée, activée par défaut) : le presse-papiers est vidé immédiatement.
                 """,
                 recommendation: """

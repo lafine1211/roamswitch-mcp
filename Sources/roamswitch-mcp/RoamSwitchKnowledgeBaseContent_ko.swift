@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.11 (build 129).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.12 (build 130).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -359,6 +359,7 @@ extension RoamSwitchKnowledgeBase {
                 • 감시 범위: `~/.zsh_history`와 `~/.bash_history`에 새로 추가된 줄만 감시합니다(기존 기록은 대상이 아닙니다).
                 • 판정 패턴: (1) 알려진 리버스 셸 한 줄 명령어(정적 시그니처 검사와 공유), (2) Base64로 디코딩한 내용을 셸이나 `osascript`에 직접 파이프로 넘기는 이중 우회. Homebrew처럼 정당한 설치 프로그램이 사용하는 단순한 `curl ... | bash`는 의도적으로 표시하지 않습니다.
                 • 대응 방식: 에어갭 봉쇄(Wi-Fi 무선은 끄지 않음), 최대 10분 후 자동 복구됩니다. 알림은 Keychain, 브라우저에 저장된 비밀번호, 암호화폐 지갑을 확인하라고 권장합니다.
+                • 알려진 설치 프로그램 예외: 명령어 속 URL이 rustup·Docker·Homebrew·uv(astral)·deno·bun·nvm 등 알려진 공식 설치 프로그램과 일치하면, 네트워크를 차단하지 않고 알림만(ℹ️) 보냅니다. 개발자의 평범한 설치 작업이 실수로 에어갭되지 않도록 하기 위한 예외입니다.
                 • 사후 대응인 이유: 명령어가 기록에 남을 즈음에는 이미 실행된 뒤이지만, 즉시 네트워크를 차단하면 진행 중인 2단계 다운로드, 살아있는 리버스 셸 연결, 자격 증명 유출을 막을 수 있습니다.
                 • Gatekeeper로 막을 수 없는 이유: 사용자 자신의 정당한 셸이 입력한 그대로 실행하는 것이므로 프로세스 자체에는 이상한 점이 없습니다.
                 • 보완 기능: 클립보드 보호(feat_secret_leak_auditor)는 복사하는 순간에 명령어를 탐지하여 터미널 외에 스크립트 편집기, Spotlight 등에 붙여넣는 것도 커버합니다.
@@ -463,6 +464,21 @@ extension RoamSwitchKnowledgeBase {
                 • MCP 도구 `get_incident_timeline`은 이 통합 타임라인을 반환합니다(에어갭 상황에서 로컬 AI로 원인을 조사할 때 유용). 각 가드별 기록은 `get_canary_status`, `get_port_anomaly_incidents`, `get_runtime_threat_status`로도 확인할 수 있습니다.
                 """,
                 recommendation: "자동 차단이 발생한 후에는 이 타임라인을 알림 기록과 함께 검토하여 원인을 찾고 재발을 방지하세요."
+            ),
+            LocalizedEntry(
+                id: "feat_security_activity_log",
+                title: "보안 활동 로그 (검색·필터·시계열 그래프로 모든 사고를 한눈에)",
+                summary: "봉쇄 사고 타임라인과 확정된 이메일 첨부파일 악성코드 탐지 결과를 하나의 화면에 통합하여 키워드 검색, 카테고리/심각도 필터, 시계열 그래프 드릴다운으로 확인할 수 있습니다.",
+                details: """
+                • 여는 방법: 메뉴 "Mac 보안 종합 진단" → "📈 보안 활동 로그…".
+                • 데이터 출처: 봉쇄 사고 타임라인(feat_containment_incident_timeline, 최신 200건)과 웹메일 다운로드 보호(feat_webmail_download_guard)에서 확정된 악성코드 탐지 결과를 통합한 목록입니다.
+                • 필터: 카테고리(ARP 스푸핑, 랜섬웨어 미끼 파일, XProtect 연동 Air-Gap, 포트 이상, ClickFix, 실행 기록, 랜섬웨어 엔트로피 탐지, 허니토큰, 브라우저 자격 증명 감시, 위험한 다운로드), 심각도(전체/info/warning/critical), 기간(과거 24시간/과거 3일간/과거 7일간/전체 기간), 자유 텍스트 검색(요약·상세·카테고리 이름을 대상으로 대소문자를 구분하지 않는 부분 일치).
+                • 시계열 그래프: 선택한 기간의 탐지 건수를 막대 그래프로 표시합니다. 기간이 72시간 이하면 1시간 단위, 초과하면 1일 단위로 자동 전환됩니다. 막대를 클릭하면 해당 시간대로만 좁혀볼 수 있고, 다시 클릭하면 해제됩니다.
+                • 표시 개수: 최신 500건까지 표시합니다(초과 시 더 있다는 안내와 함께 필터를 좁히도록 안내).
+                • 내보내기: CSV 내보내기(Pro).
+                • 다른 화면과의 차이: "Mac 보안 로그 감사"는 macOS 자체의 통합 로그(sudo, SSH, Gatekeeper, XProtect)를 다루는 별도의 데이터 출처입니다. "알림 기록"은 RoamSwitch가 보낸 모든 알림 배너의 7일치 기록입니다. 이 화면은 RoamSwitch 자신이 내린 봉쇄 판단만을 가로질러 검색할 수 있는 유일한 곳입니다.
+                """,
+                recommendation: "자동 차단이 발생한 후 무슨 일이 있었는지 되짚어 보거나, 카테고리·기간별 탐지 경향을 비교할 때 사용하세요."
             ),
             LocalizedEntry(
                 id: "feat_notification_history",
@@ -988,7 +1004,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "ClickFix 수법과 일치하는 명령어가 터미널에서 실행되었거나(셸 기록에서 탐지) 클립보드에 복사되었을 때 표시됩니다.",
                 details: """
                 • 원인: 가짜 캡차나 "이 명령어를 실행하면 해결됩니다"라는 가짜 오류 페이지에 유도되었습니다. 리버스 셸 한 줄 명령어와 Base64로 디코딩된 내용을 셸이나 osascript에 파이프로 넘기는 경우가 표시됩니다.
-                • 자동 방어(터미널에서 실행 시, Pro, 기본값 꺼짐): 에어갭 봉쇄(Wi-Fi 무선은 끄지 않음), 최대 10분 후 자동 복구됩니다.
+                • 자동 방어(터미널에서 실행 시, Pro, 기본값 꺼짐): 에어갭 봉쇄(Wi-Fi 무선은 끄지 않음), 최대 10분 후 자동 복구됩니다. 명령어 속 URL이 rustup·Docker·Homebrew·uv(astral)·deno·bun·nvm 등 알려진 공식 설치 프로그램과 일치하면, 네트워크를 차단하지 않고 알림만 보냅니다.
                 • 자동 방어(복사 시, 기본값 켜짐): 클립보드가 즉시 비워집니다.
                 """,
                 recommendation: """

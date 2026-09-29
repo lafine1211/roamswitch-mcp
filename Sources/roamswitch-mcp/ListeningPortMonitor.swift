@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.11 (build 129).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.12 (build 130).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -123,6 +123,29 @@ final class ListeningPortMonitor {
             return arg
         }
         return nil
+    }
+
+    /// `ps -o etime= -p <pid>` — process uptime as macOS's own compact string
+    /// (`MM:SS`, `HH:MM:SS`, or `DD-HH:MM:SS`), nil if the pid is gone or
+    /// `ps` fails. Shared by the dangerous-port-exposure alert and
+    /// `PortAnomalyGuard`'s TCP/UDP notices.
+    static func processElapsedTime(pid: Int) -> String? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/ps")
+        process.arguments = ["-o", "etime=", "-p", "\(pid)"]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+        do {
+            try process.run()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            guard process.terminationStatus == 0 else { return nil }
+            let out = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return (out?.isEmpty == false) ? out : nil
+        } catch {
+            return nil
+        }
     }
 
     func getProcessPath(pid: Int) -> String? {

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.11 (build 129).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.12 (build 130).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -359,6 +359,7 @@ extension RoamSwitchKnowledgeBase {
                 • 监视对象：仅 `~/.zsh_history` 和 `~/.bash_history` 中新追加的行（已有历史记录不在范围内）。
                 • 检测模式：① 已知的反向 Shell 典型命令（与静态特征检测共用）② 将 Base64 解码后的内容直接传给 Shell 或 `osascript` 的双重绕过模式。Homebrew 等正规安装程序使用的简单 `curl ... | bash` 不在检测范围内。
                 • 自动响应：气隙隔离（不关闭 Wi-Fi 无线），最多 10 分钟后自动恢复。通知中会建议检查钥匙串（Keychain）、浏览器保存的密码和加密货币钱包是否安全。
+                • 已知安装程序例外：如果命令中的 URL 与 rustup、Docker、Homebrew、uv(astral)、deno、bun、nvm 等已知官方安装程序一致，则只发送提示性通知（ℹ️）而不断网,避免开发者的正常安装操作被误判为气隙隔离。
                 • 属于事后响应的原因：命令被记录到历史中时已经执行，但如果第二阶段下载、反向 Shell 连接、凭据外传等仍在进行中，立即断网即可阻止损害扩大。
                 • Gatekeeper 无法防范的原因：只是用户的正规 Shell 按照输入内容执行，进程本身没有任何可疑之处。
                 • 补充：还有在复制时即进行检测的剪贴板保护（feat_secret_leak_auditor），可覆盖粘贴到 Script Editor、Spotlight 等终端以外位置的情况。
@@ -463,6 +464,21 @@ extension RoamSwitchKnowledgeBase {
                 • 可通过 MCP 工具 `get_incident_timeline` 获取此统一时间线（也可用于在 Air-Gap 期间借助本地 AI 调查原因）。各功能的单独历史也可通过 `get_canary_status`、`get_port_anomaly_incidents`、`get_runtime_threat_status` 查看。
                 """,
                 recommendation: "发生自动阻断后，请结合此历史与通知历史进行确认，以帮助查明原因并防止再次发生。"
+            ),
+            LocalizedEntry(
+                id: "feat_security_activity_log",
+                title: "安全活动日志(搜索·筛选·时间线图表横向查看所有事件)",
+                summary: "将遏制事件历史与已确认的邮件附件恶意软件检测结果统一到一个画面中,可通过关键字搜索、分类/严重程度筛选,并通过时间序列图表下钻查看。",
+                details: """
+                • 打开方式:菜单「Mac安全综合诊断」→「📈 安全活动日志…」。
+                • 数据来源:遏制事件历史(feat_containment_incident_timeline,最新200条)与网页邮件下载防护(feat_webmail_download_guard)中已确认的恶意软件检测结果的合并列表。
+                • 筛选条件:分类(ARP欺骗、勒索软件诱饵文件、XProtect联动Air-Gap、端口异常、ClickFix、执行记录、勒索软件熵值检测、蜜罐凭据、浏览器凭据访问监视、危险下载)、严重程度(全部/info/warning/critical)、时间范围(过去24小时/过去3天/过去7天/所有时间)、自由文本搜索(对概要、详情、分类名称进行不区分大小写的子串匹配)。
+                • 时间序列图表:以柱状图显示所选时间范围内的检测件数——时间跨度在72小时以内时按小时分组,超过则按天分组,自动切换。点击某根柱子可将列表缩小到该时间段,再次点击可取消。
+                • 显示上限:最多显示最新500条(超出时会显示提示信息并建议缩小筛选范围)。
+                • 导出:CSV导出(Pro)。
+                • 与相似画面的区别:「Mac安全日志审计」针对的是另一个数据来源——macOS自身的统一日志(sudo、SSH、Gatekeeper、XProtect)。「通知历史」是RoamSwitch发送过的所有通知横幅的7天记录。本画面是唯一可以横向搜索RoamSwitch自身遏制判断的地方。
+                """,
+                recommendation: "在发生自动阻断后用它回顾发生了什么,或按分类、时间范围比较检测趋势。"
             ),
             LocalizedEntry(
                 id: "feat_notification_history",
@@ -988,7 +1004,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "检测到在终端中执行了（通过 Shell 历史记录检测）或复制到剪贴板中的命令符合 ClickFix 手法时发出的警告。",
                 details: """
                 • 触发原因：被伪造的 CAPTCHA 或「要修复问题，请运行此命令」之类的伪造错误页面诱导。检测对象为反向 Shell 的典型命令，以及将 Base64 解码后直接传给 Shell / osascript 的模式。
-                • 自动防御（终端执行时·Pro·默认关闭）：气隙隔离（不关闭 Wi-Fi 无线，最多 10 分钟后自动恢复）。
+                • 自动防御（终端执行时·Pro·默认关闭）：气隙隔离（不关闭 Wi-Fi 无线，最多 10 分钟后自动恢复）。但如果命令中的 URL 与 rustup、Docker、Homebrew、uv(astral)、deno、bun、nvm 等已知官方安装程序一致，则只发送提示性通知而不断网。
                 • 自动防御（复制时·默认开启）：立即删除剪贴板中的内容。
                 """,
                 recommendation: """
