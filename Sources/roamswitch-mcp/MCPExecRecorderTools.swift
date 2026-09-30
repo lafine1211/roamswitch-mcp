@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.14 (build 132).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.15 (build 133).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -16,7 +16,7 @@ enum ExecRecorderText {
         switch s.state {
         case "running": return loc("記録中")
         case "starting": return loc("起動中…")
-        case "needsFullDiskAccess": return loc("実行記録は利用できません: RoamSwitchHelperにフルディスクアクセスが必要です")
+        case "needsFullDiskAccess": return loc("実行記録は利用できません: フルディスクアクセスでRoamSwitchの許可が必要です（一覧に無ければ「+」から /Applications/RoamSwitch.app を追加）")
         case "esloggerMissing": return loc("実行記録は利用できません: /usr/bin/esloggerが見つかりません(macOS 13以降が必要)")
         case "backoff": return loc("esloggerが停止したため、再試行を待っています")
         case "failed": return loc("esloggerを起動できません。時間をおいて自動的に再試行します")

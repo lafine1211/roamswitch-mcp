@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.10.14 (build 132). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.10.15 (build 133). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -89,6 +89,7 @@ final class MCPKnowledgeBaseTests: XCTestCase {
             "exec.shell_from_app", "exec.untrusted_location", "exec.pipe_to_shell", "exec.osascript_obfuscated",
             "exec.quarantine_stripped_then_exec", "exec.launchd_untrusted_binary", "exec.keychain_access",
             "exec.interpreter_inline_obfuscated", "exec.dyld_insert_libraries", "exec.ransomware_recovery_tampering",
+            "exec.honeytoken_path",
         ]
         for code in RoamSwitchKnowledgeBase.supportedLanguageCodes {
             let entries = RoamSwitchKnowledgeBase.localizedEntries(for: code)

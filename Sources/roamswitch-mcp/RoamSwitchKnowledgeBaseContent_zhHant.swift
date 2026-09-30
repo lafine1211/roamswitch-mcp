@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.14 (build 132).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.15 (build 133).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -331,7 +331,7 @@ extension RoamSwitchKnowledgeBase {
                 • 偵測時快照：誘餌檔案被觸發時也會建立，但可能包含已加密的檔案，不建議作為復原來源。
                 • 保留模式：當偵測時快照是最新的快照時（最長 7 天），會暫停建立新的事前快照並暫停清理舊快照，避免加密前的最後一代被擠掉。
                 • 取出：在選單中選擇「勒索軟體復原…」，即可把建議快照（仍然存在的最新事前快照）中的檔案或檔案夾複製到 `~/RoamSwitch-Recovered/<快照ID>/`。不會覆蓋既有檔案，也不提供整體回復。復原一律由人工手動進行。
-                • 限制：macOS 可能會在約 24 小時後自動刪除本機快照（可用空間不足時更早），已經不存在的快照無法使用。取出檔案需要 RoamSwitch 輔助程式擁有「完整磁碟取用權限」（建立快照不需要）。
+                • 限制：macOS 可能會在約 24 小時後自動刪除本機快照（可用空間不足時更早），已經不存在的快照無法使用。取出檔案需要在「完整磁碟取用權限」中允許 RoamSwitch（建立快照不需要）。
                 • MCP：唯讀的 `get_ransomware_recovery_snapshots` 可查看清單與建議項（無法執行復原）。
                 • Pro: 此視窗（清單與取出檔案）和 MCP 工具屬於 Pro 功能。快照的建立本身在非 Pro 下也會執行。
                 """,
@@ -373,14 +373,14 @@ extension RoamSwitchKnowledgeBase {
                 summary: "透過 Apple 內建的 /usr/bin/eslogger（macOS 13 以上）記錄這台 Mac 上啟動了哪些程式，並在某次啟動符合可疑組合時通知您。它不會阻擋任何執行，也不會切斷網路；記錄只保留在這台 Mac 上。",
                 details: """
                 • 原理：特權輔助程式把 `/usr/bin/eslogger exec fork exit` 當作子程序執行並解析其 JSON 串流。eslogger 隨 macOS 提供；RoamSwitch 不使用也不申請 EndpointSecurity 權限（entitlement），因此這是事後觀察，而不是執行前攔截。
-                • 前提：macOS 13 以上，並為 RoamSwitchHelper 授予「完整磁碟取用權限」。沒有該權限時，視窗只會顯示「無法使用執行記錄：RoamSwitchHelper 需要「完整磁碟取用權限」」（或找不到 eslogger），不會改用持續輪詢。啟用記錄之前、輔助程式啟動之前的事件不會被記錄。
-                • 關聯規則（僅通知，預設保持安靜，每條規則都有固定 ID 和 MITRE ATT&CK 技術編號）：瀏覽器/Office/郵件 App 直接啟動 Shell 或指令碼直譯器（exec.shell_from_app，T1059）；從 /tmp、/private/var/tmp 或帶隔離屬性的位置執行未簽署/臨時簽署的二進位檔（exec.untrusted_location，T1204.002）；將 curl/wget 傳給 Shell 的 `sh -c` 單行指令，並伴有 IP 直連 URL、base64、eval、關閉 TLS 驗證或瀏覽器作為父程序等加重因素（exec.pipe_to_shell，T1059.004）；`osascript -e` 把 do shell script 與 base64/eval 結合（exec.osascript_obfuscated，T1059.002）；`xattr -d com.apple.quarantine` 之後 15 分鐘內執行該檔案（exec.quarantine_stripped_then_exec，T1553.001）；launchd 從最近 24 小時內寫入的 LaunchAgent/LaunchDaemon 啟動未簽署/臨時簽署的二進位檔（exec.launchd_untrusted_binary，T1543.001/.004）；在非 Shell 且非 Apple 簽署的祖先程序之下執行 `security find-generic-password -w` 或 `dump-keychain`（exec.keychain_access，T1555.001）；osascript 以外的裸直譯器執行內嵌的 `-c`/`-e`/`-Command` 單行程式碼，並將 base64/eval 與下載或類似 exec 的呼叫結合（exec.interpreter_inline_obfuscated，T1059）；設定了 DYLD_INSERT_LIBRARIES 的非 Apple 簽署二進位檔被執行（exec.dyld_insert_libraries，T1574.006）；既非 RoamSwitch 自身也非 Apple 程序執行的 `tmutil deletelocalsnapshots`/`thinlocalsnapshots`（exec.ransomware_recovery_tampering，T1490）。在「終端機」裡正常輸入的 `curl | sh` 不會被刻意標記。
+                • 前提：macOS 13 以上，並在「完整磁碟取用權限」中允許 RoamSwitch。沒有該權限時，視窗只會顯示「無法使用執行記錄：請在「完整磁碟取用權限」中允許 RoamSwitch（清單中沒有時，用「+」加入 /Applications/RoamSwitch.app）」（或找不到 eslogger），不會改用持續輪詢。啟用記錄之前、輔助程式啟動之前的事件不會被記錄。
+                • 關聯規則（僅通知，預設保持安靜，每條規則都有固定 ID 和 MITRE ATT&CK 技術編號）：瀏覽器/Office/郵件 App 直接啟動 Shell 或指令碼直譯器（exec.shell_from_app，T1059）；從 /tmp、/private/var/tmp 或帶隔離屬性的位置執行未簽署/臨時簽署的二進位檔（exec.untrusted_location，T1204.002）；將 curl/wget 傳給 Shell 的 `sh -c` 單行指令，並伴有 IP 直連 URL、base64、eval、關閉 TLS 驗證或瀏覽器作為父程序等加重因素（exec.pipe_to_shell，T1059.004）；`osascript -e` 把 do shell script 與 base64/eval 結合（exec.osascript_obfuscated，T1059.002）；`xattr -d com.apple.quarantine` 之後 15 分鐘內執行該檔案（exec.quarantine_stripped_then_exec，T1553.001）；launchd 從最近 24 小時內寫入的 LaunchAgent/LaunchDaemon 啟動未簽署/臨時簽署的二進位檔（exec.launchd_untrusted_binary，T1543.001/.004）；在非 Shell 且非 Apple 簽署的祖先程序之下執行 `security find-generic-password -w` 或 `dump-keychain`（exec.keychain_access，T1555.001）；osascript 以外的裸直譯器執行內嵌的 `-c`/`-e`/`-Command` 單行程式碼，並將 base64/eval 與下載或類似 exec 的呼叫結合（exec.interpreter_inline_obfuscated，T1059）；設定了 DYLD_INSERT_LIBRARIES 的非 Apple 簽署二進位檔被執行（exec.dyld_insert_libraries，T1574.006）；既非 RoamSwitch 自身也非 Apple 程序執行的 `tmutil deletelocalsnapshots`/`thinlocalsnapshots`（exec.ransomware_recovery_tampering，T1490）；指令列直接指定 RoamSwitch 放置的誘餌憑證檔案（如 ~/.aws/credentials、~/.env.backup，內容中帶有標記；真實檔案不會符合，透過函式庫讀取的情況由蜜罐權杖監視負責）（exec.honeytoken_path，T1552.001）。在「終端機」裡正常輸入的 `curl | sh` 不會被刻意標記。
                 • 通知：一則通知（Pro）加上事件時間軸中的一筆記錄（來源 execRecorder，處置「僅通知」）。通知本身絕不會觸發 Air-Gap 等隔離。
                 • 儲存：分段的 JSON Lines，位於 /Library/Application Support/RoamSwitch/exec_log（僅 root 可讀：0700/0600，因為命令列可能包含機密；App、檢視器與 MCP 伺服器只能透過具權限的 Helper 讀取），預設 200 MB·14 天（可變更），當機安全的輪替。各分段以雜湊鏈相連，可發現被刪除、編輯或截斷的分段（「驗證雜湊鏈」）；這是竄改偵測，而非竄改防護。不會記錄環境變數，但命令列引數中可能包含敏感資訊。
                 • 負載控制：有界佇列，過載時丟棄最舊的行（計數並顯示），指數退避重新啟動，關閉後 eslogger 會被完全停止。
                 • 檢視與匯出：選單 → 惡意軟體防護 →「程序執行記錄…」（搜尋、程序樹、匯出為 JSON Lines）。MCP 工具 `search_exec_events` 和 `get_process_tree`（Pro，唯讀）。
                 """,
-                recommendation: "如果需要用於事件調查的執行歷程，可以啟用，並請先為 RoamSwitchHelper 授予「完整磁碟取用權限」。請把通知當作需要在記錄中查證的線索，而不是入侵的證據。"
+                recommendation: "如果需要用於事件調查的執行歷程，可以啟用，並請先在「完整磁碟取用權限」中允許 RoamSwitch。請把通知當作需要在記錄中查證的線索，而不是入侵的證據。"
             ),
             LocalizedEntry(
                 id: "feat_persistence_monitor_guard",

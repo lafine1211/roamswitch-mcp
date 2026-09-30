@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.14 (build 132).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.15 (build 133).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -99,6 +99,12 @@ public struct SecurityLogAuditReport: Equatable {
     public let xprotectDetections: Int
     public let events: [SecurityLogEvent]
     public let templateAnomalies: [LogTemplateAnomaly]
+    /// The subset of `templateAnomalies` whose example line came from an event
+    /// with a non-`info` severity (failed sudo/ssh/login, Gatekeeper denial,
+    /// XProtect hit, ...). Only these may notify or land in the notification
+    /// history; the rest stay visible in the audit view but never page
+    /// (alert-fatigue fix, 2026-09-30).
+    public var notifiableTemplateAnomalies: [LogTemplateAnomaly] = []
 
     public var isClean: Bool {
         sudoFailures == 0 && gatekeeperBlocks == 0 && xprotectDetections == 0
@@ -182,7 +188,15 @@ final class SecurityLogAuditor {
         // scan — and unconditionally (unlike `SecurityNotifier
         // .sendThreatAlert`, this isn't Pro-gated): a Free user gets the
         // same durable record, just without the live banner/sound.
-        for anomaly in anomalies where anomaly.isNew {
+        // Only anomalies whose source line was itself a warning/critical
+        // security event may notify or enter the history. Everything else the
+        // template analyzer flags (loginwindow/syspolicy narration, XPC
+        // teardown, app-group container lookups) is routine OS chatter that
+        // turned this into a boy-who-cried-wolf alert; it stays in the audit
+        // view's `templateAnomalies`.
+        let relevantMessages = Set(newSinceCursor.filter { $0.severity != .info }.map(\.message))
+        let notifiable = anomalies.filter { relevantMessages.contains($0.example) }
+        for anomaly in notifiable where anomaly.isNew {
             NotificationHistory.record(
                 title: "🧩 " + loc("新規ログパターンを検出"),
                 body: anomaly.example
@@ -206,7 +220,7 @@ final class SecurityLogAuditor {
         // near-duplicate entries while a template's baseline matures, at
         // most `LogTemplateAnalyzer.minObservationsForOwnBaseline` of them)
         // is a better trade than a notification with zero durable trail.
-        for anomaly in anomalies where !anomaly.isNew {
+        for anomaly in notifiable where !anomaly.isNew {
             NotificationHistory.record(
                 title: "📈 " + String(format: loc("ログの発生頻度が急増 (z=%.1f)"), anomaly.zScore),
                 body: anomaly.example
@@ -222,7 +236,8 @@ final class SecurityLogAuditor {
             gatekeeperBlocks: gkBlocks,
             xprotectDetections: xpCount,
             events: events,
-            templateAnomalies: anomalies
+            templateAnomalies: anomalies,
+            notifiableTemplateAnomalies: notifiable
         )
     }
 

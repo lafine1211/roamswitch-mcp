@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.14 (build 132).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.15 (build 133).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -331,7 +331,7 @@ extension RoamSwitchKnowledgeBase {
                 • 감지 시 스냅샷: 미끼 파일이 감지될 때도 만들지만, 암호화된 파일을 포함할 수 있어 복구 원본으로는 권장하지 않습니다.
                 • 보존 모드: 감지 시 스냅샷이 가장 최근인 동안(최대 7일)에는 새 사전 스냅샷 생성과 오래된 스냅샷 정리를 멈춰, 암호화 이전의 마지막 세대가 밀려나지 않게 합니다.
                 • 꺼내기: 메뉴의 "랜섬웨어 복구…"에서 권장 스냅샷(남아 있는 가장 최근 사전 스냅샷)의 파일이나 폴더를 `~/RoamSwitch-Recovered/<스냅샷 ID>/`로 복사합니다. 기존 파일은 덮어쓰지 않으며, 전체 되돌리기는 제공하지 않습니다. 복구는 항상 수동입니다.
-                • 제약: macOS는 로컬 스냅샷을 약 24시간 뒤에 자동으로 삭제할 수 있으며(여유 공간이 적으면 더 빨리), 남아 있지 않은 세대는 사용할 수 없습니다. 파일을 꺼내려면 RoamSwitch 헬퍼에 전체 디스크 접근 권한이 필요합니다(스냅샷 생성에는 불필요).
+                • 제약: macOS는 로컬 스냅샷을 약 24시간 뒤에 자동으로 삭제할 수 있으며(여유 공간이 적으면 더 빨리), 남아 있지 않은 세대는 사용할 수 없습니다. 파일을 꺼내려면 전체 디스크 접근 권한에서 RoamSwitch를 허용해야 합니다(스냅샷 생성에는 불필요).
                 • MCP: 읽기 전용 `get_ransomware_recovery_snapshots`로 목록과 권장 항목을 확인할 수 있습니다(복원은 할 수 없습니다).
                 • Pro: 이 화면(목록 및 파일 꺼내기)과 MCP 도구는 Pro 기능입니다. 스냅샷 촬영 자체는 Pro가 아니어도 동작합니다.
                 """,
@@ -373,14 +373,14 @@ extension RoamSwitchKnowledgeBase {
                 summary: "Apple의 /usr/bin/eslogger(macOS 13 이상)로 이 Mac에서 시작된 프로그램을 기록하고, 의심스러운 조합과 일치하는 실행을 알려 드립니다. 실행을 차단하거나 네트워크를 끊지 않으며, 기록은 이 Mac 안에만 남습니다.",
                 details: """
                 • 동작 방식: 권한 있는 헬퍼가 `/usr/bin/eslogger exec fork exit`를 자식 프로세스로 실행하고 그 JSON 스트림을 해석합니다. eslogger는 macOS에 포함된 도구이며 RoamSwitch는 EndpointSecurity 권한(entitlement)을 사용하거나 신청하지 않습니다. 따라서 실행 전 차단이 아니라 사후 관찰입니다.
-                • 필요 조건: macOS 13 이상과 RoamSwitchHelper의 전체 디스크 접근 권한. 권한이 없으면 창에 「실행 기록을 사용할 수 없습니다: RoamSwitchHelper에 전체 디스크 접근 권한이 필요합니다」(또는 eslogger를 찾을 수 없음)라고만 표시하고 상시 폴링으로 대체하지 않습니다. 기록을 켜기 전이나 헬퍼 시작 전의 이벤트는 남지 않습니다.
-                • 상관 규칙(알림 전용, 기본적으로 조용함, 각 규칙에 고정 ID와 MITRE ATT&CK 기법): 브라우저/Office/메일 앱이 셸이나 스크립트 인터프리터를 직접 실행(exec.shell_from_app, T1059) / /tmp, /private/var/tmp 또는 격리 속성이 있는 위치에서 서명 없음·임시(ad-hoc) 서명 바이너리 실행(exec.untrusted_location, T1204.002) / curl/wget을 셸로 넘기는 `sh -c` 한 줄 명령 중 IP 주소 URL, base64, eval, TLS 검증 해제, 브라우저 부모 같은 의심 정황이 함께 있는 것(exec.pipe_to_shell, T1059.004) / `osascript -e`로 do shell script와 base64/eval을 조합한 것(exec.osascript_obfuscated, T1059.002) / `xattr -d com.apple.quarantine` 후 15분 이내에 그 파일을 실행(exec.quarantine_stripped_then_exec, T1553.001) / 최근 24시간 안에 기록된 LaunchAgent/LaunchDaemon에서 서명 없음·임시 서명 바이너리가 launchd를 통해 시작(exec.launchd_untrusted_binary, T1543.001/.004) / Apple 서명이 아닌, 셸이 아닌 조상 프로세스 아래에서 `security find-generic-password -w` 또는 `dump-keychain` 실행(exec.keychain_access, T1555.001) / osascript 이외의 순수 인터프리터가 인라인 `-c`/`-e`/`-Command` 한 줄 코드를 실행하며 base64/eval과 다운로드 또는 exec 유사 호출을 결합한 것(exec.interpreter_inline_obfuscated, T1059) / DYLD_INSERT_LIBRARIES를 설정한 비-Apple 서명 바이너리 실행(exec.dyld_insert_libraries, T1574.006) / RoamSwitch 자신도 Apple 프로세스도 아닌 무언가가 실행한 `tmutil deletelocalsnapshots`/`thinlocalsnapshots`(exec.ransomware_recovery_tampering, T1490). 터미널에서 평범하게 입력한 `curl | sh`는 의도적으로 감지하지 않습니다.
+                • 필요 조건: macOS 13 이상과 전체 디스크 접근 권한에서 RoamSwitch 허용. 권한이 없으면 창에 「실행 기록을 사용할 수 없습니다: 전체 디스크 접근 권한에서 RoamSwitch를 허용하세요(목록에 없으면 「+」로 /Applications/RoamSwitch.app을 추가)」(또는 eslogger를 찾을 수 없음)라고만 표시하고 상시 폴링으로 대체하지 않습니다. 기록을 켜기 전이나 헬퍼 시작 전의 이벤트는 남지 않습니다.
+                • 상관 규칙(알림 전용, 기본적으로 조용함, 각 규칙에 고정 ID와 MITRE ATT&CK 기법): 브라우저/Office/메일 앱이 셸이나 스크립트 인터프리터를 직접 실행(exec.shell_from_app, T1059) / /tmp, /private/var/tmp 또는 격리 속성이 있는 위치에서 서명 없음·임시(ad-hoc) 서명 바이너리 실행(exec.untrusted_location, T1204.002) / curl/wget을 셸로 넘기는 `sh -c` 한 줄 명령 중 IP 주소 URL, base64, eval, TLS 검증 해제, 브라우저 부모 같은 의심 정황이 함께 있는 것(exec.pipe_to_shell, T1059.004) / `osascript -e`로 do shell script와 base64/eval을 조합한 것(exec.osascript_obfuscated, T1059.002) / `xattr -d com.apple.quarantine` 후 15분 이내에 그 파일을 실행(exec.quarantine_stripped_then_exec, T1553.001) / 최근 24시간 안에 기록된 LaunchAgent/LaunchDaemon에서 서명 없음·임시 서명 바이너리가 launchd를 통해 시작(exec.launchd_untrusted_binary, T1543.001/.004) / Apple 서명이 아닌, 셸이 아닌 조상 프로세스 아래에서 `security find-generic-password -w` 또는 `dump-keychain` 실행(exec.keychain_access, T1555.001) / osascript 이외의 순수 인터프리터가 인라인 `-c`/`-e`/`-Command` 한 줄 코드를 실행하며 base64/eval과 다운로드 또는 exec 유사 호출을 결합한 것(exec.interpreter_inline_obfuscated, T1059) / DYLD_INSERT_LIBRARIES를 설정한 비-Apple 서명 바이너리 실행(exec.dyld_insert_libraries, T1574.006) / RoamSwitch 자신도 Apple 프로세스도 아닌 무언가가 실행한 `tmutil deletelocalsnapshots`/`thinlocalsnapshots`(exec.ransomware_recovery_tampering, T1490); 명령줄이 RoamSwitch가 설치한 미끼 인증 정보 파일(~/.aws/credentials, ~/.env.backup 등 내용에 표식이 있는 것)을 직접 지정해 실행됨(exec.honeytoken_path, T1552.001. 실제 파일은 대상이 아니며, 라이브러리를 통한 읽기는 허니토큰 감시가 담당). 터미널에서 평범하게 입력한 `curl | sh`는 의도적으로 감지하지 않습니다.
                 • 알림: 알림(Pro)과 인시던트 타임라인 기록(출처 execRecorder, 조치 「알림 전용」). 알림 하나만으로 Air-Gap 등의 격리가 발동되는 일은 없습니다.
                 • 저장: /Library/Application Support/RoamSwitch/exec_log 아래의 세그먼트 분할 JSON Lines(root 전용 0700/0600. 명령줄에 비밀 정보가 포함될 수 있어, 앱·뷰어·MCP 서버는 권한 있는 헬퍼를 통해서만 읽습니다), 기본 200MB·14일(변경 가능), 충돌에도 안전한 로테이션. 세그먼트를 해시 체인으로 연결해 삭제·수정·잘림을 탐지합니다(「체인 검증」). 변조 탐지일 뿐 변조 방지는 아닙니다. 환경 변수는 기록하지 않지만 명령줄 인수에는 민감한 정보가 포함될 수 있습니다.
                 • 부하 대책: 과부하 시 오래된 줄부터 버리는 제한 큐(건수 표시), 지수 백오프 재시작, 끄면 eslogger가 완전히 중지됩니다.
                 • 보기와 내보내기: 메뉴 → 악성코드 방어 → 「프로세스 실행 기록…」(검색, 프로세스 트리, JSON Lines 내보내기). MCP 도구 `search_exec_events`, `get_process_tree`(Pro, 읽기 전용).
                 """,
-                recommendation: "인시던트 조사용 실행 이력이 필요할 때 켜세요. 먼저 RoamSwitchHelper에 전체 디스크 접근 권한을 허용합니다. 알림은 침해의 증거가 아니라 로그에서 확인할 단서로 다뤄 주세요."
+                recommendation: "인시던트 조사용 실행 이력이 필요할 때 켜세요. 먼저 전체 디스크 접근 권한에서 RoamSwitch를 허용합니다. 알림은 침해의 증거가 아니라 로그에서 확인할 단서로 다뤄 주세요."
             ),
             LocalizedEntry(
                 id: "feat_persistence_monitor_guard",

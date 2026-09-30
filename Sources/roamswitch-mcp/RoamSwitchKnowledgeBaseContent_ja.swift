@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.14 (build 132).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.15 (build 133).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -330,7 +330,7 @@ extension RoamSwitchKnowledgeBase {
                 • 検知時スナップショット: おとりファイルの検知時にも取りますが、暗号化済みのファイルを含む場合があり、復旧元としては勧めません。
                 • 保持モード: 検知時のスナップショットが最新の間（最大7日）は、新しい事前スナップショットの取得と古い世代の整理を止め、暗号化前の最後の世代が押し出されないようにします。
                 • 取り出し: メニューの「ランサムウェア復旧…」から、推奨（残っている最新の事前スナップショット）のファイルやフォルダを `~/RoamSwitch-Recovered/<スナップショットID>/` へコピーします。既存のファイルは上書きせず、全体の巻き戻しは提供しません。復旧は常に手動です。
-                • 制約: macOSはローカルスナップショットを約24時間で自動的に削除することがあり（空き容量が少ないとさらに早く）、残っていない世代は使えません。取り出しには、RoamSwitchのヘルパーにフルディスクアクセスの許可が必要です（作成には不要）。
+                • 制約: macOSはローカルスナップショットを約24時間で自動的に削除することがあり（空き容量が少ないとさらに早く）、残っていない世代は使えません。取り出しには、フルディスクアクセスでRoamSwitchの許可が必要です（作成には不要）。
                 • MCP: 読み取り専用の `get_ransomware_recovery_snapshots` で、一覧と推奨を確認できます（復元は行えません）。
                 • Pro: この画面（一覧と取り出し）とMCPツールはPro版の機能です。事前スナップショットの取得そのものは、Pro版でなくても動きます。
                 """,
@@ -372,14 +372,14 @@ extension RoamSwitchKnowledgeBase {
                 summary: "macOS標準の/usr/bin/eslogger(macOS 13以降)でこのMacで起動したプログラムを記録し、不審な組み合わせに一致した起動を通知します。実行をブロックすることも通信を遮断することもなく、記録はこのMacの中だけに残ります。",
                 details: """
                 • 仕組み: 特権ヘルパーが `/usr/bin/eslogger exec fork exit` を子プロセスとして起動し、そのJSONストリームを解析します。esloggerはmacOSに同梱のツールで、RoamSwitchはEndpointSecurityエンタイトルメントを使わず申請もしません。そのため実行前ブロックではなく事後の観測です。
-                • 必要条件: macOS 13以降と、RoamSwitchHelperへのフルディスクアクセスの許可。許可がない場合は「実行記録は利用できません: RoamSwitchHelperにフルディスクアクセスが必要です」(またはesloggerが見つからない旨)と表示するだけで、代わりの常時ポーリングは行いません。記録を有効にする前・ヘルパー起動前のイベントは残りません。
-                • 相関ルール(通知のみ・初期設定では静か・各ルールに固定IDとMITRE ATT&CK技術ID): ブラウザ/Office/メールアプリが直接シェルやスクリプト処理系を起動(exec.shell_from_app, T1059)／/tmp・/private/var/tmpや隔離属性付きの場所から署名なし・アドホック署名のバイナリを実行(exec.untrusted_location, T1204.002)／curl/wgetをシェルへ渡す `sh -c` ワンライナーのうち、生IPのURL・base64・eval・TLS検証無効・ブラウザ等が親といった不審な事情を伴うもの(exec.pipe_to_shell, T1059.004)／`osascript -e` でdo shell scriptとbase64/evalを組み合わせたもの(exec.osascript_obfuscated, T1059.002)／`xattr -d com.apple.quarantine` の後15分以内にそのファイルを実行(exec.quarantine_stripped_then_exec, T1553.001)／直近24時間に書き込まれたLaunchAgent/LaunchDaemonから署名なし・アドホックのバイナリがlaunchd経由で起動(exec.launchd_untrusted_binary, T1543.001/.004)／Apple署名でないシェル以外の祖先プロセスによる `security find-generic-password -w` や `dump-keychain`(exec.keychain_access, T1555.001)／osascript以外の裸のインタプリタが `-c`/`-e`/`-Command` のインライン一行コードを実行し、base64/evalとダウンロードやexec相当の呼び出しを組み合わせたもの(exec.interpreter_inline_obfuscated, T1059)／DYLD_INSERT_LIBRARIESを設定した非Apple署名バイナリの実行(exec.dyld_insert_libraries, T1574.006)／RoamSwitch自身でもAppleのプロセスでもない何かによる`tmutil deletelocalsnapshots`/`thinlocalsnapshots`の実行(exec.ransomware_recovery_tampering, T1490)。Terminalで普通に打った `curl | sh` は意図的に検知しません。
+                • 必要条件: macOS 13以降と、フルディスクアクセスでのRoamSwitchの許可。許可がない場合は「実行記録は利用できません: フルディスクアクセスでRoamSwitchの許可が必要です（一覧に無ければ「+」から /Applications/RoamSwitch.app を追加）」(またはesloggerが見つからない旨)と表示するだけで、代わりの常時ポーリングは行いません。記録を有効にする前・ヘルパー起動前のイベントは残りません。
+                • 相関ルール(通知のみ・初期設定では静か・各ルールに固定IDとMITRE ATT&CK技術ID): ブラウザ/Office/メールアプリが直接シェルやスクリプト処理系を起動(exec.shell_from_app, T1059)／/tmp・/private/var/tmpや隔離属性付きの場所から署名なし・アドホック署名のバイナリを実行(exec.untrusted_location, T1204.002)／curl/wgetをシェルへ渡す `sh -c` ワンライナーのうち、生IPのURL・base64・eval・TLS検証無効・ブラウザ等が親といった不審な事情を伴うもの(exec.pipe_to_shell, T1059.004)／`osascript -e` でdo shell scriptとbase64/evalを組み合わせたもの(exec.osascript_obfuscated, T1059.002)／`xattr -d com.apple.quarantine` の後15分以内にそのファイルを実行(exec.quarantine_stripped_then_exec, T1553.001)／直近24時間に書き込まれたLaunchAgent/LaunchDaemonから署名なし・アドホックのバイナリがlaunchd経由で起動(exec.launchd_untrusted_binary, T1543.001/.004)／Apple署名でないシェル以外の祖先プロセスによる `security find-generic-password -w` や `dump-keychain`(exec.keychain_access, T1555.001)／osascript以外の裸のインタプリタが `-c`/`-e`/`-Command` のインライン一行コードを実行し、base64/evalとダウンロードやexec相当の呼び出しを組み合わせたもの(exec.interpreter_inline_obfuscated, T1059)／DYLD_INSERT_LIBRARIESを設定した非Apple署名バイナリの実行(exec.dyld_insert_libraries, T1574.006)／RoamSwitch自身でもAppleのプロセスでもない何かによる`tmutil deletelocalsnapshots`/`thinlocalsnapshots`の実行(exec.ransomware_recovery_tampering, T1490)／コマンドラインが、RoamSwitchの設置した偽の認証情報ファイル(~/.aws/credentials、~/.env.backupなど中身にマーカーを持つもの)を直接指定して実行(exec.honeytoken_path, T1552.001)。本物のファイルは対象外で、ライブラリ経由の読み取りはハニートークンの監視が担当。Terminalで普通に打った `curl | sh` は意図的に検知しません。
                 • 通知: 通知(Pro)とインシデントタイムラインへの記録(発生源 execRecorder、対応「通知のみ」)。通知が単独でAir-Gapなどの隔離を発動することはありません。
                 • 保存: /Library/Application Support/RoamSwitch/exec_log にセグメント分割のJSON Lines(root専用の0700/0600。コマンドライン引数に機密が含まれ得るため、アプリ・ビューア・MCPサーバーは特権ヘルパー経由でのみ読み取ります)。既定200MB・14日(変更可)、クラッシュ安全なローテーション。セグメント間をハッシュチェーンで連結し、削除・編集・切り詰めを検出します(「チェーンを検証」)。改ざん検知であり改ざん防止ではありません。環境変数は記録しませんが、コマンドライン引数に機密が含まれる場合があります。
                 • 負荷対策: 過負荷時は古い行から捨てる有界キュー(件数を表示)、指数バックオフでの再起動、オフにするとesloggerを完全に停止します。
                 • 閲覧とエクスポート: メニュー→マルウェア対策→「プロセス実行の記録…」(検索・プロセスツリー・JSON Linesエクスポート)。MCPツール `search_exec_events` と `get_process_tree`(Pro・読み取り専用)。
                 """,
-                recommendation: "インシデント調査用の実行履歴が欲しい場合に有効にしてください。先にRoamSwitchHelperへフルディスクアクセスを許可します。通知は侵害の証拠ではなく、ログで確認する手がかりとして扱ってください。"
+                recommendation: "インシデント調査用の実行履歴が欲しい場合に有効にしてください。先にフルディスクアクセスでRoamSwitchを許可します。通知は侵害の証拠ではなく、ログで確認する手がかりとして扱ってください。"
             ),
             LocalizedEntry(
                 id: "feat_persistence_monitor_guard",
