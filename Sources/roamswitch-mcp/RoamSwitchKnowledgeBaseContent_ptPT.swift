@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.16 (build 134).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.17 (build 135).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -378,7 +378,7 @@ extension RoamSwitchKnowledgeBase {
                 • Alertas: uma notificação (Pro) e uma entrada na cronologia de incidentes (origem execRecorder, ação «apenas notificação»). Um alerta nunca ativa por si só o air-gap nem qualquer outro isolamento.
                 • Armazenamento: JSON Lines segmentado em /Library/Application Support/RoamSwitch/exec_log (legível apenas por root: 0700/0600, porque as linhas de comandos podem conter segredos; a app, o visualizador e o servidor MCP leem apenas através do helper privilegiado), 200 MB / 14 dias por predefinição (alterável), rotação segura contra falhas. Os segmentos são encadeados por hash para detetar segmentos eliminados, editados ou truncados («Verificar cadeia»); deteta adulterações, mas não as impede. As variáveis de ambiente nunca são registadas, mas os argumentos da linha de comandos podem conter segredos.
                 • Controlo de carga: fila limitada que descarta as linhas mais antigas em caso de sobrecarga (contadas e mostradas), reinícios com espera exponencial e, ao desligar, o eslogger é totalmente parado.
-                • Visualização e exportação: menu → Proteção contra malware → «Registo de execução de processos…» (pesquisa, árvore de processos, exportação para JSON Lines). Ferramentas MCP `search_exec_events` e `get_process_tree` (Pro, só de leitura).
+                • Visualização e exportação: menu → Proteção contra malware → «Registo de execução de processos…» (pesquisa, árvore de processos, exportação para JSON Lines). Ferramentas MCP `search_exec_events` e `get_process_tree` (Pro, só de leitura). Segurança da saída: os caminhos, argumentos e IDs de assinatura dos processos podem ser controlados por um atacante, pelo que as ferramentas removem caracteres de controlo, limitam cada cadeia a 300 caracteres, mascaram como **** os formatos de segredos conhecidos e os valores de opções com nome secreto, e acrescentam após o JSON um segundo bloco de texto que os identifica como dados externos não fiáveis. O texto de pesquisa (`query`) também é comparado apenas com a linha de comandos já mascarada (um valor mascarado nunca pode ser encontrado pesquisando), tem de ter pelo menos 3 caracteres e as pesquisas de texto têm um limite de frequência por sessão, pelo que não é possível sondar um segredo caráter a caráter. O visualizador da própria app pesquisa o seu próprio registo na íntegra.
                 """,
                 recommendation: "Ative-o se quiser um histórico de execuções para análise de incidentes e permita primeiro o RoamSwitch em Acesso total ao disco. Trate os alertas como pistas a verificar no registo, não como prova de comprometimento."
             ),
@@ -566,7 +566,7 @@ extension RoamSwitchKnowledgeBase {
                 • O que faz: executa `npm audit signatures` com a pasta alvo como diretório de trabalho, contactando o registo npm (registry.npmjs.org). É a única funcionalidade do RoamSwitch que comunica com npmjs.com.
                 • Saída: a saída do próprio comando npm é apresentada tal como é (nunca interpretada manualmente). Um código de saída diferente de zero, ou termos como «invalid»/«missing registry signature» na saída, recebem uma marca de atenção leve.
                 • Se o comando npm não for encontrado, aparece uma mensagem a sugerir a instalação do Node.js/npm.
-                • Ferramenta MCP: `run_npm_audit_signatures` (argumento `directory`, com dupla verificação Pro mais o interruptor opcional).
+                • Ferramenta MCP: `run_npm_audit_signatures` (argumento `directory`, com dupla verificação Pro mais o interruptor opcional). `directory` só é aceite dentro de uma pasta de projeto registada no RoamSwitch. O npm é executado com o registo fixado em registry.npmjs.org, ignorando a configuração npm do utilizador/projeto, com um limite de 90 segundos.
                 """,
                 recommendation: "Ative apenas para uma auditoria de dependências antes de um deployment ou ao investigar uma suspeita de comprometimento da cadeia de fornecimento — não precisa de estar sempre ativo."
             ),
@@ -1451,6 +1451,7 @@ extension RoamSwitchKnowledgeBase {
                   - As descargas diárias da lista de ameaças da Proteção de links, dos mapas de CVE de pacotes, e dos mapas de CVE de vulnerabilidades (apenas em receção, verificados por assinatura, sem enviar identificadores; a atualização automática da Proteção de links pode ser desligada)
                   - O tráfego normal para os fornecedores de VPN e DNS seguro que configurar
                   - As sondas não destrutivas da verificação ativa de vulnerabilidades para 127.0.0.1 (este próprio Mac)
+                  - A verificação de assinaturas npm (opcional, apenas Pro) contacta registry.npmjs.org quando é executada
                 • Não existe em nenhum lugar do código telemetria nem recolha de utilização. Até o lembrete de aprovação do auxiliar funciona apenas a partir de uma contagem no dispositivo.
                 """,
                 recommendation: "É seguro de usar em ambientes empresariais altamente confidenciais e configurações de desenvolvimento pessoais sem se preocupar com fugas de dados."

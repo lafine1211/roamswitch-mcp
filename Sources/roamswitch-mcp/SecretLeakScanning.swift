@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.16 (build 134).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.17 (build 135).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -25,6 +25,8 @@ public enum SecretLeakScanning {
         case privateKey = "Private Key (RSA/SSH)"
         case slack = "Slack Token"
         case stripe = "Stripe API Key"
+        /// GitLab personal access tokens, npm tokens, Google OAuth access tokens.
+        case accessToken = "Access Token (GitLab / npm / Google OAuth)"
         /// A checksum-verified BIP39 mnemonic seed phrase (12/15/18/21/24 words).
         case cryptoSeedPhrase = "Crypto Seed Phrase (BIP39)"
         /// A checksum-verified Bitcoin Wallet Import Format private key.
@@ -43,6 +45,7 @@ public enum SecretLeakScanning {
             case .privateKey: return loc("秘密鍵 (RSA/SSH)")
             case .slack: return loc("Slackトークン")
             case .stripe: return loc("Stripe APIキー")
+            case .accessToken: return loc("アクセストークン (GitLab / npm / Google OAuth)")
             case .cryptoSeedPhrase: return loc("暗号資産ウォレットのシードフレーズ (BIP39)")
             case .cryptoBitcoinWIF: return loc("Bitcoin秘密鍵 (WIF形式)")
             case .cryptoExtendedKey: return loc("暗号資産ウォレットの拡張秘密鍵 (BIP32)")
@@ -61,6 +64,7 @@ public enum SecretLeakScanning {
             case .privateKey: return loc("秘密鍵が漏洩している可能性があります。直ちに鍵を再生成し、authorized_keysを更新してください。")
             case .slack: return loc("Slack API管理画面からトークンをRevokeしてください。")
             case .stripe: return loc("StripeダッシュボードからAPIキーをロールしてください。")
+            case .accessToken: return loc("発行元(GitLab / npm / Google)の管理画面からトークンを失効させ、再発行してください。")
             case .cryptoSeedPhrase: return loc("これは暗号資産ウォレットを復元できる可能性があります。APIキーと違い「失効」はできません。直ちに新しいウォレットを作成し、資産を移動してください。このフレーズを入力したウォレットは今後一切使用しないでください。")
             case .cryptoBitcoinWIF: return loc("暗号資産ウォレットの秘密鍵です。APIキーと違い「失効」はできません。直ちに新しいウォレットを作成し、資産を移動してください。この鍵に対応するウォレットは今後一切使用しないでください。")
             case .cryptoExtendedKey: return loc("暗号資産ウォレットの拡張秘密鍵です。この鍵から配下の全アドレスの秘密鍵を導出できます。APIキーと違い「失効」はできません。直ちに新しいウォレットを作成し、資産を移動してください。")
@@ -104,9 +108,9 @@ public enum SecretLeakScanning {
     /// pasteboard watcher (`scanTextForSecrets`) and the manual line-by-line
     /// audit (`auditText`).
     private static let patterns: [(regex: String, type: DetectedSecretType)] = [
-        (#"\b(sk-[a-zA-Z0-9]{20,60}|sk-proj-[a-zA-Z0-9_\-]{40,})\b"#, .openAI),
-        (#"\bsk-ant-[a-zA-Z0-9_\-]{30,}\b"#, .anthropic),
-        (#"\b(ghp_[a-zA-Z0-9]{36}|github_pat_[a-zA-Z0-9_]{40,})\b"#, .gitHub),
+        (#"\b(sk-[a-zA-Z0-9]{20,}|sk-(?:proj|svcacct|admin)-[a-zA-Z0-9_\-]{20,})"#, .openAI),
+        (#"\bsk-ant-[a-zA-Z0-9_\-]{30,}"#, .anthropic),
+        (#"\b(gh[pousr]_[a-zA-Z0-9]{36,}|github_pat_[a-zA-Z0-9_]{40,})"#, .gitHub),
         (#"\bAKIA[0-9A-Z]{16}\b"#, .aws),
         (#"\bhf_[a-zA-Z0-9]{34}\b"#, .huggingFace),
         // Two live Google key formats: the long-standing `AIzaSy...` format
@@ -119,8 +123,11 @@ public enum SecretLeakScanning {
         // observed and its precise length wasn't confirmed.
         (#"\b(AIza[0-9A-Za-z\-_]{30,45}|AQ\.[0-9A-Za-z\-_]{30,100})\b"#, .googleGemini),
         (#"-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----"#, .privateKey),
-        (#"\bxox[baprs]-[0-9a-zA-Z\-]{10,}\b"#, .slack),
+        (#"\b(?:xox[baprs]|xapp)-[0-9a-zA-Z\-]{10,}"#, .slack),
         (#"\b(?:sk|rk)_(?:live|test)_[0-9a-zA-Z]{24,}\b"#, .stripe),
+        (#"\bglpat-[0-9A-Za-z_\-]{20,}"#, .accessToken),
+        (#"\bnpm_[A-Za-z0-9]{36}\b"#, .accessToken),
+        (#"\bya29\.[0-9A-Za-z\-_]{20,}"#, .accessToken),
     ]
 
     public static func scanTextForSecrets(_ text: String) -> [DetectedSecretItem] {
@@ -255,6 +262,8 @@ public enum SecretLeakScanning {
         ".git", "node_modules", "target", "vendor", "dist", "build", "__pycache__", ".venv", "venv",
     ]
     private static let scanMaxFileBytes = 2 * 1024 * 1024
+    /// Directory nesting cap for `auditDirectory` (defence in depth next to the visited-set).
+    private static let scanMaxDepth = 40
 
     /// 2026-09-24: `CredentialHoneytokenGuard` が設置する囮ファイルの(ホーム相対パス → バイト数)。
     /// 内容を読まずに判別するため(読むこと自体が検知を誘発する)サイズで照合する。内容変更時は同ガードと揃えること。
@@ -277,31 +286,36 @@ public enum SecretLeakScanning {
     /// directories and files that are too large or look binary (a NUL byte in the
     /// first 8KB). Purely local — never touches the network. Intended to run off the
     /// main thread since a large repository can take a while to walk.
+    /// Symlinks are never followed out of `root` (`SafeScanFS`: a link is skipped unless
+    /// its real path is still inside `root`), only regular files are read (O_NOFOLLOW,
+    /// size-capped), and each directory is visited once (no link loops).
     public static func auditDirectory(at root: URL) -> [SecretFinding] {
         var results: [SecretFinding] = []
-        let fm = FileManager.default
-        guard let enumerator = fm.enumerator(
-            at: root,
-            includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey],
-            options: []
-        ) else { return results }
+        guard let rootPath = SafeScanFS.canonicalPath(root.path) else { return results }
+        let homePath = FileManager.default.homeDirectoryForCurrentUser.path
+        let home = SafeScanFS.canonicalPath(homePath) ?? homePath
 
-        for case let url as URL in enumerator {
-            let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey])
-            if values?.isDirectory == true {
-                if scanSkipDirs.contains(url.lastPathComponent) {
-                    enumerator.skipDescendants()
+        var visited: Set<String> = [rootPath]
+        var stack: [(path: String, depth: Int)] = [(rootPath, 0)]
+        while let item = stack.popLast() {
+            for entry in SafeScanFS.children(ofDirectory: item.path, root: rootPath) {
+                switch entry.kind {
+                case .directory:
+                    guard item.depth < scanMaxDepth, !scanSkipDirs.contains(entry.name),
+                          visited.insert(entry.path).inserted else { continue }
+                    stack.append((entry.path, item.depth + 1))
+                case .regularFile:
+                    let size = Int(clamping: entry.size)
+                    guard size > 0, size <= scanMaxFileBytes else { continue }
+                    // 2026-09-24: 自前のハニートークン囮を読むと、読み取り検知(atime)が自分自身を誤報するため除外する。
+                    if isHoneytokenDecoy(path: entry.path, size: size, home: home) { continue }
+                    guard let data = SafeScanFS.readRegularFile(atPath: entry.path, maxBytes: scanMaxFileBytes) else { continue }
+                    let sniffLen = min(data.count, 8192)
+                    if data.prefix(sniffLen).contains(0) { continue }
+                    guard let text = String(data: data, encoding: .utf8) else { continue }
+                    results.append(contentsOf: auditText(text, filePath: entry.path))
                 }
-                continue
             }
-            guard let size = values?.fileSize, size > 0, size <= scanMaxFileBytes else { continue }
-            // 2026-09-24: 自前のハニートークン囮を読むと、読み取り検知(atime)が自分自身を誤報するため除外する。
-            if isHoneytokenDecoy(path: url.path, size: size, home: fm.homeDirectoryForCurrentUser.path) { continue }
-            guard let data = try? Data(contentsOf: url) else { continue }
-            let sniffLen = min(data.count, 8192)
-            if data.prefix(sniffLen).contains(0) { continue }
-            guard let text = String(data: data, encoding: .utf8) else { continue }
-            results.append(contentsOf: auditText(text, filePath: url.path))
         }
         return results
     }
@@ -377,11 +391,13 @@ public enum SecretLeakScanning {
         return result
     }
 
+    /// Reveals as little of a secret as possible: at most the first 4 characters
+    /// (enough to recognise the key family, e.g. `AKIA`) plus the length. The
+    /// tail is never shown — MCP clients (LLMs) and logs receive this string,
+    /// and a prefix+suffix of a high-entropy token materially narrows brute force.
     private static func maskSecret(_ secret: String) -> String {
         guard secret.count > 8 else { return "****" }
-        let prefixLen = secret.count > 16 ? 6 : 3
-        let suffixLen = secret.count > 16 ? 4 : 2
-        return "\(secret.prefix(prefixLen))...\(secret.suffix(suffixLen))"
+        return "\(secret.prefix(4))...[\(secret.count) chars]"
     }
 
     private static func shannonEntropy(_ s: String) -> Double {

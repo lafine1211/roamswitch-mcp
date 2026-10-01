@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.16 (build 134).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.17 (build 135).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -73,21 +73,21 @@ enum PackageCveScriptScan {
     /// `enumerateLifecycleScripts(inNodeModules:)` on reaching a
     /// `node_modules` directory instead of skipping it outright — and never
     /// descends further within it (no nested `node_modules`).
-    static func scanWatchedFolder(_ folder: URL, maxDepth: Int) -> [Finding] {
+    /// Symlinks are only followed while they stay inside the scan root
+    /// (`SafeScanFS`); `root` is set by the recursion, callers omit it.
+    static func scanWatchedFolder(_ folder: URL, maxDepth: Int, root: String? = nil) -> [Finding] {
         var out: [Finding] = []
-        guard let entries = try? FileManager.default.contentsOfDirectory(
-            at: folder, includingPropertiesForKeys: [.isDirectoryKey], options: []
-        ) else { return out }
-        for entryURL in entries {
-            let fileName = entryURL.lastPathComponent
-            let isDir = (try? entryURL.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
-            guard isDir else { continue }
-            if fileName == "node_modules" {
-                out.append(contentsOf: enumerateLifecycleScripts(inNodeModules: entryURL))
+        guard let base = SafeScanFS.canonicalPath(folder.path) else { return out }
+        let scopeRoot = root ?? base
+        for entry in SafeScanFS.children(ofDirectory: base, root: scopeRoot) {
+            guard entry.kind == .directory else { continue }
+            let entryURL = URL(fileURLWithPath: entry.path)
+            if entry.name == "node_modules" {
+                out.append(contentsOf: enumerateLifecycleScripts(inNodeModules: entryURL, root: scopeRoot))
                 continue
             }
-            if maxDepth > 0, !skipDirNames.contains(fileName) {
-                out.append(contentsOf: scanWatchedFolder(entryURL, maxDepth: maxDepth - 1))
+            if maxDepth > 0, !skipDirNames.contains(entry.name) {
+                out.append(contentsOf: scanWatchedFolder(entryURL, maxDepth: maxDepth - 1, root: scopeRoot))
             }
         }
         return out
@@ -98,35 +98,31 @@ enum PackageCveScriptScan {
     /// scoped packages (`node_modules/@scope/<pkg>/package.json`). Never
     /// descends into a package's own `node_modules` (nested dependency
     /// trees) — this is a top-level inventory, not a full recursive audit.
-    static func enumerateLifecycleScripts(inNodeModules nodeModulesURL: URL) -> [Finding] {
+    /// A package directory that is a symlink (pnpm) is followed only when it
+    /// resolves inside the scan root.
+    static func enumerateLifecycleScripts(inNodeModules nodeModulesURL: URL, root: String? = nil) -> [Finding] {
         var out: [Finding] = []
-        guard let entries = try? FileManager.default.contentsOfDirectory(
-            at: nodeModulesURL, includingPropertiesForKeys: [.isDirectoryKey], options: []
-        ) else { return out }
-        for entryURL in entries {
-            let name = entryURL.lastPathComponent
-            guard (try? entryURL.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true else { continue }
-            if name.hasPrefix("@") {
-                guard let scopedEntries = try? FileManager.default.contentsOfDirectory(
-                    at: entryURL, includingPropertiesForKeys: [.isDirectoryKey], options: []
-                ) else { continue }
-                for scopedEntryURL in scopedEntries {
-                    guard (try? scopedEntryURL.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true else { continue }
+        guard let base = SafeScanFS.canonicalPath(nodeModulesURL.path) else { return out }
+        let scopeRoot = root ?? base
+        for entry in SafeScanFS.children(ofDirectory: base, root: scopeRoot) where entry.kind == .directory {
+            if entry.name.hasPrefix("@") {
+                for scoped in SafeScanFS.children(ofDirectory: entry.path, root: scopeRoot) where scoped.kind == .directory {
                     out.append(contentsOf: extractLifecycleScripts(
-                        packageDir: scopedEntryURL, packageName: "\(name)/\(scopedEntryURL.lastPathComponent)"
+                        packageDir: scoped.path, packageName: "\(entry.name)/\(scoped.name)", root: scopeRoot
                     ))
                 }
             } else {
-                out.append(contentsOf: extractLifecycleScripts(packageDir: entryURL, packageName: name))
+                out.append(contentsOf: extractLifecycleScripts(packageDir: entry.path, packageName: entry.name, root: scopeRoot))
             }
         }
         return out
     }
 
-    private static func extractLifecycleScripts(packageDir: URL, packageName: String) -> [Finding] {
-        let manifestURL = packageDir.appendingPathComponent("package.json")
-        guard let data = try? Data(contentsOf: manifestURL),
-              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [] }
+    private static func extractLifecycleScripts(packageDir: String, packageName: String, root: String) -> [Finding] {
+        // No link-following read: regular file inside the scan root, size-capped.
+        guard let manifest = SafeScanFS.readFile(packageDir + "/package.json", root: root),
+              let obj = try? JSONSerialization.jsonObject(with: manifest.data) as? [String: Any] else { return [] }
+        let manifestPath = manifest.path
         let version = (obj["version"] as? String) ?? ""
         guard let scripts = obj["scripts"] as? [String: Any] else { return [] }
 
@@ -138,8 +134,9 @@ enum PackageCveScriptScan {
                 packageName: packageName,
                 packageVersion: version,
                 scriptName: scriptName,
-                scriptCommand: command,
-                relativePath: manifestURL.path,
+                // Attacker-authored (any dependency's package.json): cap + strip control chars.
+                scriptCommand: MCPUntrustedText.sanitize(command),
+                relativePath: manifestPath,
                 isDangerPattern: dangerLabel != nil,
                 dangerPatternLabel: dangerLabel
             ))
@@ -150,10 +147,21 @@ enum PackageCveScriptScan {
     /// Entry point: scans every watched folder (the same list
     /// `PackageCveScanLanguages` uses) for lifecycle scripts declared by
     /// currently-installed npm dependencies.
+    /// Upper bound on folders scanned per call.
+    static let maxWatchedFolders = 50
+
     static func runScan(watchedFolders: [String]) -> [Finding] {
         var out: [Finding] = []
-        for folder in watchedFolders {
-            out.append(contentsOf: scanWatchedFolder(URL(fileURLWithPath: folder), maxDepth: 6))
+        var seen = Set<String>()
+        for folder in watchedFolders.prefix(maxWatchedFolders) {
+            // Defence in depth (callers exposed to untrusted input validate against the
+            // registered-folder list first): absolute, existing directory, no duplicates.
+            guard folder.hasPrefix("/"), !folder.contains("\0") else { continue }
+            let url = URL(fileURLWithPath: folder).resolvingSymlinksInPath()
+            var isDir: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue,
+                  seen.insert(url.path).inserted else { continue }
+            out.append(contentsOf: scanWatchedFolder(url, maxDepth: 6))
         }
         return out
     }

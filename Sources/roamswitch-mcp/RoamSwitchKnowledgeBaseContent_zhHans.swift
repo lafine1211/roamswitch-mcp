@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.16 (build 134).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.17 (build 135).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -378,7 +378,7 @@ extension RoamSwitchKnowledgeBase {
                 • 通知：一条通知（Pro）加上事件时间线中的一条记录（来源 execRecorder，处置“仅通知”）。通知本身绝不会触发 Air-Gap 等隔离。
                 • 存储：分段的 JSON Lines，位于 /Library/Application Support/RoamSwitch/exec_log（仅 root 可读：0700/0600，因为命令行可能包含机密；应用、查看器和 MCP 服务器只能通过特权 Helper 读取），默认 200 MB·14 天（可更改），崩溃安全的轮转。各分段以哈希链相连，可发现被删除、编辑或截断的分段（“验证哈希链”）；这是篡改检测，而非篡改防护。不会记录环境变量，但命令行参数中可能包含敏感信息。
                 • 负载控制：有界队列，过载时丢弃最旧的行（计数并显示），指数退避重启，关闭后 eslogger 会被完全停止。
-                • 查看与导出：菜单 → 恶意软件防护 →“进程执行记录…”（搜索、进程树、导出为 JSON Lines）。MCP 工具 `search_exec_events` 和 `get_process_tree`（Pro，只读）。
+                • 查看与导出：菜单 → 恶意软件防护 →“进程执行记录…”（搜索、进程树、导出为 JSON Lines）。MCP 工具 `search_exec_events` 和 `get_process_tree`（Pro，只读）。 输出安全：进程路径、参数和签名ID可被攻击者任意构造，因此这些工具会去除控制字符、将每个字符串限制在300个字符以内、把已知的密钥格式和带密钥名称的参数值屏蔽为 ****，并在JSON之后追加第二个文本块，标明其为不可信的外部数据。搜索词（`query`）同样只与已屏蔽的命令行进行匹配（被屏蔽的值无法通过搜索找到），长度至少为3个字符，且带搜索词的查询按会话限制频率，因此无法借助搜索逐字符探测密钥。应用自带的查看窗口则会对您自己的日志进行全文搜索。
                 """,
                 recommendation: "如果需要用于事件排查的执行历史，可以启用，并请先在“完全磁盘访问权限”中允许 RoamSwitch。请把通知当作需要在日志中核实的线索，而不是入侵的证据。"
             ),
@@ -566,7 +566,7 @@ extension RoamSwitchKnowledgeBase {
                 • 执行内容：以目标文件夹为工作目录运行 `npm audit signatures`，与 npm 注册表 (registry.npmjs.org) 通信。这是 RoamSwitch 中唯一与 npmjs.com 通信的功能。
                 • 输出：原样显示 npm 命令的输出（绝不自行解读或定论）。若退出码非零，或输出中包含 "invalid"/"missing registry signature" 等字样，会显示轻量级的注意提示。
                 • 若找不到 npm 命令，会显示提示安装 Node.js/npm 的信息。
-                • MCP 工具：`run_npm_audit_signatures`（`directory` 参数，Pro 与选择性启用开关的双重限制）。
+                • MCP 工具：`run_npm_audit_signatures`（`directory` 参数，Pro 与选择性启用开关的双重限制）。 `directory` 仅接受在 RoamSwitch 中登记的项目文件夹内的路径。npm 运行时将注册表固定为 registry.npmjs.org，忽略用户/项目的 npm 配置，并设有 90 秒超时。
                 """,
                 recommendation: "仅在部署前的依赖审计，或怀疑发生供应链入侵的事件调查时启用即可，无需始终保持开启。"
             ),
@@ -1451,6 +1451,7 @@ extension RoamSwitchKnowledgeBase {
                   - 每天一次获取链接保护的威胁情报源、软件包 CVE 映射和漏洞 CVE 映射（仅接收、签名验证、不发送标识符；链接保护的自动更新可以关闭）
                   - 与用户配置的 VPN、安全 DNS 服务商之间的正常通信
                   - 实证型漏洞验证向 127.0.0.1（本 Mac）发送的非破坏性探测
+                  - npm 签名验证（选择性启用，仅限 Pro）运行时会连接 registry.npmjs.org
                 • 代码中不存在遥测或使用情况收集。辅助程序未批准提醒等功能也仅通过本机内的计数实现。
                 """,
                 recommendation: "即使在高度机密的工作环境或个人开发环境中，也可以放心使用，无需担心信息泄露。"

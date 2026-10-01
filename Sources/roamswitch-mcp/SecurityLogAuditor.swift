@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.16 (build 134).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.17 (build 135).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -241,6 +241,11 @@ final class SecurityLogAuditor {
         )
     }
 
+    /// Wall-clock ceiling for one `log show` query.
+    private static let logQueryTimeoutSeconds: TimeInterval = 60
+    /// Output kept from one query (excess is drained and dropped).
+    private static let maxLogOutputBytes = 64 * 1024 * 1024
+
     private func fetchSecurityLogs(hours: Int) -> [SecurityLogEvent] {
         var results: [SecurityLogEvent] = []
 
@@ -253,6 +258,9 @@ final class SecurityLogAuditor {
         subsystem == "com.apple.XProtectFramework.PluginService" OR \
         process == "XProtectRemediator"
         """
+
+        // Defence in depth: never query more than 7 days, whatever the caller passed.
+        let hours = min(max(hours, 1), 168)
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/log")
@@ -270,11 +278,30 @@ final class SecurityLogAuditor {
 
         do {
             try process.run()
-            
-            // Read output stream line by line with 8s timeout to avoid stalls
+
+            // Hard ceiling so a wedged/very slow `log show` can't stall the caller: SIGTERM
+            // at the deadline, SIGKILL shortly after. Killing the process closes its pipe, so
+            // the read loop below ends.
+            let pid = process.processIdentifier
+            let watchdog = DispatchWorkItem {
+                process.terminate()
+                DispatchQueue.global().asyncAfter(deadline: .now() + 3) {
+                    if process.isRunning { kill(pid, SIGKILL) }
+                }
+            }
+            DispatchQueue.global().asyncAfter(deadline: .now() + Self.logQueryTimeoutSeconds, execute: watchdog)
+
+            // Bounded read: keep at most `maxLogOutputBytes`, keep draining so the child never
+            // blocks on a full pipe.
             let fileHandle = pipe.fileHandleForReading
-            let data = fileHandle.readDataToEndOfFile()
+            var data = Data()
+            while let chunk = try? fileHandle.read(upToCount: 64 * 1024), !chunk.isEmpty {
+                if data.count < Self.maxLogOutputBytes {
+                    data.append(chunk.prefix(Self.maxLogOutputBytes - data.count))
+                }
+            }
             process.waitUntilExit()
+            watchdog.cancel()
 
             if let output = String(data: data, encoding: .utf8) {
                 let lines = output.components(separatedBy: .newlines)
@@ -285,7 +312,9 @@ final class SecurityLogAuditor {
                 }
             }
         } catch {
-            print("[SecurityLogAuditor] Log query failed: \(error)")
+            // stderr, never stdout: in `RoamSwitchMCPServer` stdout IS the JSON-RPC channel,
+            // so a stray print would corrupt the protocol stream.
+            FileHandle.standardError.write(Data("[SecurityLogAuditor] Log query failed: \(error)\n".utf8))
         }
 
         // Sort descending by timestamp

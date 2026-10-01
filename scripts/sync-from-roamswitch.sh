@@ -41,7 +41,7 @@ CORE=(AppLanguage TrustedNetwork GatewayFingerprint WiFiSecurityMonitor \
       MCPResponseFormatting MCPProtocol MCPServer RoamSwitchMCPSkillsContent \
       PackageCveScan PackageCveMapData PackageCveScanLanguages PackageCveMapLanguagesData \
       PackageCveScriptScan NpmAuditSignatures TyposquatGuard \
-      SecretLeakScanning CryptoSecretDetection SecurityLogAuditor LogTemplateAnalyzer QuarantineManager CanaryStatusReader \
+      SecretLeakScanning SecurityLogAuditor LogTemplateAnalyzer QuarantineManager CanaryStatusReader \
       RansomwareEntropyStatusReader ForensicCaptureManager HoneytokenStatusReader \
       BrowserCredentialWatchStatusReader \
       PortAnomalyStatusReader RuntimeThreatStatusReader NotificationHistory \
@@ -49,7 +49,8 @@ CORE=(AppLanguage TrustedNetwork GatewayFingerprint WiFiSecurityMonitor \
       RansomwareSnapshotStatusReader MCPExecRecorderTools)
 
 # Sources that live in the app's Shared/ folder (also compiled into the helper).
-SHARED=(RansomwareSnapshotLogic ExecEventModel ExecLogStore ExecProcessTree ExecReadAPI)
+SHARED=(RansomwareSnapshotLogic ExecEventModel ExecLogStore ExecProcessTree ExecReadAPI \
+        CryptoSecretDetection SafeScanFS ExecCommandMasker)
 
 # App test files that only exercise types present in this repo. Their
 # `@testable import RoamSwitch` is rewritten to this package's module name.

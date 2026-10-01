@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.16 (build 134).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.17 (build 135).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -34,6 +34,59 @@ struct MCPExecRecorderStatePayload: Encodable {
     let malformedLines: UInt64?
     let alertsRaised: UInt64?
     let statusUpdatedAt: String?
+}
+
+/// Output hygiene for exec-recorder data returned over MCP. Everything in an exec
+/// event (process path, argv, cwd, signing identity) is chosen by whoever ran the
+/// process, i.e. potentially an attacker targeting the MCP client's LLM, and argv
+/// routinely carries secrets (`--token xxx`, `Authorization: Bearer ...`,
+/// `https://user:pass@host`). So before anything leaves this process every string is
+/// (1) stripped of control/format characters, (2) secret-masked, and (3) capped at
+/// `MCPUntrustedText.maxLength` (300) — always in that order, so an invisible
+/// character can't hide a secret from the masker and a cut can't leave a half-masked
+/// secret behind. The recorder's own store limits (`ESLoggerParser.maxArgChars` 512,
+/// `maxPathChars` 1024) are upper bounds on what is *kept*; this 300-character cap on
+/// what is *returned* is deliberately stricter.
+enum ExecOutputSanitizer {
+    /// Pre-mask cap: above the parser's own per-string limits so the masker sees whole values.
+    private static let premaskLimit = 1024
+    static let redactionMarker = "****"
+
+    /// One string (path, cwd, signing ID, ...).
+    static func clean(_ s: String) -> String {
+        MCPUntrustedText.sanitize(maskText(MCPUntrustedText.sanitize(s, maxLength: premaskLimit)))
+    }
+
+    static func clean(_ s: String?) -> String? { s.map { clean($0) } }
+
+    /// A whole argv: flag/value pairs are masked across element boundaries.
+    static func cleanArgs(_ args: [String]?) -> [String]? {
+        guard let args else { return nil }
+        let stripped = args.map { MCPUntrustedText.sanitize($0, maxLength: premaskLimit) }
+        return maskArgs(stripped).map { MCPUntrustedText.sanitize($0) }
+    }
+
+    // MARK: - Masking
+
+    /// `--api-key`, `-token`, ... The rules live in `ExecCommandMasker` (Shared/) so the
+    /// helper's masked search match uses exactly the same ones.
+    static func isSensitiveFlagName(_ rawName: String) -> Bool { ExecCommandMasker.isSensitiveFlagName(rawName) }
+
+    /// A whole argv: flag/value pairs are masked across element boundaries.
+    static func maskArgs(_ args: [String]) -> [String] {
+        ExecCommandMasker.maskArgs(args, marker: redactionMarker, text: maskText)
+    }
+
+    /// Masks secrets inside one string: URL credentials, bearer/basic tokens,
+    /// `name=value` / `name: value` / `--flag value` for secret-looking names
+    /// (also inside `sh -c '...'` bodies), then every known token format
+    /// (`SecretLeakScanning.redact`: OpenAI/Anthropic/GitHub/AWS/..., private keys,
+    /// crypto keys, mnemonics). `redact` compiles its patterns per call, so it is only
+    /// run on strings long enough to hold any of those secrets.
+    static func maskText(_ s: String) -> String {
+        let result = ExecCommandMasker.maskStructural(s, marker: redactionMarker)
+        return result.count >= 12 ? ExecCommandMasker.maskHighEntropy(SecretLeakScanning.redact(result), marker: redactionMarker) : result
+    }
 }
 
 struct MCPExecEventPayload: Encodable {
@@ -92,6 +145,33 @@ struct MCPProcessTreePayload: Encodable {
     let caveats: [String]
 }
 
+/// Sliding-window limit on `search_exec_events` calls that carry a text query. One MCP server
+/// process serves one client session, so process-wide state is per session. A legitimate
+/// investigation needs a handful of queries; probing for a secret needs thousands.
+final class MCPExecSearchThrottle {
+    static let shared = MCPExecSearchThrottle()
+
+    let maxQueries: Int
+    let window: Double
+    private var stamps: [Double] = []
+    private let lock = NSLock()
+
+    init(maxQueries: Int = 20, window: Double = 60) {
+        self.maxQueries = maxQueries
+        self.window = window
+    }
+
+    /// Records the call and returns true when it is within the limit; a refused call is not recorded.
+    func allow(now: Double = Date().timeIntervalSince1970) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        stamps.removeAll { now - $0 >= window }
+        guard stamps.count < maxQueries else { return false }
+        stamps.append(now)
+        return true
+    }
+}
+
 /// Answers an `ExecMCPMailbox.Request` (nil = no answer). The default asks the
 /// running RoamSwitch app; tests inject a closure.
 typealias ExecReadTransport = (ExecMCPMailbox.Request) -> ExecMCPMailbox.Response?
@@ -144,14 +224,19 @@ enum MCPExecRecorderTools {
         return f.date(from: t)?.timeIntervalSince1970
     }
 
+    /// Every attacker-controlled string goes through `ExecOutputSanitizer` (control/format
+    /// characters stripped, secrets masked, 300-character cap); callers must send the result
+    /// with `textContentResult(_, untrusted: true)`.
     static func eventPayload(_ r: ExecEventRecord) -> MCPExecEventPayload {
         let iso = ISO8601DateFormatter()
         iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return MCPExecEventPayload(
             seq: r.seq, time: iso.string(from: Date(timeIntervalSince1970: r.time)), kind: r.kind, pid: r.pid, ppid: r.ppid,
-            uid: r.uid, path: r.path, args: r.args, cwd: r.cwd, signature: r.signatureClass.rawValue,
-            signingID: r.signingID, teamID: r.teamID, cdhash: r.cdhash, exitStatus: r.exitStatus,
-            dyldInsertLibraries: r.dyldInsertLibraries
+            uid: r.uid, path: ExecOutputSanitizer.clean(r.path), args: ExecOutputSanitizer.cleanArgs(r.args),
+            cwd: ExecOutputSanitizer.clean(r.cwd), signature: r.signatureClass.rawValue,
+            signingID: ExecOutputSanitizer.clean(r.signingID), teamID: ExecOutputSanitizer.clean(r.teamID),
+            cdhash: ExecOutputSanitizer.clean(r.cdhash), exitStatus: r.exitStatus,
+            dyldInsertLibraries: ExecOutputSanitizer.clean(r.dyldInsertLibraries)
         )
     }
 
@@ -160,7 +245,8 @@ enum MCPExecRecorderTools {
         iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return MCPProcessNodePayload(
             depth: n.depth, pid: n.pid, ppid: n.ppid, time: iso.string(from: Date(timeIntervalSince1970: n.time)),
-            path: n.path, args: n.args, signature: n.signature.rawValue, signingID: n.signingID, teamID: n.teamID
+            path: ExecOutputSanitizer.clean(n.path), args: ExecOutputSanitizer.cleanArgs(n.args), signature: n.signature.rawValue,
+            signingID: ExecOutputSanitizer.clean(n.signingID), teamID: ExecOutputSanitizer.clean(n.teamID)
         )
     }
 
@@ -170,6 +256,7 @@ enum MCPExecRecorderTools {
     static func unavailableText(code: String?) -> String {
         switch code {
         case "pro_required": return loc(proRequiredMessage)
+        case "rate_limited": return loc("検索語付きの検索が短時間に集中しました。しばらく待ってから再試行してください。")
         case "helper_unavailable", "bad_request":
             return loc("ヘルパーから実行記録を取得できませんでした。RoamSwitchHelperが動作しているか確認してください。")
         default:
@@ -177,9 +264,22 @@ enum MCPExecRecorderTools {
         }
     }
 
+    /// A rejected query (too short / too frequent): same payload shape, no data, the reason in
+    /// `unavailableReason`.
+    private static func rejectedSearch(_ reason: String, defaults: UserDefaults, now: Date) -> MCPExecSearchPayload {
+        MCPExecSearchPayload(recorder: recorderState(defaults: defaults, now: now), logReadable: false, matched: 0,
+                             scanTruncated: false, events: [], unavailableReason: reason, caveats: caveats())
+    }
+
     /// `arguments`: query (text), pid, ppid, since, until, kind (exec|fork|exit),
     /// signature (platform|developer|adhoc|unsigned), teamID, limit (1-200).
-    static func search(arguments: [String: Any], defaults: UserDefaults, transport: ExecReadTransport = MCPExecRecorderTools.mailboxTransport, now: Date = Date()) -> MCPExecSearchPayload {
+    ///
+    /// `query` is matched by the helper against the secret-masked command line only
+    /// (`maskedTextMatch`): matching the raw line would let an LLM (or an injected prompt)
+    /// recover a secret one character at a time from whether a query hits. As further
+    /// defence in depth a query must be at least `ExecCommandMasker.minQueryLength`
+    /// characters, and text queries are rate-limited per MCP session (`MCPExecSearchThrottle`).
+    static func search(arguments: [String: Any], defaults: UserDefaults, transport: ExecReadTransport = MCPExecRecorderTools.mailboxTransport, throttle: MCPExecSearchThrottle = .shared, now: Date = Date()) -> MCPExecSearchPayload {
         func int32(_ k: String) -> Int32? { (arguments[k] as? Int).flatMap { Int32(exactly: $0) } }
         let text = (arguments["query"] as? String).map { String($0.prefix(200)) }
         let since = (arguments["since"] as? String).flatMap { parseTimeArgument($0, now: now) }
@@ -187,8 +287,17 @@ enum MCPExecRecorderTools {
         let kind = (arguments["kind"] as? String).flatMap { ["exec", "fork", "exit"].contains($0) ? $0 : nil }
         let sig = (arguments["signature"] as? String).flatMap { ExecSignatureClass(rawValue: $0) }
         let limit = min(max((arguments["limit"] as? Int) ?? 50, 1), 200)
+        if let text, !text.isEmpty {
+            guard ExecCommandMasker.normalizedNeedle(text).count >= ExecCommandMasker.minQueryLength else {
+                return rejectedSearch(loc("検索語は3文字以上で指定してください(短い検索語でコマンドライン中の秘密を1文字ずつ探ることを防ぐためです)。"), defaults: defaults, now: now)
+            }
+            guard throttle.allow(now: now.timeIntervalSince1970) else {
+                return rejectedSearch(loc("検索語付きの検索が短時間に集中しました。しばらく待ってから再試行してください。"), defaults: defaults, now: now)
+            }
+        }
         let request = ExecSearchRequest(text: text, pid: int32("pid"), ppid: int32("ppid"), since: since, until: until, kind: kind,
-                                        signature: sig?.rawValue, teamID: arguments["teamID"] as? String, limit: limit)
+                                        signature: sig?.rawValue, teamID: arguments["teamID"] as? String, limit: limit,
+                                        maskedTextMatch: true)
         let response = transport(ExecMCPMailbox.Request(op: "search", search: request))
         let reply = (response?.ok == true) ? response?.search : nil
         return MCPExecSearchPayload(

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.16 (build 134).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.17 (build 135).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -101,7 +101,9 @@ final class NetworkHistoryGuard {
 
         var entries: [HistorySnapshotEntry] = []
         for (ssid, record) in records {
-            entries.append(HistorySnapshotEntry(ssid: ssid, gatewayCount: record.gatewayMACs.count, lastSeen: record.lastSeen))
+            // SSIDs are attacker-chosen (anyone can name an access point): cap length and
+            // strip control/format characters before they reach an MCP client's LLM.
+            entries.append(HistorySnapshotEntry(ssid: MCPUntrustedText.sanitize(ssid), gatewayCount: record.gatewayMACs.count, lastSeen: record.lastSeen))
         }
         entries.sort { $0.lastSeen > $1.lastSeen }
 
@@ -117,7 +119,7 @@ final class NetworkHistoryGuard {
                 }
                 if sharesGateway { continue }
                 if let distance = NetworkSSIDSimilarity.suspiciousDistance(a, b) {
-                    lookalikes.append(LookalikePair(ssid: a, similarTo: b, distance: distance))
+                    lookalikes.append(LookalikePair(ssid: MCPUntrustedText.sanitize(a), similarTo: MCPUntrustedText.sanitize(b), distance: distance))
                 }
             }
         }

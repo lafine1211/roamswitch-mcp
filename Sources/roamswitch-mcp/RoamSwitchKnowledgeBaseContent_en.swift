@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.16 (build 134).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.17 (build 135).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -377,7 +377,7 @@ extension RoamSwitchKnowledgeBase {
                 • Alerts: a notification (Pro) plus an entry in the incident timeline (source execRecorder, action “notify only”). An alert never triggers the air-gap or any other isolation by itself.
                 • Storage: segmented JSON Lines under /Library/Application Support/RoamSwitch/exec_log (root-only: 0700/0600, because command lines can contain secrets; the app, viewer and MCP server read only through the privileged helper), 200 MB / 14 days by default (changeable), crash-safe rotation. Segments are hash-chained so deleted, edited or truncated segments are detected (“Verify chain”); this is tamper-evident, not tamper-proof. Environment variables are never recorded, but command-line arguments can contain secrets.
                 • Load control: a bounded queue that drops the oldest lines when overloaded (counted and shown), exponential-backoff restarts, and turning it off stops eslogger completely.
-                • Viewer and export: menu → Malware Protection → “Process Execution Log…” (search, process tree, export to JSON Lines). MCP tools `search_exec_events` and `get_process_tree` (Pro, read-only).
+                • Viewer and export: menu → Malware Protection → “Process Execution Log…” (search, process tree, export to JSON Lines). MCP tools `search_exec_events` and `get_process_tree` (Pro, read-only). Output safety: process paths, arguments and signing IDs are attacker-controlled, so the tools strip control characters, cap each string at 300 characters, mask well-known secret formats and secret-named flag values as ****, and append a second text block (after the JSON) marking them as untrusted external data. The `query` text is matched against the already-masked command line only (a masked value can never be found by searching), must be at least 3 characters, and text queries are rate-limited per session, so the search cannot be used to probe for a secret character by character. The app's own viewer searches your own log in full.
                 """,
                 recommendation: "Turn it on if you want an execution history for incident triage, and allow RoamSwitch in Full Disk Access first. Treat alerts as leads to check in the log, not as proof of compromise."
             ),
@@ -565,7 +565,7 @@ extension RoamSwitchKnowledgeBase {
                 • What it does: runs `npm audit signatures` with the target folder as the working directory, contacting the npm registry (registry.npmjs.org). This is the only RoamSwitch feature that talks to npmjs.com.
                 • Output: npm's own command output is shown verbatim (never hand-interpreted). A non-zero exit code, or wording like "invalid"/"missing registry signature" in the output, gets a lightweight attention marker.
                 • If the npm command isn't found, a message prompts installing Node.js/npm.
-                • MCP tool: `run_npm_audit_signatures` (`directory` argument, double-gated on Pro plus the opt-in toggle).
+                • MCP tool: `run_npm_audit_signatures` (`directory` argument, double-gated on Pro plus the opt-in toggle). `directory` is accepted only inside a project folder registered in RoamSwitch. npm runs with the registry pinned to registry.npmjs.org, ignoring user/project npm configuration, under a 90-second timeout.
                 """,
                 recommendation: "Enable this only for a pre-deploy dependency audit or when investigating a suspected supply-chain compromise — it doesn't need to stay on all the time."
             ),
@@ -1450,6 +1450,7 @@ extension RoamSwitchKnowledgeBase {
                   - Daily downloads of the Link Guard threat feed, package CVE maps, and vulnerability CVE maps (receive-only, signature-verified, no identifiers sent; Link Guard auto-update can be turned off)
                   - Normal traffic to the VPN and secure DNS providers you configure
                   - Active vulnerability verification's non-destructive probes to 127.0.0.1 (this Mac itself)
+                  - npm signature verification (opt-in, Pro only) contacts registry.npmjs.org when run
                 • There is no telemetry or usage collection anywhere in the code. Even the helper-approval reminder works from an on-device count only.
                 """,
                 recommendation: "It's safe to use in highly confidential business environments and personal development setups without worrying about data leaks."

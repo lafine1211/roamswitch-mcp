@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.16 (build 134).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.17 (build 135).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -378,7 +378,7 @@ extension RoamSwitchKnowledgeBase {
                 • 알림: 알림(Pro)과 인시던트 타임라인 기록(출처 execRecorder, 조치 「알림 전용」). 알림 하나만으로 Air-Gap 등의 격리가 발동되는 일은 없습니다.
                 • 저장: /Library/Application Support/RoamSwitch/exec_log 아래의 세그먼트 분할 JSON Lines(root 전용 0700/0600. 명령줄에 비밀 정보가 포함될 수 있어, 앱·뷰어·MCP 서버는 권한 있는 헬퍼를 통해서만 읽습니다), 기본 200MB·14일(변경 가능), 충돌에도 안전한 로테이션. 세그먼트를 해시 체인으로 연결해 삭제·수정·잘림을 탐지합니다(「체인 검증」). 변조 탐지일 뿐 변조 방지는 아닙니다. 환경 변수는 기록하지 않지만 명령줄 인수에는 민감한 정보가 포함될 수 있습니다.
                 • 부하 대책: 과부하 시 오래된 줄부터 버리는 제한 큐(건수 표시), 지수 백오프 재시작, 끄면 eslogger가 완전히 중지됩니다.
-                • 보기와 내보내기: 메뉴 → 악성코드 방어 → 「프로세스 실행 기록…」(검색, 프로세스 트리, JSON Lines 내보내기). MCP 도구 `search_exec_events`, `get_process_tree`(Pro, 읽기 전용).
+                • 보기와 내보내기: 메뉴 → 악성코드 방어 → 「프로세스 실행 기록…」(검색, 프로세스 트리, JSON Lines 내보내기). MCP 도구 `search_exec_events`, `get_process_tree`(Pro, 읽기 전용). 출력 안전: 프로세스 경로·인수·서명 ID는 공격자가 임의로 만들 수 있으므로, 제어 문자를 제거하고 문자열당 300자로 제한하며 알려진 비밀 정보 형식과 비밀 이름 플래그의 값을 ****로 가리고, JSON 뒤에 신뢰할 수 없는 외부 데이터임을 알리는 두 번째 텍스트 블록을 덧붙입니다. 검색어(`query`)도 이미 마스킹된 명령줄에 대해서만 대조되며(마스킹된 값은 검색으로 찾을 수 없습니다), 3자 이상이어야 하고, 검색어가 있는 검색은 세션마다 횟수가 제한되므로 검색으로 비밀 정보를 한 글자씩 알아낼 수 없습니다. 앱 자체의 보기 화면은 본인의 로그를 전체 텍스트로 검색합니다.
                 """,
                 recommendation: "인시던트 조사용 실행 이력이 필요할 때 켜세요. 먼저 전체 디스크 접근 권한에서 RoamSwitch를 허용합니다. 알림은 침해의 증거가 아니라 로그에서 확인할 단서로 다뤄 주세요."
             ),
@@ -566,7 +566,7 @@ extension RoamSwitchKnowledgeBase {
                 • 동작 내용: 대상 폴더를 작업 디렉터리로 하여 `npm audit signatures`를 실행하고, npm 레지스트리(registry.npmjs.org)와 통신합니다. RoamSwitch에서 npmjs.com과 통신하는 것은 이 기능뿐입니다.
                 • 출력: npm의 명령 출력을 그대로 표시합니다(자체적으로 해석하거나 단정하지 않음). 종료 코드가 0이 아니거나 출력에 "invalid"/"missing registry signature" 등의 문구가 포함되면 참고용 주의 표시를 합니다.
                 • npm 명령을 찾을 수 없으면 Node.js/npm 설치를 안내하는 메시지를 표시합니다.
-                • MCP 도구: `run_npm_audit_signatures`(`directory` 인자, Pro와 옵트인 토글의 이중 게이트).
+                • MCP 도구: `run_npm_audit_signatures`(`directory` 인자, Pro와 옵트인 토글의 이중 게이트). `directory`는 RoamSwitch에 등록된 프로젝트 폴더 내부 경로만 허용합니다. npm은 레지스트리를 registry.npmjs.org로 고정하고 사용자/프로젝트 npm 설정을 무시하며 90초 타임아웃으로 실행됩니다.
                 """,
                 recommendation: "배포 전 의존성 감사나 공급망 침해가 의심되는 사고 조사 시에만 활성화하세요. 항상 켜둘 필요는 없습니다."
             ),
@@ -1451,6 +1451,7 @@ extension RoamSwitchKnowledgeBase {
                   - 링크 보호 위협 정보, 패키지 CVE 맵, 취약점 CVE 맵의 일일 다운로드(수신 전용, 서명 검증, 식별자 미전송; 링크 보호 자동 업데이트는 끌 수 있음)
                   - 사용자가 설정한 VPN 및 보안 DNS 제공업체와의 일반 트래픽
                   - 실증형 취약점 검증의 127.0.0.1(이 Mac 자체)로의 비파괴적 프로브
+                  - npm 서명 검증(옵트인, Pro 전용)을 실행할 때 registry.npmjs.org와 통신
                 • 코드 어디에도 사용 현황 수집이나 원격 측정은 존재하지 않습니다. 헬퍼 승인 알림조차 기기 내 카운트만으로 동작합니다.
                 """,
                 recommendation: "기밀성이 높은 업무 환경이나 개인 개발 환경에서도 데이터 유출 걱정 없이 안심하고 사용할 수 있습니다."

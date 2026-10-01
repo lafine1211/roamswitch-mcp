@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.16 (build 134).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.17 (build 135).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -794,22 +794,24 @@ enum PackageCveScanLanguages {
 
     /// Walks `folder` up to `maxDepth` levels, running the matching parser
     /// on every recognized lockfile found. Tolerant of any I/O error —
-    /// returns whatever it could read.
-    static func scanWatchedFolder(_ folder: URL, maxDepth: Int) -> [WatchedDependency] {
+    /// returns whatever it could read. Symlinks are followed only while they
+    /// resolve inside the scan root, and lockfiles are read without following
+    /// a final-component link, as regular files only, size-capped
+    /// (`SafeScanFS`); `root` is set by the recursion, callers omit it.
+    static func scanWatchedFolder(_ folder: URL, maxDepth: Int, root: String? = nil) -> [WatchedDependency] {
         var out: [WatchedDependency] = []
-        guard let entries = try? FileManager.default.contentsOfDirectory(
-            at: folder, includingPropertiesForKeys: [.isDirectoryKey], options: []
-        ) else { return out }
-        for entryURL in entries {
-            let fileName = entryURL.lastPathComponent
-            let isDir = (try? entryURL.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
-            if isDir {
-                if maxDepth > 0, !skipDirNames.contains(fileName) {
-                    out.append(contentsOf: scanWatchedFolder(entryURL, maxDepth: maxDepth - 1))
+        guard let base = SafeScanFS.canonicalPath(folder.path) else { return out }
+        let scopeRoot = root ?? base
+        for entry in SafeScanFS.children(ofDirectory: base, root: scopeRoot) {
+            if entry.kind == .directory {
+                if maxDepth > 0, !skipDirNames.contains(entry.name) {
+                    out.append(contentsOf: scanWatchedFolder(URL(fileURLWithPath: entry.path), maxDepth: maxDepth - 1, root: scopeRoot))
                 }
                 continue
             }
-            if let parser = lockfileParsers[fileName], let text = try? String(contentsOf: entryURL, encoding: .utf8) {
+            if let parser = lockfileParsers[entry.name],
+               let data = SafeScanFS.readRegularFile(atPath: entry.path, maxBytes: SafeScanFS.maxLockfileBytes),
+               let text = String(data: data, encoding: .utf8) {
                 out.append(contentsOf: parser(text))
             }
         }

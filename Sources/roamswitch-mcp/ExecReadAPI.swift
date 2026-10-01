@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.16 (build 134).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.17 (build 135).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -38,13 +38,18 @@ public struct ExecSearchRequest: Codable, Equatable {
     public var signature: String?
     public var teamID: String?
     public var limit: Int
+    /// nil/false = full-text match (the app's own UI). true = `text` is matched against
+    /// the secret-masked command line only, with a minimum query length (MCP path; see
+    /// `ExecCommandMasker`). Optional so an older app's request still decodes.
+    public var maskedTextMatch: Bool?
 
     /// Hard cap on events per reply (the app's export uses the maximum; the MCP
     /// tools ask for at most 200).
     public static let maxLimit = 5000
 
     public init(text: String? = nil, pid: Int32? = nil, ppid: Int32? = nil, since: Double? = nil, until: Double? = nil,
-                kind: String? = nil, signature: String? = nil, teamID: String? = nil, limit: Int = 50) {
+                kind: String? = nil, signature: String? = nil, teamID: String? = nil, limit: Int = 50,
+                maskedTextMatch: Bool? = nil) {
         self.text = text
         self.pid = pid
         self.ppid = ppid
@@ -54,6 +59,7 @@ public struct ExecSearchRequest: Codable, Equatable {
         self.signature = signature
         self.teamID = teamID
         self.limit = limit
+        self.maskedTextMatch = maskedTextMatch
     }
 
     /// Untrusted input -> a clamped `ExecLogQuery` (helper side).
@@ -64,7 +70,8 @@ public struct ExecSearchRequest: Codable, Equatable {
             kind: kind.flatMap { ["exec", "fork", "exit"].contains($0) ? $0 : nil },
             signature: signature.flatMap { ExecSignatureClass(rawValue: $0) },
             teamID: teamID.map { String($0.prefix(32)) },
-            limit: min(max(limit, 1), Self.maxLimit)
+            limit: min(max(limit, 1), Self.maxLimit),
+            maskedTextMatch: maskedTextMatch == true
         )
     }
 }
@@ -181,7 +188,7 @@ public enum ExecMCPMailbox {
     public struct Response: Codable, Equatable {
         public var id: String
         public var ok: Bool
-        /// Stable machine code when `ok == false`: "pro_required" | "helper_unavailable" | "bad_request".
+        /// Stable machine code when `ok == false`: "pro_required" | "helper_unavailable" | "bad_request" | "rate_limited".
         public var error: String?
         public var search: ExecSearchReply?
         public var tree: ExecProcessTreeReply?
@@ -199,6 +206,8 @@ public enum ExecMCPMailbox {
     public static let waitSecs: Double = 8
     /// Requests older than this are discarded unanswered.
     public static let staleSecs: Double = 30
+    /// Tolerated clock difference between the writer and the claimer.
+    static let futureSkewSecs: Double = 5
     static let maxRequestBytes = 64 * 1024
     static let maxResponseBytes = ExecReadService.maxReplyBytes + 1024 * 1024
 
@@ -236,6 +245,17 @@ public enum ExecMCPMailbox {
         return false
     }
 
+    /// Reads a regular file of at most `max` bytes without ever loading more (a same-user process
+    /// could plant an arbitrarily large file). nil = missing, not a regular file, or too large.
+    static func readBounded(_ url: URL, max: Int) -> Data? {
+        guard let h = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? h.close() }
+        var st = stat()
+        guard fstat(h.fileDescriptor, &st) == 0, (st.st_mode & S_IFMT) == S_IFREG, Int(st.st_size) <= max else { return nil }
+        guard let data = try? h.read(upToCount: max + 1), data.count <= max else { return nil }
+        return data
+    }
+
     // MARK: MCP-server side
 
     /// Writes `request`, waits up to `timeout` for the app's response file,
@@ -248,7 +268,7 @@ public enum ExecMCPMailbox {
         guard writeAtomic(data, to: reqURL) else { return nil }
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
-            if let raw = try? Data(contentsOf: respURL), raw.count <= maxResponseBytes,
+            if let raw = readBounded(respURL, max: maxResponseBytes),
                let resp = try? JSONDecoder().decode(Response.self, from: raw), resp.id == request.id {
                 try? FileManager.default.removeItem(at: respURL)
                 return resp
@@ -277,12 +297,13 @@ public enum ExecMCPMailbox {
                 continue
             }
             guard name.hasPrefix("req-"), name.hasSuffix(".json") else { continue }
-            let raw = try? Data(contentsOf: url)
+            let raw = readBounded(url, max: maxRequestBytes)
             try? fm.removeItem(at: url)
             guard let raw, raw.count <= maxRequestBytes,
                   let req = try? JSONDecoder().decode(Request.self, from: raw),
                   isValidID(req.id), name == "req-\(req.id).json",
-                  now.timeIntervalSince1970 - req.createdAt <= staleSecs else { continue }
+                  // Neither stale nor from the future (a far-future createdAt would never expire).
+                  case let age = now.timeIntervalSince1970 - req.createdAt, age >= -futureSkewSecs, age <= staleSecs else { continue }
             out.append(req)
         }
         return out

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.16 (build 134).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.17 (build 135).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -377,7 +377,7 @@ extension RoamSwitchKnowledgeBase {
                 • 通知: 通知(Pro)とインシデントタイムラインへの記録(発生源 execRecorder、対応「通知のみ」)。通知が単独でAir-Gapなどの隔離を発動することはありません。
                 • 保存: /Library/Application Support/RoamSwitch/exec_log にセグメント分割のJSON Lines(root専用の0700/0600。コマンドライン引数に機密が含まれ得るため、アプリ・ビューア・MCPサーバーは特権ヘルパー経由でのみ読み取ります)。既定200MB・14日(変更可)、クラッシュ安全なローテーション。セグメント間をハッシュチェーンで連結し、削除・編集・切り詰めを検出します(「チェーンを検証」)。改ざん検知であり改ざん防止ではありません。環境変数は記録しませんが、コマンドライン引数に機密が含まれる場合があります。
                 • 負荷対策: 過負荷時は古い行から捨てる有界キュー(件数を表示)、指数バックオフでの再起動、オフにするとesloggerを完全に停止します。
-                • 閲覧とエクスポート: メニュー→マルウェア対策→「プロセス実行の記録…」(検索・プロセスツリー・JSON Linesエクスポート)。MCPツール `search_exec_events` と `get_process_tree`(Pro・読み取り専用)。
+                • 閲覧とエクスポート: メニュー→マルウェア対策→「プロセス実行の記録…」(検索・プロセスツリー・JSON Linesエクスポート)。MCPツール `search_exec_events` と `get_process_tree`(Pro・読み取り専用)。 出力の安全対策: プロセスのパス・引数・署名IDは攻撃者が任意に決められるため、制御文字の除去・各文字列300文字の上限・既知の秘密情報形式や秘密名のフラグ値の「****」マスクを行い、JSONの後ろに「信頼できない外部データ」の注記を2つ目のテキストブロックとして付けます。検索語(query)も、マスク済みのコマンドラインに対してのみ照合されます(マスクされた値は検索では見つかりません)。検索語は3文字以上で、検索語付きの検索はセッションごとに回数が制限されるため、検索を使って秘密情報を1文字ずつ探ることはできません。アプリ本体の閲覧画面は、ご自身のログを全文で検索します。
                 """,
                 recommendation: "インシデント調査用の実行履歴が欲しい場合に有効にしてください。先にフルディスクアクセスでRoamSwitchを許可します。通知は侵害の証拠ではなく、ログで確認する手がかりとして扱ってください。"
             ),
@@ -565,7 +565,7 @@ extension RoamSwitchKnowledgeBase {
                 • 実行内容: 対象フォルダをカレントディレクトリとして `npm audit signatures` を起動し、npmレジストリ(registry.npmjs.org)と通信します。RoamSwitch内でnpmjs.comと通信するのはこの機能だけです。
                 • 出力: npmのコマンド出力をそのまま表示します（独自の解釈・断定はしません）。終了コードが0以外、または「invalid」「missing registry signature」等の文言を含む場合は参考情報として要注意の表示をします。
                 • npmコマンドが見つからない場合はNode.js/npmのインストールを促すメッセージを表示します。
-                • MCPツール: `run_npm_audit_signatures`（`directory`引数、Pro限定・オプトイン限定の二重ゲート）。
+                • MCPツール: `run_npm_audit_signatures`（`directory`引数、Pro限定・オプトイン限定の二重ゲート）。 `directory` はRoamSwitchに登録済みのプロジェクトフォルダ配下のみ受け付けます。npmはレジストリを registry.npmjs.org に固定し、ユーザー/プロジェクトのnpm設定を無視して、90秒のタイムアウト付きで実行します。
                 """,
                 recommendation: "本番デプロイ前の依存関係監査や、サプライチェーン侵害が疑われるインシデント調査時にのみ有効化してください。常時オンにする必要はありません。"
             ),
@@ -1450,6 +1450,7 @@ extension RoamSwitchKnowledgeBase {
                   - リンク保護の脅威フィード、パッケージCVEマップ、脆弱性CVEマップの1日1回の取得（受信専用・署名検証・識別子の送信なし。リンク保護の自動更新はオフにできます）
                   - ユーザーが設定したVPN・セキュアDNSプロバイダーへの通常の通信
                   - 実証型脆弱性診断の、127.0.0.1（このMac自身）への非破壊プローブ
+                  - npm署名検証（オプトイン・Pro限定）の実行時に registry.npmjs.org へ通信
                 • テレメトリや利用状況の収集はコード内に存在しません。ヘルパー未承認のリマインダーなども端末内のカウントだけで実現しています。
                 """,
                 recommendation: "機密性の高い業務環境や個人の開発環境でも、情報流出を心配せずに利用できます。"

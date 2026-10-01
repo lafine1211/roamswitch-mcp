@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.16 (build 134).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.17 (build 135).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -46,6 +46,21 @@ final class QuarantineManager {
         let quarantinedFileName: String
         let threatName: String
         let quarantinedAt: Date
+        /// 隔離前のパーミッション(下位9bit)。復元時に戻す。古い記録には無い(nil → 0644)。
+        var originalPermissions: Int? = nil
+    }
+
+    /// clamscan の検出行 `<path>: <Signature> FOUND` を分解する。パス自体に ": " が含まれ得るので、
+    /// 先頭の ": " ではなく末尾の " FOUND" を外してから「最後の ": "」で分ける(シグネチャ名は空白・コロンを含まない)。
+    static func parseFoundLine(_ line: String) -> (path: String, threat: String)? {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasSuffix(" FOUND") else { return nil }
+        let body = String(trimmed.dropLast(" FOUND".count))
+        guard let sep = body.range(of: ": ", options: .backwards) else { return nil }
+        let path = String(body[body.startIndex..<sep.lowerBound])
+        let threat = String(body[sep.upperBound...])
+        guard !path.isEmpty, !threat.isEmpty else { return nil }
+        return (path, threat)
     }
 
     /// Call right after a clamscan run with --move completes, passing the
@@ -74,20 +89,25 @@ final class QuarantineManager {
         var quarantinedPaths: Set<String> = []
 
         for line in lines {
-            guard let range = line.range(of: ": "), let foundRange = line.range(of: " FOUND") else { continue }
-            let originalPath = String(line[line.startIndex..<range.lowerBound])
-            let threatName = String(line[range.upperBound..<foundRange.lowerBound])
+            guard let parsed = Self.parseFoundLine(line) else { continue }
+            let originalPath = parsed.path
+            let threatName = parsed.threat
             let originalFileName = (originalPath as NSString).lastPathComponent
 
-            // Check if file is still at originalPath (e.g. clamscan --move failed due to file existing in quarantine)
+            // 既に別の記録が使っている隔離名(=別ファイル)。同名の別ファイルを「隔離済み」と誤認しないために使う。
+            let takenNames = Set(entries.map { $0.quarantinedFileName })
             var actualQuarantinedName = originalFileName
             var destPath = qDir + "/" + actualQuarantinedName
+
             if fileManager.fileExists(atPath: originalPath) {
-                if fileManager.fileExists(atPath: destPath) {
+                // 元の場所にまだある(clamscan --move が失敗した、または直接呼ばれた)。空いている名前へ移す。
+                var counter = 0
+                while fileManager.fileExists(atPath: destPath) || takenNames.contains(actualQuarantinedName) {
+                    counter += 1
                     let ext = (originalFileName as NSString).pathExtension
                     let base = (originalFileName as NSString).deletingPathExtension
-                    let timestamp = Int(Date().timeIntervalSince1970)
-                    actualQuarantinedName = ext.isEmpty ? "\(base)_\(timestamp)" : "\(base)_\(timestamp).\(ext)"
+                    let suffix = "_\(Int(Date().timeIntervalSince1970))" + (counter > 1 ? "_\(counter)" : "")
+                    actualQuarantinedName = ext.isEmpty ? "\(base)\(suffix)" : "\(base)\(suffix).\(ext)"
                     destPath = qDir + "/" + actualQuarantinedName
                 }
                 do {
@@ -95,6 +115,12 @@ final class QuarantineManager {
                 } catch {
                     NSLog("RoamSwitch QuarantineManager: failed to move \(originalPath) to quarantine: \(error.localizedDescription)")
                 }
+            } else if takenNames.contains(actualQuarantinedName),
+                      !entries.contains(where: { $0.quarantinedFileName == actualQuarantinedName && $0.originalPath == originalPath }) {
+                // 元ファイルは既に無いが、隔離フォルダの同名ファイルは別の元パスの記録のもの。
+                // どちらのファイルか判別できないので「隔離済み」とは記録しない。
+                NSLog("RoamSwitch QuarantineManager: \(originalPath) is gone, but the same-named quarantine file belongs to a different record; not claiming it")
+                continue
             }
 
             guard fileManager.fileExists(atPath: destPath) else {
@@ -105,6 +131,10 @@ final class QuarantineManager {
                 continue
             }
             quarantinedPaths.insert(originalPath)
+
+            // 復元時に戻せるよう、無効化の前に元のパーミッションを控える。
+            let originalPermissions = (try? fileManager.attributesOfItem(atPath: destPath)[.posixPermissions] as? NSNumber)?
+                .map { $0.intValue & 0o777 }
 
             // Neutralize threat by removing all execute & read permissions (chmod 000)
             try? fileManager.setAttributes([.posixPermissions: 0o000], ofItemAtPath: destPath)
@@ -119,7 +149,8 @@ final class QuarantineManager {
                 originalPath: originalPath,
                 quarantinedFileName: actualQuarantinedName,
                 threatName: threatName,
-                quarantinedAt: Date()
+                quarantinedAt: Date(),
+                originalPermissions: originalPermissions
             ))
         }
         saveMetadata(entries)
@@ -158,8 +189,10 @@ final class QuarantineManager {
         do {
             let originalDir = (file.originalPath as NSString).deletingLastPathComponent
             try fileManager.createDirectory(atPath: originalDir, withIntermediateDirectories: true)
-            // Restore standard read/write permissions before moving back (chmod 644)
-            try? fileManager.setAttributes([.posixPermissions: 0o644], ofItemAtPath: file.quarantinedPath)
+            // 記録してある元のパーミッションへ戻す(記録が無い古い隔離は 0644)。setuid/setgid は付けない。
+            let fileName = (file.quarantinedPath as NSString).lastPathComponent
+            let recorded = loadMetadata().first { $0.quarantinedFileName == fileName && $0.originalPath == file.originalPath }?.originalPermissions
+            try? fileManager.setAttributes([.posixPermissions: (recorded ?? 0o644) & 0o777], ofItemAtPath: file.quarantinedPath)
             try fileManager.moveItem(atPath: file.quarantinedPath, toPath: file.originalPath)
             removeMetadata(for: file)
             return .success(())

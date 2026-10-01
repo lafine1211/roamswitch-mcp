@@ -59,7 +59,7 @@ All files live in `Sources/roamswitch-mcp/`.
 | `NpmAuditSignatures.swift` | `RoamSwitch/NpmAuditSignatures.swift` |
 | `TyposquatGuard.swift` | `RoamSwitch/TyposquatGuard.swift` |
 | `SecretLeakScanning.swift` | `RoamSwitch/SecretLeakScanning.swift` |
-| `CryptoSecretDetection.swift` | `RoamSwitch/CryptoSecretDetection.swift` |
+| `CryptoSecretDetection.swift` | `Shared/CryptoSecretDetection.swift` (from `Shared/`) |
 | `SecurityLogAuditor.swift` | `RoamSwitch/SecurityLogAuditor.swift` |
 | `LogTemplateAnalyzer.swift` | `RoamSwitch/LogTemplateAnalyzer.swift` |
 | `QuarantineManager.swift` | `RoamSwitch/QuarantineManager.swift` |
@@ -77,9 +77,11 @@ All files live in `Sources/roamswitch-mcp/`.
 | `ExecLogStore.swift` | `Shared/ExecLogStore.swift` (from `Shared/`) |
 | `ExecProcessTree.swift` | `Shared/ExecProcessTree.swift` (from `Shared/`) |
 | `ExecReadAPI.swift` | `Shared/ExecReadAPI.swift` (from `Shared/`) |
+| `SafeScanFS.swift` | `Shared/SafeScanFS.swift` (from `Shared/`) |
+| `ExecCommandMasker.swift` | `Shared/ExecCommandMasker.swift` (from `Shared/`) |
 
 This is exactly the source set the app compiles into its `RoamSwitchMCPServer` target
-(see `project.yml` in the app repo). Five of the files come from the app's `Shared/` folder
+(see `project.yml` in the app repo). Eight of the files come from the app's `Shared/` folder
 (compiled into the app and the privileged helper too); the sync script keeps them in its `SHARED`
 list, and everything else in its `CORE` list. `Localizable.xcstrings` is also in that target but is
 not mirrored (this package does not use it).

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.16 (build 134).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.17 (build 135).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -21,6 +21,12 @@ import CryptoKit
 // DETECTABLE. It is tamper-EVIDENT, not tamper-proof: an attacker with root can
 // rewrite the whole chain, and dropping the newest, still-open segment (or
 // everything after the last seal) is not detectable.
+//
+// Retention marker: `<dir>/retention.json` ({"v":1,"removedThroughIndex":N,"removedCount":C,"updated":ts})
+// records that the oldest segments up to index N were deleted by the recorder's own
+// age/size retention, so `verify` can tell that from someone deleting the oldest segments
+// (which has no index gap and would otherwise be invisible). Logs without a marker
+// (older builds) are verified as before.
 
 public enum ExecLogChain {
     public static let genesis = String(repeating: "0", count: 64)
@@ -38,6 +44,20 @@ public enum ExecLogChain {
 
     static func isMeta(_ line: Data) -> Bool {
         line.starts(with: Data("{\"t\":\"".utf8))
+    }
+}
+
+public struct ExecLogRetentionMarker: Codable, Equatable {
+    public var v: Int = 1
+    public var removedThroughIndex: UInt64
+    public var removedCount: Int
+    public var updated: Double
+
+    public static let fileName = "retention.json"
+
+    public static func read(dir: URL) -> ExecLogRetentionMarker? {
+        guard let data = try? Data(contentsOf: dir.appendingPathComponent(fileName)) else { return nil }
+        return try? JSONDecoder().decode(ExecLogRetentionMarker.self, from: data)
     }
 }
 
@@ -161,12 +181,17 @@ public final class ExecLogWriter {
     @discardableResult
     public func applyRetention(now: Date = Date()) -> Int {
         var removed = 0
+        var maxRemovedIndex: UInt64 = 0
+        defer { if removed > 0 { writeRetentionMarker(removedThrough: maxRemovedIndex, count: removed, now: now) } }
         var urls = ExecLogReader.segmentURLs(dir: dir)
         if let cur = currentURL, let i = urls.firstIndex(of: cur) { urls.remove(at: i) }
         // Age (by file modification time — the moment the segment was last written).
         for u in urls {
             guard let m = (try? FileManager.default.attributesOfItem(atPath: u.path))?[.modificationDate] as? Date else { continue }
-            if now.timeIntervalSince(m) > options.maxAgeSecs, (try? FileManager.default.removeItem(at: u)) != nil { removed += 1 }
+            if now.timeIntervalSince(m) > options.maxAgeSecs, (try? FileManager.default.removeItem(at: u)) != nil {
+                removed += 1
+                maxRemovedIndex = max(maxRemovedIndex, ExecLogReader.parseIndex(url: u) ?? 0)
+            }
         }
         urls = ExecLogReader.segmentURLs(dir: dir)
         if let cur = currentURL, let i = urls.firstIndex(of: cur) { urls.remove(at: i) }
@@ -174,9 +199,27 @@ public final class ExecLogWriter {
         var total = sizes.reduce(0) { $0 + $1.1 } + currentBytes
         while total > options.maxTotalBytes, !sizes.isEmpty {
             let (u, s) = sizes.removeFirst()
-            if (try? FileManager.default.removeItem(at: u)) != nil { removed += 1; total -= s }
+            if (try? FileManager.default.removeItem(at: u)) != nil {
+                removed += 1
+                total -= s
+                maxRemovedIndex = max(maxRemovedIndex, ExecLogReader.parseIndex(url: u) ?? 0)
+            }
         }
         return removed
+    }
+
+    /// Merges this run's deletions into `retention.json` (index only ever grows).
+    private func writeRetentionMarker(removedThrough: UInt64, count: Int, now: Date) {
+        let prior = ExecLogRetentionMarker.read(dir: dir)
+        let marker = ExecLogRetentionMarker(
+            removedThroughIndex: max(prior?.removedThroughIndex ?? 0, removedThrough),
+            removedCount: (prior?.removedCount ?? 0) + count,
+            updated: now.timeIntervalSince1970)
+        guard let data = try? JSONEncoder().encode(marker) else { return }
+        let url = dir.appendingPathComponent(ExecLogRetentionMarker.fileName)
+        let tmp = dir.appendingPathComponent(".retention.tmp")
+        guard FileManager.default.createFile(atPath: tmp.path, contents: data, attributes: [.posixPermissions: Self.fileMode]) else { return }
+        if rename(tmp.path, url.path) != 0 { try? FileManager.default.removeItem(at: tmp) }
     }
 
     public static func totalBytes(dir: URL) -> Int {
@@ -257,13 +300,18 @@ public struct ExecLogQuery {
     public var signature: ExecSignatureClass?
     public var teamID: String?
     public var limit: Int
+    /// When true, `text` is matched against the secret-masked command line
+    /// (`ExecCommandMasker`), never the raw one, so a query can't be used to probe a
+    /// secret character by character. Set on the MCP path; the app's own UI search
+    /// (the user's own data) keeps the full-text match.
+    public var maskedTextMatch: Bool
     /// Upper bound on bytes read per call so a query can never turn into a
     /// multi-second full scan of a 1 GB log.
     public var maxScanBytes: Int
 
     public init(text: String? = nil, pid: Int32? = nil, ppid: Int32? = nil, since: Double? = nil, until: Double? = nil,
                 kind: String? = nil, signature: ExecSignatureClass? = nil, teamID: String? = nil,
-                limit: Int = 50, maxScanBytes: Int = 64 * 1024 * 1024) {
+                limit: Int = 50, maskedTextMatch: Bool = false, maxScanBytes: Int = 64 * 1024 * 1024) {
         self.text = text
         self.pid = pid
         self.ppid = ppid
@@ -273,6 +321,7 @@ public struct ExecLogQuery {
         self.signature = signature
         self.teamID = teamID
         self.limit = min(max(limit, 1), 5000)
+        self.maskedTextMatch = maskedTextMatch
         self.maxScanBytes = maxScanBytes
     }
 
@@ -284,7 +333,11 @@ public struct ExecLogQuery {
         if let kind, r.kind != kind { return false }
         if let signature, r.signatureClass != signature { return false }
         if let teamID, r.teamID != teamID { return false }
-        if let t = text?.lowercased(), !t.isEmpty {
+        if maskedTextMatch, let raw = text, !raw.isEmpty {
+            // Fail closed on a query that is (or normalizes to) too short to be a real search.
+            let needle = ExecCommandMasker.normalizedNeedle(raw)
+            if needle.count < ExecCommandMasker.minQueryLength || !ExecCommandMasker.maskedMatch(r, needle: needle) { return false }
+        } else if let t = text?.lowercased(), !t.isEmpty {
             var hay = r.path.lowercased()
             if let a = r.args { hay += " " + a.joined(separator: " ").lowercased() }
             if let s = r.signingID { hay += " " + s.lowercased() }
@@ -339,6 +392,14 @@ public enum ExecLogReader {
         return Seal(hash: h, count: (o["count"] as? NSNumber)?.intValue ?? 0)
     }
 
+    /// How far a segment's creation time must precede `since` before older segments are skipped.
+    static let sinceSkewSecs: Double = 86_400
+
+    private static func segmentCreated(_ data: Data) -> Double? {
+        guard let nl = data.firstIndex(of: 0x0A) else { return nil }
+        return parseHeader(Data(data[data.startIndex..<nl]))?.created
+    }
+
     /// Newest-first search across segments, bounded by `query.maxScanBytes`.
     public static func search(dir: URL, query: ExecLogQuery) -> ExecLogSearchResult {
         let urls = segmentURLs(dir: dir)
@@ -353,6 +414,11 @@ public enum ExecLogReader {
         let decoder = JSONDecoder()
         segments: for url in urls.reversed() {
             guard let data = try? Data(contentsOf: url) else { continue }
+            // Segments are append-only but a wall-clock step can put an older timestamp after a
+            // newer one, so `since` skips records instead of ending the scan. Whole older
+            // segments are skipped once the segment itself was created `sinceSkewSecs` before
+            // `since` (its records all postdate its header, modulo clock steps).
+            var segmentHeaderBeforeSince = false
             if scanned + data.count > query.maxScanBytes && scanned > 0 { truncated = true; break }
             scanned += data.count
             var end = data.endIndex
@@ -366,7 +432,6 @@ public enum ExecLogReader {
                 if lineEnd > lineStart {
                     let line = Data(data[lineStart..<lineEnd])
                     if !ExecLogChain.isMeta(line), let rec = try? decoder.decode(ExecEventRecord.self, from: line) {
-                        if let since = query.since, rec.time < since { break segments }
                         if query.matches(rec) {
                             out.append(rec)
                             if out.count >= query.limit { break segments }
@@ -375,6 +440,8 @@ public enum ExecLogReader {
                 }
                 end = nlBefore ?? data.startIndex
             }
+            if let since = query.since, let created = segmentCreated(data), created < since - sinceSkewSecs { segmentHeaderBeforeSince = true }
+            if segmentHeaderBeforeSince { break segments }
         }
         return ExecLogSearchResult(events: out, scannedBytes: scanned, truncatedScan: truncated, segments: urls.count, readable: true)
     }
@@ -387,6 +454,9 @@ public enum ExecLogReader {
         var sealed = 0
         var prevSealHash: String?
         var prevIndex: UInt64?
+        var sawChained = false
+        var prevWasUnchained = false
+        let marker = ExecLogRetentionMarker.read(dir: dir)
         for (i, url) in urls.enumerated() {
             let name = url.lastPathComponent
             guard let data = try? Data(contentsOf: url) else { problems.append("\(name): unreadable"); prevSealHash = nil; continue }
@@ -394,9 +464,27 @@ public enum ExecLogReader {
             guard let firstLine = lines.first, let hdr = parseHeader(firstLine) else {
                 problems.append("\(name): missing or invalid header"); prevSealHash = nil; continue
             }
+            if prevIndex == nil, let m = marker, hdr.index != m.removedThroughIndex + 1 {
+                problems.append("\(name): oldest retained segment is index \(hdr.index) but retention only recorded removal through \(m.removedThroughIndex) — segments were deleted outside retention")
+            }
             if let pi = prevIndex, hdr.index != pi + 1 { problems.append("\(name): index gap (expected \(pi + 1), found \(hdr.index)) — a segment is missing") }
             prevIndex = hdr.index
-            if hdr.prev == "-" { prevSealHash = nil; continue } // chain disabled for this segment
+            if hdr.prev == "-" {
+                // Chain disabled for this segment. After a chained segment that is a downgrade
+                // (the setting was switched off, or a sealed segment's header was rewritten to
+                // skip the seal check); a sealed segment can't have been written unchained.
+                if sawChained { problems.append("\(name): hash chain disabled after chained segments (setting changed, or a sealed segment was rewritten)") }
+                if let l = lines.last, parseSeal(l) != nil { problems.append("\(name): unchained header on a sealed segment") }
+                prevSealHash = nil
+                prevWasUnchained = true
+                continue
+            }
+            // A chain restarted after unchained segments begins at genesis (ExecLogWriter.open).
+            if prevWasUnchained, hdr.prev != ExecLogChain.genesis {
+                problems.append("\(name): chain link points at a segment that is now unchained — the previous segment was rewritten")
+            }
+            prevWasUnchained = false
+            sawChained = true
             if let p = prevSealHash, p != hdr.prev { problems.append("\(name): chain link does not match the previous segment's seal") }
             let isLast = i == urls.count - 1
             if let lastLine = lines.last, let seal = parseSeal(lastLine) {

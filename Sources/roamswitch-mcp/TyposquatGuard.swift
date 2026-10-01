@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.16 (build 134).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.17 (build 135).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -147,10 +147,12 @@ enum TyposquatGuard {
     /// in `dependencies`/`devDependencies`/`optionalDependencies` (not
     /// `peerDependencies`, which describes what the *environment* is
     /// expected to provide, not something this project installs).
-    static func scanPackageJSON(_ projectDir: URL, against popular: [String]) -> [Finding] {
-        let manifestURL = projectDir.appendingPathComponent("package.json")
-        guard let data = try? Data(contentsOf: manifestURL),
-              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [] }
+    /// The manifest is read through `SafeScanFS` (inside the scan root after
+    /// link resolution, regular file, size-capped); `root` defaults to `projectDir`.
+    static func scanPackageJSON(_ projectDir: URL, against popular: [String], root: String? = nil) -> [Finding] {
+        guard let base = SafeScanFS.canonicalPath(projectDir.path),
+              let manifest = SafeScanFS.readFile(base + "/package.json", root: root ?? base),
+              let obj = try? JSONSerialization.jsonObject(with: manifest.data) as? [String: Any] else { return [] }
 
         var names: Set<String> = []
         for field in ["dependencies", "devDependencies", "optionalDependencies"] {
@@ -170,18 +172,17 @@ enum TyposquatGuard {
     /// (unlike that scanner): a typosquat is introduced at the moment a
     /// human adds a dependency to *some* project's own manifest, not
     /// somewhere in an already-installed transitive tree.
-    static func scanWatchedFolder(_ folder: URL, maxDepth: Int, against popular: [String]) -> [Finding] {
-        var out = scanPackageJSON(folder, against: popular)
-        guard let entries = try? FileManager.default.contentsOfDirectory(
-            at: folder, includingPropertiesForKeys: [.isDirectoryKey], options: []
-        ) else { return out }
-        for entryURL in entries {
-            let fileName = entryURL.lastPathComponent
-            let isDir = (try? entryURL.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
-            guard isDir, !skipDirNames.contains(fileName) else { continue }
-            if maxDepth > 0 {
-                out.append(contentsOf: scanWatchedFolder(entryURL, maxDepth: maxDepth - 1, against: popular))
-            }
+    static func scanWatchedFolder(_ folder: URL, maxDepth: Int, against popular: [String], root: String? = nil) -> [Finding] {
+        guard let base = SafeScanFS.canonicalPath(folder.path) else { return [] }
+        let scopeRoot = root ?? base
+        var out = scanPackageJSON(URL(fileURLWithPath: base), against: popular, root: scopeRoot)
+        guard maxDepth > 0 else { return out }
+        // Symlinks leaving the scan root are skipped (`SafeScanFS`).
+        for entry in SafeScanFS.children(ofDirectory: base, root: scopeRoot)
+        where entry.kind == .directory && !skipDirNames.contains(entry.name) {
+            out.append(contentsOf: scanWatchedFolder(
+                URL(fileURLWithPath: entry.path), maxDepth: maxDepth - 1, against: popular, root: scopeRoot
+            ))
         }
         return out
     }

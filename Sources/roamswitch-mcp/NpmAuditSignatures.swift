@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.16 (build 134).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.17 (build 135).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -49,45 +49,121 @@ enum NpmAuditSignatures {
         case launchFailed(String)
     }
 
-    /// Locates the `npm` binary the same way a user's shell would —
-    /// `/usr/bin/env npm` walks `$PATH`, covering Homebrew, nvm, Volta, and
-    /// system installs without hardcoding any one location.
-    private static func resolveNpmPath() -> String? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["which", "npm"]
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = Pipe()
-        do {
-            try process.run()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-            guard process.terminationStatus == 0 else { return nil }
-            let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
-            return (path?.isEmpty == false) ? path : nil
-        } catch {
-            return nil
+    /// Wall-clock ceiling for one `npm audit signatures` run.
+    static let timeoutSeconds: TimeInterval = 90
+    /// Output kept in the result; anything beyond this is drained and dropped.
+    static let maxOutputBytes = 256 * 1024
+
+    /// Registry pinned on the command line (overrides any `registry=` in a
+    /// project/user `.npmrc` or `npm_config_registry` env var).
+    static let pinnedRegistry = "https://registry.npmjs.org/"
+
+    /// Locates the `npm` binary without trusting an attacker-influenced
+    /// `$PATH`. Well-known install locations are tried first; then `$PATH`
+    /// entries, but only absolute ones that are NOT inside the project being
+    /// audited (no `./node_modules/.bin`-style planted `npm`), whose directory
+    /// and file are not group/world-writable and are owned by root or the
+    /// current user.
+    private static func resolveNpmPath(avoidingDirectory projectDir: String) -> String? {
+        let home = NSHomeDirectory()
+        var candidates = [
+            "/opt/homebrew/bin/npm",
+            "/usr/local/bin/npm",
+            "\(home)/.volta/bin/npm",
+        ]
+        let pathEntries = (ProcessInfo.processInfo.environment["PATH"] ?? "")
+            .split(separator: ":").map(String.init)
+        for entry in pathEntries where entry.hasPrefix("/") {
+            candidates.append((entry as NSString).appendingPathComponent("npm"))
         }
+        let projectPrefix = projectDir.hasSuffix("/") ? projectDir : projectDir + "/"
+        for candidate in candidates {
+            let resolved = URL(fileURLWithPath: candidate).resolvingSymlinksInPath().path
+            if resolved.hasPrefix(projectPrefix) || candidate.hasPrefix(projectPrefix) { continue }
+            guard FileManager.default.isExecutableFile(atPath: resolved),
+                  isTrustedOwnership(path: resolved),
+                  isTrustedOwnership(path: (candidate as NSString).deletingLastPathComponent) else { continue }
+            return candidate
+        }
+        return nil
+    }
+
+    /// Owned by root or the current user, and not writable by group/others.
+    private static func isTrustedOwnership(path: String) -> Bool {
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: path),
+              let owner = attrs[.ownerAccountID] as? NSNumber,
+              let perms = attrs[.posixPermissions] as? NSNumber else { return false }
+        let uid = owner.uint32Value
+        guard uid == 0 || uid == getuid() else { return false }
+        return perms.uint16Value & 0o022 == 0
+    }
+
+    /// A minimal, allow-listed environment: no `npm_config_*`, `NODE_OPTIONS`,
+    /// `NODE_PATH` etc. that could redirect the registry or inject code. PATH
+    /// is rebuilt from the npm binary's own directory plus system locations
+    /// (npm is a `#!/usr/bin/env node` script and must find its sibling node).
+    private static func sanitizedEnvironment(npmPath: String) -> [String: String] {
+        let source = ProcessInfo.processInfo.environment
+        let keep = ["HOME", "USER", "LOGNAME", "TMPDIR", "LANG", "LC_ALL", "LC_CTYPE",
+                    "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY",
+                    "http_proxy", "https_proxy", "no_proxy", "all_proxy",
+                    "NODE_EXTRA_CA_CERTS", "SSL_CERT_FILE"]
+        var env: [String: String] = [:]
+        for key in keep { if let v = source[key] { env[key] = v } }
+        let npmDir = ((npmPath as NSString).resolvingSymlinksInPath as NSString).deletingLastPathComponent
+        let npmLinkDir = (npmPath as NSString).deletingLastPathComponent
+        env["PATH"] = [npmLinkDir, npmDir, "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"]
+            .reduce(into: [String]()) { if !$1.isEmpty && !$0.contains($1) { $0.append($1) } }
+            .joined(separator: ":")
+        return env
+    }
+
+    /// Project `.npmrc` can declare scoped registries (`@scope:registry=`) or
+    /// auth/proxy settings that a `--registry` flag does not override, which
+    /// would send requests to an arbitrary host. Refuse such projects.
+    private static func projectNpmrcOverridesRegistry(directory: String) -> Bool {
+        let rc = (directory as NSString).appendingPathComponent(".npmrc")
+        guard let text = try? String(contentsOfFile: rc, encoding: .utf8) else { return false }
+        let lower = text.lowercased()
+        return lower.contains("registry") || lower.contains("proxy") || lower.contains("cafile")
     }
 
     /// Runs `npm audit signatures` with `directory` as the working
     /// directory. Sends real requests to the npm registry — callers MUST
     /// check `isEnabled` (and, in the app UI, get a fresh per-run
-    /// confirmation) before calling this.
+    /// confirmation) before calling this. Callers exposed to untrusted input
+    /// (the MCP server) must additionally restrict `directory` to registered
+    /// project folders *before* calling (see `MCPServer.resolveRegisteredPath`).
     static func run(directory: String) -> Swift.Result<Result, RunError> {
-        guard let npmPath = resolveNpmPath() else {
+        let dirURL = URL(fileURLWithPath: directory).resolvingSymlinksInPath()
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: dirURL.path, isDirectory: &isDir), isDir.boolValue else {
+            return .failure(.launchFailed("directory not found"))
+        }
+        if projectNpmrcOverridesRegistry(directory: dirURL.path) {
+            return .failure(.launchFailed("project .npmrc overrides registry/proxy settings; refusing to run"))
+        }
+        guard let npmPath = resolveNpmPath(avoidingDirectory: dirURL.path) else {
             return .failure(.npmNotFound)
         }
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: npmPath)
-        process.arguments = ["audit", "signatures"]
-        process.currentDirectoryURL = URL(fileURLWithPath: directory)
+        process.arguments = [
+            "audit", "signatures",
+            "--userconfig", "/dev/null",
+            "--globalconfig", "/dev/null",
+            "--registry=\(pinnedRegistry)",
+            "--ignore-scripts",
+            "--no-update-notifier",
+        ]
+        process.currentDirectoryURL = dirURL
+        process.environment = sanitizedEnvironment(npmPath: npmPath)
 
         let outputPipe = Pipe()
         process.standardOutput = outputPipe
         process.standardError = outputPipe
+        process.standardInput = FileHandle.nullDevice
 
         do {
             try process.run()
@@ -95,10 +171,43 @@ enum NpmAuditSignatures {
             return .failure(.launchFailed(error.localizedDescription))
         }
 
-        let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
+        // Watchdog: SIGTERM at the deadline, SIGKILL 3 s later if it lingers.
+        let pid = process.processIdentifier
+        let lock = NSLock()
+        var timedOut = false
+        let watchdog = DispatchWorkItem {
+            lock.lock(); timedOut = true; lock.unlock()
+            process.terminate()
+            DispatchQueue.global().asyncAfter(deadline: .now() + 3) {
+                if process.isRunning { kill(pid, SIGKILL) }
+            }
+        }
+        DispatchQueue.global().asyncAfter(deadline: .now() + timeoutSeconds, execute: watchdog)
 
-        let output = String(data: data, encoding: .utf8) ?? ""
-        return .success(Result(directory: directory, rawOutput: output, exitCode: process.terminationStatus))
+        // Bounded read: keep at most `maxOutputBytes`, keep draining so the
+        // child never blocks on a full pipe.
+        var data = Data()
+        var truncated = false
+        let reader = outputPipe.fileHandleForReading
+        while true {
+            guard let chunk = try? reader.read(upToCount: 64 * 1024), !chunk.isEmpty else { break }
+            if data.count < maxOutputBytes {
+                data.append(chunk.prefix(maxOutputBytes - data.count))
+                if data.count >= maxOutputBytes { truncated = true }
+            } else {
+                truncated = true
+            }
+        }
+        process.waitUntilExit()
+        watchdog.cancel()
+
+        lock.lock(); let didTimeOut = timedOut; lock.unlock()
+        if didTimeOut {
+            return .failure(.launchFailed("npm audit signatures timed out after \(Int(timeoutSeconds))s"))
+        }
+
+        var output = String(decoding: data, as: UTF8.self)
+        if truncated { output += "\n…(output truncated)" }
+        return .success(Result(directory: dirURL.path, rawOutput: output, exitCode: process.terminationStatus))
     }
 }
