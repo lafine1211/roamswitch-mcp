@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.17 (build 135).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.18 (build 136).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -86,23 +86,193 @@ public enum ExecCommandMasker {
 
     private enum ShortPassword { case none, attached, attachedOrSpaced }
 
-    private static func shortPasswordMode(args: [String]) -> ShortPassword {
+    /// `args` starts at the effective command (after wrappers / interpreters).
+    private static func shortPasswordMode(args: ArraySlice<String>) -> ShortPassword {
         guard let first = args.first else { return .none }
-        let cmd = (first as NSString).lastPathComponent.lowercased()
+        let cmd = baseName(first)
         if attachedPasswordCommands.contains(cmd) { return .attached }
         if spacedPasswordCommands.contains(cmd) { return .attachedOrSpaced }
         if loginCommands.contains(cmd), args.contains("login") { return .attachedOrSpaced }
         return .none
     }
 
+    private static func baseName(_ s: String) -> String { (s as NSString).lastPathComponent.lowercased() }
+
+    // MARK: - Effective command (wrappers / interpreters)
+
+    /// Wrapper -> options that take a separate value, and how many positionals follow the options.
+    private static let wrappers: [String: (valued: Set<String>, positional: Int)] = [
+        "sudo": (["-u", "-g", "-h", "-p", "-C", "-D", "-R", "-T", "-U", "-r", "-t", "--user", "--group", "--host", "--prompt", "--chdir", "--role", "--type"], 0),
+        "env": (["-u", "-C", "-S", "-P", "--unset", "--chdir"], 0),
+        "nohup": ([], 0),
+        "nice": (["-n", "--adjustment"], 0),
+        "time": (["-f", "-o", "--format", "--output"], 0),
+        "timeout": (["-s", "-k", "--signal", "--kill-after"], 1),
+        "command": ([], 0),
+        "exec": (["-a"], 0),
+        "xargs": (["-I", "-n", "-P", "-L", "-s", "-d", "-E", "-a", "-J"], 0),
+        "stdbuf": (["-i", "-o", "-e"], 0),
+        "caffeinate": (["-t", "-w"], 0),
+        "arch": (["-arch"], 0),
+    ]
+    private static let shells: Set<String> = ["sh", "bash", "zsh", "dash", "ksh", "fish"]
+    private static let otherInterpreters: Set<String> = ["ruby", "perl", "node", "php"]
+    private static let interpreterValued: Set<String> = ["-W", "-X", "-r", "-I", "-M", "-o", "--require", "-d", "-n", "-E"]
+
+    private static func isInterpreter(_ name: String) -> Bool {
+        if shells.contains(name) || otherInterpreters.contains(name) { return true }
+        guard name.hasPrefix("python") else { return false }
+        return name.dropFirst(6).allSatisfy { $0.isNumber || $0 == "." }
+    }
+
+    private static func isAssignment(_ s: String) -> Bool {
+        guard let eq = s.firstIndex(of: "="), eq != s.startIndex else { return false }
+        let name = s[..<eq]
+        guard let f = name.first, f.isLetter || f == "_" else { return false }
+        return name.allSatisfy { ($0.isASCII && ($0.isLetter || $0.isNumber)) || $0 == "_" }
+    }
+
+    /// Index of the command whose rules apply, skipping known wrappers and interpreters
+    /// (`/bin/sh ./mysql -pX` -> `./mysql`; `sudo env A=1 mysql ...` -> `mysql`). `shellString` is the
+    /// index of the `-c` body when the effective command is a shell run with `-c`.
+    static func effectiveCommand(_ args: [String], allowAssignments: Bool = false) -> (index: Int, shellString: Int?) {
+        let n = args.count
+        var i = 0
+        if allowAssignments { while i < n, isAssignment(args[i]) { i += 1 } }
+        while i < n {
+            let name = baseName(args[i])
+            if let w = wrappers[name] {
+                var j = i + 1
+                while j < n {
+                    let a = args[j]
+                    if a == "--" { j += 1; break }
+                    if name == "env", isAssignment(a) { j += 1; continue }
+                    if a.hasPrefix("-"), a.count > 1 { j += w.valued.contains(a) ? 2 : 1; continue }
+                    break
+                }
+                i = min(j + w.positional, n)
+                continue
+            }
+            if isInterpreter(name) {
+                let isShell = shells.contains(name)
+                var j = i + 1
+                var wantC = false
+                var inlineCode = false
+                while j < n {
+                    let a = args[j]
+                    if a == "--" { j += 1; break }
+                    if a.hasPrefix("-"), a.count > 1 {
+                        if isShell, !a.hasPrefix("--"), a.dropFirst().contains("c") { wantC = true; j += 1; continue }
+                        if !isShell, a == "-c" || a == "-e" { inlineCode = true; j += 2; continue }
+                        j += interpreterValued.contains(a) ? 2 : 1
+                        continue
+                    }
+                    break
+                }
+                if inlineCode { return (0, nil) }
+                if wantC { return (i, j < n ? j : nil) }
+                return j < n ? (j, nil) : (min(i, n - 1), nil)
+            }
+            return (i, nil)
+        }
+        return (0, nil)
+    }
+
+    // MARK: - Shell string (`sh -c '...'`)
+
+    private struct ShellToken { var range: Range<Int>; var value: String; var isOperator: Bool }
+
+    /// Best-effort split honouring quotes. Operators (`;` `|` `&` newline) are their own tokens.
+    /// Returns nil on an unterminated quote.
+    private static func tokenizeShell(_ chars: [Character]) -> [ShellToken]? {
+        var tokens: [ShellToken] = []
+        var i = 0
+        let n = chars.count
+        while i < n {
+            let c = chars[i]
+            if c == " " || c == "\t" { i += 1; continue }
+            if c == ";" || c == "|" || c == "&" || c == "\n" {
+                var j = i + 1
+                while j < n, chars[j] == c, c != ";" { j += 1 }
+                tokens.append(ShellToken(range: i..<j, value: String(chars[i..<j]), isOperator: true))
+                i = j
+                continue
+            }
+            let start = i
+            var value = ""
+            while i < n {
+                let d = chars[i]
+                if d == " " || d == "\t" || d == ";" || d == "|" || d == "&" || d == "\n" { break }
+                if d == "'" {
+                    guard let close = chars[(i + 1)...].firstIndex(of: "'") else { return nil }
+                    value += String(chars[(i + 1)..<close])
+                    i = close + 1
+                } else if d == "\"" {
+                    var j = i + 1
+                    var closed = false
+                    while j < n {
+                        if chars[j] == "\\", j + 1 < n { value.append(chars[j + 1]); j += 2; continue }
+                        if chars[j] == "\"" { closed = true; break }
+                        value.append(chars[j]); j += 1
+                    }
+                    guard closed else { return nil }
+                    i = j + 1
+                } else if d == "\\", i + 1 < n {
+                    value.append(chars[i + 1]); i += 2
+                } else {
+                    value.append(d); i += 1
+                }
+            }
+            tokens.append(ShellToken(range: start..<i, value: value, isOperator: false))
+        }
+        return tokens
+    }
+
+    /// Masks the body of `sh -c '<body>'`: each simple command is masked as an argv (so wrappers,
+    /// interpreters and per-command rules apply), changed tokens replace their source span, then the
+    /// per-string masker runs over the result as a safety net. An untokenizable body only gets the
+    /// per-string masker.
+    private static func maskShellString(_ body: String, marker: String, text: (String) -> String) -> String {
+        let chars = Array(body)
+        guard let tokens = tokenizeShell(chars), tokens.contains(where: { !$0.isOperator }) else { return text(body) }
+        var replacements: [(Range<Int>, String)] = []
+        var segment: [ShellToken] = []
+        func flush() {
+            guard !segment.isEmpty else { return }
+            let masked = maskArgsCore(segment.map(\.value), marker: marker, text: text, allowAssignments: true)
+            for (t, m) in zip(segment, masked) where m != t.value {
+                let needsQuote = m.contains(where: { " \t;|&\n".contains($0) })
+                replacements.append((t.range, needsQuote ? "'" + m.replacingOccurrences(of: "'", with: "") + "'" : m))
+            }
+            segment.removeAll()
+        }
+        for t in tokens { if t.isOperator { flush() } else { segment.append(t) } }
+        flush()
+        var out = ""
+        var pos = 0
+        for (range, m) in replacements.sorted(by: { $0.0.lowerBound < $1.0.lowerBound }) {
+            out += String(chars[pos..<range.lowerBound]) + m
+            pos = range.upperBound
+        }
+        out += String(chars[pos...])
+        return text(out)
+    }
+
     /// Masks a whole argv: flag/value pairs are masked across element boundaries;
     /// every other element goes through `text` (the caller's per-string masker).
+    /// Wrappers and interpreters (`sudo`, `env`, `/bin/sh script`, `sh -c '...'`) are looked
+    /// through, so the real command's rules apply.
     public static func maskArgs(_ args: [String], marker: String, text: (String) -> String) -> [String] {
+        maskArgsCore(args, marker: marker, text: text, allowAssignments: false)
+    }
+
+    private static func maskArgsCore(_ args: [String], marker: String, text: (String) -> String, allowAssignments: Bool) -> [String] {
         var out: [String] = []
         out.reserveCapacity(args.count)
         var pending = Pending.none
-        let shortMode = shortPasswordMode(args: args)
-        for arg in args {
+        let effective = effectiveCommand(args, allowAssignments: allowAssignments)
+        let shortMode = shortPasswordMode(args: args[effective.index...])
+        for (index, arg) in args.enumerated() {
             switch pending {
             case .full:
                 pending = .none
@@ -119,7 +289,11 @@ public enum ExecCommandMasker {
             case .none:
                 break
             }
-            if shortMode != .none, arg.hasPrefix("-p"), !arg.hasPrefix("--") {
+            if index == effective.shellString {
+                out.append(maskShellString(arg, marker: marker, text: text))
+                continue
+            }
+            if shortMode != .none, index >= effective.index, arg.hasPrefix("-p"), !arg.hasPrefix("--") {
                 if arg.count > 2 {
                     out.append("-p" + marker)
                     continue
