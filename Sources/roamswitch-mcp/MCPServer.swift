@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.27 (build 145).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.28 (build 146).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -392,6 +392,9 @@ enum MCPServer {
             arpStatus: arp,
             listeningPorts: ports,
             activeSecurityLevel: level,
+            // 既定値(false)のままだと、メニューで固定をオンにしていても、このレポートは常に「無効」と報告する。
+            // `GatewayARPLockManager` はこの別プロセスから直接読めないので、`get_guard_status` と同じキーを読む。
+            gatewayARPLockEnabled: sharedDefaults.bool(forKey: MCPResponseFormatting.gatewayARPLockKey),
             isolatedDevPorts: isolatedPorts
         )
         let interfacePresent = CWWiFiClient.shared().interface() != nil
