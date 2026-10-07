@@ -1325,7 +1325,7 @@ extension RoamSwitchKnowledgeBase {
                 • Percorso del binario: `/Applications/RoamSwitch.app/Contents/MacOS/RoamSwitchMCPServer`
                 • Claude Desktop: aggiungi il percorso del binario come `command` sotto `mcpServers` in `~/Library/Application Support/Claude/claude_desktop_config.json`.
                 • Claude Code: `claude mcp add roamswitch /Applications/RoamSwitch.app/Contents/MacOS/RoamSwitchMCPServer`
-                • Altri client (Codex CLI e altri): https://lafine.net/mcp-setup.html
+                • Altri client (Codex CLI e altri): https://roamswitch.com/mcp-setup.html
                 • Lingua di risposta: segue l'impostazione «Lingua / Language» dell'app. `get_app_help` accetta un argomento `language` per chiamata.
                 • La comunicazione avviene solo tramite stdio locale, senza inviare nulla all'esterno (solo `run_active_vuln_scan` invia sonde non distruttive verso 127.0.0.1).
                 """,

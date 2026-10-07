@@ -1325,7 +1325,7 @@ extension RoamSwitchKnowledgeBase {
                 • 실행 파일 경로: `/Applications/RoamSwitch.app/Contents/MacOS/RoamSwitchMCPServer`
                 • Claude Desktop: `~/Library/Application Support/Claude/claude_desktop_config.json`의 `mcpServers`에 실행 파일 경로를 `command`로 추가하세요.
                 • Claude Code: `claude mcp add roamswitch /Applications/RoamSwitch.app/Contents/MacOS/RoamSwitchMCPServer`
-                • 다른 클라이언트(Codex CLI 등)의 설정 방법: https://lafine.net/mcp-setup.html
+                • 다른 클라이언트(Codex CLI 등)의 설정 방법: https://roamswitch.com/mcp-setup.html
                 • 응답 언어: 앱의 "언어 / Language" 설정을 따릅니다. `get_app_help`는 호출마다 `language` 인자를 받을 수 있습니다.
                 • 통신은 로컬 stdio만 사용하며 외부로는 아무것도 전송되지 않습니다(`run_active_vuln_scan`만 127.0.0.1로 비파괴적 프로브를 전송합니다).
                 """,

@@ -1324,7 +1324,7 @@ extension RoamSwitchKnowledgeBase {
                 • バイナリパス: `/Applications/RoamSwitch.app/Contents/MacOS/RoamSwitchMCPServer`
                 • Claude Desktop: `~/Library/Application Support/Claude/claude_desktop_config.json` の `mcpServers` に、`command` としてバイナリパスを追加。
                 • Claude Code: `claude mcp add roamswitch /Applications/RoamSwitch.app/Contents/MacOS/RoamSwitchMCPServer`
-                • その他のクライアント（Codex CLI など）の手順: https://lafine.net/mcp-setup.html
+                • その他のクライアント（Codex CLI など）の手順: https://roamswitch.com/mcp-setup.html
                 • 回答言語: アプリの「言語 / Language」の設定に従います。`get_app_help` は `language` 引数で個別に指定できます。
                 • 通信はローカルのstdioのみで、外部送信はありません（`run_active_vuln_scan` のみ127.0.0.1への非破壊プローブを送信）。
                 """,

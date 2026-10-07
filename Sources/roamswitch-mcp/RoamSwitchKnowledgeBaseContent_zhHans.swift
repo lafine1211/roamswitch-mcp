@@ -1325,7 +1325,7 @@ extension RoamSwitchKnowledgeBase {
                 • 二进制路径：`/Applications/RoamSwitch.app/Contents/MacOS/RoamSwitchMCPServer`
                 • Claude Desktop：在 `~/Library/Application Support/Claude/claude_desktop_config.json` 的 `mcpServers` 中，将二进制路径添加为 `command`。
                 • Claude Code：`claude mcp add roamswitch /Applications/RoamSwitch.app/Contents/MacOS/RoamSwitchMCPServer`
-                • 其他客户端（如 Codex CLI 等）的步骤：https://lafine.net/mcp-setup.html
+                • 其他客户端（如 Codex CLI 等）的步骤：https://roamswitch.com/mcp-setup.html
                 • 回答语言：遵循应用的「语言 / Language」设置。`get_app_help` 可通过 `language` 参数单独指定。
                 • 通信仅通过本地 stdio 进行，不会向外部发送（只有 `run_active_vuln_scan` 会向 127.0.0.1 发送非破坏性探测）。
                 """,
