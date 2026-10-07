@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 The **read-only [MCP](https://modelcontextprotocol.io) server and the detection logic** behind
-[RoamSwitch](https://lafine.net) — a macOS menu-bar app that automatically defends your Mac's
+[RoamSwitch](https://roamswitch.com) — a macOS menu-bar app that automatically defends your Mac's
 network boundary — published so you can read exactly what it computes and what it exposes to an
 AI client.
 
@@ -164,7 +164,7 @@ FUZZ_ITERATIONS=200000 swift test --filter MutationFuzzTests   # longer fuzz run
 
 If you have RoamSwitch installed, prefer the binary it ships
 (`/Applications/RoamSwitch.app/Contents/MacOS/RoamSwitchMCPServer`) — setup for Claude Desktop,
-Claude Code, Codex CLI, OpenCode and Antigravity at <https://lafine.net/mcp-setup.html>.
+Claude Code, Codex CLI, OpenCode and Antigravity at <https://roamswitch.com/mcp-setup.html>.
 
 ## Standalone vs. bundled
 
@@ -207,7 +207,7 @@ the code can be checked against the shipping binary's symbols. See [`SYNC.md`](.
 
 ## More
 
-- Architecture & security whitepaper: <https://lafine.net/security.html> (§8 covers this server)
+- Architecture & security whitepaper: <https://roamswitch.com/security.html> (§8 covers this server)
 - The Swift client library for querying an installed RoamSwitch:
   [RoamSwitchKit](https://github.com/lafine1211/RoamSwitchKit)
 - The Linux edition ships its own MCP server (`roamswitch-mcp`, 19 tools) and an async Rust

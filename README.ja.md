@@ -5,7 +5,7 @@
 [![CI](https://github.com/lafine1211/roamswitch-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/lafine1211/roamswitch-mcp/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-[RoamSwitch](https://lafine.net)（Mac のネットワーク境界を自動防衛するメニューバーアプリ）に
+[RoamSwitch](https://roamswitch.com)（Mac のネットワーク境界を自動防衛するメニューバーアプリ）に
 同梱されている **読み取り専用の [MCP](https://modelcontextprotocol.io) サーバーと、その検知
 ロジック本体** です。RoamSwitch が何を計算し、AI クライアントへ何を渡しているのかを、誰でも
 そのまま読んで検証できるように公開しています。
@@ -162,7 +162,7 @@ FUZZ_ITERATIONS=200000 swift test --filter MutationFuzzTests   # 長時間ファ
 RoamSwitch をインストール済みの場合は、アプリに同梱されているバイナリ
 （`/Applications/RoamSwitch.app/Contents/MacOS/RoamSwitchMCPServer`）の利用を推奨します。
 Claude Desktop / Claude Code / Codex CLI / OpenCode / Antigravity の設定手順は
-<https://lafine.net/mcp-setup.html> にあります。
+<https://roamswitch.com/mcp-setup.html> にあります。
 
 ## 単体ビルド時の差異
 
@@ -204,7 +204,7 @@ RoamSwitch アプリのバンドル内で動く場合、このコードはアプ
 
 ## 関連情報
 
-- アーキテクチャ・セキュリティ設計書: <https://lafine.net/security.html>（§8 が本サーバー）
+- アーキテクチャ・セキュリティ設計書: <https://roamswitch.com/security.html>（§8 が本サーバー）
 - インストール済み RoamSwitch を照会する Swift クライアントライブラリ:
   [RoamSwitchKit](https://github.com/lafine1211/RoamSwitchKit)
 - Linux 版は独自の MCP サーバー（`roamswitch-mcp`、全 19 ツール）と非同期 Rust クライアント
