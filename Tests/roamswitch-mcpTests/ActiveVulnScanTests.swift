@@ -476,6 +476,38 @@ final class ActiveVulnScanTests: XCTestCase {
         XCTAssertEqual(ActiveVulnScan.probeElasticsearchNoAuth(port: locked), false)
     }
 
+    func testProbeHexStrikeFlagsTheProcessListResponseOnly() {
+        // Bytes captured from the real hexstrike_server.py (commit d689933) running in a disposable VM.
+        let real = Data(("HTTP/1.1 200 OK\r\nServer: Werkzeug/3.1.9 Python/3.12.3\r\nDate: Wed, 07 Oct 2026 19:51:31 GMT\r\n"
+            + "Content-Type: application/json\r\nContent-Length: 55\r\nConnection: close\r\n\r\n"
+            + "{\"active_processes\":{},\"success\":true,\"total_count\":0}\n").utf8)
+        XCTAssertEqual(ActiveVulnScan.probeHexStrikeNoAuth(port: spawnStubServer(reply: real)), true)
+        // Another Python web app answering the same path must not be mistaken for it.
+        XCTAssertEqual(ActiveVulnScan.probeHexStrikeNoAuth(port: spawnStubServer(reply: http200("{\"status\":\"ok\"}"))), false)
+        XCTAssertEqual(ActiveVulnScan.probeHexStrikeNoAuth(port: spawnStubServer(reply: http200("{\"success\":true}"))), false)
+        // A 404 from Flask (the route does not exist) is a clear "not HexStrike".
+        let notFound = Data("HTTP/1.1 404 NOT FOUND\r\nConnection: close\r\n\r\n{\"active_processes\":1,\"total_count\":1}".utf8)
+        XCTAssertEqual(ActiveVulnScan.probeHexStrikeNoAuth(port: spawnStubServer(reply: notFound)), false)
+    }
+
+    func testHexStrikeSignatureIsProbeOnlyAndMatchesPythonListeners() {
+        let sig = ServiceSignatures.signatures.first { $0.id == "hexstrike-noauth" }
+        XCTAssertNotNil(sig)
+        XCTAssertEqual(sig?.probeOnly, true)
+        for name in ["python3", "Python", "python3.12"] {
+            XCTAssertTrue(ServiceSignatures.match(processName: name, executablePath: nil).contains { $0.id == "hexstrike-noauth" }, name)
+        }
+        // A bare Python listener must never be reported by the passive audit: only the probe may flag it.
+        let expectation = expectation(description: "audit completes")
+        var result: PortSecurityAuditResult?
+        PortSecurityAuditor.shared.auditPort(
+            portInfo: ListeningPortInfo(processName: "python3", pid: 1, port: 18123, isGloballyExposed: true, executablePath: nil),
+            isFirewallBlocking: false
+        ) { result = $0; expectation.fulfill() }
+        wait(for: [expectation], timeout: 5)
+        XCTAssertFalse(result?.findings.contains { $0.title == sig?.title } ?? true)
+    }
+
     func testProbeCouchDBFlagsAllDbsArray() {
         let open = spawnStubServer(reply: http200("[\"_users\",\"db\"]"))
         XCTAssertEqual(ActiveVulnScan.probeCouchDBNoAuth(port: open), true)
@@ -544,7 +576,7 @@ final class ActiveVulnScanTests: XCTestCase {
     }
 
     func testEveryNewSignatureHasTranslationsInAllLanguages() {
-        for id in ["elasticsearch-noauth", "couchdb-noauth", "jenkins-noauth", "vnc-noauth", "smb1-enabled", "smb-signing-not-required"] {
+        for id in ["elasticsearch-noauth", "couchdb-noauth", "jenkins-noauth", "vnc-noauth", "smb1-enabled", "smb-signing-not-required", "hexstrike-noauth"] {
             let sig = ServiceSignatures.signatures.first { $0.id == id }
             XCTAssertNotNil(sig, id)
         }

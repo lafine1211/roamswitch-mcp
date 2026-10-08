@@ -154,7 +154,7 @@ extension RoamSwitchKnowledgeBase {
                 • 無驗證存取：對 Redis（PING）、Memcached（stats）、MongoDB（listDatabases）進行單次、短逾時、非破壞性的探測。
                 • 通用開發伺服器：檢查 CORS 設定錯誤（反射 Origin 並允許憑證）、路徑穿越與開放重新導向。
                 • 已知 CVE 版本比對：對於無需驗證即可存取的 Redis / Memcached，會以非破壞性查詢讀取版本，並與已知 CVE 版本範圍比對。不會傳送任何攻擊酬載。
-                • 也可透過 MCP 工具 `run_active_vuln_scan` 使用（是唯一會傳送網路流量的工具，且僅傳送至本機）。
+                • 也可透過 MCP 工具 `run_active_vuln_scan` 使用（其探測僅傳送至本機）。
                 """,
                 recommendation: "只有在想確認自己 Mac 上執行的 Redis、Docker、本機 LLM 等是否真的能在未驗證下被存取時，才需要開啟此功能。"
             ),
@@ -374,7 +374,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • 原理：特權輔助程式把 `/usr/bin/eslogger exec fork exit` 當作子程序執行並解析其 JSON 串流。eslogger 隨 macOS 提供；RoamSwitch 不使用也不申請 EndpointSecurity 權限（entitlement），因此這是事後觀察，而不是執行前攔截。
                 • 前提：macOS 13 以上，並在「完整磁碟取用權限」中允許 RoamSwitch。沒有該權限時，視窗只會顯示「無法使用執行記錄：請在「完整磁碟取用權限」中允許 RoamSwitch（清單中沒有時，用「+」加入 /Applications/RoamSwitch.app）」（或找不到 eslogger），不會改用持續輪詢。啟用記錄之前、輔助程式啟動之前的事件不會被記錄。
-                • 關聯規則（僅通知，預設保持安靜，每條規則都有固定 ID 和 MITRE ATT&CK 技術編號）：瀏覽器/Office/郵件 App 直接啟動 Shell 或指令碼直譯器（exec.shell_from_app，T1059）；從 /tmp、/private/var/tmp 或帶隔離屬性的位置執行未簽署/臨時簽署的二進位檔（exec.untrusted_location，T1204.002）；將 curl/wget 傳給 Shell 的 `sh -c` 單行指令，並伴有 IP 直連 URL、base64、eval、關閉 TLS 驗證或瀏覽器作為父程序等加重因素（exec.pipe_to_shell，T1059.004）；`osascript -e` 把 do shell script 與 base64/eval 結合（exec.osascript_obfuscated，T1059.002）；`xattr -d com.apple.quarantine` 之後 15 分鐘內執行該檔案（exec.quarantine_stripped_then_exec，T1553.001）；launchd 從最近 24 小時內寫入的 LaunchAgent/LaunchDaemon 啟動未簽署/臨時簽署的二進位檔（exec.launchd_untrusted_binary，T1543.001/.004）；在非 Shell 且非 Apple 簽署的祖先程序之下執行 `security find-generic-password -w` 或 `dump-keychain`（exec.keychain_access，T1555.001）；osascript 以外的裸直譯器執行內嵌的 `-c`/`-e`/`-Command` 單行程式碼，並將 base64/eval 與下載或類似 exec 的呼叫結合（exec.interpreter_inline_obfuscated，T1059）；設定了 DYLD_INSERT_LIBRARIES 的非 Apple 簽署二進位檔被執行（exec.dyld_insert_libraries，T1574.006）；既非 RoamSwitch 自身也非 Apple 程序執行的 `tmutil deletelocalsnapshots`/`thinlocalsnapshots`（exec.ransomware_recovery_tampering，T1490）；指令列直接指定 RoamSwitch 放置的誘餌憑證檔案（如 ~/.aws/credentials、~/.env.backup，內容中帶有標記；真實檔案不會符合，透過函式庫讀取的情況由蜜罐權杖監視負責）（exec.honeytoken_path，T1552.001）。在「終端機」裡正常輸入的 `curl | sh` 不會被刻意標記。
+                • 關聯規則（僅通知，預設保持安靜，每條規則都有固定 ID 和 MITRE ATT&CK 技術編號）：瀏覽器/Office/郵件 App 直接啟動 Shell 或指令碼直譯器（exec.shell_from_app，T1059）；從 /tmp、/private/var/tmp 或帶隔離屬性的位置執行未簽署/臨時簽署的二進位檔（exec.untrusted_location，T1204.002）；將 curl/wget 傳給 Shell 的 `sh -c` 單行指令，並伴有 IP 直連 URL、base64、eval、關閉 TLS 驗證或瀏覽器作為父程序等加重因素（exec.pipe_to_shell，T1059.004）；`osascript -e` 把 do shell script 與 base64/eval 結合（exec.osascript_obfuscated，T1059.002）；`xattr -d com.apple.quarantine` 之後 15 分鐘內執行該檔案（exec.quarantine_stripped_then_exec，T1553.001）；launchd 從最近 24 小時內寫入的 LaunchAgent/LaunchDaemon 啟動未簽署/臨時簽署的二進位檔（exec.launchd_untrusted_binary，T1543.001/.004）；在非 Shell 且非 Apple 簽署的祖先程序之下執行 `security find-generic-password -w` 或 `dump-keychain`（exec.keychain_access，T1555.001）；osascript 以外的裸直譯器執行內嵌的 `-c`/`-e`/`-Command` 單行程式碼，並將 base64/eval 與下載或類似 exec 的呼叫結合（exec.interpreter_inline_obfuscated，T1059）；設定了 DYLD_INSERT_LIBRARIES 的非 Apple 簽署二進位檔被執行（exec.dyld_insert_libraries，T1574.006）；既非 RoamSwitch 自身也非 Apple 程序執行的 `tmutil deletelocalsnapshots`/`thinlocalsnapshots`（exec.ransomware_recovery_tampering，T1490）；指令列直接指定 RoamSwitch 放置的誘餌憑證檔案（如 ~/.aws/credentials、~/.env.backup，內容中帶有標記；真實檔案不會符合，透過函式庫讀取的情況由蜜罐權杖監視負責）（exec.honeytoken_path，T1552.001）。另有兩條規則針對由腳本或 AI 代理驅動的攻擊工具鏈（例如 HexStrike AI 後端）：一個行程在 30 秒內以 which/type 連續查詢 8 種以上不同的滲透測試工具（exec.offensive_tool_inventory，T1595），以及腳本執行環境或 AI 程式設計代理在 2 分鐘內啟動 3 種以上此類不同工具（exec.offensive_tool_burst，T1595）。人在終端機裡輸入相同的指令不會被標記。在「終端機」裡正常輸入的 `curl | sh` 不會被刻意標記。
                 • 通知：一則通知（Pro）加上事件時間軸中的一筆記錄（來源 execRecorder，處置「僅通知」）。通知本身絕不會觸發 Air-Gap 等隔離。
                 • 儲存：分段的 JSON Lines，位於 /Library/Application Support/RoamSwitch/exec_log（僅 root 可讀：0700/0600，因為命令列可能包含機密；App、檢視器與 MCP 伺服器只能透過具權限的 Helper 讀取），預設 200 MB·14 天（可變更），當機安全的輪替。各分段以雜湊鏈相連，可發現被刪除、編輯或截斷的分段（「驗證雜湊鏈」）；這是竄改偵測，而非竄改防護。不會記錄環境變數，但命令列引數中可能包含敏感資訊。
                 • 負載控制：有界佇列，過載時丟棄最舊的行（計數並顯示），指數退避重新啟動，關閉後 eslogger 會被完全停止。
@@ -683,7 +683,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "RoamSwitch.app 內建唯讀的 MCP（Model Context Protocol）伺服器，讓 Claude 等 AI 助理可以查詢您 Mac 的安全狀態。其中沒有任何可以變更設定或封鎖任何項目的工具。",
                 details: """
                 • 傳輸方式：僅限本機 stdio。執行檔位置：`/Applications/RoamSwitch.app/Contents/MacOS/RoamSwitchMCPServer`。
-                • 主要工具：`get_security_report`（安全稽核）、`get_exposed_ports`、`get_guard_status`、`audit_url_safety`、`audit_secrets`、`audit_security_logs`、`get_quarantine_status`、`get_notification_history`、`get_canary_status`、`get_port_anomaly_incidents`、`get_runtime_threat_status`、`get_incident_timeline`（圍堵事件時間軸）、`get_network_history`（網路歷史學習）、`run_package_cve_scan`、`run_package_cve_scan_languages`、`run_active_vuln_scan`（唯一會傳送流量的工具，僅為非破壞性探測至 127.0.0.1），以及 `get_app_help`（本知識庫）。
+                • 主要工具（共 31 個）：`get_security_report`（安全稽核）、`verify_security_findings`（重新確認稽核所指出的問題是否仍然存在，唯讀）、`get_exposed_ports`、`get_guard_status`、`audit_url_safety`、`audit_secrets`、`audit_mcp_configs`（檢查 MCP 用戶端設定檔中的危險項目；本機、唯讀；也可在「惡意軟體防護」→「🧩 稽核 MCP 設定（AI 整合）…」的專用視窗中執行）、`audit_security_logs`、`get_quarantine_status`、`get_notification_history`、`get_canary_status`、`get_port_anomaly_incidents`、`get_runtime_threat_status`、`get_incident_timeline`（圍堵事件時間軸）、`get_network_history`（網路歷史學習）、`run_package_cve_scan`、`run_package_cve_scan_languages`、`run_active_vuln_scan`（僅對 127.0.0.1 進行非破壞性探測）、`run_npm_audit_signatures`（唯一會與外部伺服器即 npm 登錄庫通訊的工具，僅限 Pro 且需主動啟用），以及 `get_app_help`（本知識庫）。
                 • 程序執行記錄（Pro，唯讀）：`search_exec_events`（搜尋啟動事件）和 `get_process_tree`（某程序的祖先與後代）。
                 • 資源：`roamswitch://docs/features`、`roamswitch://docs/alerts-and-messages`、`roamswitch://docs/settings-guide`、`roamswitch://docs/troubleshooting`。
                 • 語言：回答依應用程式的語言設定而定。`get_app_help` 接受 `language` 參數（ja / en / zh-Hans / zh-Hant / ko / de / fr / es / it / pt-PT）。
@@ -1327,7 +1327,7 @@ extension RoamSwitchKnowledgeBase {
                 • Claude Code：`claude mcp add roamswitch /Applications/RoamSwitch.app/Contents/MacOS/RoamSwitchMCPServer`
                 • 其他用戶端（Codex CLI 等）的設定方式：https://roamswitch.com/mcp-setup.html
                 • 回答語言：依應用程式「語言 / Language」設定而定。`get_app_help` 每次呼叫都可帶入 `language` 參數。
-                • 通訊僅限本機 stdio，不會對外傳送任何內容（僅 `run_active_vuln_scan` 會傳送非破壞性探測至 127.0.0.1）。
+                • 與 MCP 伺服器的通訊僅限本機 stdio。唯一會與外部主機通訊的 MCP 工具是僅限 Pro 且需主動啟用的 `run_npm_audit_signatures`（npm 登錄庫）。`run_active_vuln_scan` 探測 127.0.0.1，`get_exposed_ports` 對每個對外開放的連接埠向 127.0.0.1 傳送一次 HTTP GET 以讀取回應標頭。診斷類工具為了查詢預設閘道的 MAC 位址，可能向區域網路內的閘道傳送一次 ICMP ping。
                 """,
                 recommendation: "註冊完成後，可以請 AI「用 RoamSwitch 幫我確認一下這台 Mac 現在的安全狀態」，它就會為您解說稽核結果。"
             ),

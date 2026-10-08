@@ -44,23 +44,54 @@ public struct ListeningPortInfo: Identifiable, Equatable, Hashable {
 final class ListeningPortMonitor {
     static let shared = ListeningPortMonitor()
 
-    func scanListeningPorts() -> [ListeningPortInfo] {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
-        process.arguments = ["-iTCP", "-sTCP:LISTEN", "-n", "-P"]
+    /// `lsof` を実行できなかった、または異常終了した。`[]`(= 本当にリスナーがない)とは区別する。
+    struct ScanFailure: Error, Equatable {
+        let reason: String
+    }
 
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = Pipe()
+    /// TCP の待ち受けポートを `lsof` で列挙する。`lsof` を起動できない・シグナルで落ちた・エラー終了して
+    /// 何も出さなかった場合は空配列ではなく `ScanFailure` を投げる(呼び出し側が「公開ポートなし」と
+    /// 「測れなかった」を取り違えないため)。
+    ///
+    /// 見えるのはこのプロセスのユーザーが調べられるリスナーだけで、root 所有のもの(リモート悪用の着地点に
+    /// なりやすい)は非特権の `lsof` には出ない。特権ヘルパーを持つアプリ本体は `HelperManager` 経由で
+    /// 補えるが、この関数自体はそれをしない。
+    func scanListeningPorts(runner: CommandRunner = SystemCommand.run) throws -> [ListeningPortInfo] {
+        // stdout と stderr は同時に読む(片方を読み切るまでもう片方が詰まって lsof が止まるのを避ける)。
+        guard let out = runner("/usr/sbin/lsof", ["-iTCP", "-sTCP:LISTEN", "-n", "-P"]) else {
+            throw ScanFailure(reason: "launch: lsof could not be started")
+        }
+        return try interpretLsofResult(
+            terminationStatus: out.status,
+            signaled: out.status == -1,
+            stdout: out.stdout,
+            stderr: out.stderr
+        )
+    }
 
-        do {
-            try process.run()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-            let output = String(data: data, encoding: .utf8) ?? ""
-            return parseLsofOutput(output)
-        } catch {
-            return []
+    /// `lsof` の終了結果の解釈(プロセスを起こさず検証できる純粋部分)。
+    /// - 終了コード0: 取れた分を返す。
+    /// - 終了コード1: stdout が空で stderr も空のときだけ「一致なし = リスナーなし」(lsof はこの形で終わる)。
+    ///   stdout が空で stderr に何か出ていれば失敗。stdout に結果があれば、見えない行への警告つきで終わった
+    ///   だけなので取れた分を返す。
+    /// - それ以外(2, 127, シグナル終了など)は、出力が何であれ失敗として投げる。
+    func interpretLsofResult(terminationStatus: Int32, signaled: Bool, stdout: String, stderr: String) throws -> [ListeningPortInfo] {
+        if signaled {
+            throw ScanFailure(reason: "lsof was terminated by a signal")
+        }
+        let stdoutEmpty = stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let stderrText = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+        switch terminationStatus {
+        case 0:
+            return parseLsofOutput(stdout)
+        case 1:
+            if stdoutEmpty {
+                if stderrText.isEmpty { return [] }
+                throw ScanFailure(reason: "lsof exited 1: \(stderrText.prefix(200))")
+            }
+            return parseLsofOutput(stdout)
+        default:
+            throw ScanFailure(reason: "lsof exited \(terminationStatus): \(stderrText.prefix(200))")
         }
     }
 

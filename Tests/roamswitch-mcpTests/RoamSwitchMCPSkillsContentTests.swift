@@ -6,7 +6,7 @@ import XCTest
 final class RoamSwitchMCPSkillsContentTests: XCTestCase {
     func testCatalogEntriesMatchAvailableContent() {
         let entries = RoamSwitchMCPSkillsContent.catalogEntries
-        XCTAssertEqual(entries.count, 4)
+        XCTAssertEqual(entries.count, 5)
 
         var seenURIs = Set<String>()
         for entry in entries {

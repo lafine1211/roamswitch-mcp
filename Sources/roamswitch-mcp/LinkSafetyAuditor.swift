@@ -34,6 +34,8 @@ public enum LinkRiskFactorKind: String, Codable, Equatable {
     case highRiskTLD
     case nonStandardPort
     case phishingPathKeyword
+    /// `https://apple.com@evil.example/`: the text before `@` is credentials, not the destination.
+    case urlUserInfo
 }
 
 public struct LinkRiskFactor: Identifiable, Codable, Equatable {
@@ -177,11 +179,33 @@ public final class LinkSafetyAuditor {
         // 2. Check for IP address instead of domain name
         if isIPAddress(host) {
             penaltyScore += 45
+            if Self.isObfuscatedIPv4Host(host) {
+                riskFactors.append(LinkRiskFactor(
+                    title: loc("IPアドレス直打ちURL（数値表記で偽装）"),
+                    detail: loc("接続先が 2130706433 や 0x7f.1 のような10進・16進・省略形の数値で書かれています。ブラウザはこれを IP アドレスとして解釈するため、ドメイン名に見せかけて接続先を隠す手口で使われます。"),
+                    isSevere: true,
+                    kind: .ipAddressHost
+                ))
+            } else {
+                riskFactors.append(LinkRiskFactor(
+                    title: loc("IPアドレス直打ちURL"),
+                    detail: loc("ドメイン名ではなくIPアドレス（例: http://45.33.x.x）を直接指定している不審な接続先です。"),
+                    isSevere: true,
+                    kind: .ipAddressHost
+                ))
+            }
+        }
+
+        // 2b. Credentials in the authority: what precedes "@" is not the destination.
+        if let userInfo = url.user, !userInfo.isEmpty {
+            // "apple.com@evil.example" reads as apple.com at a glance; a dotted user part is the lookalike case.
+            let looksLikeHost = userInfo.contains(".")
+            penaltyScore += looksLikeHost ? 45 : 30
             riskFactors.append(LinkRiskFactor(
-                title: loc("IPアドレス直打ちURL"),
-                detail: loc("ドメイン名ではなくIPアドレス（例: http://45.33.x.x）を直接指定している不審な接続先です。"),
-                isSevere: true,
-                kind: .ipAddressHost
+                title: looksLikeHost ? loc("URLの@より前にドメイン名風の文字列（接続先の偽装）") : loc("URLにユーザー情報（@）が含まれています"),
+                detail: loc("「https://正規サイト@別のサイト/」の形では、@より前は認証情報であり接続先は@より後ろです。正規サイトのURLに見せかけて別のサイトへ誘導する手口で使われます。"),
+                isSevere: looksLikeHost,
+                kind: .urlUserInfo
             ))
         }
 
@@ -316,14 +340,37 @@ public final class LinkSafetyAuditor {
     // MARK: - Helper Algorithms
 
     private func isIPAddress(_ host: String) -> Bool {
-        let parts = host.split(separator: ".")
-        if parts.count == 4 {
-            return parts.allSatisfy { part in
-                guard let n = Int(part) else { return false }
-                return (0...255).contains(n)
-            }
+        if host.contains(":") { return true } // IPv6
+        return Self.isNumericIPv4Host(host)
+    }
+
+    /// Whether a host is made only of numbers the way `inet_aton` reads them: one to four
+    /// dot-separated labels, each decimal (`2130706433`, `0177`) or `0x`-hex. A real domain
+    /// always ends in a letter TLD, so an all-numeric host is an IP address even when it is
+    /// not written as dotted decimal (`http://2130706433/`, `http://0x7f.1/`).
+    static func isNumericIPv4Host(_ host: String) -> Bool {
+        let labels = host.split(separator: ".", omittingEmptySubsequences: false)
+        guard (1...4).contains(labels.count) else { return false }
+        return labels.allSatisfy { label in
+            let l = label.lowercased()
+            if l.hasPrefix("0x") { return l.count > 2 && l.dropFirst(2).allSatisfy(\.isHexDigit) }
+            return !l.isEmpty && l.allSatisfy { $0.isASCII && $0.isNumber }
         }
-        return host.contains(":") // IPv6
+    }
+
+    /// An all-numeric host that is not plain dotted decimal (`192.168.1.1`): decimal/hex
+    /// integers, hex or octal labels, or fewer than four labels.
+    static func isObfuscatedIPv4Host(_ host: String) -> Bool {
+        guard isNumericIPv4Host(host) else { return false }
+        let labels = host.split(separator: ".", omittingEmptySubsequences: false)
+        if labels.count != 4 { return true }
+        return labels.contains { label in
+            let l = label.lowercased()
+            if l.hasPrefix("0x") { return true }
+            if l.count > 1 && l.hasPrefix("0") { return true } // octal
+            guard let n = Int(l) else { return true }
+            return n > 255
+        }
     }
 
     private func containsNonASCII(_ str: String) -> Bool {

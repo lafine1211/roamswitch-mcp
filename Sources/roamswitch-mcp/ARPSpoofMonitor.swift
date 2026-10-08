@@ -15,6 +15,12 @@ public struct ARPMonitorStatus: Equatable {
     /// explaining exactly what changed).
     public var previousMAC: String?
     public var currentMAC: String?
+    /// ゲートウェイのIP/MACを取得できたか。`false` なら何とも比べていないので「正常」は何も保証しない。
+    public var gatewayKnown: Bool = true
+    /// 信頼できる基準と照合できたか: 現在のゲートウェイMACが、ユーザーが登録した信頼ネットワークのMACと一致した。
+    /// `false` なら「疑いなし」は何とも照合していない。このプロセス自身の前回観測は基準にしない
+    /// (最初の観測の時点で既に偽造されていれば、2回目以降も「一致」してしまうため)。
+    public var hadBaseline: Bool = true
 }
 
 final class ARPSpoofMonitor {
@@ -47,10 +53,14 @@ final class ARPSpoofMonitor {
     /// unreadable on both sides), the far more likely explanation is that
     /// someone on the *same* network is now answering ARP requests for the
     /// gateway's IP with a different MAC — i.e. spoofing.
-    func inspectGateway(currentIP: String?, currentMAC: String?, currentSSID: String?) -> ARPMonitorStatus {
+    func inspectGateway(currentIP: String?, currentMAC: String?, currentSSID: String?, matchesTrustedBaseline: Bool = false) -> ARPMonitorStatus {
         guard let ip = currentIP, let mac = currentMAC else {
-            return ARPMonitorStatus(isSpoofingDetected: false, message: loc("正常（監視中）"), previousMAC: nil, currentMAC: nil)
+            return ARPMonitorStatus(isSpoofingDetected: false, message: loc("正常（監視中）"), previousMAC: nil, currentMAC: nil, gatewayKnown: false, hadBaseline: false)
         }
+
+        // 「照合済み」と言えるのは、永続する信頼できる基準(登録済みの信頼ネットワークのゲートウェイMAC)と一致したときだけ。
+        // 検知ロジック自体(プロセス内の前回観測との比較)は従来どおりだが、それは基準の信頼性を保証しない。
+        let hadBaseline = matchesTrustedBaseline
 
         if let lastIP = lastObservedGatewayIP, let lastMAC = lastObservedGatewayMAC {
             if lastIP == ip && lastMAC.caseInsensitiveCompare(mac) != .orderedSame {
@@ -74,7 +84,7 @@ final class ARPSpoofMonitor {
         lastObservedGatewayMAC = mac
         lastObservedSSID = currentSSID
         baselineLock.unlock()
-        return ARPMonitorStatus(isSpoofingDetected: false, message: loc("正常（スプーフィング未検知）"), previousMAC: nil, currentMAC: nil)
+        return ARPMonitorStatus(isSpoofingDetected: false, message: loc("正常（スプーフィング未検知）"), previousMAC: nil, currentMAC: nil, gatewayKnown: true, hadBaseline: hadBaseline)
     }
 
     /// Keeps the trusted gateway as the baseline (instead of adopting whatever is there now), for a release

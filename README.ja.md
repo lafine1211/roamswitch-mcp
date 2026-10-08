@@ -37,8 +37,13 @@
 
 ## 提供ツール（`tools/list`）
 
-全 17 ツール。すべて読み取り専用です。ソケットを開くのは `get_exposed_ports` と、既定で無効な
-`run_active_vuln_scan` の 2 つだけで、いずれも `127.0.0.1` 限定です。
+全 31 ツール（`MCPServer.swift` の `toolDefinitions` の要素数で、`tools/list` が返す数と同じ）。
+すべて読み取り専用です。`get_exposed_ports` と、既定で無効な `run_active_vuln_scan` は `127.0.0.1`
+限定です。外部のホストへ通信するのは、Pro 限定・既定で無効の `run_npm_audit_signatures`
+（`npm audit signatures` が npm レジストリへ問い合わせる）だけです。診断系のツール
+（`get_security_report` / `verify_security_findings` / `get_exposed_ports` / `get_guard_status`）は、
+デフォルトゲートウェイの MAC アドレスを調べるため、LAN 内のゲートウェイに ICMP ping を 1 発送る
+ことがあります。
 
 ### 状態診断・ネットワーク
 
@@ -46,7 +51,17 @@
   自動アップデート、XProtect、ファイアウォール、ステルスモード、Wi-Fi 暗号化強度、ARP
   スプーフィング、ゲートウェイ ARP 固定、SSH、sudo の `NOPASSWD` 監査、外部公開ポート、
   ダウンロード保護 / DNS 脅威保護 / リンク保護、USB・アクセサリ防御）をスコア化し、
-  項目ごとの改善アドバイスを返します。
+  項目ごとの改善アドバイスを返します。確実には測れなかった項目には、言語非依存の任意フィールド
+  `inconclusiveReason`（例: `no_baseline`、`location_unavailable`）が付き、`isPassed` / `statusText`
+  が正常に見えても確認済みではありません。
+- `verify_security_findings` — `get_security_report` の指摘が今も残っているかを、その場で再確認します
+  （`checkIds` は任意で、省略すると全項目）。各結果は `stillPresent` / `resolved` / `inconclusive` の
+  いずれかと、言語に依存しない `reason` を返します。読み取り専用で、修正はせず、外部のホストにも
+  出ません（デフォルトゲートウェイの MAC アドレスを調べるため、LAN 内のゲートウェイに ICMP ping を
+  1 発送ることがあります）。設定値ベースの項目（`host_firewall`、`network_stealth_mode`、
+  `gateway_arp_lock`、`malware_scanning`、`dns_threat_guard`、`usb_zero_trust`）はアプリ内設定の反映で、
+  OS の実状態の再測定ではありません。`arp_spoof_monitor` は、ゲートウェイ MAC が登録済みの信頼
+  ネットワークと一致したときだけ `resolved` で、それ以外は `inconclusive`（`no_baseline`）です。
 - `get_exposed_ports` — 現在リッスン中の全 TCP ポート。localhost を超えて公開されている
   ものは既知の危険サービス DB（Redis・MongoDB 等に加え、Ollama:11434 / LM Studio:1234 /
   Gradio:7860 / vLLM:8000 などのローカル AI 推論サーバー）と照合し、`127.0.0.1:<port>` への
@@ -74,10 +89,16 @@
   メッセージはプロセス外へ出る前にキー・トークンをマスクし、ログテンプレート異常
   （未知の新規パターン、統計的な頻度スパイク）も併せて返します。
 - `get_app_help` — 同梱ナレッジベースの全文検索。
+- `audit_mcp_configs` — MCP クライアントの設定ファイル（Claude Desktop・Claude Code・Cursor・
+  Windsurf・VS Code・Cline・Gemini CLI の既定の場所と、登録済みフォルダの `.mcp.json`）を読み、
+  危険な記述を指摘します: ツールの自動承認、非ループバックの平文 `http://` サーバー、シェルの
+  ワンライナー起動、HexStrike AI への接続、グループ／全員が書き込める設定ファイル、
+  Claude Code の `enableAllProjectMcpServers`。env・ヘッダの値や引数は返しません。
+  ネットワーク通信なし。
 
 ### 脆弱性・CVE
 
-- `run_active_vuln_scan` — **唯一ネットワークリクエストを送るツール**です。非破壊・読み取り
+- `run_active_vuln_scan` — **確認用のプローブを送る唯一のツール**です。非破壊・読み取り
   専用・`127.0.0.1` 限定・チェックごとに短いタイムアウトの 1 リクエストのみで、他ホストには
   一切触れません。検出済みの無認証既定サービス（Redis / Memcached / MongoDB）へのプロトコル
   準拠プローブ、検出済み開発サーバーへの CORS 設定ミス・パストラバーサル・オープンリダイレクト
@@ -88,6 +109,18 @@
 - `run_package_cve_scan_languages` — 指定フォルダ内の依存ロックファイル（`package-lock.json`、
   `requirements.txt`、`Pipfile.lock`、`poetry.lock`、`Cargo.lock`、`Gemfile.lock`、
   `composer.lock`、`go.sum`、`pom.xml`）を同じローカルマップと照合します。ネットワーク通信なし。
+- `run_package_lifecycle_script_scan` — 指定フォルダの `node_modules` にある `package.json` の
+  ライフサイクルスクリプト（preinstall / install / postinstall / prepare）の棚卸し。各項目に
+  参考用の `isDangerPattern` が付きます。脅威の判定ではなく一覧です。ネットワーク通信なし・
+  何も実行しません。Pro。
+- `run_typosquat_scan` — `package.json` の依存名が著名な npm パッケージ（`expres`、`loadash` など）
+  に編集距離 1〜2 で酷似していないかの参考判定。静的リストとの照合で、誤検知もあり得ます。
+  ネットワーク通信なし。Pro。
+- `run_npm_audit_signatures` — `npm audit signatures` でインストール済みパッケージの署名・来歴を
+  検証し、npm の出力をそのまま返します。**npm レジストリへ通信します。** Pro 限定で、
+  Package CVE Scan 画面のスイッチをオンにするまで既定で無効です。
+- `get_vulnerability_scan_history` — `run_active_vuln_scan` が記録した各プローブの最終結果
+  （vulnerable / safe / inconclusive）と、確認からの経過日数。ネットワーク通信なし。
 
 ### インシデント状態（Air-Gap 中でも動作）
 
@@ -112,6 +145,22 @@
 - `get_network_history` — 常時稼働の Evil Twin 検知が記憶しているネットワーク履歴。SSID ごとの
   ゲートウェイ機器の**件数**と最終接続日時（MAC アドレスは出力しません）、および共通の
   ゲートウェイを持たないのに名前が酷似した SSID の組を返します。
+- `get_ransomware_entropy_guard_status` — ランサムウェア・エントロピーガードの有効状態と、監視
+  フォルダでの直近 50 件までの大量暗号化バースト。Pro。
+- `get_ransomware_recovery_snapshots` — ランサムウェア復旧用スナップショット（種別・残っているか・
+  推奨）と取得間隔。読み取り専用で、MCP から復元することはできません。Pro。
+- `get_forensic_evidence_bundles` — 封じ込め時に自動採取された直近 20 件までの証拠バンドル。
+  各ファイルの SHA-256 で整合性を検証できます。
+- `get_honeytoken_status` — 認証情報ハニートークンガードの有効状態と、囮の認証情報ファイルへの
+  直近 50 件までのアクセス。Pro。
+- `get_browser_credential_watch_status` — ブラウザ資格情報ウォッチの有効状態と、ブラウザ以外による
+  保存パスワード・Cookie DB の直近 50 件までの読み取り。Pro・オプトイン。
+- `search_exec_events` — プロセス実行レコーダー（eslogger）のログ検索。読み取り専用で、引数内の
+  秘密情報は可能な範囲でマスクします。Pro。
+- `get_process_tree` — 同じレコーダーのログから、指定した pid の祖先・子孫のプロセスツリーを
+  再構築します。Pro。
+- `get_sensor_audit_results` — ペアリング済みの RoamSwitch Sensor に依頼した、LAN 側からの到達性
+  監査の結果。
 
 ### リソース（`resources/list`）
 
@@ -190,9 +239,11 @@ RoamSwitch アプリのバンドル内で動く場合、このコードはアプ
 - **読み取り専用。** 状態を変更する API は存在しません。
 - **ソケットを開かない。** stdin から 1 行読み、stdout へ 1 行書き、クライアントがパイプを
   閉じたら終了します。
-- **テレメトリなし・外部通信なし。** 例外は `get_exposed_ports` のローカル `127.0.0.1`
-  プローブと、既定で無効なオプトイン機能 `run_active_vuln_scan`（これも `127.0.0.1` 限定）
-  のみです。`audit_url_safety` はネットワークに一切触れず、URL の取得も行いません。
+- **テレメトリなし・外部ホストへの通信なし。** 例外は Pro 限定・オプトインの
+  `run_npm_audit_signatures`（npm レジストリ）だけです。ローカル内の通信として、
+  `get_exposed_ports` の `127.0.0.1` プローブ、既定で無効なオプトイン機能 `run_active_vuln_scan`
+  （これも `127.0.0.1` 限定）、そして診断系ツールがゲートウェイの MAC アドレスを調べるために
+  LAN 内のデフォルトゲートウェイへ送ることのある ICMP ping 1 発があります。`audit_url_safety` はネットワークに一切触れず、URL の取得も行いません。
 - MIT ライセンス。
 
 ## これはミラーです — ここで編集しないでください
@@ -207,5 +258,5 @@ RoamSwitch アプリのバンドル内で動く場合、このコードはアプ
 - アーキテクチャ・セキュリティ設計書: <https://roamswitch.com/security.html>（§8 が本サーバー）
 - インストール済み RoamSwitch を照会する Swift クライアントライブラリ:
   [RoamSwitchKit](https://github.com/lafine1211/RoamSwitchKit)
-- Linux 版は独自の MCP サーバー（`roamswitch-mcp`、全 19 ツール）と非同期 Rust クライアント
+- Linux 版は独自の MCP サーバー（`roamswitch-mcp`、全 36 ツール）と非同期 Rust クライアント
   [roamswitch-linux-kit](https://github.com/lafine1211/roamswitch-linux-kit) を提供しています。

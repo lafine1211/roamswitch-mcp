@@ -156,6 +156,13 @@ final class PortSecurityAuditor {
         let riskLevel: PortSecurityRiskLevel = (isGlobal && !isFirewallBlocking) ? .critical : .warning
 
         switch port {
+        case 6274, 6277:
+            return PortAuditFinding(
+                title: loc("MCP Inspector（MCP サーバー検証ツール）のポート露出リスク"),
+                riskLevel: riskLevel,
+                description: loc("MCP Inspector の画面（6274）とプロキシ（6277）の既定ポートです。このプロキシは、指定された MCP サーバーの起動コマンドを子プロセスとして実行します。ネットワークから到達でき、認証トークンが無効または漏えいしていると、同じネットワークの相手がこの Mac 上でコマンドを実行できます。"),
+                recommendation: loc("起動時に表示される認証トークンを無効にせず、待ち受けを 127.0.0.1 に限定し、使い終わったらプロセスを停止してください。")
+            )
         case 11434:
             return PortAuditFinding(
                 title: loc("Ollama ローカルLLM API 露出リスク"),
@@ -256,14 +263,16 @@ final class PortSecurityAuditor {
         guard !Self.knownSignaturePorts.contains(port) else { return [] }
 
         let riskLevel: PortSecurityRiskLevel = (isGlobal && !isFirewallBlocking) ? .critical : .warning
-        return ServiceSignatures.match(processName: processName, executablePath: executablePath).map { signature in
-            PortAuditFinding(
-                title: signature.title,
-                riskLevel: riskLevel,
-                description: signature.description,
-                recommendation: signature.recommendation
-            )
-        }
+        return ServiceSignatures.match(processName: processName, executablePath: executablePath)
+            .filter { !$0.probeOnly && (isGlobal || !$0.requiresNetworkExposure) }
+            .map { signature in
+                PortAuditFinding(
+                    title: signature.title,
+                    riskLevel: riskLevel,
+                    description: signature.description,
+                    recommendation: signature.recommendation
+                )
+            }
     }
 
     // MARK: - Non-destructive HTTP Probe

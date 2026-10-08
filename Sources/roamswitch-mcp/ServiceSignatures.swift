@@ -33,6 +33,15 @@ enum ServiceSignatures {
         let title: String
         let description: String
         let recommendation: String
+        /// A signature whose process pattern is far too broad to mean anything on its
+        /// own (every Python listener matches `python`). It is never reported by the
+        /// passive port audit; it only produces a finding when `ActiveVulnScan`'s
+        /// probe positively identifies the service.
+        var probeOnly: Bool = false
+        /// A tool whose normal, intended setup is a loopback listener (an intercepting proxy,
+        /// a local inspector): it is only worth reporting once it is reachable from the
+        /// network, so the passive audit skips it while it is bound to loopback.
+        var requiresNetworkExposure: Bool = false
     }
 
     static let signatures: [Signature] = [
@@ -112,6 +121,22 @@ enum ServiceSignatures {
             title: loc("SMB 署名が必須ではありません"),
             description: loc("SMB2 以降で通信の署名が必須になっていません。同じLAN上の攻撃者が認証を中継する NTLM リレー攻撃で、このホストになりすませます。"),
             recommendation: loc("SMB 署名を必須にしてください（Samba では server signing = mandatory）。")
+        ),
+        Signature(
+            id: "caido-network-exposed",
+            processPatterns: ["caido-cli", "caido"],
+            title: loc("Caido（傍受プロキシ）がネットワークから到達できる状態です"),
+            description: loc("Caido は通信を傍受・記録・書き換える Web セキュリティ検査用のプロキシで、AI ペネトレーションテストツールの Strix もこれを内蔵しています。記録された通信にはログイン情報やセッション Cookie が含まれ、ゲストアクセスを許可する設定（--allow-guests）では、同じネットワークの誰でもその内容を閲覧できてしまいます。"),
+            recommendation: loc("意図して共有していない場合は、待ち受けを 127.0.0.1 に限定する（--listen 127.0.0.1:ポート）か、プロセスを停止してください。検査用のコンテナや VM の中だけで使い、外部へポートを公開しないでください。"),
+            requiresNetworkExposure: true
+        ),
+        Signature(
+            id: "hexstrike-noauth",
+            processPatterns: ["python"],
+            title: loc("HexStrike AI 型の認証なしコマンド実行 API が稼働しています"),
+            description: loc("このポートで HexStrike AI（AI にペネトレーションテスト用ツールを自律実行させる MCP バックエンド）の API が応答しました。このサーバーには認証がなく、/api/command に送られた文字列をそのままシェルで実行します。標準の起動方法（python3 hexstrike_server.py）は全インターフェースで待ち受けるため、同じネットワークの誰でも、この Mac 上で任意のコマンドを実行できる状態になります。"),
+            recommendation: loc("意図して使っていない場合はプロセスを停止してください。使う場合は信頼できるネットワークから切り離した検証用の VM 内に限定し、このポートをRoamSwitchのファイアウォールで外部から遮断してください。"),
+            probeOnly: true
         ),
     ]
 

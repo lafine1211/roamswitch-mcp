@@ -365,4 +365,298 @@ final class MCPResponseFormattingTests: XCTestCase {
         XCTAssertEqual(payload.findings.count, 1)
         XCTAssertEqual(payload.findings[0].title, "Redis露出")
     }
+    // MARK: - verify_security_findings
+
+    private func verifyItem(_ id: String, passed: Bool = true, applicable: Bool = true, reason: String? = nil) -> SecurityAuditItem {
+        SecurityAuditItem(category: "cat", title: "title-\(id)", isPassed: passed, statusText: "status-\(id)", detail: "detail-\(id)", recommendation: "rec", settingsURL: nil, isApplicable: applicable, checkId: id, inconclusiveReason: reason)
+    }
+
+    private func verifyReport(_ items: [SecurityAuditItem]) -> ComprehensiveSecurityReport {
+        ComprehensiveSecurityReport(score: 50, grade: "C", totalChecks: items.count, passedChecks: 0, items: items, timestamp: Date())
+    }
+
+    private func verify(_ items: [SecurityAuditItem], ids: [String]? = nil, interface: Bool = false, ssid: Bool = true) -> MCPVerifySecurityFindingsPayload {
+        MCPResponseFormatting.makeVerifyPayload(report: verifyReport(items), requestedCheckIds: ids, wifiInterfacePresent: interface, wifiSSIDResolved: ssid)
+    }
+
+    func testClassify_threeVerdictsAndNotApplicable() {
+        let failing = SecurityCheckVerification.classify(verifyItem("a", passed: false))
+        XCTAssertEqual(failing.verdict, .stillPresent)
+        XCTAssertEqual(failing.reason, "failing")
+
+        let passing = SecurityCheckVerification.classify(verifyItem("a", passed: true))
+        XCTAssertEqual(passing.verdict, .resolved)
+        XCTAssertEqual(passing.reason, "passing")
+
+        let notApplicable = SecurityCheckVerification.classify(verifyItem("a", passed: true, applicable: false))
+        XCTAssertEqual(notApplicable.verdict, .resolved)
+        XCTAssertEqual(notApplicable.reason, "not_applicable")
+
+        let inconclusive = SecurityCheckVerification.classify(verifyItem("a", passed: false, reason: "helper_unavailable"))
+        XCTAssertEqual(inconclusive.verdict, .inconclusive)
+        XCTAssertEqual(inconclusive.reason, "helper_unavailable")
+    }
+
+    func testClassify_unreliableReadingBeatsBothPassAndNotApplicable() {
+        // sudo_hygiene 相当: ヘルパー値が無いと isApplicable == false になるが、「対象外」ではなく「確認できない」。
+        let unverifiedSudo = SecurityCheckVerification.classify(verifyItem("sudo_hygiene", passed: true, applicable: false, reason: "helper_unavailable"))
+        XCTAssertEqual(unverifiedSudo.verdict, .inconclusive)
+        XCTAssertEqual(unverifiedSudo.reason, "helper_unavailable")
+        // 合格に見えても、読み取りが信頼できなければ resolved にしない。
+        XCTAssertEqual(SecurityCheckVerification.classify(verifyItem("wifi", passed: true, reason: "location_unavailable")).verdict, .inconclusive)
+    }
+
+    func testMakeVerifyPayload_omittedCheckIdsReturnsAll18() {
+        let ids = (0..<18).map { "check_\($0)" }
+        let payload = verify(ids.map { verifyItem($0) })
+        XCTAssertEqual(payload.results.count, 18)
+        XCTAssertEqual(payload.results.map(\.checkId), ids)
+        XCTAssertEqual(verify(ids.map { verifyItem($0) }, ids: []).results.count, 18, "empty array means all")
+    }
+
+    func testMakeVerifyPayload_filtersInRequestedOrderAndDedupes() {
+        let items = [verifyItem("a"), verifyItem("b", passed: false), verifyItem("c")]
+        let payload = verify(items, ids: ["c", "b", "c"])
+        XCTAssertEqual(payload.results.map(\.checkId), ["c", "b"])
+        XCTAssertEqual(payload.results.map(\.verdict), [.resolved, .stillPresent])
+        XCTAssertEqual(payload.results[1].title, "title-b")
+        XCTAssertEqual(payload.results[1].statusText, "status-b")
+        XCTAssertEqual(payload.results[1].detail, "detail-b")
+    }
+
+    func testMakeVerifyPayload_unknownIdIsInconclusiveWithoutFailingTheRest() {
+        let payload = verify([verifyItem("a")], ids: ["a", "nope"])
+        XCTAssertEqual(payload.results.count, 2)
+        XCTAssertEqual(payload.results[0].verdict, .resolved)
+        XCTAssertEqual(payload.results[1].checkId, "nope")
+        XCTAssertEqual(payload.results[1].verdict, .inconclusive)
+        XCTAssertEqual(payload.results[1].reason, "unknown_check_id")
+    }
+
+    func testMakeVerifyPayload_capsRequestedIdsAndTruncatesEchoedUnknownId() {
+        let known = verifyItem("a")
+        let many = (0..<(MCPResponseFormatting.maxVerifyCheckIds + 25)).map { "x\($0)" }
+        let capped = verify([known], ids: many)
+        XCTAssertEqual(capped.results.count, MCPResponseFormatting.maxVerifyCheckIds)
+        XCTAssertEqual(capped.caveats.count, 1)
+
+        let long = String(repeating: "z", count: 500)
+        let echoed = verify([known], ids: [long]).results[0]
+        XCTAssertEqual(echoed.checkId.count, MCPResponseFormatting.maxEchoedCheckIdLength)
+    }
+
+    func testMakeVerifyPayload_encodesLanguageIndependentJSONContract() throws {
+        let payload = verify([verifyItem("a", passed: false)])
+        let data = try JSONEncoder().encode(payload)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(Set(json.keys), ["results", "caveats", "timestamp"])
+        let first = try XCTUnwrap((json["results"] as? [[String: Any]])?.first)
+        XCTAssertEqual(Set(first.keys), ["checkId", "title", "verdict", "reason", "statusText", "detail"])
+        XCTAssertEqual(first["verdict"] as? String, "stillPresent")
+        XCTAssertEqual(first["reason"] as? String, "failing")
+    }
+
+    func testMakeVerifyPayload_caveatsOnlyForEvaluatedItems() {
+        XCTAssertTrue(verify([verifyItem("a")]).caveats.isEmpty)
+        XCTAssertEqual(verify([verifyItem("host_firewall"), verifyItem("network_stealth_mode")]).caveats.count, 1)
+        XCTAssertEqual(verify([verifyItem("exposed_ports")]).caveats.count, 1)
+        // 絞り込みで評価していない項目の注意書きは付けない。
+        XCTAssertTrue(verify([verifyItem("host_firewall"), verifyItem("a")], ids: ["a"]).caveats.isEmpty)
+        // Wi-Fi: インターフェースあり + SSID未解決のときだけ、wifi項目を返す場合に注意書き。
+        XCTAssertEqual(verify([verifyItem("wifi_encryption_strength")], interface: true, ssid: false).caveats.count, 1)
+        XCTAssertTrue(verify([verifyItem("wifi_encryption_strength")], interface: false, ssid: false).caveats.isEmpty)
+    }
+
+    func testMakeVerifyPayload_configOnlyChecksCarryTheSettingCaveatOnlyWhenEvaluated() {
+        let configOnly = ["gateway_arp_lock", "malware_scanning", "dns_threat_guard", "usb_zero_trust"]
+        for id in configOnly {
+            XCTAssertEqual(verify([verifyItem(id)]).caveats, [MCPResponseFormatting.configOnlyCaveat], id)
+        }
+        // 4項目をまとめて返しても注意書きは1つ。
+        XCTAssertEqual(verify(configOnly.map { verifyItem($0) }).caveats.count, 1)
+        // 絞り込みで返さない項目の注意書きは付けない。
+        XCTAssertTrue(verify(configOnly.map { verifyItem($0) } + [verifyItem("a")], ids: ["a"]).caveats.isEmpty)
+        // 判定は設定どおりで、inconclusive にはしない(host_firewall と同じ方針)。
+        XCTAssertEqual(verify([verifyItem("dns_threat_guard", passed: false)]).results[0].verdict, .stillPresent)
+        XCTAssertEqual(verify([verifyItem("usb_zero_trust")]).results[0].verdict, .resolved)
+    }
+
+    func testMakeVerifyPayload_unmeasuredExposedPortsExplainsTheFailure() {
+        let unmeasured = verify([verifyItem("exposed_ports", passed: false, applicable: false, reason: "tool_failed")])
+        XCTAssertEqual(unmeasured.results[0].verdict, .inconclusive)
+        XCTAssertEqual(unmeasured.results[0].reason, "tool_failed")
+        XCTAssertEqual(unmeasured.caveats, [MCPResponseFormatting.exposedPortsVisibilityCaveat, MCPResponseFormatting.exposedPortsUnmeasuredCaveat])
+        XCTAssertEqual(verify([verifyItem("exposed_ports")]).caveats, [MCPResponseFormatting.exposedPortsVisibilityCaveat])
+    }
+
+    func testMakeSecurityReportPayload_caveatsForSettingOnlyAndPortItems() {
+        func payload(_ items: [SecurityAuditItem]) -> MCPSecurityReportPayload {
+            MCPResponseFormatting.makeSecurityReportPayload(report: verifyReport(items), wifiInterfacePresent: false, wifiSSIDResolved: true)
+        }
+        XCTAssertTrue(payload([verifyItem("a")]).caveats.isEmpty)
+        XCTAssertEqual(payload([verifyItem("usb_zero_trust")]).caveats, [MCPResponseFormatting.configOnlyCaveat])
+        XCTAssertEqual(payload([verifyItem("exposed_ports")]).caveats, [MCPResponseFormatting.exposedPortsVisibilityCaveat])
+
+        // 測定できなかった exposed_ports は、合格として見えない(対象外)うえ、caveat で理由を伝える。
+        let unmeasured = payload([verifyItem("exposed_ports", passed: false, applicable: false, reason: "tool_failed")])
+        XCTAssertFalse(unmeasured.items[0].isApplicable)
+        XCTAssertFalse(unmeasured.items[0].isPassed)
+        XCTAssertTrue(unmeasured.caveats.contains(MCPResponseFormatting.exposedPortsUnmeasuredCaveat))
+    }
+
+    func testMakeSecurityReportPayload_exposesInconclusiveReasonOnlyWhenPresent() throws {
+        let report = verifyReport([verifyItem("a", reason: "tool_failed"), verifyItem("b")])
+        let payload = MCPResponseFormatting.makeSecurityReportPayload(report: report, wifiInterfacePresent: false, wifiSSIDResolved: true)
+        XCTAssertEqual(payload.items[0].inconclusiveReason, "tool_failed")
+        XCTAssertNil(payload.items[1].inconclusiveReason)
+
+        // 既存のキーは変えず、`inconclusiveReason` は理由があるときだけ追加される(nil のときはキー自体を出さない)。
+        let base: Set<String> = ["category", "title", "isPassed", "statusText", "detail", "recommendation", "isApplicable", "checkId", "nistCsf"]
+        func keys(_ item: MCPSecurityAuditItemPayload) throws -> Set<String> {
+            let json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(item)) as? [String: Any])
+            return Set(json.keys)
+        }
+        XCTAssertEqual(try keys(payload.items[0]), base.union(["inconclusiveReason"]))
+        XCTAssertEqual(try keys(payload.items[1]), base)
+    }
+
+    func testMakeSecurityReportPayload_reasonMatchesVerifyForEveryItem() {
+        // 同じ根拠: report の項目の inconclusiveReason は、verify が inconclusive と判定するときの reason と常に一致する。
+        let items = [
+            verifyItem("a"), verifyItem("b", passed: false), verifyItem("c", applicable: false),
+            verifyItem("d", reason: "helper_unavailable"), verifyItem("e", passed: false, applicable: false, reason: "not_verifiable"),
+        ]
+        let payload = MCPResponseFormatting.makeSecurityReportPayload(report: verifyReport(items), wifiInterfacePresent: false, wifiSSIDResolved: true)
+        let verified = verify(items)
+        for (reportItem, verdict) in zip(payload.items, verified.results) {
+            XCTAssertEqual(reportItem.checkId, verdict.checkId)
+            XCTAssertEqual(reportItem.inconclusiveReason, verdict.verdict == .inconclusive ? verdict.reason : nil, reportItem.checkId)
+        }
+    }
+
+    func testMakeSecurityReportPayload_wifiAndARPThatLookHealthyCarryTheirReason() throws {
+        // PersonalSOC が困っていた2項目。isApplicable/isPassed は「正常」に見えるが、確認済みではない。
+        let report = SecurityHealthChecker.shared.generateComprehensiveReport(
+            wifiInfo: WiFiInfo(ssid: nil, bssid: nil, securityLevel: .notConnected),
+            arpStatus: ARPMonitorStatus(isSpoofingDetected: false, message: "", previousMAC: nil, currentMAC: nil, gatewayKnown: true, hadBaseline: false),
+            listeningPorts: [],
+            activeSecurityLevel: .balanced,
+            wifiReadingUnreliable: true
+        )
+        let payload = MCPResponseFormatting.makeSecurityReportPayload(report: report, wifiInterfacePresent: true, wifiSSIDResolved: false)
+        let wifi = try XCTUnwrap(payload.items.first { $0.checkId == "wifi_encryption_strength" })
+        let arp = try XCTUnwrap(payload.items.first { $0.checkId == "arp_spoof_monitor" })
+        XCTAssertTrue(wifi.isApplicable)
+        XCTAssertTrue(wifi.isPassed)
+        XCTAssertEqual(wifi.inconclusiveReason, "location_unavailable")
+        XCTAssertTrue(arp.isApplicable)
+        XCTAssertTrue(arp.isPassed)
+        XCTAssertEqual(arp.inconclusiveReason, "no_baseline")
+
+        // 読み取れているときは出さない。
+        let measured = SecurityHealthChecker.shared.generateComprehensiveReport(
+            wifiInfo: WiFiInfo(ssid: nil, bssid: nil, securityLevel: .notConnected),
+            arpStatus: ARPMonitorStatus(isSpoofingDetected: false, message: "", previousMAC: nil, currentMAC: nil, gatewayKnown: true, hadBaseline: true),
+            listeningPorts: [],
+            activeSecurityLevel: .balanced
+        )
+        let clean = MCPResponseFormatting.makeSecurityReportPayload(report: measured, wifiInterfacePresent: false, wifiSSIDResolved: true)
+        XCTAssertNil(clean.items.first { $0.checkId == "wifi_encryption_strength" }?.inconclusiveReason)
+        XCTAssertNil(clean.items.first { $0.checkId == "arp_spoof_monitor" }?.inconclusiveReason)
+    }
+
+    func testVerifyToolIsListedReadOnlyWithOptionalCheckIds() throws {
+        let tools = MCPServer.toolDefinitionsForTesting()
+        let tool = try XCTUnwrap(tools.first { ($0["name"] as? String) == "verify_security_findings" })
+        let description = try XCTUnwrap(tool["description"] as? String)
+        XCTAssertTrue(description.contains("READ-ONLY"))
+        XCTAssertTrue(description.contains("never fixes"))
+        let schema = try XCTUnwrap(tool["inputSchema"] as? [String: Any])
+        XCTAssertNil(schema["required"], "checkIds is optional")
+        let props = try XCTUnwrap(schema["properties"] as? [String: Any])
+        let checkIds = try XCTUnwrap(props["checkIds"] as? [String: Any])
+        XCTAssertEqual(checkIds["type"] as? String, "array")
+        XCTAssertEqual(checkIds["maxItems"] as? Int, MCPResponseFormatting.maxVerifyCheckIds)
+        // 名前の重複が無いこと(カタログに1回だけ載る)。
+        XCTAssertEqual(tools.filter { ($0["name"] as? String) == "verify_security_findings" }.count, 1)
+    }
+
+    // MARK: - verify_security_findings の引数・注意書き
+
+    func testParseVerifyCheckIds_argumentValidation() {
+        func parse(_ args: [String: Any]) -> (ids: [String]?, isValid: Bool) { MCPResponseFormatting.parseVerifyCheckIds(args) }
+        // 省略・null は全項目。
+        XCTAssertNil(parse([:]).ids)
+        XCTAssertTrue(parse([:]).isValid)
+        XCTAssertNil(parse(["checkIds": NSNull()]).ids)
+        XCTAssertTrue(parse(["checkIds": NSNull()]).isValid)
+        // 空配列は有効(makeVerifyPayload が全項目として扱う)。
+        XCTAssertEqual(parse(["checkIds": [String]()]).ids, [])
+        XCTAssertTrue(parse(["checkIds": [String]()]).isValid)
+        // 配列でない・文字列以外を含むものは不正。
+        for bad: Any in ["host_firewall", 1, true, ["a": 1], [1, 2], ["a", 1], [NSNull()], [["a"]]] {
+            XCTAssertFalse(parse(["checkIds": bad]).isValid, "\(bad)")
+        }
+        XCTAssertEqual(parse(["checkIds": ["a", "b"]]).ids, ["a", "b"])
+    }
+
+    func testMakeVerifyPayload_emptyArrayMeansAllAndDuplicatesAreRemoved() {
+        let items = [verifyItem("a"), verifyItem("b")]
+        XCTAssertEqual(verify(items, ids: []).results.map(\.checkId), ["a", "b"])
+        XCTAssertEqual(verify(items, ids: ["b", "a", "b", "a"]).results.map(\.checkId), ["b", "a"])
+    }
+
+    func testMakeVerifyPayload_exactly50IdsPassAndThe51stIsDropped() {
+        let max = MCPResponseFormatting.maxVerifyCheckIds
+        let ids = (0..<max).map { "id\($0)" }
+        let atLimit = verify([verifyItem("a")], ids: ids)
+        XCTAssertEqual(atLimit.results.count, max)
+        XCTAssertTrue(atLimit.caveats.isEmpty, "50 distinct ids is within the limit")
+        let over = verify([verifyItem("a")], ids: ids + ["one-more"])
+        XCTAssertEqual(over.results.count, max)
+        XCTAssertEqual(over.caveats.count, 1)
+        // 重複を除いた後の件数で上限を判定する(重複で水増しした入力は弾かない)。
+        let padded = verify([verifyItem("a")], ids: ids + ids)
+        XCTAssertEqual(padded.results.count, max)
+        XCTAssertTrue(padded.caveats.isEmpty)
+    }
+
+    func testMakeVerifyPayload_idsThatCollideAfterTruncationYieldOneRow() {
+        let prefix = String(repeating: "x", count: MCPResponseFormatting.maxEchoedCheckIdLength)
+        let a = prefix + "AAAA", b = prefix + "BBBB"
+        let payload = verify([verifyItem("k")], ids: [a, b, "k"])
+        XCTAssertEqual(payload.results.map(\.checkId), [prefix, "k"], "the echoed (truncated) id must not appear twice")
+        XCTAssertEqual(payload.results[0].reason, "unknown_check_id")
+    }
+
+    func testMakeVerifyPayload_arpAndTrustedOpenCaveats() {
+        let arp = verify([verifyItem("arp_spoof_monitor", reason: "no_baseline")])
+        XCTAssertEqual(arp.results[0].verdict, .inconclusive)
+        XCTAssertTrue(arp.caveats.contains(MCPResponseFormatting.arpTrustedBaselineCaveat))
+        XCTAssertFalse(verify([verifyItem("arp_spoof_monitor")]).caveats.contains(MCPResponseFormatting.arpTrustedBaselineCaveat))
+
+        let open = verify([verifyItem("host_firewall", passed: true, applicable: false), verifyItem("network_stealth_mode", passed: true, applicable: false)])
+        XCTAssertTrue(open.results.allSatisfy { $0.verdict == .resolved && $0.reason == "not_applicable" })
+        XCTAssertTrue(open.caveats.contains(MCPResponseFormatting.trustedOpenNotApplicableCaveat))
+        XCTAssertFalse(verify([verifyItem("host_firewall")]).caveats.contains(MCPResponseFormatting.trustedOpenNotApplicableCaveat))
+
+        let report = MCPResponseFormatting.makeSecurityReportPayload(
+            report: verifyReport([verifyItem("host_firewall", passed: true, applicable: false), verifyItem("arp_spoof_monitor", reason: "no_baseline")]),
+            wifiInterfacePresent: false, wifiSSIDResolved: true)
+        XCTAssertTrue(report.caveats.contains(MCPResponseFormatting.trustedOpenNotApplicableCaveat))
+        XCTAssertTrue(report.caveats.contains(MCPResponseFormatting.arpTrustedBaselineCaveat))
+    }
+
+    func testVerifyToolDescriptionStatesTheNetworkAndSettingBasedTruth() throws {
+        let tools = MCPServer.toolDefinitionsForTesting()
+        let verifyTool = try XCTUnwrap(tools.first { ($0["name"] as? String) == "verify_security_findings" })
+        let text = try XCTUnwrap(verifyTool["description"] as? String)
+        XCTAssertFalse(text.contains("no network requests"), "the gateway MAC lookup may ping the LAN gateway")
+        XCTAssertTrue(text.contains("ICMP ping"))
+        XCTAssertTrue(text.contains("not a re-measurement of the OS state"))
+        for name in ["get_security_report", "get_exposed_ports", "get_guard_status"] {
+            let d = try XCTUnwrap(tools.first { ($0["name"] as? String) == name }?["description"] as? String)
+            XCTAssertTrue(d.contains("ICMP ping"), name)
+        }
+    }
 }

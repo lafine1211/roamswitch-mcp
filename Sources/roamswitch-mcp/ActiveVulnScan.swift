@@ -374,6 +374,18 @@ public enum ActiveVulnScan {
         return verdict(code, body)
     }
 
+    /// HexStrike AI's API server has no authentication, so a positive answer means every
+    /// client that can reach this port can run commands. The probe asks for
+    /// `/api/processes/list`, which returns `{"active_processes":{},"success":true,"total_count":0}`
+    /// instantly and has no side effect. NOT `/health`, the obvious fingerprint: measured
+    /// against the real server it takes ~3.5 s (over this probe's timeout) and it runs ~127
+    /// `which` commands, which would trip RoamSwitch's own `exec.offensive_tool_inventory` rule.
+    static func probeHexStrikeNoAuth(port: Int, timeout: TimeInterval = 2.0) -> Bool? {
+        probeHTTPBody(port: port, path: "/api/processes/list", timeout: timeout) {
+            $0 == 200 && $1.contains("\"active_processes\"") && $1.contains("\"total_count\"")
+        }
+    }
+
     static func probeElasticsearchNoAuth(port: Int, timeout: TimeInterval = 2.0) -> Bool? {
         probeHTTPBody(port: port, path: "/", timeout: timeout) { $0 == 200 && $1.contains("\"cluster_name\"") }
     }
@@ -779,7 +791,7 @@ public enum ActiveVulnScan {
     private static let probeableSignatureIDs: Set<String> = [
         "redis-default-noauth", "memcached-noauth", "mongod-default-noauth",
         "elasticsearch-noauth", "couchdb-noauth", "jenkins-noauth", "vnc-noauth",
-        "smb1-enabled", "smb-signing-not-required",
+        "smb1-enabled", "smb-signing-not-required", "hexstrike-noauth",
     ]
 
     /// Whether `runScan` would attempt anything at all for this port — i.e. it either
@@ -819,6 +831,7 @@ public enum ActiveVulnScan {
                 case "couchdb-noauth": confirmed = probeCouchDBNoAuth(port: port.port)
                 case "jenkins-noauth": confirmed = probeJenkinsNoAuth(port: port.port)
                 case "vnc-noauth": confirmed = probeVNCNoAuth(port: port.port)
+                case "hexstrike-noauth": confirmed = probeHexStrikeNoAuth(port: port.port)
                 case "smb1-enabled": confirmed = probeSMBNegotiate(port: port.port).map { $0 == .smb1 }
                 case "smb-signing-not-required": confirmed = probeSMBNegotiate(port: port.port).map { $0 == .smb2SigningNotRequired }
                 default: confirmed = nil

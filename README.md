@@ -37,15 +37,31 @@ block traffic, no license or payment code, no UI. Just the code that *observes* 
 
 ## Tools exposed (`tools/list`)
 
-17 tools. Every one is read-only. Only `get_exposed_ports` and the opt-in
-`run_active_vuln_scan` touch a socket at all, and both are pinned to `127.0.0.1`.
+31 tools (the length of `toolDefinitions` in `MCPServer.swift`, which is what `tools/list` returns).
+Every one is read-only. `get_exposed_ports` and the opt-in `run_active_vuln_scan` are pinned to
+`127.0.0.1`; the one tool that contacts an external host is the opt-in, Pro-only
+`run_npm_audit_signatures`, which runs `npm audit signatures` against the npm registry. The
+diagnostic tools (`get_security_report`, `verify_security_findings`, `get_exposed_ports`,
+`get_guard_status`) may send one ICMP ping to the default gateway on the LAN to look up its MAC
+address.
 
 ### Posture & network
 
 - `get_security_report` — the full 18-point macOS posture audit (FileVault, SIP, Gatekeeper,
   auto-update, XProtect, firewall, stealth mode, Wi-Fi encryption, ARP spoofing, gateway ARP
   pinning, SSH, sudo `NOPASSWD`, exposed ports, download/DNS/link protection, USB &
-  accessory guards), scored with per-item advice.
+  accessory guards), scored with per-item advice. An item that could not be measured reliably
+  carries an optional language-independent `inconclusiveReason` (e.g. `no_baseline`,
+  `location_unavailable`): its `isPassed` / `statusText` may look healthy but are not confirmed.
+- `verify_security_findings` — re-checks, right now, whether specific findings from
+  `get_security_report` are still present (optional `checkIds`, default all). Each result is
+  `stillPresent`, `resolved` or `inconclusive` with a language-independent `reason`; read-only,
+  never fixes anything, contacts no external host (it may send one ICMP ping to the default gateway
+  on the LAN to look up its MAC address). Items decided by RoamSwitch's own settings
+  (`host_firewall`, `network_stealth_mode`, `gateway_arp_lock`, `malware_scanning`,
+  `dns_threat_guard`, `usb_zero_trust`) reflect those in-app settings, not a re-measurement of the
+  OS state. `arp_spoof_monitor` is `resolved` only when the gateway MAC matches a registered
+  trusted network; otherwise it is `inconclusive` (`no_baseline`).
 - `get_exposed_ports` — every listening TCP port; those exposed beyond localhost are matched
   against a known-dangerous-service database (Redis, MongoDB, …, plus local AI inference
   servers such as Ollama:11434, LM Studio:1234, Gradio:7860, vLLM:8000) and probed at
@@ -73,10 +89,16 @@ block traffic, no license or payment code, no UI. Just the code that *observes* 
   log-template anomalies (never-before-seen patterns, statistical frequency spikes) are
   reported alongside the counts.
 - `get_app_help` — full-text search of the bundled knowledge base.
+- `audit_mcp_configs` — reads the MCP client configuration files in their well-known per-user
+  locations (Claude Desktop, Claude Code, Cursor, Windsurf, VS Code, Cline, Gemini CLI) plus the
+  project-level `.mcp.json` files in registered folders, and flags risky entries: auto-approved
+  tools, plaintext `http://` servers on a non-loopback host, shell one-liner launch commands,
+  entries pointing at HexStrike AI, group/world-writable config files and Claude Code's
+  `enableAllProjectMcpServers`. Never returns env or header values or arguments. No network.
 
 ### Vulnerability & CVE
 
-- `run_active_vuln_scan` — **the only tool that sends network requests.** Non-destructive,
+- `run_active_vuln_scan` — **the only tool that sends verification probes.** Non-destructive,
   read-only, `127.0.0.1`-only, one short-timeout request per check, never another host:
   unauthenticated-by-default services already detected here (Redis/Memcached/MongoDB) verified
   with a protocol-appropriate probe; CORS misconfiguration / path traversal / open redirect
@@ -88,6 +110,18 @@ block traffic, no license or payment code, no UI. Just the code that *observes* 
 - `run_package_cve_scan_languages` — dependency lockfiles (`package-lock.json`,
   `requirements.txt`, `Pipfile.lock`, `poetry.lock`, `Cargo.lock`, `Gemfile.lock`,
   `composer.lock`, `go.sum`, `pom.xml`) in the given folders vs. the same local map. No network.
+- `run_package_lifecycle_script_scan` — inventory of `package.json` lifecycle scripts
+  (preinstall / install / postinstall / prepare) in the given folders' `node_modules`, each with
+  a reference-only `isDangerPattern` flag. A list, not a threat verdict. No network, executes
+  nothing. Pro.
+- `run_typosquat_scan` — dependency names in `package.json` within edit distance 1-2 of a
+  well-known npm package (`expres`, `loadash`, …). Reference-only heuristic against a static
+  list; some hits are false positives. No network. Pro.
+- `run_npm_audit_signatures` — runs `npm audit signatures` to verify installed packages'
+  registry signatures and provenance and returns npm's output verbatim. **Contacts the npm
+  registry.** Pro, and off by default until the toggle in the Package CVE Scan window is on.
+- `get_vulnerability_scan_history` — last outcome (vulnerable / safe / inconclusive) of every
+  probe `run_active_vuln_scan` has recorded, with the days since it was checked. No network.
 
 ### Incident state (works during an Air-Gap)
 
@@ -114,6 +148,22 @@ RoamSwitch has severed the network.
 - `get_network_history` — the always-on Evil-Twin detector's memory: remembered SSIDs with a
   gateway-device *count* and last-seen time (MAC addresses are never returned), plus look-alike
   SSID pairs that never shared a gateway.
+- `get_ransomware_entropy_guard_status` — Ransomware Entropy Guard state and up to the 50 most
+  recent mass-encryption bursts in the watched folders. Pro.
+- `get_ransomware_recovery_snapshots` — ransomware-recovery snapshots (kind, still on disk,
+  recommended) and the schedule. Read-only: nothing can be restored through MCP. Pro.
+- `get_forensic_evidence_bundles` — up to the 20 most recent evidence bundles captured
+  automatically during a containment, each verifiable by per-artifact SHA-256.
+- `get_honeytoken_status` — Credential Honeytoken Guard state and up to the 50 most recent
+  accesses of a planted decoy credential file. Pro.
+- `get_browser_credential_watch_status` — Browser Credential Watch state and up to the 50 most
+  recent non-browser reads of a saved-password or cookie database. Pro, opt-in.
+- `search_exec_events` — search of the process-exec recorder log (eslogger). Read-only;
+  secrets in arguments are masked best-effort. Pro.
+- `get_process_tree` — ancestor / descendant process tree around one pid, rebuilt from the same
+  recorder log. Pro.
+- `get_sensor_audit_results` — results of outside-in reachability audits requested from a paired
+  RoamSwitch Sensor.
 
 ### Resources (`resources/list`)
 
@@ -193,9 +243,11 @@ system state directly.
 - **Read-only.** No API mutates anything.
 - **No socket.** Reads one line from stdin, writes one line to stdout, exits when the client
   closes the pipe.
-- **No telemetry, no outbound network** — except the local `127.0.0.1` probe in
-  `get_exposed_ports` and the opt-in, off-by-default `run_active_vuln_scan`, which is also
-  `127.0.0.1`-only. `audit_url_safety` never touches the network and never fetches the URL.
+- **No telemetry, no outbound traffic to external hosts** — except the opt-in, Pro-only
+  `run_npm_audit_signatures` (npm registry). Local-only traffic: the `127.0.0.1` probe in
+  `get_exposed_ports`, the opt-in, off-by-default `run_active_vuln_scan` (also `127.0.0.1`-only),
+  and the single ICMP ping to the LAN's default gateway that the diagnostic tools may send to look
+  up its MAC address. `audit_url_safety` never touches the network and never fetches the URL.
 - MIT licensed.
 
 ## This is a mirror — do not edit here
@@ -210,5 +262,5 @@ the code can be checked against the shipping binary's symbols. See [`SYNC.md`](.
 - Architecture & security whitepaper: <https://roamswitch.com/security.html> (§8 covers this server)
 - The Swift client library for querying an installed RoamSwitch:
   [RoamSwitchKit](https://github.com/lafine1211/RoamSwitchKit)
-- The Linux edition ships its own MCP server (`roamswitch-mcp`, 19 tools) and an async Rust
+- The Linux edition ships its own MCP server (`roamswitch-mcp`, 36 tools) and an async Rust
   client, [roamswitch-linux-kit](https://github.com/lafine1211/roamswitch-linux-kit).

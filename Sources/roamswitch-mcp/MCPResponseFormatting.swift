@@ -20,6 +20,11 @@ public struct MCPSecurityAuditItemPayload: Codable, Equatable {
     public let checkId: String
     public let cisControl: String?
     public let nistCsf: [String]
+    /// 任意。この項目の合否が信頼できない(測定できなかった・当てにならない)ときだけ入る、言語非依存の理由コード
+    /// (helper_unavailable / gateway_unknown / no_baseline / location_unavailable / tool_failed / not_verifiable)。
+    /// `verify_security_findings` が inconclusive と判定する根拠と同じ値で、nil のときは JSON にキー自体を出さない。
+    /// 入っているとき `isPassed` / `statusText` は「正常」に見えても確認済みではない。
+    public let inconclusiveReason: String?
 }
 
 public struct MCPSecurityReportPayload: Codable, Equatable {
@@ -28,6 +33,25 @@ public struct MCPSecurityReportPayload: Codable, Equatable {
     public let totalChecks: Int
     public let passedChecks: Int
     public let items: [MCPSecurityAuditItemPayload]
+    public let caveats: [String]
+    public let timestamp: String
+}
+
+/// `verify_security_findings` の1項目。`get_security_report` の項目(`MCPSecurityAuditItemPayload`)とは別の型で、
+/// 既存のレポート出力・Kitのデコードには影響しない。Linux版と共通の契約。
+public struct MCPVerifiedFindingPayload: Codable, Equatable {
+    public let checkId: String
+    public let title: String
+    public let verdict: SecurityCheckVerification
+    /// 言語に依存しない理由コード(failing / passing / not_applicable / helper_unavailable / gateway_unknown /
+    /// no_baseline / location_unavailable / unknown_check_id / not_verifiable / tool_failed)。
+    public let reason: String
+    public let statusText: String
+    public let detail: String
+}
+
+public struct MCPVerifySecurityFindingsPayload: Codable, Equatable {
+    public let results: [MCPVerifiedFindingPayload]
     public let caveats: [String]
     public let timestamp: String
 }
@@ -511,6 +535,52 @@ public enum MCPResponseFormatting {
 
     // MARK: get_security_report
 
+    /// Wi-Fiインターフェースはあるが SSID が取れなかった状態。「本当に未接続」と「位置情報の権限が無くて読めない」を
+    /// 区別できないので、この読み取りは信頼できない。`get_security_report` の注意書きと
+    /// `verify_security_findings` の inconclusive 判定で同じ条件を使う。
+    public static func wifiReadingUnreliable(interfacePresent: Bool, ssidResolved: Bool) -> Bool {
+        interfacePresent && !ssidResolved
+    }
+
+    static var wifiLocationCaveat: String {
+        loc("Wi-Fi暗号化強度の判定は、位置情報の権限を持たないためこのツールからは行えない場合があります。「未接続」と表示されていても、実際にはOpen Wi-Fi等に接続している可能性があります。RoamSwitchアプリ本体の表示もあわせてご確認ください。")
+    }
+
+    /// 判定が「RoamSwitchでオンにしているか」という設定値で、実際に動作していることの実測ではない項目。
+    /// `host_firewall` / `network_stealth_mode` と同じ扱い: 合否は設定どおりに出し(inconclusive にはしない)、
+    /// 注意書きでその限界を明示する。
+    static let configOnlyCheckIds: Set<String> = ["gateway_arp_lock", "malware_scanning", "dns_threat_guard", "usb_zero_trust"]
+
+    static var configOnlyCaveat: String {
+        loc("ゲートウェイARP固定・ダウンロード自動スキャン(マルウェア対策)・DNS脅威保護・USBガードの判定は、RoamSwitchでオンにしているかという設定値で、実際に動作して効いていることの実測ではありません。")
+    }
+
+    /// ARP監視が「問題なし」と言えるのは、登録済みの信頼ネットワークのゲートウェイMACと一致したときだけ。
+    static var arpTrustedBaselineCaveat: String {
+        loc("ARPスプーフィング監視は、登録済みの信頼ネットワークのゲートウェイMACと一致したときだけ「問題なし」と判定します。登録が無いと、このプロセス自身の観測だけでは偽装を見抜けないため確認できません (no_baseline)。")
+    }
+
+    static let trustedOpenCheckIds: Set<String> = ["host_firewall", "network_stealth_mode"]
+
+    /// 保護レベルが信頼(open)だと、ファイアウォール/ステルスは設計上「対象外」。macOS側の状態が変わったわけではない。
+    static var trustedOpenNotApplicableCaveat: String {
+        loc("保護レベルが信頼(open)のため対象外です。macOSファイアウォール自体の状態は変更されていません。")
+    }
+
+    /// 非特権の lsof には root 所有のリスナーが出ない(この別プロセスは特権ヘルパーを持たない)。
+    static var exposedPortsVisibilityCaveat: String {
+        loc("外部公開ポートの判定は lsof の結果に基づきます。このツールを実行しているユーザーから見えるリスナーに限られ、root所有のものは見えません。")
+    }
+
+    static var exposedPortsUnmeasuredCaveat: String {
+        loc("外部公開ポートは lsof の実行に失敗したため測定できていません。「公開ポートなし」という意味ではありません。")
+    }
+
+    /// `get_exposed_ports` / `run_active_vuln_scan` が lsof の失敗を空リスト(= ポートなし)で返さないためのエラー文。
+    static var portListUnavailableMessage: String {
+        loc("待ち受けポートの一覧を取得できませんでした (lsof の実行に失敗)。ポートが無いという意味ではありません。")
+    }
+
     public static func makeSecurityReportPayload(
         report: ComprehensiveSecurityReport,
         wifiInterfacePresent: Bool,
@@ -521,8 +591,23 @@ public enum MCPResponseFormatting {
         // "genuinely not connected" and "no Location Services permission" —
         // a bare command-line tool can't be granted that permission the way
         // the app bundle can, so this reading can't be trusted either way.
-        if wifiInterfacePresent, !wifiSSIDResolved {
-            caveats.append(loc("Wi-Fi暗号化強度の判定は、位置情報の権限を持たないためこのツールからは行えない場合があります。「未接続」と表示されていても、実際にはOpen Wi-Fi等に接続している可能性があります。RoamSwitchアプリ本体の表示もあわせてご確認ください。"))
+        if wifiReadingUnreliable(interfacePresent: wifiInterfacePresent, ssidResolved: wifiSSIDResolved) {
+            caveats.append(wifiLocationCaveat)
+        }
+        if report.items.contains(where: { $0.checkId == "exposed_ports" }) {
+            caveats.append(exposedPortsVisibilityCaveat)
+        }
+        if report.items.contains(where: { $0.checkId == "exposed_ports" && $0.inconclusiveReason == "tool_failed" }) {
+            caveats.append(exposedPortsUnmeasuredCaveat)
+        }
+        if report.items.contains(where: { configOnlyCheckIds.contains($0.checkId) }) {
+            caveats.append(configOnlyCaveat)
+        }
+        if report.items.contains(where: { $0.checkId == "arp_spoof_monitor" && $0.inconclusiveReason == "no_baseline" }) {
+            caveats.append(arpTrustedBaselineCaveat)
+        }
+        if report.items.contains(where: { trustedOpenCheckIds.contains($0.checkId) && !$0.isApplicable }) {
+            caveats.append(trustedOpenNotApplicableCaveat)
         }
 
         return MCPSecurityReportPayload(
@@ -542,9 +627,113 @@ public enum MCPResponseFormatting {
                     isApplicable: $0.isApplicable,
                     checkId: $0.checkId,
                     cisControl: $0.cisControlID,
-                    nistCsf: $0.nistCsfCategories
+                    nistCsf: $0.nistCsfCategories,
+                    inconclusiveReason: SecurityCheckVerification.inconclusiveReason(of: $0)
                 )
             },
+            caveats: caveats,
+            timestamp: ISO8601DateFormatter().string(from: report.timestamp)
+        )
+    }
+
+    // MARK: verify_security_findings
+
+    /// 1回に指定できる checkId の上限(超過分は無視して注意書きを付ける)。全18項目より十分大きく、
+    /// 巨大な引数でレスポンスが膨らまないための歯止め。
+    public static let maxVerifyCheckIds = 50
+    /// 未知の checkId をそのまま返すときの最大文字数(入力はエージェント由来で信頼できない)。
+    static let maxEchoedCheckIdLength = 64
+
+    /// `verify_security_findings` の `checkIds` 引数の検証。省略・null は「全項目」(`ids == nil`)。
+    /// 配列でない・文字列以外を含むものは不正(`isValid == false`)。空配列は `makeVerifyPayload` で全項目扱い。
+    static func parseVerifyCheckIds(_ arguments: [String: Any]) -> (ids: [String]?, isValid: Bool) {
+        guard let raw = arguments["checkIds"], !(raw is NSNull) else { return (nil, true) }
+        guard let list = raw as? [Any], let ids = list as? [String] else { return (nil, false) }
+        return (ids, true)
+    }
+
+    /// 全項目を再評価した `report` から、`requestedCheckIds`(nil/空 = 全項目)に絞って判定を作る純粋関数。
+    /// 結果は指定順(重複は最初の1件)。レポートに無い id は、全体を失敗させず、その id だけ
+    /// `inconclusive` + `unknown_check_id` にする。
+    public static func makeVerifyPayload(
+        report: ComprehensiveSecurityReport,
+        requestedCheckIds: [String]?,
+        wifiInterfacePresent: Bool,
+        wifiSSIDResolved: Bool
+    ) -> MCPVerifySecurityFindingsPayload {
+        var caveats: [String] = []
+        var itemsById: [String: SecurityAuditItem] = [:]
+        for item in report.items where !item.checkId.isEmpty && itemsById[item.checkId] == nil {
+            itemsById[item.checkId] = item
+        }
+
+        let selected: [String]
+        if let requested = requestedCheckIds, !requested.isEmpty {
+            // 長すぎる id は先に切り詰め、切り詰めた後の文字列で重複を除く(先頭64文字が同じ別々の id が
+            // 同じ checkId の2行にならないように)。実在する checkId はどれも短いので、切り詰めても一致は変わらない。
+            var seen = Set<String>()
+            var ordered: [String] = []
+            for raw in requested {
+                let id = String(raw.prefix(maxEchoedCheckIdLength))
+                if seen.insert(id).inserted { ordered.append(id) }
+            }
+            if ordered.count > maxVerifyCheckIds {
+                ordered = Array(ordered.prefix(maxVerifyCheckIds))
+                caveats.append(String(format: loc("一度に指定できる checkId は %d 件までです。それを超える分は無視しました。"), maxVerifyCheckIds))
+            }
+            selected = ordered
+        } else {
+            selected = report.items.map(\.checkId).filter { !$0.isEmpty }
+        }
+
+        let results: [MCPVerifiedFindingPayload] = selected.map { id in
+            guard let item = itemsById[id] else {
+                return MCPVerifiedFindingPayload(
+                    checkId: String(id.prefix(maxEchoedCheckIdLength)),
+                    title: "",
+                    verdict: .inconclusive,
+                    reason: "unknown_check_id",
+                    statusText: "",
+                    detail: ""
+                )
+            }
+            let classification = SecurityCheckVerification.classify(item)
+            return MCPVerifiedFindingPayload(
+                checkId: item.checkId,
+                title: item.title,
+                verdict: classification.verdict,
+                reason: classification.reason,
+                statusText: item.statusText,
+                detail: item.detail
+            )
+        }
+        let evaluated = Set(results.filter { $0.reason != "unknown_check_id" }.map(\.checkId))
+
+        if wifiReadingUnreliable(interfacePresent: wifiInterfacePresent, ssidResolved: wifiSSIDResolved),
+           evaluated.contains("wifi_encryption_strength") {
+            caveats.append(wifiLocationCaveat)
+        }
+        if !evaluated.isDisjoint(with: ["host_firewall", "network_stealth_mode"]) {
+            caveats.append(loc("macOS ファイアウォールとステルスモードの判定は、RoamSwitchの保護レベル設定がそうなっているべき状態を示すもので、macOS自体のファイアウォール設定の実測値ではありません。"))
+        }
+        if evaluated.contains("exposed_ports") {
+            caveats.append(exposedPortsVisibilityCaveat)
+            if results.contains(where: { $0.checkId == "exposed_ports" && $0.reason == "tool_failed" }) {
+                caveats.append(exposedPortsUnmeasuredCaveat)
+            }
+        }
+        if !evaluated.isDisjoint(with: configOnlyCheckIds) {
+            caveats.append(configOnlyCaveat)
+        }
+        if results.contains(where: { $0.checkId == "arp_spoof_monitor" && $0.reason == "no_baseline" }) {
+            caveats.append(arpTrustedBaselineCaveat)
+        }
+        if results.contains(where: { trustedOpenCheckIds.contains($0.checkId) && $0.reason == "not_applicable" }) {
+            caveats.append(trustedOpenNotApplicableCaveat)
+        }
+
+        return MCPVerifySecurityFindingsPayload(
+            results: results,
             caveats: caveats,
             timestamp: ISO8601DateFormatter().string(from: report.timestamp)
         )

@@ -70,7 +70,8 @@ final class StdioSmokeTests: XCTestCase {
                         "search_exec_events", "get_process_tree",
                         "get_ransomware_entropy_guard_status", "get_honeytoken_status",
                         "get_browser_credential_watch_status", "get_forensic_evidence_bundles",
-                        "get_vulnerability_scan_history"])
+                        "get_vulnerability_scan_history", "verify_security_findings",
+                        "audit_mcp_configs"])
     }
 
     func testAuditURLSafety_flagsPhishing_offline() throws {

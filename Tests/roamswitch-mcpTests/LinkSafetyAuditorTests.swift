@@ -33,6 +33,52 @@ final class LinkSafetyAuditorTests: XCTestCase {
         XCTAssertTrue(report.riskFactors.contains { $0.title.contains("IPアドレス直打ち") })
     }
 
+    // MARK: - Numeric hosts and credentials in the authority
+
+    func testObfuscatedNumericHostsAreIPAddressHosts() {
+        let auditor = LinkSafetyAuditor.shared
+        for url in ["http://2130706433/", "http://0x7f.1/", "http://0x7f000001/login", "http://0177.0.0.1/", "http://127.1/", "https://3232235777/x"] {
+            let report = auditor.analyzeURL(url)
+            XCTAssertTrue(report.riskFactors.contains { $0.kind == .ipAddressHost }, url)
+            XCTAssertEqual(report.riskLevel, .dangerous, url)
+            XCTAssertTrue(report.riskFactors.first { $0.kind == .ipAddressHost }?.title.contains("数値表記") == true, "\(url) should say the number was disguised")
+        }
+        let plain = auditor.analyzeURL("http://192.168.1.100/admin")
+        XCTAssertFalse(plain.riskFactors.first { $0.kind == .ipAddressHost }?.title.contains("数値表記") == true)
+    }
+
+    func testNumericHostHelpersDoNotTouchRealDomains() {
+        for host in ["example.com", "1password.com", "123.example.com", "a.1", "0xg.com", "x.0x7f", "1.2.3.4.5", ""] {
+            XCTAssertFalse(LinkSafetyAuditor.isNumericIPv4Host(host), host)
+        }
+        XCTAssertTrue(LinkSafetyAuditor.isNumericIPv4Host("1.2.3.4"))
+        XCTAssertFalse(LinkSafetyAuditor.isObfuscatedIPv4Host("1.2.3.4"))
+        XCTAssertFalse(LinkSafetyAuditor.isObfuscatedIPv4Host("192.168.0.1"))
+        XCTAssertTrue(LinkSafetyAuditor.isObfuscatedIPv4Host("192.168.0.01"))
+        XCTAssertTrue(LinkSafetyAuditor.isObfuscatedIPv4Host("1.2.3.999"))
+    }
+
+    func testDomainLookalikeBeforeAtSignIsSevere() {
+        let report = LinkSafetyAuditor.shared.analyzeURL("https://apple.com@evil.example/signin")
+        XCTAssertEqual(report.domain, "evil.example")
+        let factor = report.riskFactors.first { $0.kind == .urlUserInfo }
+        XCTAssertNotNil(factor)
+        XCTAssertEqual(factor?.isSevere, true)
+        XCTAssertEqual(report.riskLevel, .dangerous)
+    }
+
+    func testPlainUserInfoIsFlaggedButNotSevereAlone() {
+        let report = LinkSafetyAuditor.shared.analyzeURL("https://bob:pw@example.org/")
+        let factor = report.riskFactors.first { $0.kind == .urlUserInfo }
+        XCTAssertEqual(factor?.isSevere, false)
+        XCTAssertEqual(report.riskLevel, .caution)
+    }
+
+    func testNoUserInfoFactorForOrdinaryURLs() {
+        XCTAssertFalse(LinkSafetyAuditor.shared.analyzeURL("https://www.apple.com/jp/").riskFactors.contains { $0.kind == .urlUserInfo })
+        XCTAssertFalse(LinkSafetyAuditor.shared.analyzeURL("https://example.org/a@b").riskFactors.contains { $0.kind == .urlUserInfo }, "an @ in the path is not credentials")
+    }
+
     func testSubdomainSpoofing_detected() {
         let auditor = LinkSafetyAuditor.shared
         let report = auditor.analyzeURL("https://apple.com.account-verify.xyz/login")
