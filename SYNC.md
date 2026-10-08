@@ -58,6 +58,7 @@ All files live in `Sources/roamswitch-mcp/`.
 | `PackageCveScriptScan.swift` | `RoamSwitch/PackageCveScriptScan.swift` |
 | `NpmAuditSignatures.swift` | `RoamSwitch/NpmAuditSignatures.swift` |
 | `TyposquatGuard.swift` | `RoamSwitch/TyposquatGuard.swift` |
+| `MCPConfigAuditor.swift` | `RoamSwitch/MCPConfigAuditor.swift` |
 | `SecretLeakScanning.swift` | `RoamSwitch/SecretLeakScanning.swift` |
 | `CryptoSecretDetection.swift` | `Shared/CryptoSecretDetection.swift` (from `Shared/`) |
 | `SecurityLogAuditor.swift` | `RoamSwitch/SecurityLogAuditor.swift` |
@@ -114,6 +115,7 @@ via `@testable import RoamSwitch`. Only `main.swift` (the stdin→stdout pump) i
 | `RansomwareRecoveryMCPTests.swift` | `RoamSwitchTests/RansomwareRecoveryMCPTests.swift` |
 | `RoamSwitchMCPSkillsContentTests.swift` | `RoamSwitchTests/RoamSwitchMCPSkillsContentTests.swift` |
 | `ActiveVulnScanTests.swift` | `RoamSwitchTests/ActiveVulnScanTests.swift` (was previously not mirrored — added 2026-09, see this repo's history) |
+| `MCPConfigAuditorTests.swift` | `RoamSwitchTests/MCPConfigAuditorTests.swift` |
 | `StdioSmokeTests.swift` | **not mirrored** — specific to this repo (drives the built binary over stdio) |
 | `MutationFuzzTests.swift` | **not mirrored** — specific to this repo |
 

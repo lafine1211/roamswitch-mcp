@@ -40,7 +40,7 @@ CORE=(AppLanguage TrustedNetwork GatewayFingerprint WiFiSecurityMonitor \
       RoamSwitchKnowledgeBaseContent_it RoamSwitchKnowledgeBaseContent_ptPT \
       MCPResponseFormatting MCPProtocol MCPServer RoamSwitchMCPSkillsContent \
       PackageCveScan PackageCveMapData PackageCveScanLanguages PackageCveMapLanguagesData \
-      PackageCveScriptScan NpmAuditSignatures TyposquatGuard \
+      PackageCveScriptScan NpmAuditSignatures TyposquatGuard MCPConfigAuditor \
       SecretLeakScanning SecurityLogAuditor LogTemplateAnalyzer QuarantineManager CanaryStatusReader \
       RansomwareEntropyStatusReader ForensicCaptureManager HoneytokenStatusReader \
       BrowserCredentialWatchStatusReader \
@@ -60,7 +60,7 @@ SHARED=(RansomwareSnapshotLogic ExecEventModel ExecLogStore ExecProcessTree Exec
 TESTS=(LinkSafetyAuditorTests CryptoSecretDetectionTests MCPKnowledgeBaseTests MCPProtocolTests \
        MCPResponseFormattingTests ARPSpoofMonitorTests MCPServerRobustnessTests ParserRobustnessTests \
        TyposquatGuardTests RansomwareRecoveryMCPTests RoamSwitchMCPSkillsContentTests \
-       ActiveVulnScanTests)
+       ActiveVulnScanTests MCPConfigAuditorTests)
 
 TDST="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/Tests/roamswitch-mcpTests"
 
