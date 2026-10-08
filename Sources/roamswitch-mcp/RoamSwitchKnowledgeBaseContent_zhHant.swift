@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.28 (build 146).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.0 (build 147).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -304,7 +304,7 @@ extension RoamSwitchKnowledgeBase {
                 • 子網域仿冒：分析像 `apple.com.login-verify.xyz` 這類混入知名品牌名稱的結構。
                 • 高風險 TLD：對於 `.xyz`、`.top`、`.tk`、`.icu` 等常見於一次性釣魚攻擊的 TLD 進行扣分。
                 • 明文 HTTP 與直接 IP：警告登入頁面使用未加密 HTTP，以及使用裸 IP 位址的網址。
-                • 完全在地執行：網址絕不會傳送到外部分析 API，因此機密網址與權杖不會外洩。
+                • 完全在地執行：網址絕不會傳送到外部分析 API，因此機密網址與權杖不會外洩。僅在展開短網址（追蹤重新導向）時，才會直接連線到該網址本身。
                 """,
                 recommendation: "收到郵件或聊天訊息中的可疑連結時，請勿直接點擊，先以連結安全性診斷檢查。"
             ),
@@ -526,7 +526,7 @@ extension RoamSwitchKnowledgeBase {
                 • 開啟方式：「惡意軟體防護」→「📦 軟體包CVE比對（Homebrew）…」。相依性部分請在「相依性」分頁新增專案資料夾。
                 • Homebrew：以 `brew list --versions` 的結果比對由真實 NVD 資料產生的 formula 對 CPE 對應表。結果會附上信心等級：confirmed（已驗證的對應表）或 gray（未驗證的關鍵字比對，可能為誤判）。
                 • 相依性：解析 package-lock.json / requirements.txt / Pipfile.lock / poetry.lock / Cargo.lock / Gemfile.lock / composer.lock / go.sum / pom.xml，並與 npm、PyPI、crates.io、RubyGems、Packagist、Go、Maven 的已知 CVE 對應表比對（來源為 OSV.dev，CVSS 7.0 以上）。
-                • 資料更新：CVE 對應表每天從已簽署的清單取得一次，僅接收。取得之前會顯示尚未下載，且不會偵測到任何項目。
+                • 資料更新：CVE 對應表約每 30 天從已簽署的清單取得一次，僅接收。取得之前會顯示尚未下載，且不會偵測到任何項目。
                 • MCP 工具：`run_package_cve_scan`（Homebrew）與 `run_package_cve_scan_languages`（相依性，`watchedFolders` 參數）。
                 """,
                 recommendation: "定期執行 Homebrew 掃描，在「相依性」分頁登錄開發中的專案，並儘快更新含有嚴重 CVE 的套件。"
@@ -591,7 +591,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • 範圍：僅限專案自身 package.json 的 dependencies/devDependencies/optionalDependencies（peerDependencies 不在範圍內）。node_modules（已安裝的傳遞相依性）也刻意不在範圍內——打字錯誤產生於人類將相依性加入 package.json 的那一刻。
                 • 比對邏輯：標準的 Levenshtein 距離動態規劃實作，將每個相依名稱與知名 npm 套件名稱清單比對。帶作用域的套件（`@scope/pkg`）以其基礎名稱（`pkg`）比較。長度差超過 2 的候選會被低成本預過濾跳過。閾值為：知名名稱長度 8 個字元以上時允許距離最多為 2，更短則僅允許距離 1。
-                • 清單保持更新的方式：用於比對的熱門套件名稱清單由 `PackageCveMapUpdater` 透過與 CVE 對應表相同的每日一次、僅接收、Ed25519 簽章驗證的清單進行分發（建置時內嵌種子加兩層覆蓋，優先採用 `mapVersion` 較新的一方）。無需等待應用程式發布即可更新該清單。
+                • 清單保持更新的方式：用於比對的熱門套件名稱清單由 `PackageCveMapUpdater` 透過與 CVE 對應表相同的約每 30 天一次、僅接收、Ed25519 簽章驗證的清單進行分發（建置時內嵌種子加兩層覆蓋，優先採用 `mapVersion` 較新的一方）。無需等待應用程式發布即可更新該清單。
                 • 這是參考資訊，並非定論——已知的許可清單會部分排除一些正規的相似套件（如 preact），但並不完整。
                 • 開啟方式：「📦 套件 CVE 比對」→「打字仿冒偵測 (Pro)」分頁，針對與「相依性」分頁相同的專案資料夾。MCP：`run_typosquat_scan`（`watchedFolders` 參數，僅限 Pro）。
                 """,
@@ -605,7 +605,7 @@ extension RoamSwitchKnowledgeBase {
                 • 運作方式：具有特權的Helper透過`tcpdump -i pflog0`監控pf(封包過濾器)日誌，偵測在短時間視窗內到達足夠多不同目的連接埠的來源IP。判定僅根據日誌記錄，絕不會變更或檢查通訊內容本身。對應Linux版的`port_scan_detect.rs`(nftables `log` + `journalctl`)。
                 • 自動封鎖：偵測到的掃描來源會透過`PFRulesetCoordinator`加入pf規則，預設封鎖10分鐘。自動封鎖可狜立於偵測功能本身單狜開關。
                 • 通知：每次偵測(及封鎖)都會發送macOS通知，並記錄到統一的事件時間軸中。
-                • 開啟方式：選單列 → 「連接埠與裝置監控」 → 「🔍 入站連接埠掃描偵測 (Pro)」。啟用和停用都需要經過確認對話框。預設關閉。
+                • 開啟方式：選單列 → 「連接埠與裝置監控」 → 「🔍 入站連接埠掃描偵測 (Pro)」。開啟與關閉都會先跳出確認對話框。啟用 Pro 時會自動開啟（您手動關閉的選擇會被保留）。特權輔助工具尚未核准時不會發生任何事，核准後會自動開始。僅自動封鎖可在同一選單中透過「自動封鎖入站連接埠掃描來源 (10分鐘)」單獨關閉。
                 """,
                 recommendation: "沒有依IP的許可清單，封鎖會在10分鐘後自動解除。如果您在家庭或公司環境中定期執行合法的掃描工具(資產盤點、弱點掃描等)，建議在其執行期間關閉自動封鎖(僅保留偵測/通知)，以避免因誤判而反復封鎖。"
             ),
@@ -1141,13 +1141,13 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "set_pro_default_guards",
                 title: "啟用 Pro 時自動開啟的防護，與需自行開啟的防護",
-                summary: "首次啟用 Pro 授權時，主要的自主防禦防護會自動開啟。此後會依您對各項防護所做的開／關選擇來執行。",
+                summary: "首次啟用 Pro 授權時，以通知為主、誤報少且不需額外權限或設定的自主防禦防護會自動開啟。可能妨礙正常使用的防護，以及需要額外權限、設定或對外通訊的防護，仍須自行開啟。此後會依您對各項防護所做的開／關選擇來執行。",
                 details: """
-                • 自動開啟（僅首次啟用 Pro 時一次）：自動封鎖未知監聽連接埠、勒索軟體誘餌檔案偵測、偵測到 ARP 詐騙時自動封鎖、XProtect 惡意軟體偵測時自動斷網、自動日誌審計，以及定期監控重要系統檔案是否遭竄改。開啟 ARP 與 XProtect 斷網功能時，會顯示一次性說明。
-                • Pro 版預設開啟：網頁與郵件保護，以及自動啟動註冊（LaunchAgent/Daemon）監控。
-                • 預設關閉（須自行開啟）：ClickFix 自動封鎖、Docker 風險偵測、BadUSB 實體連接埠防護、USB 儲存裝置自動封鎖、閘道 ARP/NDP 固定、VPN 隧道、Bluetooth 自動關閉，以及實證型漏洞驗證。DNS 威脅防護的供應商由您自行選擇。
+                • 自動開啟（僅首次啟用 Pro 時一次）：自動封鎖未知監聽連接埠、入站連接埠掃描偵測（含對掃描來源 10 分鐘的自動封鎖）、勒索軟體誘餌檔案偵測與熵偵測、憑證蜜罐權杖、偵測到 ARP 詐騙時自動封鎖、XProtect 惡意軟體偵測時自動斷網、自動日誌審計、重要系統檔案竄改監控，以及相依鎖定檔案竄改監控。開啟 ARP 與 XProtect 斷網功能時，會顯示一次性說明。
+                • Pro 版預設開啟：網頁與郵件保護、自動啟動註冊（LaunchAgent/Daemon）監控、DNS 威脅防護（僅套用於外出網路），以及連結保護（自動攔截明顯的詐騙網站）。
+                • 預設關閉（須自行開啟）：ClickFix 自動封鎖、Docker 風險偵測、BadUSB 實體連接埠防護、USB 儲存裝置自動封鎖、閘道 ARP/NDP 固定、Bluetooth 自動關閉、程序執行記錄、瀏覽器憑證存取監控、VPN 隧道、Sensor 配對、實證型漏洞驗證，以及 npm 簽章驗證。它們各自可能妨礙正常使用（斷網、輸入裝置、外接儲存裝置、聲音）、需要額外的權限或安裝（完整磁碟取用權限、輔助使用、blueutil）、需要許可清單等自行設定，或會與外部伺服器通訊。DNS 威脅防護的供應商由您自行選擇。
                 • 即使在免費版也預設開啟：剪貼簿保護（API 金鑰與 ClickFix 指令）。
-                • 之後版本新增的防護，會為既有的 Pro 使用者套用各自的一次性預設值。授權過期時，Pro 專屬防護會被關閉。
+                • 之後版本新增的防護，會為既有的 Pro 使用者套用各自的一次性預設值。您關閉的防護，即使重新啟用授權也會維持關閉。移除授權時，Pro 專屬防護會被關閉；原本開啟的防護會在下次啟用 Pro 時依預設值重新開啟。
                 """,
                 recommendation: "啟用 Pro 後，請檢查選單中的 ✅ 標記。不符合您使用情境的防護（例如未使用 Docker）可維持關閉，並開啟您需要的功能（例如經常使用公共 Wi-Fi 就開啟 VPN）。"
             ),
@@ -1448,7 +1448,8 @@ extension RoamSwitchKnowledgeBase {
                   - 授權啟用與解除授權（僅在您操作時發生）以及開啟購買頁面
                   - 應用程式更新檢查（Sparkle）
                   - ClamAV 特徵庫更新（`freshclam`）
-                  - 每天下載連結保護的威脅情資、套件 CVE 對應表與漏洞 CVE 對應表（僅接收、經簽署驗證、不傳送任何識別碼；連結保護的自動更新可以關閉）
+                  - 連結檢查中的短網址展開（直接連線到目標網址本身，不會向分析 API 或開發者傳送任何內容）
+                  - 下載連結保護的威脅情資、套件 CVE 對應表與漏洞 CVE 對應表（威脅情資每天、對應表約每 30 天一次；僅接收、經簽署驗證、不傳送任何識別碼；連結保護的自動更新可以關閉）
                   - 與您所設定的 VPN 與安全 DNS 供應商之間的一般流量
                   - 實證型漏洞驗證針對 127.0.0.1（這台 Mac 本機）的非破壞性探測
                   - npm 簽章驗證（選擇性啟用，僅限 Pro）執行時會連線至 registry.npmjs.org

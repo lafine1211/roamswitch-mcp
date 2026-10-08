@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.28 (build 146).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.0 (build 147).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -517,6 +517,7 @@ public enum MCPResponseFormatting {
     static let dockerEventGuardKey = "RoamSwitch.DockerEventGuardEnabled"             // DockerEventGuard — false
     static let criticalPathFimKey = "RoamSwitch.CriticalPathFimEnabled"               // CriticalPathFimGuard — false; Pro default-on
     static let lockfileTamperGuardKey = "RoamSwitch.LockfileTamperGuardEnabled"       // LockfileTamperGuard — false; Pro default-on
+    static let portScanGuardKey = "RoamSwitch.PortScanGuardEnabled"                   // PortScanGuard — false; Pro default-on
     static let persistenceMonitorKey = "RoamSwitch.PersistenceMonitorEnabled"         // PersistenceMonitorGuard — true
     static let gatewayARPLockKey = "RoamSwitch.GatewayARPLockEnabled"                 // GatewayARPLockManager — false
     static let scheduledLogAuditKey = "RoamSwitch.ScheduledLogAuditEnabled"           // ScheduledLogAuditGuard — false; Pro default-on
@@ -824,6 +825,7 @@ public enum MCPResponseFormatting {
 
         var guards: [MCPGuardEntryPayload] = []
         guards.append(entry("portAnomalyGuard", portAnomalyGuardKey, defaultWhenUnset: false))
+        guards.append(entry("portScanGuard", portScanGuardKey, defaultWhenUnset: false))
         guards.append(entry("arpSpoofAutoContainment", arpSpoofAutoContainmentKey, defaultWhenUnset: false))
         guards.append(entry("usbKeyboardGuard", usbKeyboardGuardKey, defaultWhenUnset: false))
         guards.append(entry("usbStorageGuard", usbStorageGuardKey, defaultWhenUnset: false))
@@ -839,6 +841,7 @@ public enum MCPResponseFormatting {
         guards.append(entry("execRecorder", execRecorderKey, defaultWhenUnset: false))
         guards.append(entry("dockerEventGuard", dockerEventGuardKey, defaultWhenUnset: false))
         guards.append(entry("criticalPathFim", criticalPathFimKey, defaultWhenUnset: false))
+        guards.append(entry("lockfileTamperGuard", lockfileTamperGuardKey, defaultWhenUnset: false))
         guards.append(entry("persistenceMonitor", persistenceMonitorKey, defaultWhenUnset: true))
         guards.append(entry("gatewayARPLock", gatewayARPLockKey, defaultWhenUnset: false))
         guards.append(entry("scheduledLogAudit", scheduledLogAuditKey, defaultWhenUnset: false))
@@ -872,7 +875,7 @@ public enum MCPResponseFormatting {
 
         var caveats: [String] = []
         caveats.append(loc("各ガードの実際の有効性はRoamSwitch Pro版のライセンス状態にも依存しますが、このツールは別プロセスのためライセンス状態を正確に確認できません。上記はSettingsのトグル状態のみを示しています。"))
-        caveats.append(loc("usingDefault が true の項目は、ユーザーが一度も切り替えていない既定値です。ポート異常ガード・ARPスプーフィング自動封じ込め・ランタイム脅威封じ込め・ランサムウェア・カナリアガード・重要パスの改ざん監視・定期ログ監査は、Pro版を有効化した時点で一度だけ自動的にオンになります。"))
+        caveats.append(loc("usingDefault が true の項目は、ユーザーが一度も切り替えていない既定値です。ポート異常ガード・着信ポートスキャン検知・ARPスプーフィング自動封じ込め・ランタイム脅威封じ込め・ランサムウェア検知（カナリア・エントロピー）・認証情報ハニートークン・重要パスの改ざん監視・依存関係ロックファイルの改ざん監視・定期ログ監査は、Pro版を有効化した時点で一度だけ自動的にオンになります。USBキーボード／ストレージ・Bluetooth・ClickFix・Docker・ゲートウェイARP固定・プロセス実行記録・ブラウザ認証情報の監視・VPNは、Proでも既定ではオフです。"))
         caveats.append(loc("VPNトンネルの実際の接続状態とキルスイッチの適用状態は特権ヘルパーが管理しているため、このツールからは確認できません。VPN関連の項目は設定値のみを示しています。"))
 
         return MCPGuardStatusPayload(

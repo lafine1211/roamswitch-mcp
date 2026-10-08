@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.28 (build 146).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.0 (build 147).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -304,7 +304,7 @@ extension RoamSwitchKnowledgeBase {
                 • 서브도메인 위장: `apple.com.login-verify.xyz`처럼 유명 브랜드 이름을 끼워 넣은 구조를 분석합니다.
                 • 고위험 TLD: 일회성 피싱에서 흔히 쓰이는 `.xyz`, `.top`, `.tk`, `.icu` 등에 감점을 매깁니다.
                 • 평문 HTTP와 원시 IP: 로그인 페이지에서 암호화되지 않은 HTTP와 순수 IP 주소 URL을 경고합니다.
-                • 완전히 로컬에서 처리: URL이 외부 분석 API로 전송되지 않으므로 기밀 URL이나 토큰이 유출되지 않습니다.
+                • 완전히 로컬에서 처리: URL이 외부 분석 API로 전송되지 않으므로 기밀 URL이나 토큰이 유출되지 않습니다. 단축 URL을 펼칠 때(리디렉션 추적)에만 해당 URL 자체에 직접 접속합니다.
                 """,
                 recommendation: "이메일이나 채팅으로 받은 의심스러운 링크는 바로 클릭하지 말고 먼저 링크 안전성 진단으로 확인하세요."
             ),
@@ -526,7 +526,7 @@ extension RoamSwitchKnowledgeBase {
                 • 열기: 악성코드 보호 → "📦 패키지 CVE 대조 (Homebrew)…". 의존성은 의존성 탭에서 프로젝트 폴더를 추가하세요.
                 • Homebrew: `brew list --versions` 결과를 실제 NVD 데이터로 생성한 formula-CPE 대응표와 비교합니다. 결과에는 신뢰도가 표시됩니다: confirmed(검증된 대응표) 또는 gray(검증되지 않은 키워드 일치로 오탐일 수 있음).
                 • 의존성: package-lock.json / requirements.txt / Pipfile.lock / poetry.lock / Cargo.lock / Gemfile.lock / composer.lock / go.sum / pom.xml을 분석하여 npm, PyPI, crates.io, RubyGems, Packagist, Go, Maven의 알려진 CVE 맵(OSV.dev 기반, CVSS 7.0 이상)과 대조합니다.
-                • 데이터 배포: CVE 맵은 서명된 매니페스트에서 하루에 한 번 수신 전용으로 받아옵니다. 받아오기 전에는 아직 다운로드되지 않았다고 표시되며 아무것도 탐지하지 않습니다.
+                • 데이터 배포: CVE 맵은 서명된 매니페스트에서 약 30일에 한 번 수신 전용으로 받아옵니다. 받아오기 전에는 아직 다운로드되지 않았다고 표시되며 아무것도 탐지하지 않습니다.
                 • MCP 도구: `run_package_cve_scan`(Homebrew)과 `run_package_cve_scan_languages`(의존성, `watchedFolders` 인자).
                 """,
                 recommendation: "정기적으로 Homebrew 검사를 실행하고, 진행 중인 프로젝트를 의존성 탭에 등록하며, 심각한 CVE가 있는 패키지는 신속히 업데이트하세요."
@@ -591,7 +591,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • 범위: package.json의 프로젝트 자체 dependencies/devDependencies/optionalDependencies만 해당(peerDependencies는 제외). node_modules(이미 설치된 전이 의존성)도 의도적으로 제외됩니다 — 오타는 사람이 package.json에 의존성을 추가하는 순간 발생하기 때문입니다.
                 • 비교 로직: 표준 레벤슈타인 거리 DP 구현으로 각 의존성 이름을 인기 npm 패키지 이름 목록과 비교합니다. 스코프가 있는 패키지(`@scope/pkg`)는 기본 이름(`pkg`)으로 비교합니다. 길이 차이가 2를 초과하는 후보는 저비용 사전 필터로 건너뜁니다. 임계값은 인기 패키지 이름이 8자 이상이면 편집 거리 2까지, 그보다 짧으면 거리 1만 허용합니다.
-                • 목록이 최신 상태로 유지되는 방식: 비교 대상인 인기 패키지 이름 목록은 `PackageCveMapUpdater`가 CVE 맵과 동일하게 하루 한 번, 수신 전용, Ed25519 서명된 매니페스트를 통해 배포합니다(빌드 시점에 내장된 시드와 2단계 재정의 중 `mapVersion`이 더 최신인 쪽을 선택). 앱 릴리스를 기다리지 않고 목록을 갱신할 수 있습니다.
+                • 목록이 최신 상태로 유지되는 방식: 비교 대상인 인기 패키지 이름 목록은 `PackageCveMapUpdater`가 CVE 맵과 동일하게 약 30일에 한 번, 수신 전용, Ed25519 서명된 매니페스트를 통해 배포합니다(빌드 시점에 내장된 시드와 2단계 재정의 중 `mapVersion`이 더 최신인 쪽을 선택). 앱 릴리스를 기다리지 않고 목록을 갱신할 수 있습니다.
                 • 참고 정보이며 단정이 아닙니다 — 알려진 허용 목록으로 일부 정상적인 유사 패키지(예: preact)를 제외하지만 완전하지 않습니다.
                 • 여는 방법: "📦 패키지 CVE 대조" → "오타스쿼팅 탐지 (Pro)" 탭에서 "의존성" 탭과 동일한 프로젝트 폴더를 대상으로 합니다. MCP: `run_typosquat_scan`(`watchedFolders` 인자, Pro 전용).
                 """,
@@ -605,7 +605,7 @@ extension RoamSwitchKnowledgeBase {
                 • 작동 방식: 권한을 가진 헬퍼가 `tcpdump -i pflog0`으로 pf(패쾛 필터) 로그를 감시하여, 짧은 시간 창 안에 충분히 많은 서로 다른 목적지 포트에 도달한 발신 IP를 탐지합니다. 판정은 로그 기록에만 기반하며 통신 내용 자체를 변경하거나 검사하지 않습니다. Linux 버전의 `port_scan_detect.rs`(nftables `log` + `journalctl`)에 해당합니다.
                 • 자동 차단: 탐지된 스캔 발신지는 `PFRulesetCoordinator`를 통해 pf 규칙에 추가되어 기본적으로 10분간 차단됩니다. 자동 차단은 탐지 기능 자체와 별도로 켜고 끈 수 있습니다.
                 • 알림: 탐지(및 차단)할 때마다 macOS 알림이 발송되며, 통합 인시던 타임라인에도 기록됩니다.
-                • 여는 방법: 메뉴 막대 → “포트 및 장치 모니터링” → “🔍 수신 포트 스캔 탐지 (Pro)”. 활성화와 비활성화 모두 확인 대화상자를 거칩니다. 기본값은 꺼짐입니다.
+                • 여는 방법: 메뉴 막대 → “포트 및 장치 모니터링” → “🔍 수신 포트 스캔 탐지 (Pro)”. 켜기와 끄기 모두 확인 대화상자를 거칩니다. Pro를 활성화하면 자동으로 켜집니다(직접 끈 선택은 유지됩니다). 특권 헬퍼가 승인되기 전에는 아무 일도 일어나지 않고, 승인되면 저절로 시작됩니다. 자동 차단만 별도로 끄려면 같은 메뉴의 “수신 포트 스캔 발신지 자동 차단 (10분)”을 사용합니다.
                 """,
                 recommendation: "IP별 허용 목록은 없으며, 차단은 10분 후 자동으로 해제됩니다. 집이나 회사에서 정당한 스캔 도구(자산 관리, 취약점 진단 등)를 정기적으로 실행한다면, 반복적인 오탐 차단을 피하기 위해 실행 중에는 자동 차단만 꺼두고 탐지(알림)만 켜두는 것을 고려하세요."
             ),
@@ -1141,13 +1141,13 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "set_pro_default_guards",
                 title: "Pro 활성화 시 자동으로 켜지는 가드와 선택적으로 켜는 가드",
-                summary: "Pro 라이선스를 처음 활성화하면 주요 자율 방어 가드가 자동으로 켜집니다. 이후에는 각 가드에 대해 사용자가 내린 켜기/끄기 선택이 존중됩니다.",
+                summary: "Pro 라이선스를 처음 활성화하면, 주로 알림만 보내고 오탐이 적으며 추가 권한이나 설정이 필요 없는 자율 방어 가드가 자동으로 켜집니다. 일반적인 사용을 방해할 수 있는 것이나 추가 권한·설정·외부 통신이 필요한 것은 옵트인으로 남습니다. 그 후에는 각 가드에 대해 사용자가 내린 켜기/끄기 선택이 존중됩니다.",
                 details: """
-                • 자동으로 켜짐(Pro를 처음 활성화할 때 한 번): 알 수 없는 리스닝 포트 자동 차단, 랜섬웨어 미끼 파일 탐지, ARP 스푸핑 감지 시 자동 차단, XProtect 악성코드 탐지 시 자동 차단, 자동 로그 감사, 중요 시스템 파일 변조 정기 감시. ARP와 XProtect 차단이 켜질 때는 이를 설명하는 일회성 안내가 표시됩니다.
-                • Pro에서 기본값 켜짐: 웹 및 이메일 보호, 자동 실행 등록(LaunchAgent/Daemon) 감시.
-                • 기본값 꺼짐(선택적 사용): ClickFix 자동 차단, Docker 위험 탐지, BadUSB 물리 포트 가드, USB 저장장치 자동 차단, 게이트웨이 ARP/NDP 고정, VPN 터널, Bluetooth 자동 끄기, 실증형 취약점 검증. DNS 위협 보호의 제공업체는 사용자가 선택합니다.
+                • 자동으로 켜짐(Pro를 처음 활성화할 때 한 번): 알 수 없는 리스닝 포트 자동 차단, 수신 포트 스캔 탐지(스캔 발신지에 대한 10분간 자동 차단 포함), 랜섬웨어 미끼 파일 탐지와 엔트로피 탐지, 자격 증명 허니토큰, ARP 스푸핑 감지 시 자동 차단, XProtect 악성코드 탐지 시 자동 네트워크 차단, 자동 로그 감사, 중요 시스템 파일 변조 감시, 의존 잠금 파일 변조 감시. ARP와 XProtect 차단이 켜질 때는 이를 설명하는 일회성 안내가 표시됩니다.
+                • Pro에서 기본값 켜짐: 웹 및 이메일 보호, 자동 실행 등록(LaunchAgent/Daemon) 감시, DNS 위협 보호(외출 중인 네트워크에만 적용), 링크 보호(명백한 사기 사이트 자동 차단).
+                • 기본값 꺼짐(선택적 사용): ClickFix 자동 차단, Docker 위험 탐지, BadUSB 물리 포트 가드, USB 저장장치 자동 차단, 게이트웨이 ARP/NDP 고정, Bluetooth 자동 끄기, 프로세스 실행 기록, 브라우저 자격 증명 접근 모니터링, VPN 터널, Sensor 페어링, 실증형 취약점 검증, npm 서명 검증. 이들은 각각 일반적인 사용을 방해할 수 있거나(네트워크 차단, 입력 장치, 외장 드라이브, 소리), 추가 권한이나 설치(전체 디스크 접근, 손쉬운 사용, blueutil)가 필요하거나, 허용 목록 같은 사용자 설정이 필요하거나, 외부 서버와 통신합니다. DNS 위협 보호의 제공업체는 사용자가 선택합니다.
                 • 무료 버전에서도 기본값 켜짐: 클립보드 보호(API 키와 ClickFix 명령어).
-                • 이후 버전에 추가되는 가드는 기존 Pro 사용자에게도 각각 한 번의 기본값이 적용됩니다. 라이선스가 만료되면 Pro 전용 가드는 꺼집니다.
+                • 이후 버전에 추가되는 가드는 기존 Pro 사용자에게도 각각 한 번의 기본값이 적용됩니다. 직접 끈 가드는 라이선스를 다시 활성화해도 꺼진 채로 유지됩니다. 라이선스를 해제하면 Pro 전용 가드는 꺼지고, 켜져 있던 가드는 다음에 Pro를 활성화할 때 기본값으로 다시 켜집니다.
                 """,
                 recommendation: "Pro를 활성화한 후 메뉴의 ✅ 표시를 확인하세요. 사용 목적에 맞지 않는 가드(예: Docker를 사용하지 않는다면)는 꺼둔 채로 두고, 필요한 것(예: 공용 Wi-Fi를 자주 사용한다면 VPN)은 켜세요."
             ),
@@ -1448,7 +1448,8 @@ extension RoamSwitchKnowledgeBase {
                   - 라이선스 활성화와 비활성화(사용자가 조작할 때만)와 구매 페이지 열기
                   - 앱 업데이트 확인(Sparkle)
                   - ClamAV 정의 업데이트(`freshclam`)
-                  - 링크 보호 위협 정보, 패키지 CVE 맵, 취약점 CVE 맵의 일일 다운로드(수신 전용, 서명 검증, 식별자 미전송; 링크 보호 자동 업데이트는 끌 수 있음)
+                  - 링크 점검의 단축 URL 펼치기(대상 URL 자체에 직접 접속하며, 분석 API나 개발자에게는 아무것도 전송하지 않음)
+                  - 링크 보호 위협 정보, 패키지 CVE 맵, 취약점 CVE 맵의 다운로드(위협 정보는 매일, 맵은 약 30일마다. 수신 전용, 서명 검증, 식별자 미전송; 링크 보호 자동 업데이트는 끌 수 있음)
                   - 사용자가 설정한 VPN 및 보안 DNS 제공업체와의 일반 트래픽
                   - 실증형 취약점 검증의 127.0.0.1(이 Mac 자체)로의 비파괴적 프로브
                   - npm 서명 검증(옵트인, Pro 전용)을 실행할 때 registry.npmjs.org와 통신

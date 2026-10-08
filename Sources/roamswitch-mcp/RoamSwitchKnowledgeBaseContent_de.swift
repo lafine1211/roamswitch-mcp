@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.28 (build 146).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.0 (build 147).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -304,7 +304,7 @@ extension RoamSwitchKnowledgeBase {
                 • Subdomain-Imitation: Analysiert Strukturen wie `apple.com.login-verify.xyz`, die den Namen einer bekannten Marke einbetten.
                 • Riskante TLDs: Zieht Punkte ab für TLDs, die häufig bei Wegwerf-Phishing genutzt werden, etwa `.xyz`, `.top`, `.tk`, `.icu`.
                 • Unverschlüsseltes HTTP und rohe IPs: Warnt vor unverschlüsseltem HTTP auf Anmeldeseiten und nackten IP-Adress-URLs.
-                • Vollständig lokal: URLs werden nie an eine externe Analyse-API gesendet, sodass vertrauliche URLs und Tokens nicht durchsickern.
+                • Vollständig lokal: URLs werden nie an eine externe Analyse-API gesendet, sodass vertrauliche URLs und Tokens nicht durchsickern. Nur beim Auflösen verkürzter URLs (Weiterleitungen verfolgen) wird die URL selbst direkt aufgerufen.
                 """,
                 recommendation: "Klicken Sie verdächtige Links aus E-Mail oder Chat nicht direkt an; prüfen Sie sie zuerst mit der Link-Sicherheitsprüfung."
             ),
@@ -526,7 +526,7 @@ extension RoamSwitchKnowledgeBase {
                 • Öffnen: Malware-Schutz → „📦 Paket-CVE-Abgleich (Homebrew)…“. Für Abhängigkeiten fügen Sie Projektordner im Tab „Abhängigkeiten“ hinzu.
                 • Homebrew: `brew list --versions` wird mit einer aus echten NVD-Daten erzeugten Formula-zu-CPE-Tabelle abgeglichen. Funde tragen eine Vertrauensstufe: confirmed (verifizierte Tabelle) oder gray (unverifizierter Schlüsselwort-Treffer, möglicherweise ein Fehlalarm).
                 • Abhängigkeiten: Analysiert package-lock.json / requirements.txt / Pipfile.lock / poetry.lock / Cargo.lock / Gemfile.lock / composer.lock / go.sum / pom.xml und gleicht sie mit bekannten CVE-Karten für npm, PyPI, crates.io, RubyGems, Packagist, Go und Maven ab (aus OSV.dev, CVSS 7.0 oder höher).
-                • Datenzustellung: Die CVE-Karten werden einmal täglich aus einem signierten Manifest rein empfangend abgerufen. Vor dem Abruf werden sie als noch nicht heruntergeladen angezeigt und erkennen nichts.
+                • Datenzustellung: Die CVE-Karten werden etwa alle 30 Tage aus einem signierten Manifest rein empfangend abgerufen. Vor dem Abruf werden sie als noch nicht heruntergeladen angezeigt und erkennen nichts.
                 • MCP-Tools: `run_package_cve_scan` (Homebrew) und `run_package_cve_scan_languages` (Abhängigkeiten, Argument `watchedFolders`).
                 """,
                 recommendation: "Führen Sie den Homebrew-Scan regelmäßig aus, registrieren Sie aktive Projekte im Tab „Abhängigkeiten“ und aktualisieren Sie Pakete mit schwerwiegenden CVEs umgehend."
@@ -591,7 +591,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • Umfang: nur die eigenen dependencies/devDependencies/optionalDependencies des Projekts in package.json (peerDependencies ist ausgenommen). node_modules (bereits installierte transitive Abhängigkeiten) ist ebenfalls bewusst ausgenommen — ein Tippfehler entsteht in dem Moment, in dem ein Mensch eine Abhängigkeit zu package.json hinzufügt.
                 • Abgleichlogik: eine standardmäßige DP-Implementierung der Levenshtein-Distanz prüft jeden Abhängigkeitsnamen gegen eine Liste beliebter npm-Paketnamen. Paket mit Scope (`@scope/pkg`) werden anhand des Basisnamens (`pkg`) verglichen. Kandidaten mit mehr als 2 Zeichen Längenunterschied werden durch einen günstigen Vorfilter übersprungen. Der Schwellenwert liegt bei Editierdistanz bis 2 für beliebte Namen ab 8 Zeichen, sonst nur Distanz 1.
-                • Wie die Liste aktuell bleibt: Die Liste beliebter Paketnamen wird von `PackageCveMapUpdater` über dasselbe einmal tägliche, nur empfangende, Ed25519-signierte Manifest wie die CVE-Maps verteilt (ein eingebauter Seed zur Build-Zeit plus eine zweistufige Aktualisierung, wobei die Version mit der neueren `mapVersion` bevorzugt wird). Die Liste kann aktualisiert werden, ohne auf ein App-Release zu warten.
+                • Wie die Liste aktuell bleibt: Die Liste beliebter Paketnamen wird von `PackageCveMapUpdater` über dasselbe nur empfangende, Ed25519-signierte Manifest (etwa alle 30 Tage abgerufen) wie die CVE-Maps verteilt (ein eingebauter Seed zur Build-Zeit plus eine zweistufige Aktualisierung, wobei die Version mit der neueren `mapVersion` bevorzugt wird). Die Liste kann aktualisiert werden, ohne auf ein App-Release zu warten.
                 • Referenzinformation, kein Urteil — eine bekannte Positivliste unterdrückt einige legitime Doppelgänger-Pakete (z. B. preact), ist aber nicht vollständig.
                 • Öffnen: Tab „📦 Paket-CVE-Abgleich“ → „Typosquatting-Erkennung (Pro)“, bezogen auf dieselben Projektordner wie der Tab „Abhängigkeiten“. MCP: `run_typosquat_scan` (Argument `watchedFolders`, nur Pro).
                 """,
@@ -605,7 +605,7 @@ extension RoamSwitchKnowledgeBase {
                 • Funktionsweise: Der privilegierte Helper überwacht die pf-(Paketfilter-)Protokolle über `tcpdump -i pflog0` und markiert eine Quell-IP, die innerhalb eines kurzen Zeitfensters genügend unterschiedliche Zielports erreicht. Die Erkennung basiert ausschließlich auf Protokolleinträgen; der Datenverkehr selbst wird dabei weder verändert noch inspiziert. Entspricht `port_scan_detect.rs` der Linux-Edition (nftables `log` + `journalctl`).
                 • Automatische Blockierung: Eine erkannte Scan-Quelle wird standardmäßig 10 Minuten lang über `PFRulesetCoordinator` per pf-Regel blockiert. Die automatische Blockierung lässt sich unabhängig von der Erkennungsfunktion selbst umschalten.
                 • Benachrichtigungen: Bei jeder Erkennung (und Blockierung) wird eine macOS-Benachrichtigung ausgelöst und zusätzlich in der einheitlichen Vorfall-Zeitleiste festgehalten.
-                • Öffnen: Menüleiste → „Port- & Geräteüberwachung“ → „🔍 Erkennung eingehender Portscans (Pro)“. Sowohl das Aktivieren als auch das Deaktivieren erfordert eine Bestätigung. Standardmäßig deaktiviert.
+                • Öffnen: Menüleiste → „Port- & Geräteüberwachung“ → „🔍 Erkennung eingehender Portscans (Pro)“. Sowohl das Aktivieren als auch das Deaktivieren erfordert eine Bestätigung. Wird bei der Pro-Aktivierung automatisch eingeschaltet (eine eigene Entscheidung dagegen bleibt erhalten). Solange der privilegierte Helper nicht genehmigt ist, passiert nichts; nach der Genehmigung startet die Funktion von selbst. Nur die automatische Blockierung lässt sich im selben Menü über „Quellen eingehender Portscans automatisch blockieren (10 Min.)“ getrennt ausschalten.
                 """,
                 recommendation: "Es gibt keine IP-bezogene Positivliste, und eine Blockierung wird nach 10 Minuten automatisch aufgehoben. Wenn Sie zu Hause oder im Unternehmen regelmäßig ein legitimes Scan-Tool (Bestandsaufnahme, Schwachstellenscan usw.) einsetzen, sollten Sie währenddessen die automatische Blockierung deaktivieren (nur Erkennung/Benachrichtigung beibehalten), um wiederholte Fehlalarm-Blockierungen zu vermeiden."
             ),
@@ -1141,13 +1141,13 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "set_pro_default_guards",
                 title: "Mit Pro automatisch aktivierte Schutzfunktionen und optionale Schutzfunktionen",
-                summary: "Beim ersten Aktivieren einer Pro-Lizenz werden die wichtigsten autonomen Verteidigungsfunktionen automatisch eingeschaltet. Danach wird die von Ihnen für jede Funktion getroffene Ein-/Aus-Wahl respektiert.",
+                summary: "Beim ersten Aktivieren einer Pro-Lizenz werden die autonomen Verteidigungsfunktionen automatisch eingeschaltet, die überwiegend nur benachrichtigen, selten Fehlalarme auslösen und weder zusätzliche Berechtigungen noch eine Einrichtung brauchen. Alles, was die normale Nutzung stören könnte oder zusätzliche Berechtigungen, Einrichtung oder externe Kommunikation erfordert, bleibt Opt-in. Danach wird die von Ihnen für jede Funktion getroffene Ein-/Aus-Wahl respektiert.",
                 details: """
-                • Automatisch eingeschaltet (einmalig, bei erster Pro-Aktivierung): Automatische Blockierung unbekannter Listening-Ports, Ransomware-Köderdatei-Erkennung, automatische Blockierung bei ARP-Spoofing, automatische Trennung bei XProtect-Malware-Erkennung, automatische Protokollprüfung sowie regelmäßige Überwachung wichtiger Systemdateien auf Manipulation. Beim Einschalten der ARP- und XProtect-Trennungen erscheint ein einmaliger erklärender Hinweis.
-                • Bei Pro standardmäßig aktiv: Web- & E-Mail-Schutz sowie Überwachung von Autostart-Registrierungen (LaunchAgent/Daemon).
-                • Standardmäßig deaktiviert (Opt-in): ClickFix-Auto-Blockierung, Docker-Risikoerkennung, physischer BadUSB-Portschutz, automatische Blockierung von USB-Speicher, Gateway-ARP/NDP-Fixierung, VPN-Tunnel, automatisches Bluetooth-Aus sowie aktive Schwachstellenverifizierung. Der Anbieter des DNS-Bedrohungsschutzes ist Ihre Wahl.
+                • Automatisch eingeschaltet (einmalig, bei erster Pro-Aktivierung): Automatische Blockierung unbekannter Listening-Ports, Erkennung eingehender Portscans (einschließlich der 10-minütigen automatischen Blockierung der Scan-Quelle), Ransomware-Köderdatei-Erkennung und Entropie-Erkennung, Anmeldedaten-Honeytokens, automatische Blockierung bei ARP-Spoofing, automatische Netzwerktrennung bei XProtect-Malware-Erkennung, automatische Protokollprüfung, Manipulationsüberwachung wichtiger Systemdateien und Manipulationsüberwachung von Abhängigkeits-Lockfiles. Beim Einschalten der ARP- und XProtect-Trennungen erscheint ein einmaliger erklärender Hinweis.
+                • Bei Pro standardmäßig aktiv: Web- & E-Mail-Schutz, Überwachung von Autostart-Registrierungen (LaunchAgent/Daemon), DNS-Bedrohungsschutz (nur in unterwegs genutzten Netzwerken angewendet) und Link-Schutz (automatische Blockierung eindeutig betrügerischer Seiten).
+                • Standardmäßig deaktiviert (Opt-in): ClickFix-Auto-Blockierung, Docker-Risikoerkennung, physischer BadUSB-Portschutz, automatische Blockierung von USB-Speicher, Gateway-ARP/NDP-Fixierung, automatisches Bluetooth-Aus, Prozessstart-Protokoll, Überwachung des Browser-Anmeldedatenzugriffs, VPN-Tunnel, Sensor-Kopplung, aktive Schwachstellenverifizierung und npm-Signaturprüfung. Jede davon kann die normale Nutzung unterbrechen (Netzwerktrennung, Eingabegeräte, externe Laufwerke, Ton), braucht eine zusätzliche Berechtigung oder Installation (Vollzugriff auf die Festplatte, Bedienungshilfen, blueutil), erfordert eigene Einstellungen wie eine Positivliste oder kontaktiert einen externen Server. Der Anbieter des DNS-Bedrohungsschutzes ist Ihre Wahl.
                 • Auch in der kostenlosen Version standardmäßig aktiv: Zwischenablage-Schutz (API-Schlüssel und ClickFix-Befehle).
-                • Später hinzugefügte Schutzfunktionen erhalten für bestehende Pro-Nutzer jeweils einen eigenen einmaligen Standardwert. Läuft die Lizenz ab, werden Nur-Pro-Schutzfunktionen ausgeschaltet.
+                • Später hinzugefügte Schutzfunktionen erhalten für bestehende Pro-Nutzer jeweils einen eigenen einmaligen Standardwert. Eine von Ihnen ausgeschaltete Funktion bleibt aus, auch wenn die Lizenz erneut aktiviert wird. Wird die Lizenz entfernt, werden Nur-Pro-Schutzfunktionen ausgeschaltet; die zuvor eingeschalteten sind bei der nächsten Pro-Aktivierung standardmäßig wieder an.
                 """,
                 recommendation: "Prüfen Sie nach der Pro-Aktivierung die ✅-Markierungen im Menü. Lassen Sie Schutzfunktionen, die nicht zu Ihrer Nutzung passen (z. B. Docker, falls ungenutzt), deaktiviert, und schalten Sie ein, was Sie brauchen (z. B. das VPN bei häufiger Nutzung öffentlichen WLANs)."
             ),
@@ -1448,7 +1448,8 @@ extension RoamSwitchKnowledgeBase {
                   - Lizenzaktivierung und -deaktivierung (nur wenn Sie handeln) sowie das Öffnen der Kaufseite
                   - App-Updateprüfungen (Sparkle)
                   - ClamAV-Definitionsaktualisierungen (`freshclam`)
-                  - Tägliche Downloads der Link-Schutz-Bedrohungsliste, der Paket-CVE-Karten und der Schwachstellen-CVE-Karten (rein empfangend, signaturgeprüft, ohne Übertragung von Kennungen; das Auto-Update des Link-Schutzes lässt sich ausschalten)
+                  - Auflösen verkürzter URLs in der Link-Prüfung (ruft die Ziel-URL selbst auf; nichts geht an eine Analyse-API oder den Entwickler)
+                  - Downloads der Link-Schutz-Bedrohungsliste, der Paket-CVE-Karten und der Schwachstellen-CVE-Karten (die Liste täglich, die Karten etwa alle 30 Tage; rein empfangend, signaturgeprüft, ohne Übertragung von Kennungen; das Auto-Update des Link-Schutzes lässt sich ausschalten)
                   - Normaler Datenverkehr zu den von Ihnen konfigurierten VPN- und sicheren DNS-Anbietern
                   - Nicht-destruktive Sondierungen der aktiven Schwachstellenverifizierung an 127.0.0.1 (diesen Mac selbst)
                   - Die npm-Signaturprüfung (Opt-in, nur Pro) kontaktiert beim Ausführen registry.npmjs.org

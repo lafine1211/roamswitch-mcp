@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.28 (build 146).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.0 (build 147).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -304,7 +304,7 @@ extension RoamSwitchKnowledgeBase {
                 • Personificação de subdomínio: analisa estruturas como `apple.com.login-verify.xyz` que incorporam o nome de uma grande marca.
                 • TLD de alto risco: retira pontos por TLD comuns em phishing descartável, como `.xyz`, `.top`, `.tk`, `.icu`.
                 • HTTP não cifrado e IP em bruto: avisa sobre HTTP não cifrado em páginas de início de sessão e URL com endereço IP nu.
-                • Totalmente local: os URL nunca são enviados para uma API de análise externa, pelo que os URL confidenciais e os tokens não são divulgados.
+                • Totalmente local: os URL nunca são enviados para uma API de análise externa, pelo que os URL confidenciais e os tokens não são divulgados. Só ao expandir um URL encurtado (seguir redirecionamentos) é que se acede diretamente a esse próprio URL.
                 """,
                 recommendation: "Não clique diretamente em links suspeitos recebidos por e-mail ou chat; verifique-os primeiro com a Verificação de segurança de links."
             ),
@@ -526,7 +526,7 @@ extension RoamSwitchKnowledgeBase {
                 • Abrir: Proteção contra malware → «📦 Verificação de CVE de pacotes (Homebrew)…». Para dependências, adicione pastas de projeto no separador Dependências.
                 • Homebrew: `brew list --versions` é comparado com uma tabela de fórmula para CPE gerada a partir de dados reais da NVD. Os resultados têm um nível de confiança: confirmed (tabela verificada) ou gray (correspondência de palavra-chave não verificada que pode ser um falso positivo).
                 • Dependências: analisa package-lock.json / requirements.txt / Pipfile.lock / poetry.lock / Cargo.lock / Gemfile.lock / composer.lock / go.sum / pom.xml e compara-os com mapas de CVE conhecidas para npm, PyPI, crates.io, RubyGems, Packagist, Go e Maven (do OSV.dev, CVSS 7,0 ou superior).
-                • Distribuição de dados: os mapas de CVE são obtidos uma vez por dia a partir de um manifesto assinado, apenas em receção. Antes de serem obtidos, mostram-se como ainda não descarregados e não detetam nada.
+                • Distribuição de dados: os mapas de CVE são obtidos aproximadamente a cada 30 dias a partir de um manifesto assinado, apenas em receção. Antes de serem obtidos, mostram-se como ainda não descarregados e não detetam nada.
                 • Ferramentas MCP: `run_package_cve_scan` (Homebrew) e `run_package_cve_scan_languages` (dependências, argumento `watchedFolders`).
                 """,
                 recommendation: "Execute a verificação do Homebrew regularmente, registe os projetos ativos no separador Dependências, e atualize prontamente os pacotes com CVE graves."
@@ -591,7 +591,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • Âmbito: apenas as dependencies/devDependencies/optionalDependencies próprias do projeto no package.json (peerDependencies fica fora do âmbito). O node_modules (dependências transitivas já instaladas) também fica deliberadamente fora do âmbito — um erro de digitação é introduzido no momento em que uma pessoa adiciona uma dependência ao package.json.
                 • Lógica de comparação: uma implementação DP padrão da distância de Levenshtein compara cada nome de dependência com uma lista de pacotes npm populares. Os pacotes com âmbito (`@scope/pkg`) são comparados pelo nome base (`pkg`). Os candidatos cuja diferença de comprimento seja superior a 2 são ignorados por um pré-filtro económico. O limiar é uma distância de edição até 2 para nomes populares com 8 ou mais carateres, apenas distância 1 para nomes mais curtos.
-                • Como a lista se mantém atualizada: a lista de nomes de pacotes populares com que compara é distribuída pelo `PackageCveMapUpdater` através do mesmo manifesto diário, apenas de receção e assinado com Ed25519 dos mapas de CVE (uma semente incorporada em tempo de compilação mais uma substituição de dois níveis, preferindo a que tiver o `mapVersion` mais recente). A lista pode ser atualizada sem esperar por uma nova versão da aplicação.
+                • Como a lista se mantém atualizada: a lista de nomes de pacotes populares com que compara é distribuída pelo `PackageCveMapUpdater` através do mesmo manifesto (obtido aproximadamente a cada 30 dias), apenas de receção e assinado com Ed25519 dos mapas de CVE (uma semente incorporada em tempo de compilação mais uma substituição de dois níveis, preferindo a que tiver o `mapVersion` mais recente). A lista pode ser atualizada sem esperar por uma nova versão da aplicação.
                 • Informação de referência, não um veredito — uma lista de permissões conhecida suprime alguns pacotes legítimos semelhantes (por exemplo, preact), mas não é exaustiva.
                 • Como abrir: separador «📦 Verificação de CVE de pacotes» → «Deteção de typosquatting (Pro)», visando as mesmas pastas de projeto que o separador «Dependências». MCP: `run_typosquat_scan` (argumento `watchedFolders`, apenas Pro).
                 """,
@@ -605,7 +605,7 @@ extension RoamSwitchKnowledgeBase {
                 • Como funciona: o helper privilegiado monitoriza os registos do pf (packet filter) através de `tcpdump -i pflog0` e assinala um IP de origem que alcança portas de destino diferentes suficientes numa janela curta. A deteção baseia-se exclusivamente em registos; nunca altera nem inspeciona o próprio tráfego. Corresponde ao `port_scan_detect.rs` da edição Linux (nftables `log` + `journalctl`).
                 • Bloqueio automático: uma origem de varrimento detetada é adicionada a uma regra do pf e bloqueada durante 10 minutos por predefinição através do `PFRulesetCoordinator`. O bloqueio automático pode ser ativado/desativado independentemente da própria funcionalidade de deteção.
                 • Notificações: é enviada uma notificação do macOS em cada deteção (e bloqueio), também registada na linha cronológica de incidentes unificada.
-                • Como abrir: barra de menus → “Monitor de portas e dispositivos” → “🔍 Deteção de varrimento de portas de entrada (Pro)”. Tanto ativar como desativar passam por uma caixa de diálogo de confirmação. Desativado por predefinição.
+                • Como abrir: barra de menus → “Monitor de portas e dispositivos” → “🔍 Deteção de varrimento de portas de entrada (Pro)”. Tanto a ativação como a desativação passam por uma caixa de confirmação. Liga-se automaticamente na ativação da Pro (a escolha de a desligar é mantida). Enquanto a ferramenta auxiliar privilegiada não estiver aprovada, nada acontece; arranca sozinha depois de aprovada. Apenas o bloqueio automático pode ser desligado em separado, com “Bloquear automaticamente as origens de varrimento de portas de entrada (10 min)” no mesmo menu.
                 """,
                 recommendation: "Não existe uma lista de permissões por IP, e um bloqueio é levantado automaticamente ao fim de 10 minutos. Se executar regularmente uma ferramenta de varrimento legítima em casa ou no trabalho (inventário de ativos, varrimento de vulnerabilidades, etc.), considere desativar o bloqueio automático (mantendo apenas a deteção/notificação) enquanto esta é executada, para evitar bloqueios repetidos por falsos positivos."
             ),
@@ -1141,13 +1141,13 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "set_pro_default_guards",
                 title: "Proteções ativadas automaticamente com a Pro, e proteções opcionais",
-                summary: "Na primeira ativação de uma licença Pro, as principais proteções de defesa autónoma são ativadas automaticamente. Depois disso, a escolha de ativar/desativar que fizer para cada proteção é respeitada.",
+                summary: "Na primeira ativação de uma licença Pro, as proteções de defesa autónoma que sobretudo notificam, geram poucos falsos alarmes e não precisam de permissões nem de configuração adicionais são ativadas automaticamente. O que possa atrapalhar a utilização normal, ou que exija permissões, configuração ou comunicação externa adicionais, continua opcional. Depois disso, a escolha de ativar/desativar que fizer para cada proteção é respeitada.",
                 details: """
-                • Ativadas automaticamente (uma vez, na primeira ativação da Pro): bloqueio automático de portas de escuta desconhecidas, deteção de ransomware através de ficheiros-isco, bloqueio automático ao detetar falsificação de ARP, desconexão automática ao detetar malware pelo XProtect, auditoria automática de registos, e monitorização periódica de adulteração de ficheiros críticos do sistema. Ao ativar os cortes de ARP e XProtect, surge um aviso único a explicar.
-                • Ativas por predefinição com a Pro: Proteção Web e E-mail, e monitorização de registos de início automático (LaunchAgent/Daemon).
-                • Desligadas por predefinição (opcionais): bloqueio automático ClickFix, deteção de riscos do Docker, proteção física da porta BadUSB, bloqueio automático de armazenamento USB, fixação ARP/NDP da gateway, túnel VPN, desativação automática do Bluetooth, e verificação ativa de vulnerabilidades. O fornecedor da Proteção contra ameaças DNS é uma escolha sua.
+                • Ativadas automaticamente (uma vez, na primeira ativação da Pro): bloqueio automático de portas de escuta desconhecidas, deteção de varrimento de portas de entrada (incluindo o bloqueio automático de 10 minutos da origem do varrimento), deteção de ransomware através de ficheiros-isco e por entropia, honeytokens de credenciais, bloqueio automático ao detetar ARP spoofing, corte automático da rede ao detetar malware pelo XProtect, auditoria automática de registos, monitorização de adulteração de ficheiros críticos do sistema e monitorização de adulteração de lockfiles de dependências. Ao ativar os cortes de ARP e XProtect, surge um aviso único a explicar.
+                • Ativas por predefinição com a Pro: Proteção Web e E-mail, monitorização de registos de início automático (LaunchAgent/Daemon), Proteção contra ameaças DNS (aplicada apenas em redes fora de casa) e Proteção de Ligações (bloqueio automático de sites claramente fraudulentos).
+                • Desligadas por predefinição (opcionais): bloqueio automático ClickFix, deteção de riscos do Docker, proteção física da porta BadUSB, bloqueio automático de armazenamento USB, fixação ARP/NDP da gateway, desativação automática do Bluetooth, registo de execução de processos, monitorização de acesso às credenciais do navegador, túnel VPN, emparelhamento do Sensor, verificação ativa de vulnerabilidades e verificação de assinaturas npm. Cada uma pode interromper a utilização normal (corte da rede, dispositivos de entrada, unidades externas, áudio), precisa de uma permissão ou instalação adicional (Acesso Total ao Disco, Acessibilidade, blueutil), exige definições próprias, como uma lista de permissões, ou contacta um servidor externo. O fornecedor da Proteção contra ameaças DNS é uma escolha sua.
                 • Ativa por predefinição mesmo na edição gratuita: proteção da área de transferência (chaves de API e comandos ClickFix).
-                • As proteções adicionadas em versões posteriores recebem o seu próprio valor predefinido, uma única vez, para os utilizadores Pro existentes. Se a licença expirar, as proteções exclusivas da Pro são desligadas.
+                • As proteções adicionadas em versões posteriores recebem o seu próprio valor predefinido, uma única vez, para os utilizadores Pro existentes. Uma proteção que desligar continua desligada, mesmo que a licença seja ativada de novo. Se a licença for removida, as proteções exclusivas da Pro são desligadas, e as que estavam ligadas voltam a ficar ligadas por predefinição na próxima ativação da Pro.
                 """,
                 recommendation: "Depois de ativar a Pro, verifique as marcas ✅ no menu. Deixe desligadas as proteções que não se adequem à sua utilização (por exemplo, o Docker se não o usar), e ative o que precisar (por exemplo, a VPN se usar frequentemente Wi-Fi público)."
             ),
@@ -1448,7 +1448,8 @@ extension RoamSwitchKnowledgeBase {
                   - A ativação e desativação de licença (apenas quando age) e a abertura da página de compra
                   - As verificações de atualização da app (Sparkle)
                   - As atualizações das definições do ClamAV (`freshclam`)
-                  - As descargas diárias da lista de ameaças da Proteção de links, dos mapas de CVE de pacotes, e dos mapas de CVE de vulnerabilidades (apenas em receção, verificados por assinatura, sem enviar identificadores; a atualização automática da Proteção de links pode ser desligada)
+                  - A expansão de URL encurtados na verificação de links (acede ao próprio URL de destino; nada é enviado para uma API de análise nem para o programador)
+                  - As descargas da lista de ameaças da Proteção de links, dos mapas de CVE de pacotes, e dos mapas de CVE de vulnerabilidades (a lista todos os dias, os mapas aproximadamente a cada 30 dias; apenas em receção, verificados por assinatura, sem enviar identificadores; a atualização automática da Proteção de links pode ser desligada)
                   - O tráfego normal para os fornecedores de VPN e DNS seguro que configurar
                   - As sondas não destrutivas da verificação ativa de vulnerabilidades para 127.0.0.1 (este próprio Mac)
                   - A verificação de assinaturas npm (opcional, apenas Pro) contacta registry.npmjs.org quando é executada

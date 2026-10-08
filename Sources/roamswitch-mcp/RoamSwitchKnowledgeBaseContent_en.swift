@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.10.28 (build 146).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.0 (build 147).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -303,7 +303,7 @@ extension RoamSwitchKnowledgeBase {
                 • Subdomain impersonation: analyzes structures like `apple.com.login-verify.xyz` that embed a major brand name.
                 • High-risk TLDs: deducts points for TLDs common in throwaway phishing, such as `.xyz`, `.top`, `.tk`, `.icu`.
                 • Cleartext HTTP and raw IPs: warns about unencrypted HTTP on login pages and bare IP-address URLs.
-                • Fully local: URLs are never sent to an outside analysis API, so confidential URLs and tokens don't leak.
+                • Fully local: URLs are never sent to an outside analysis API, so confidential URLs and tokens don't leak. Only when expanding a shortened URL (tracing redirects) does it contact that URL itself, directly.
                 """,
                 recommendation: "Don't click suspicious links from email or chat directly; check them with the Link Safety Audit first."
             ),
@@ -525,7 +525,7 @@ extension RoamSwitchKnowledgeBase {
                 • Open: Malware Protection → "📦 Package CVE Scan (Homebrew)…". For dependencies, add project folders in the Dependencies tab.
                 • Homebrew: `brew list --versions` is matched against a formula-to-CPE table generated from real NVD data. Findings carry a confidence level: confirmed (verified table) or gray (unverified keyword match that may be a false positive).
                 • Dependencies: parses package-lock.json / requirements.txt / Pipfile.lock / poetry.lock / Cargo.lock / Gemfile.lock / composer.lock / go.sum / pom.xml and checks them against known-CVE maps for npm, PyPI, crates.io, RubyGems, Packagist, Go, and Maven (from OSV.dev, CVSS 7.0 or higher).
-                • Data delivery: the CVE maps are fetched once a day from a signed manifest, receive-only. Until fetched they show as not yet downloaded and detect nothing.
+                • Data delivery: the CVE maps are fetched about once every 30 days from a signed manifest, receive-only. Until fetched they show as not yet downloaded and detect nothing.
                 • MCP tools: `run_package_cve_scan` (Homebrew) and `run_package_cve_scan_languages` (dependencies, `watchedFolders` argument).
                 """,
                 recommendation: "Run the Homebrew scan regularly, register active projects in the Dependencies tab, and update packages with serious CVEs promptly."
@@ -590,7 +590,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • Scope: only the project's own package.json dependencies/devDependencies/optionalDependencies (peerDependencies is out of scope). node_modules (already-installed transitive dependencies) is deliberately out of scope too — a typo is introduced at the moment a human adds a dependency to package.json.
                 • Matching logic: a standard Levenshtein-distance DP implementation checks each dependency name against a list of popular npm package names. Scoped packages (`@scope/pkg`) compare by their base name (`pkg`). Candidates whose length differs by more than 2 are skipped by a cheap pre-filter. The threshold is edit distance up to 2 for popular names of 8+ characters, distance 1 only for shorter names.
-                • How the list stays current: the popular-package-name list checked against is distributed by `PackageCveMapUpdater` via the same once-a-day, receive-only, Ed25519-signed manifest as the CVE maps (a build-time embedded seed plus a two-tier override, preferring whichever has the newer `mapVersion`). The list can be refreshed without waiting for an app release.
+                • How the list stays current: the popular-package-name list checked against is distributed by `PackageCveMapUpdater` via the same receive-only, Ed25519-signed manifest (fetched about every 30 days) as the CVE maps (a build-time embedded seed plus a two-tier override, preferring whichever has the newer `mapVersion`). The list can be refreshed without waiting for an app release.
                 • Reference information, not a verdict — a known allowlist suppresses some legitimate look-alike packages (e.g. preact), but it isn't exhaustive.
                 • How to open: "📦 Package CVE Scan" → "Typosquat Detection (Pro)" tab, targeting the same project folders as the "Dependencies" tab. MCP: `run_typosquat_scan` (`watchedFolders` argument, Pro only).
                 """,
@@ -604,7 +604,7 @@ extension RoamSwitchKnowledgeBase {
                 • How it works: the privileged helper watches pf (packet filter) logs via `tcpdump -i pflog0` and flags a source IP that reaches enough distinct destination ports within a short window. Detection is based purely on log records; it never modifies or inspects the traffic content itself. Corresponds to the Linux edition's `port_scan_detect.rs` (nftables `log` + `journalctl`).
                 • Auto-block: a detected scan source is added to a pf rule and blocked for 10 minutes by default via `PFRulesetCoordinator`. Auto-block can be toggled independently of the detection feature itself.
                 • Notifications: a macOS notification fires on every detection (and block), and it's also recorded in the unified incident timeline.
-                • How to open: menu bar → “Ports & Devices Monitor” → “🔍 Incoming Port Scan Detection (Pro)”. Both enabling and disabling go through a confirmation dialog. Off by default.
+                • How to open: menu bar → “Ports & Devices Monitor” → “🔍 Incoming Port Scan Detection (Pro)”. Both enabling and disabling go through a confirmation dialog. It turns on automatically when Pro is activated (a choice to turn it off is kept). While the privileged helper is not approved yet, nothing happens, and it starts by itself once the helper is approved. Only the auto-block can be switched off separately, with “Auto-block incoming port scan sources (10 min)” in the same menu.
                 """,
                 recommendation: "There is no per-IP allowlist, and a block clears automatically after 10 minutes. If you regularly run a legitimate scanning tool at home or work (asset inventory, vulnerability scanning, etc.), consider turning off auto-block (keeping detection/notification only) while it runs, to avoid repeated false-positive blocks."
             ),
@@ -1140,13 +1140,13 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "set_pro_default_guards",
                 title: "Guards Turned On Automatically with Pro, and Opt-In Guards",
-                summary: "The first time a Pro license is activated, the main autonomous defense guards are turned on automatically. After that, the on/off choice you make for each guard is respected.",
+                summary: "The first time a Pro license is activated, the autonomous defense guards that mostly notify, rarely misfire and need no extra permission or setup are turned on automatically. Anything that could get in the way of normal use, or that needs extra permissions, setup or outside communication, stays opt-in. After that, the on/off choice you make for each guard is respected.",
                 details: """
-                • Turned on automatically (once, at first Pro activation): auto-block unknown listening ports, ransomware bait-file detection, auto-block on ARP spoofing, auto-disconnect on XProtect malware detection, automatic log audit, and periodic critical system file tampering monitoring. When the ARP and XProtect cutoffs are turned on, a one-time notice explains this.
-                • On by default with Pro: Web & Mail Protection and auto-launch registration (LaunchAgent/Daemon) monitoring.
-                • Off by default (opt-in): ClickFix auto-block, Docker risk detection, BadUSB physical port guard, USB storage auto-block, gateway ARP/NDP pinning, VPN tunnel, Bluetooth auto-off, and active vulnerability verification. The DNS Threat Protection provider is your choice.
+                • Turned on automatically (once, at first Pro activation): auto-block of unknown listening ports, incoming port scan detection (including the 10-minute auto-block of the scanning source), ransomware bait-file detection and entropy-based detection, credential honeytokens, auto-block on ARP spoofing, automatic network cutoff on XProtect malware detection, automatic log audit, critical system file tamper monitoring, and dependency lockfile tamper monitoring. When the ARP and XProtect cutoffs are turned on, a one-time notice explains this.
+                • On by default with Pro: Web & Mail Protection, auto-launch registration (LaunchAgent/Daemon) monitoring, DNS Threat Protection (applied on away networks only), and Link Guard (auto-block of clearly fraudulent sites).
+                • Off by default (opt-in): ClickFix auto-block, Docker risk detection, BadUSB physical port guard, USB storage auto-block, gateway ARP/NDP pinning, Bluetooth auto-off, process execution log, browser credential access monitoring, VPN tunnel, Sensor pairing, active vulnerability verification, and npm signature verification. Each of them can interrupt normal use (network cutoff, input devices, external drives, audio), needs an extra permission or install (Full Disk Access, Accessibility, blueutil), needs settings of your own such as an allow-list, or contacts an outside server. The DNS Threat Protection provider is your choice.
                 • On by default even in the free edition: clipboard protection (API keys and ClickFix commands).
-                • Guards added in later versions get their own one-time default for existing Pro users. If the license lapses, Pro-only guards are turned off.
+                • Guards added in later versions get their own one-time default for existing Pro users. A guard you turn off stays off, even if the license is activated again. If the license is removed, Pro-only guards are turned off, and the ones that were on come back on by default at the next Pro activation.
                 """,
                 recommendation: "After activating Pro, check the ✅ marks in the menu. Leave guards that don't fit your use (e.g. Docker if you don't use it) off, and turn on what you need (e.g. the VPN if you use public Wi-Fi often)."
             ),
@@ -1447,7 +1447,8 @@ extension RoamSwitchKnowledgeBase {
                   - License activation and deactivation (only when you act) and opening the purchase page
                   - App update checks (Sparkle)
                   - ClamAV definition updates (`freshclam`)
-                  - Daily downloads of the Link Guard threat feed, package CVE maps, and vulnerability CVE maps (receive-only, signature-verified, no identifiers sent; Link Guard auto-update can be turned off)
+                  - Shortened-URL expansion in the link check (accesses the target URL itself; nothing goes to an analysis API or the developer)
+                  - Downloads of the Link Guard threat feed, package CVE maps, and vulnerability CVE maps (the feed daily, the maps about every 30 days; receive-only, signature-verified, no identifiers sent; Link Guard auto-update can be turned off)
                   - Normal traffic to the VPN and secure DNS providers you configure
                   - Active vulnerability verification's non-destructive probes to 127.0.0.1 (this Mac itself)
                   - npm signature verification (opt-in, Pro only) contacts registry.npmjs.org when run
