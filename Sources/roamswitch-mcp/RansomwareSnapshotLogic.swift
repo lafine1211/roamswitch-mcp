@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.4 (build 151).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.5 (build 152).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -213,6 +213,22 @@ enum RansomwareSnapshotPath {
     static func isInside(resolved: String, root: String) -> Bool {
         let r = root.hasSuffix("/") ? String(root.dropLast()) : root
         return resolved == r || resolved.hasPrefix(r + "/")
+    }
+
+    /// True only for exactly `<directory>/<prefix><UUID>`: no extra path components, no `..`, no
+    /// trailing slash. A prefix test plus `lastPathComponent` alone accepts
+    /// `<directory>/<prefix>x/../../elsewhere/<prefix><UUID>`, which names a place outside it.
+    static func isExactMountPointName(_ path: String, directory: String, prefix: String) -> Bool {
+        let head = directory.hasSuffix("/") ? directory : directory + "/"
+        guard path.hasPrefix(head + prefix) else { return false }
+        let tail = String(path.dropFirst(head.count + prefix.count))
+        return UUID(uuidString: tail) != nil
+    }
+
+    /// Whether root may copy a file it opened in the snapshot out to `userUID`. Only the user's own
+    /// files: a hard link inside the user's home can point at a file that only root may read.
+    static func mayCopyToUser(fileOwnerUID: UInt32, userUID: UInt32) -> Bool {
+        fileOwnerUID == userUID
     }
 
     /// First free name for `baseName` inside `directory`: `name`, `name (1)`,
