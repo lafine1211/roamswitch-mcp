@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.11.7 (build 154). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.11.8 (build 155). Do not edit here; see SYNC.md.
 
 import XCTest
 import Network
