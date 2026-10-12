@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.11.6 (build 153). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.11.7 (build 154). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -70,6 +70,21 @@ final class ARPSpoofMonitorTests: XCTestCase {
         let status = monitor.inspectGateway(currentIP: nil, currentMAC: nil, currentSSID: nil)
 
         XCTAssertFalse(status.isSpoofingDetected)
+    }
+
+    func testMissingObservationInTheMiddle_keepsTheBaselineSoAForgedReplyIsNotLearnedAsTrusted() {
+        // ゲートウェイのARP記録が一時的に消える(ロックの解除、インターフェースのリセット、期限切れ)間に、
+        // 基準を忘れてはいけない。忘れると、次に現れた(偽造かもしれない)MACが「信頼できる基準」になり、
+        // 本物のルーターのほうが「急変」として報告される(Linux版で、実機の仮想マシンで見つかった同じ形)。
+        let monitor = ARPSpoofMonitor()
+        _ = monitor.inspectGateway(currentIP: "192.168.1.1", currentMAC: "aa:bb:cc:dd:ee:ff", currentSSID: nil)
+        _ = monitor.inspectGateway(currentIP: nil, currentMAC: nil, currentSSID: nil)   // 記録が無い間
+        _ = monitor.inspectGateway(currentIP: "192.168.1.1", currentMAC: nil, currentSSID: nil)   // アドレスだけ分かる間
+        let status = monitor.inspectGateway(currentIP: "192.168.1.1", currentMAC: "11:22:33:44:55:66", currentSSID: nil)
+
+        XCTAssertTrue(status.isSpoofingDetected)
+        XCTAssertEqual(status.previousMAC, "aa:bb:cc:dd:ee:ff", "the baseline is still the address seen before the entry went missing")
+        XCTAssertEqual(status.currentMAC, "11:22:33:44:55:66")
     }
 
     func testAfterSpoofDetected_baselineIsNotAdvanced() {

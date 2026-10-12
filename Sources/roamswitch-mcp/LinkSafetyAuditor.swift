@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.6 (build 153).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.7 (build 154).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -36,6 +36,10 @@ public enum LinkRiskFactorKind: String, Codable, Equatable {
     case phishingPathKeyword
     /// `https://apple.com@evil.example/`: the text before `@` is credentials, not the destination.
     case urlUserInfo
+    /// bit.ly などの短縮URL。行き先は、接続しないと分からない。
+    case urlShortener
+    /// ブランド名に secure / login などの語を足した非公式ドメイン(paypa1-secure-login のように、似た文字へ置き換えたものも含む)。
+    case brandComboSquat
 }
 
 public struct LinkRiskFactor: Identifiable, Codable, Equatable {
@@ -137,6 +141,12 @@ public final class LinkSafetyAuditor {
         "chase", "wellsfargo", "bankofamerica", "binance", "coinbase"
     ]
 
+    /// 行き先を隠す短縮URLのサービス。接続せずに、行き先を読むことはできない。
+    private let urlShorteners: [String] = [
+        "bit.ly", "t.co", "tinyurl.com", "ow.ly", "is.gd", "buff.ly", "cutt.ly", "rebrand.ly", "shorturl.at",
+        "t.ly", "rb.gy", "lnkd.in", "s.id", "tiny.cc", "bl.ink", "v.gd", "x.gd", "qr.ae", "shorte.st", "adf.ly"
+    ]
+
     private let suspiciousPathKeywords: [String] = [
         "verify", "login", "signin", "account-update", "secure-login",
         "confirm-identity", "password-reset", "auth-check", "billing-update"
@@ -228,6 +238,28 @@ public final class LinkSafetyAuditor {
                 detail: String(format: loc("「%@」の正規ドメインではなく、サブドメインにブランド名を含めたフィッシングドメインです。"), spoofedBrand),
                 isSevere: true,
                 kind: .brandSubdomainSpoofing
+            ))
+        }
+
+        // 4b. 短縮URL(行き先が分からない)
+        if urlShorteners.contains(where: { host == $0 || host.hasSuffix("." + $0) }) {
+            penaltyScore += 25
+            riskFactors.append(LinkRiskFactor(
+                title: loc("短縮URLです(行き先が分かりません)"),
+                detail: loc("この診断は通信しないので、短縮URLの行き先を調べられません。短縮URLは、危険なサイトへの誘導にも使われます。送り主に心当たりがなければ、開かないでください。"),
+                isSevere: false,
+                kind: .urlShortener
+            ))
+        }
+
+        // 4c. ブランド名に secure / login などの語を足した非公式ドメイン(paypa1-secure-login など)
+        if LinkFilterEngine.isBrandComboSquat(host) {
+            penaltyScore += 45
+            riskFactors.append(LinkRiskFactor(
+                title: loc("ブランド名に「secure」「login」などの語を足した非公式ドメイン"),
+                detail: loc("ブランド名を、そのまま、または数字や似た文字に置き換えて書き、「secure」「login」などの語を足した形です。フィッシング詐欺サイトの可能性が高いです。"),
+                isSevere: true,
+                kind: .brandComboSquat
             ))
         }
 

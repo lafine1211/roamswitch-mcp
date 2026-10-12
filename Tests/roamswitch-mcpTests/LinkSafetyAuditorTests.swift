@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.11.6 (build 153). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.11.7 (build 154). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -176,5 +176,29 @@ final class LinkSafetyAuditorTests: XCTestCase {
         // The enum used by LinkGuardManager / the menu picker.
         XCTAssertEqual(LinkGuardMode(rawValue: "block"), .block)
         XCTAssertEqual(LinkGuardMode.allCases.count, 3)
+    }
+
+    // MARK: - 短縮URLと、数字に置き換えたブランド名
+
+    func testShortenedURLIsNotCalledSafe() {
+        let auditor = LinkSafetyAuditor.shared
+        for url in ["https://bit.ly/abc123", "https://t.co/xyz", "https://www.tinyurl.com/x"] {
+            let report = auditor.analyzeURL(url)
+            XCTAssertTrue(report.riskFactors.contains { $0.kind == .urlShortener }, url)
+            XCTAssertNotEqual(report.riskLevel, .safe, url)
+        }
+        XCTAssertFalse(auditor.analyzeURL("https://github.com/").riskFactors.contains { $0.kind == .urlShortener })
+    }
+
+    func testDigitSubstitutedBrandWithPhishingWordIsSevere() {
+        let auditor = LinkSafetyAuditor.shared
+        for url in ["https://paypa1-secure-login.example/", "https://amaz0n-support.example/", "https://microsoft-security-alert.example/"] {
+            let report = auditor.analyzeURL(url)
+            XCTAssertTrue(report.riskFactors.contains { $0.kind == .brandComboSquat && $0.isSevere }, url)
+            XCTAssertEqual(report.riskLevel, .dangerous, url)
+        }
+        for url in ["https://www.paypal.com/", "https://support.google.com/", "https://mail.google.com/", "https://purchase-help.example.com/", "https://www.apple.com/"] {
+            XCTAssertFalse(auditor.analyzeURL(url).riskFactors.contains { $0.kind == .brandComboSquat }, url)
+        }
     }
 }

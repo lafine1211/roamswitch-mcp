@@ -80,9 +80,10 @@ All files live in `Sources/roamswitch-mcp/`.
 | `ExecReadAPI.swift` | `Shared/ExecReadAPI.swift` (from `Shared/`) |
 | `SafeScanFS.swift` | `Shared/SafeScanFS.swift` (from `Shared/`) |
 | `ExecCommandMasker.swift` | `Shared/ExecCommandMasker.swift` (from `Shared/`) |
+| `LinkFilterEngine.swift` | `Shared/LinkFilterEngine.swift` (from `Shared/`) |
 
 This is exactly the source set the app compiles into its `RoamSwitchMCPServer` target
-(see `project.yml` in the app repo). Eight of the files come from the app's `Shared/` folder
+(see `project.yml` in the app repo). Nine of the files come from the app's `Shared/` folder
 (compiled into the app and the privileged helper too); the sync script keeps them in its `SHARED`
 list, and everything else in its `CORE` list. `Localizable.xcstrings` is also in that target but is
 not mirrored (this package does not use it).
