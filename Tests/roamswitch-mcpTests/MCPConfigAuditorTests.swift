@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.11.10 (build 157). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.11.11 (build 158). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -184,6 +184,36 @@ final class MCPConfigAuditorTests: XCTestCase {
         let encoded = String(data: try! JSONEncoder().encode(r.findings), encoding: .utf8)!
         XCTAssertFalse(encoded.contains(secret))
         XCTAssertTrue(encoded.contains("(non-registry spec)"))
+    }
+
+    func testEnvThatLoadsCodeAtStartUpIsFlaggedWithoutRegardToCase() {
+        let r = audit(#"{"mcpServers":{"a":{"command":"node","env":{"NODE_OPTIONS":"--require /tmp/x.js","LD_PRELOAD":"/tmp/x.so"}}}}"#)
+        XCTAssertEqual(ids(r), ["code_loading_env"])
+        XCTAssertEqual(r.findings.first?.severity, "high")
+        XCTAssertEqual(r.findings.first?.detail, "env sets LD_PRELOAD, NODE_OPTIONS")
+        // The lower-case spelling that got past Flowise's exact-case deny list.
+        for env in [#"{"node_options":"--require=/tmp/x.js"}"#, #"{"Node_Options":"-r /tmp/x.js"}"#, #"{"dyld_insert_libraries":"/tmp/x.dylib"}"#,
+                    #"{"BASH_ENV":"/tmp/rc"}"#, #"{"PYTHONSTARTUP":"/tmp/s.py"}"#,
+                    #"{"JAVA_TOOL_OPTIONS":"-Xmx1g -javaagent:/tmp/a.jar"}"#,
+                    #"{"NODE_OPTIONS":"--max-old-space-size=4096 --import ./hook.mjs"}"#] {
+            let r = audit(#"{"mcpServers":{"a":{"command":"x","env":"# + env + "}}}")
+            XCTAssertEqual(ids(r), ["code_loading_env"], env)
+        }
+    }
+
+    func testOrdinaryEnvSettingsAreNotFlagged() {
+        for env in [#"{"PATH":"/opt/node/bin:/usr/bin"}"#, #"{"NODE_OPTIONS":"--max-old-space-size=4096 --no-warnings"}"#,
+                    #"{"JAVA_TOOL_OPTIONS":"-Xmx1g"}"#, #"{"PYTHONPATH":"/opt/lib","API_KEY":"k"}"#,
+                    #"{"LD_PRELOAD":""}"#, #"{"LD_PRELOAD":"   "}"#, #"{"LD_PRELOAD":true}"#] {
+            let r = audit(#"{"mcpServers":{"a":{"command":"x","env":"# + env + "}}}")
+            XCTAssertTrue(ids(r).isEmpty, env)
+        }
+    }
+
+    func testTheEnvFindingNeverCopiesAValue() throws {
+        let r = audit(#"{"mcpServers":{"a":{"command":"x","env":{"LD_PRELOAD":"/home/u/SECRET-PATH/x.so"}}}}"#)
+        let f = try XCTUnwrap(r.findings.first)
+        XCTAssertFalse((f.detail + f.message + f.server.map { $0 } .debugDescription).contains("SECRET-PATH"))
     }
 
     func testWritableConfigIsFlaggedOnlyWhenItHoldsMCPContent() {

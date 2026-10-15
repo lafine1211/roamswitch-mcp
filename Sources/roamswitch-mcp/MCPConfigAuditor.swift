@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.10 (build 157).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.11 (build 158).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -30,7 +30,7 @@ enum MCPConfigAuditor {
     struct Finding: Codable, Equatable {
         /// Stable id: `auto_approve`, `remote_plain_http`, `shell_wrapper`, `hexstrike`,
         /// `world_writable_config`, `auto_trust_project_servers`, `unpinned_package_launcher`,
-        /// `container_host_access`.
+        /// `container_host_access`, `code_loading_env`.
         let id: String
         /// `high` or `medium`.
         let severity: String
@@ -273,6 +273,18 @@ enum MCPConfigAuditor {
             ))
         }
 
+        // `env` that makes the launched process load extra code at start-up.
+        if let env = config["env"] as? [String: Any] {
+            let keys = codeLoadingEnvKeys(env)
+            if !keys.isEmpty {
+                findings.append(Finding(
+                    id: "code_loading_env", severity: "high", file: file, server: name,
+                    detail: "env sets " + keys.joined(separator: ", "),
+                    message: loc("この MCP サーバーの環境変数に、起動したプロセスが自分のコードより先に追加のライブラリやスクリプトを読み込む設定（LD_PRELOAD、DYLD_INSERT_LIBRARIES、NODE_OPTIONS の --require など）があります。ふつうの MCP サーバーには要らない設定で、設定ファイルを書き換えられる人がコードを紛れ込ませる手口です。心当たりがなければこの項目を削除し、設定ファイルを書き換えられる人がほかにいないか確認してください。")
+                ))
+            }
+        }
+
         // HexStrike AI.
         let haystack = ([rawName, command, urlString] + args).joined(separator: " ").lowercased()
         if haystack.contains("hexstrike") {
@@ -283,6 +295,43 @@ enum MCPConfigAuditor {
             ))
         }
         return findings
+    }
+
+    /// Variables that make the process load a library or script of the caller's choosing before its
+    /// own code runs, whatever the value is (an empty value only clears the variable).
+    private static let alwaysCodeLoadingEnv: Set<String> = ["LD_PRELOAD", "LD_AUDIT", "DYLD_INSERT_LIBRARIES", "BASH_ENV", "PYTHONSTARTUP"]
+
+    /// Everyday settings (`NODE_OPTIONS=--max-old-space-size=4096`) that load code only when the value
+    /// carries one of these flags.
+    private static let conditionalCodeLoadingEnv: [String: [String]] = [
+        "NODE_OPTIONS": ["--require", "--import", "--loader", "--experimental-loader"],
+        "JAVA_TOOL_OPTIONS": ["-javaagent", "-agentlib", "-agentpath", "-Xbootclasspath"],
+        "_JAVA_OPTIONS": ["-javaagent", "-agentlib", "-agentpath", "-Xbootclasspath"],
+        "JDK_JAVA_OPTIONS": ["-javaagent", "-agentlib", "-agentpath", "-Xbootclasspath"],
+    ]
+
+    /// Names (as written in the file, sanitized) of the `env` entries that load code at start-up.
+    ///
+    /// Names are matched without regard to case: Windows treats `node_options` and `NODE_OPTIONS` as
+    /// one variable, and Flowise's exact-case deny list was bypassed with the lower-case spelling (a
+    /// published Windows proof of concept). On macOS a lower-case name does nothing, but a config file
+    /// is often shared between machines and the spelling is a sign of someone trying to get past a
+    /// check. Values are read to decide and never copied out.
+    static func codeLoadingEnvKeys(_ env: [String: Any]) -> [String] {
+        var found: [String] = []
+        for (key, value) in env {
+            guard let text = value as? String, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+            let upper = key.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+            var hit = alwaysCodeLoadingEnv.contains(upper)
+            if !hit, let flags = conditionalCodeLoadingEnv[upper] {
+                hit = text.split(whereSeparator: { $0.isWhitespace }).contains { raw in
+                    let token = raw.trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+                    return (upper == "NODE_OPTIONS" && token == "-r") || flags.contains { token.hasPrefix($0) }
+                }
+            }
+            if hit { found.append(sanitized(key)) }
+        }
+        return found.sorted()
     }
 
     /// Printable, bounded text for anything that came from a config file.

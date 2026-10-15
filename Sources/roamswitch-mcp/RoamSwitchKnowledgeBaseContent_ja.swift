@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.10 (build 157).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.11 (build 158).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -228,6 +228,21 @@ extension RoamSwitchKnowledgeBase {
                 • Pickle形式のAIモデルの警告は feat_ai_model_guard を参照。
                 """,
                 recommendation: "ClamAVを導入した上で有効化し、ブラウザの保存先を独自フォルダにしている場合は監視対象フォルダに追加してください。"
+            ),
+            LocalizedEntry(
+                id: "feat_web_rules",
+                title: "Webシェル・不正なWebコードの検知（PHP / JS / JSP / ASP / .htaccess） (Pro)",
+                summary: "Webアプリ層の不正コード（Webシェル、難読化された注入コード、画像に偽装したPHP、.htaccessの悪用）を、正規表現を使わない小さなルール言語で検知します。開発用のWebフォルダも毎日と手動で検査します。",
+                details: """
+                • ルールの出どころ: 製品に組み込みのルール、署名付きの日次フィード（受信専用。`~/Library/Application Support/RoamSwitch/web_rules.json` に保存）、利用者定義のルール（`~/Library/Application Support/RoamSwitch/rules.d/*.json`）の3層です。利用者定義のルールは、所有者が自分か root で、グループ・他人が書き込めないファイルだけを読み込みます。
+                • 即時の検知: Web・メール保護（feat_webmail_download_guard）の監視対象フォルダに保存・変更されたWebファイルに、同じ静的検査の中で適用します。Linux版のようなアクセス前の阻止はできず、すべて事後の検知です（EndpointSecurityは使いません）。
+                • 開発用Webフォルダ: `~/Sites`、`/Library/WebServer/Documents`、`~/Herd`、`~/Library/Application Support/Herd`、`/Applications/MAMP/htdocs`、`~/Library/Application Support/Local`、`~/Local Sites`、パッケージCVE照合の対象フォルダ、Web・メール保護の監視対象フォルダを、1日1回と手動で検査します。1日1回の検査は `node_modules`（依存パッケージ）と `.git` に入りません（監視中のフォルダでの即時検知と、フォルダを指定した手動の検査では `node_modules` も調べます）。`tests` `fixtures` などのテスト用フォルダにはルールを適用しません。
+                • 隔離: 既定では critical の検知だけが、他の脅威と同じ流れ（隔離Vaultへ移動、「隔離ファイルを管理」で復元・削除）の対象です。high は通知とフック、設定画面の一覧だけで、ファイルには触れません（設定で「critical と high を隔離」「隔離しない」にも変えられます）。medium と low は報告のみで、通知履歴に残ります。「除外して復元」したファイルは、Webルールでは再び検知されません（ClamAVの除外とは別の一覧です）。
+                • 検知後のフック: `~/Library/Application Support/RoamSwitch/hooks/post-detection` に実行ファイルを置くと、検知のたびに JSON を標準入力で渡して実行します（所有者が自分か root、グループ・他人が書き込めない、親フォルダも同様、が条件。30秒で打ち切り）。
+                • アカウント対処（既定はオフ）: 設定で有効にすると、ファイルを隔離Vaultへ移した検知について、そのファイルの持ち主のログインシェルを無効化します（high を残した場合や、隔離に失敗した場合は何もしません）。管理者パスワードでの確認が必要で、ログイン中のユーザー、root、UID 501 未満のアカウントには何もしません。元のシェルは記録され、設定画面から戻せます。
+                • 限界: ファイルの先頭4MBだけを調べ、固定の語句の並びで見るため、変数名の組み立てなどで分割された文字列は追えません。
+                """,
+                recommendation: "開発用のWebフォルダがあるMacでは、Proを有効にして既定のまま使ってください。誤検知と思われるファイルは、隔離Vaultから復元すれば再び検知されません。"
             ),
             LocalizedEntry(
                 id: "feat_ai_model_guard",
