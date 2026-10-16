@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.11 (build 158).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.12 (build 159).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -570,6 +570,7 @@ enum MCPServer {
             scannedFolderCount: folders.count,
             findings: findings.map {
                 MCPPackageCveLanguageFindingPayload(
+                    lockfile: $0.lockfile,
                     ecosystem: $0.ecosystem,
                     cveId: $0.cveId,
                     package: $0.package,
@@ -1109,7 +1110,7 @@ enum MCPServer {
         ],
         [
             "name": "run_active_vuln_scan",
-            "description": "UNLIKE MOST TOOLS, THIS SENDS NETWORK REQUESTS (to 127.0.0.1 only; the one tool that reaches an external server is run_npm_audit_signatures). Three check families, all non-destructive, read-only, 127.0.0.1-only, single request with a short timeout, never touching another host: (1) known unauthenticated-by-default services already detected on this host — Redis, Memcached, MongoDB — verified with a protocol-appropriate probe (e.g. Redis PING); (2) generic checks against any detected local dev-server port — CORS misconfiguration (arbitrary Origin reflected with credentials allowed), path traversal (reading /etc/passwd via ../ to prove insufficient path validation), and open redirect (a handful of common parameter names like redirect/url/next tried against the root path, flagged only if the server actually redirects to our unregistered probe domain); (3) known-CVE version matching — when a Redis or Memcached instance is confirmed unauthenticated in (1), its version is read via a further non-destructive query (Redis INFO / Memcached stats) and checked against a small table of known CVEs (e.g. CVE-2022-24834 for Redis, CVE-2018-1000115 for Memcached) by version range only, never by sending an actual exploit payload. Disabled by default: requires the 'Active Vulnerability Verification' toggle enabled in RoamSwitch Settings, and refuses to run otherwise.",
+            "description": "UNLIKE MOST TOOLS, THIS SENDS NETWORK REQUESTS (to 127.0.0.1 only; the one tool that reaches an external server is run_npm_audit_signatures). Three check families, all non-destructive, read-only, 127.0.0.1-only, single request with a short timeout, never touching another host: (1) known unauthenticated-by-default services already detected on this host — Redis, Memcached, MongoDB and the local AI/ML services Ollama, Jupyter Server, MLflow and Gradio (one read-only HTTP GET each) — verified with a protocol-appropriate probe (e.g. Redis PING); (2) generic checks against any detected local dev-server port — CORS misconfiguration (arbitrary Origin reflected with credentials allowed), path traversal (reading /etc/passwd via ../ to prove insufficient path validation), and open redirect (a handful of common parameter names like redirect/url/next tried against the root path, flagged only if the server actually redirects to our unregistered probe domain); (3) known-CVE version matching — when a Redis, Memcached, Ollama, Jupyter Server, MLflow or Gradio instance is confirmed unauthenticated in (1), its version is read via a further non-destructive query (Redis INFO / Memcached stats / each AI service's own version endpoint) and checked against a small table of known CVEs (e.g. CVE-2022-24834 for Redis, CVE-2018-1000115 for Memcached) by version range only, never by sending an actual exploit payload. Disabled by default: requires the 'Active Vulnerability Verification' toggle enabled in RoamSwitch Settings, and refuses to run otherwise.",
             "inputSchema": ["type": "object", "properties": [String: Any]()],
         ],
         [

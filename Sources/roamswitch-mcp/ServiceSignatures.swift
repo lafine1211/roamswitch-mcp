@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.11 (build 158).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.12 (build 159).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -136,6 +136,43 @@ enum ServiceSignatures {
             title: loc("HexStrike AI 型の認証なしコマンド実行 API が稼働しています"),
             description: loc("このポートで HexStrike AI（AI にペネトレーションテスト用ツールを自律実行させる MCP バックエンド）の API が応答しました。このサーバーには認証がなく、/api/command に送られた文字列をそのままシェルで実行します。標準の起動方法（python3 hexstrike_server.py）は全インターフェースで待ち受けるため、同じネットワークの誰でも、この Mac 上で任意のコマンドを実行できる状態になります。"),
             recommendation: loc("意図して使っていない場合はプロセスを停止してください。使う場合は信頼できるネットワークから切り離した検証用の VM 内に限定し、このポートをRoamSwitchのファイアウォールで外部から遮断してください。"),
+            probeOnly: true
+        ),
+        // Local AI / ML services (2026-10). Identity and the unauthenticated-access check come from each
+        // service's own endpoints, measured on real servers (Ollama 0.40.4, Gradio 6.30.0, MLflow 3.17.1,
+        // Jupyter Server 2.21.1). All four are probe-only: the texts state that the service answered, so they
+        // are only reported once `ActiveVulnScan` has really seen it answer. (The passive port audit already
+        // covers an exposed Ollama by port number, 11434.)
+        Signature(
+            id: "ollama-exposed",
+            processPatterns: ["ollama"],
+            title: loc("Ollama(ローカル LLM サーバー)が認証なしでネットワークから使える状態です"),
+            description: loc("このポートで Ollama の API が応答しました。Ollama には認証の仕組みがなく、ネットワークから届く相手は誰でもモデルの一覧取得・ダウンロード・削除・推論の実行ができます。GPU などの計算資源を勝手に使われたり、ディスクを埋められたりします。既定の待ち受けは 127.0.0.1 ですが、OLLAMA_HOST=0.0.0.0 などの設定でネットワークから届く状態になっています。"),
+            recommendation: loc("OLLAMA_HOST を 127.0.0.1 に戻して Ollama を再起動してください。他の端末から使う必要がある場合は、認証を付けたリバースプロキシか VPN の内側に限定してください。"),
+            probeOnly: true
+        ),
+        Signature(
+            id: "jupyter-noauth",
+            processPatterns: ["python", "jupyter"],
+            title: loc("Jupyter Server がトークンもパスワードもなしで公開されています"),
+            description: loc("このポートで Jupyter Server の API(/api/status)がログインなしで応答しました。Jupyter はノートブックやターミナルからコードを実行できるため、認証がないと、ネットワークから届く相手は誰でもこのユーザーの権限で任意のコマンドを実行できます。トークンとパスワードの両方を無効にしたまま、127.0.0.1 以外で待ち受けると起きる状態です。"),
+            recommendation: loc("トークンかパスワードを有効に戻し、待ち受けを 127.0.0.1 だけにしてください。別の端末から使う場合は、SSH のポートフォワードなどで通してください。"),
+            probeOnly: true
+        ),
+        Signature(
+            id: "mlflow-noauth",
+            processPatterns: ["python", "mlflow", "gunicorn", "uvicorn"],
+            title: loc("MLflow Tracking Server が認証なしで公開されています"),
+            description: loc("このポートで MLflow の実験一覧(/api/2.0/mlflow/experiments/search)がログインなしで返りました。MLflow は既定では認証がなく、届く相手は誰でも実験名・パラメータ・指標・成果物の保存先を読め、実験やモデルの登録・削除もできます。成果物(学習済みモデルなど)を差し替えられると、それを読み込む側でコードが実行される恐れがあります。"),
+            recommendation: loc("--host 127.0.0.1 で起動し直してください。ネットワークに出す必要がある場合は、MLflow の basic-auth(--app-name basic-auth)か、認証付きのリバースプロキシの内側に限定してください。"),
+            probeOnly: true
+        ),
+        Signature(
+            id: "gradio-noauth",
+            processPatterns: ["python", "gradio"],
+            title: loc("Gradio アプリが認証なしで公開されています"),
+            description: loc("このポートで Gradio アプリの設定(/config)がログインなしで返りました。Gradio は auth を指定しない限り誰でも操作でき、アプリが持つ機能(ファイルの読み書き、モデルや外部コマンドの実行など)がそのまま使われます。server_name を 0.0.0.0 にした場合や、share=True の公開リンクで起きる状態です。"),
+            recommendation: loc("launch() に auth=(ユーザー名, パスワード) を指定し、server_name は 127.0.0.1 にしてください。share=True の公開リンクは使わないでください。"),
             probeOnly: true
         ),
     ]

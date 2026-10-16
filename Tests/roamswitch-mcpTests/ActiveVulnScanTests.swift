@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.11.11 (build 158). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.11.12 (build 159). Do not edit here; see SYNC.md.
 
 import XCTest
 import Network
@@ -506,6 +506,148 @@ final class ActiveVulnScanTests: XCTestCase {
         ) { result = $0; expectation.fulfill() }
         wait(for: [expectation], timeout: 5)
         XCTAssertFalse(result?.findings.contains { $0.title == sig?.title } ?? true)
+    }
+
+    // MARK: - Local AI / ML services (bodies below were captured from real servers, 2026-10-16)
+
+    private let ollamaRoot = "Ollama is running"
+    private let ollamaVersion = "{\"version\":\"0.40.4\"}"
+    private let jupyterAPI = "{\"version\": \"2.21.1\"}"
+    private let jupyterStatus = "{\"connections\": 0, \"kernels\": 0, \"last_activity\": \"2026-10-16T05:12:42.542337Z\", \"started\": \"2026-10-16T05:12:38.518873Z\"}"
+    private let mlflowSearch = "{\n  \"experiments\": [\n    {\n      \"experiment_id\": \"0\",\n      \"name\": \"Default\"\n    }\n  ]\n}"
+    private let gradioConfig = "{\"version\":\"6.30.0\",\"api_prefix\":\"/gradio_api\",\"mode\":\"blocks\",\"app_id\":17808720288158255272,\"dev_mode\":false,\"components\":[{\"id\":1,\"type\":\"textbox\"}]}"
+
+    private func httpStatus(_ status: String, _ body: String) -> Data {
+        Data("HTTP/1.1 \(status)\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n\(body)".utf8)
+    }
+
+    /// Serves every connection, choosing the reply by the requested path, so a scan that sends the
+    /// identity probe and then the version lookup can be exercised end to end.
+    private func spawnRoutingStub(routes: [String: Data]) -> Int {
+        let listener = try! NWListener(using: .tcp, on: .any)
+        let ready = DispatchSemaphore(value: 0)
+        var boundPort = 0
+        listener.stateUpdateHandler = { state in
+            if case .ready = state, boundPort == 0 {
+                boundPort = Int(listener.port?.rawValue ?? 0)
+                ready.signal()
+            }
+        }
+        listener.newConnectionHandler = { connection in
+            connection.stateUpdateHandler = { state in
+                if state == .ready {
+                    connection.receive(minimumIncompleteLength: 1, maximumLength: 8192) { data, _, _, _ in
+                        let request = String(decoding: data ?? Data(), as: UTF8.self)
+                        let path = request.split(separator: " ").dropFirst().first.map(String.init) ?? ""
+                        let reply = routes[path] ?? Data("HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n".utf8)
+                        connection.send(content: reply, completion: .contentProcessed { _ in connection.cancel() })
+                    }
+                }
+            }
+            connection.start(queue: .global())
+        }
+        listener.start(queue: .global())
+        _ = ready.wait(timeout: .now() + 2)
+        return boundPort
+    }
+
+    func testAIServiceProbesFlagTheMeasuredOpenResponses() {
+        XCTAssertEqual(ActiveVulnScan.probeOllamaExposed(port: spawnStubServer(reply: http200(ollamaRoot))), true)
+        XCTAssertEqual(ActiveVulnScan.probeJupyterNoAuth(port: spawnStubServer(reply: http200(jupyterStatus))), true)
+        XCTAssertEqual(ActiveVulnScan.probeMLflowNoAuth(port: spawnStubServer(reply: http200(mlflowSearch))), true)
+        XCTAssertEqual(ActiveVulnScan.probeGradioNoAuth(port: spawnStubServer(reply: http200(gradioConfig))), true)
+    }
+
+    func testAIServiceProbesDoNotFlagProtectedOrUnrelatedServices() {
+        // Jupyter with a token: /api/status is 403 (measured). Gradio with auth: /config is 401 (measured).
+        XCTAssertEqual(ActiveVulnScan.probeJupyterNoAuth(port: spawnStubServer(reply: httpStatus("403 Forbidden", "{\"message\": \"Forbidden\", \"reason\": null}"))), false)
+        XCTAssertEqual(ActiveVulnScan.probeGradioNoAuth(port: spawnStubServer(reply: httpStatus("401 Unauthorized", "{\"detail\":{\"error\":\"Not authenticated\",\"auth_message\":null}}"))), false)
+        // Another web app that merely answers 200 with JSON.
+        let probes: [(Int) -> Bool?] = [
+            { ActiveVulnScan.probeOllamaExposed(port: $0) }, { ActiveVulnScan.probeJupyterNoAuth(port: $0) },
+            { ActiveVulnScan.probeMLflowNoAuth(port: $0) }, { ActiveVulnScan.probeGradioNoAuth(port: $0) },
+        ]
+        for probe in probes {
+            XCTAssertEqual(probe(spawnStubServer(reply: http200("{\"status\":\"ok\"}"))), false)
+        }
+        // The right words under a wrong status.
+        XCTAssertEqual(ActiveVulnScan.probeMLflowNoAuth(port: spawnStubServer(reply: httpStatus("500 Internal Server Error", mlflowSearch))), false)
+        // A components list without the leading version key is not a Gradio config.
+        XCTAssertEqual(ActiveVulnScan.probeGradioNoAuth(port: spawnStubServer(reply: http200("{\"components\":[],\"x\":{\"version\":\"1.0\"}}"))), false)
+        // "Ollama is running" must be the whole body, not a substring of some page.
+        XCTAssertEqual(ActiveVulnScan.probeOllamaExposed(port: spawnStubServer(reply: http200("<html>Ollama is running behind this page</html>"))), false)
+    }
+
+    func testAIServiceVersionsAreReadFromTheMeasuredAnswers() {
+        let port = spawnRoutingStub(routes: [
+            "/api/version": http200(ollamaVersion), "/api": http200(jupyterAPI),
+            "/version": http200("3.17.1"), "/config": http200(gradioConfig),
+        ])
+        XCTAssertEqual(ActiveVulnScan.aiServiceVersion(signatureID: "ollama-exposed", port: port), "0.40.4")
+        XCTAssertEqual(ActiveVulnScan.aiServiceVersion(signatureID: "jupyter-noauth", port: port), "2.21.1")
+        XCTAssertEqual(ActiveVulnScan.aiServiceVersion(signatureID: "mlflow-noauth", port: port), "3.17.1")
+        XCTAssertEqual(ActiveVulnScan.aiServiceVersion(signatureID: "gradio-noauth", port: port), "6.30.0")
+        // No version endpoint, or a body that does not look like a version => no version, never a guess.
+        XCTAssertNil(ActiveVulnScan.aiServiceVersion(signatureID: "ollama-exposed", port: spawnRoutingStub(routes: [:])))
+        XCTAssertNil(ActiveVulnScan.aiServiceVersion(signatureID: "mlflow-noauth", port: spawnRoutingStub(routes: ["/version": http200("<html>nope</html>")])))
+    }
+
+    func testChunkedAnswersAreDecodedBeforeTheVersionIsRead() {
+        let chunked = Data("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n8\r\n{\"versio\r\nc\r\nn\":\"0.1.30\"}\r\n0\r\n\r\n".utf8)
+        let port = spawnRoutingStub(routes: ["/api/version": chunked])
+        XCTAssertEqual(ActiveVulnScan.aiServiceVersion(signatureID: "ollama-exposed", port: port), "0.1.30")
+        XCTAssertEqual(ActiveVulnScan.dechunk("3\r\nabc\r\n0\r\n\r\n"), "abc")
+        XCTAssertEqual(ActiveVulnScan.dechunk("zz\r\nabc"), "")
+    }
+
+    func testRunScanAddsTheKnownCVEsOfAnExposedOldOllama() {
+        // 0.1.30 predates the fixes for CVE-2024-37032 (0.1.34), CVE-2024-39720 (0.1.46) and more.
+        let old = spawnRoutingStub(routes: ["/": http200(ollamaRoot), "/api/version": http200("{\"version\":\"0.1.30\"}")])
+        let current = spawnRoutingStub(routes: ["/": http200(ollamaRoot), "/api/version": http200(ollamaVersion)])
+        let ports = [
+            ListeningPortInfo(processName: "ollama", pid: 1, port: old, isGloballyExposed: true, executablePath: nil),
+            ListeningPortInfo(processName: "ollama", pid: 2, port: current, isGloballyExposed: true, executablePath: nil),
+        ]
+        let findings = runScanIsolated(ports: ports).findings
+        let onOld = findings.filter { $0.port == old }
+        let onCurrent = findings.filter { $0.port == current }
+        XCTAssertTrue(onOld.contains { $0.title.contains("CVE-2024-37032") }, onOld.map(\.title).joined(separator: " | "))
+        XCTAssertTrue(onOld.contains { $0.title.contains("CVE-2024-39720") })
+        XCTAssertEqual(onCurrent.count, 1, "a current Ollama gets the exposure finding only: \(onCurrent.map(\.title))")
+    }
+
+    func testRunScanReportsALockedJupyterAsConfirmedSafeAndAddsNoCVEs() {
+        let locked = spawnRoutingStub(routes: [
+            "/api/status": httpStatus("403 Forbidden", "{\"message\": \"Forbidden\", \"reason\": null}"),
+            "/api": http200("{\"version\": \"1.0.0\"}"),
+        ])
+        let ports = [ListeningPortInfo(processName: "python3", pid: 1, port: locked, isGloballyExposed: true, executablePath: nil)]
+        let result = runScanIsolated(ports: ports)
+        XCTAssertFalse(result.findings.contains { $0.title.contains("Jupyter") || $0.title.contains("CVE-") })
+        XCTAssertTrue(result.confirmedSafe.contains { $0.port == locked })
+    }
+
+    func testAISignaturesAreProbeOnlyAndPythonListenersAreCheckedByEveryPythonProbe() {
+        for id in ["ollama-exposed", "jupyter-noauth", "mlflow-noauth", "gradio-noauth"] {
+            XCTAssertEqual(ServiceSignatures.signatures.first { $0.id == id }?.probeOnly, true, id)
+        }
+        let ids = Set(ServiceSignatures.match(processName: "python3", executablePath: nil).map(\.id))
+        XCTAssertEqual(ids, ["hexstrike-noauth", "jupyter-noauth", "mlflow-noauth", "gradio-noauth"])
+        XCTAssertEqual(ServiceSignatures.match(processName: "ollama", executablePath: nil).map(\.id), ["ollama-exposed"])
+    }
+
+    func testEmbeddedMapHasSaneEntriesForEveryAISignature() throws {
+        let map = try JSONDecoder().decode(ActiveVulnScan.CVEMap.self, from: Data(ActiveVulnCveMapData.embeddedJSON.utf8))
+        for id in ["ollama-exposed", "jupyter-noauth", "mlflow-noauth", "gradio-noauth"] {
+            let entries = map.entries.filter { $0.signatureID == id }
+            XCTAssertFalse(entries.isEmpty, id)
+            for e in entries {
+                XCTAssertTrue(e.minVersion.lexicographicallyPrecedes(e.fixedVersion), "\(e.cveId) \(id): empty range")
+                // NVD sometimes records a build date (20240209) as a version; it would match every release.
+                XCTAssertLessThan(e.fixedVersion[0], 1000, "\(e.cveId) \(id): date-like version")
+                XCTAssertTrue(e.cveId.hasPrefix("CVE-"))
+            }
+        }
     }
 
     func testProbeCouchDBFlagsAllDbsArray() {

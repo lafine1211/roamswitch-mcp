@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.11 (build 158).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.12 (build 159).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -361,17 +361,116 @@ public enum ActiveVulnScan {
     /// inconclusive (no response at all).
     private static func probeHTTPBody(port: Int, path: String, timeout: TimeInterval,
                                       verdict: (Int, String) -> Bool) -> Bool? {
+        guard let response = httpGet(port: port, path: path, timeout: timeout) else { return nil }
+        guard let status = response.status else { return false }
+        return verdict(status, response.body)
+    }
+
+    /// The single read-only request shared by every HTTP probe and version lookup: one `GET`,
+    /// one connection, at most 16 KiB of the answer. Reads until the answer is complete (its
+    /// `Content-Length` is reached or the chunked body ends) or the peer closes, so a body that
+    /// arrives in a second TCP segment is not lost. A chunked body is decoded, so a version
+    /// number is never cut up by chunk framing. `nil` = no response at all; `status == nil` =
+    /// the peer answered something that is not HTTP.
+    static func httpGet(port: Int, path: String, timeout: TimeInterval) -> (status: Int?, body: String)? {
+        guard let nwPort = NWEndpoint.Port(rawValue: UInt16(port)) else { return nil }
         let request = "GET \(path) HTTP/1.1\r\nHost: 127.0.0.1:\(port)\r\nAccept: application/json\r\nConnection: close\r\n\r\n"
-        guard let response = sendRawTCP(port: port, payload: Data(request.utf8), timeout: timeout), !response.isEmpty else {
-            return nil
+        let connection = NWConnection(host: "127.0.0.1", port: nwPort, using: .tcp)
+        let semaphore = DispatchSemaphore(value: 0)
+        let lock = NSLock()
+        var received = Data()
+        var finished = false
+
+        func finish() {
+            lock.lock(); defer { lock.unlock() }
+            if !finished { finished = true; semaphore.signal() }
         }
-        let text = String(decoding: response, as: UTF8.self)
+        func receiveMore() {
+            connection.receive(minimumIncompleteLength: 1, maximumLength: 8192) { data, _, isComplete, error in
+                lock.lock()
+                if let data = data { received.append(data) }
+                let snapshot = received
+                lock.unlock()
+                if error != nil || isComplete || snapshot.count >= 16 * 1024 || httpResponseIsComplete(snapshot) {
+                    finish()
+                } else {
+                    receiveMore()
+                }
+            }
+        }
+        connection.stateUpdateHandler = { state in
+            switch state {
+            case .ready:
+                connection.send(content: Data(request.utf8), completion: .contentProcessed { _ in receiveMore() })
+            case .failed, .cancelled:
+                finish()
+            default:
+                break
+            }
+        }
+        connection.start(queue: DispatchQueue.global(qos: .utility))
+        _ = semaphore.wait(timeout: .now() + timeout)
+        connection.cancel()
+
+        lock.lock(); let raw = received; lock.unlock()
+        guard !raw.isEmpty else { return nil }
+        return parseHTTPResponse(raw)
+    }
+
+    /// Splits a raw HTTP/1.1 response into its status code and (decoded) body.
+    static func parseHTTPResponse(_ raw: Data) -> (status: Int?, body: String) {
+        let text = String(decoding: raw, as: UTF8.self)
         guard let statusLine = text.split(separator: "\r\n", maxSplits: 1, omittingEmptySubsequences: false).first,
               let code = statusLine.split(separator: " ").dropFirst().first.flatMap({ Int($0) }) else {
-            return false
+            return (nil, "")
         }
-        let body = text.components(separatedBy: "\r\n\r\n").dropFirst().joined(separator: "\r\n\r\n")
-        return verdict(code, body)
+        let parts = text.components(separatedBy: "\r\n\r\n")
+        let head = parts.first ?? ""
+        let body = parts.dropFirst().joined(separator: "\r\n\r\n")
+        let chunked = head.split(separator: "\r\n").contains {
+            let line = $0.lowercased()
+            return line.hasPrefix("transfer-encoding:") && line.contains("chunked")
+        }
+        return (code, chunked ? dechunk(body) : body)
+    }
+
+    /// Decodes an HTTP/1.1 chunked body. A truncated tail (the 16 KiB read limit) just ends the text.
+    /// Works on bytes: chunk sizes are byte counts, and Swift treats "\r\n" as a single Character.
+    static func dechunk(_ body: String) -> String {
+        let bytes = Array(body.utf8)
+        var out: [UInt8] = []
+        var i = 0
+        while i < bytes.count {
+            guard let lineEnd = (i..<max(i, bytes.count - 1)).first(where: { bytes[$0] == 13 && bytes[$0 + 1] == 10 }) else { break }
+            let sizeText = String(decoding: bytes[i..<lineEnd], as: UTF8.self).split(separator: ";").first.map(String.init) ?? ""
+            guard let size = Int(sizeText.trimmingCharacters(in: .whitespaces), radix: 16), size > 0 else { break }
+            let start = lineEnd + 2
+            let end = min(start + size, bytes.count)
+            out.append(contentsOf: bytes[start..<end])
+            i = end
+            if i + 1 < bytes.count, bytes[i] == 13, bytes[i + 1] == 10 { i += 2 }
+        }
+        return String(decoding: out, as: UTF8.self)
+    }
+
+    /// True once the headers are in and the body is complete: its `Content-Length` is reached, or
+    /// the chunked body has its terminating zero-length chunk. Without either, only the peer's
+    /// close (or the timeout) ends the read.
+    private static func httpResponseIsComplete(_ data: Data) -> Bool {
+        let text = String(decoding: data, as: UTF8.self)
+        guard let split = text.range(of: "\r\n\r\n") else { return false }
+        let head = text[text.startIndex..<split.lowerBound].lowercased()
+        let body = text[split.upperBound...]
+        for line in head.split(separator: "\r\n") {
+            if line.hasPrefix("content-length:"),
+               let n = Int(line.dropFirst("content-length:".count).trimmingCharacters(in: .whitespaces)) {
+                return body.utf8.count >= n
+            }
+            if line.hasPrefix("transfer-encoding:") && line.contains("chunked") {
+                return body.hasSuffix("0\r\n\r\n")
+            }
+        }
+        return false
     }
 
     /// HexStrike AI's API server has no authentication, so a positive answer means every
@@ -398,6 +497,80 @@ public enum ActiveVulnScan {
 
     static func probeJenkinsNoAuth(port: Int, timeout: TimeInterval = 2.0) -> Bool? {
         probeHTTPBody(port: port, path: "/api/json", timeout: timeout) { $0 == 200 && $1.contains("\"_class\"") }
+    }
+
+    // Local AI / ML services. Each is one read-only GET whose answer proves both identity and
+    // "no login in front of it"; the response shapes were measured on real servers (Ollama 0.40.4,
+    // Jupyter Server 2.21.1, MLflow 3.17.1, Gradio 6.30.0). A login-protected instance answers
+    // differently (Jupyter with a token: 403 on /api/status; Gradio with auth: 401 on /config),
+    // which is what makes each probe return `false` there. Mirrors `active_vuln_scan.rs`.
+
+    static func probeOllamaExposed(port: Int, timeout: TimeInterval = 2.0) -> Bool? {
+        probeHTTPBody(port: port, path: "/", timeout: timeout) {
+            $0 == 200 && $1.trimmingCharacters(in: .whitespacesAndNewlines) == "Ollama is running"
+        }
+    }
+
+    static func probeJupyterNoAuth(port: Int, timeout: TimeInterval = 2.0) -> Bool? {
+        probeHTTPBody(port: port, path: "/api/status", timeout: timeout) {
+            $0 == 200 && $1.contains("\"kernels\"") && $1.contains("\"connections\"")
+        }
+    }
+
+    static func probeMLflowNoAuth(port: Int, timeout: TimeInterval = 2.0) -> Bool? {
+        probeHTTPBody(port: port, path: "/api/2.0/mlflow/experiments/search?max_results=1", timeout: timeout) {
+            $0 == 200 && $1.contains("\"experiments\"")
+        }
+    }
+
+    static func probeGradioNoAuth(port: Int, timeout: TimeInterval = 2.0) -> Bool? {
+        probeHTTPBody(port: port, path: "/config", timeout: timeout) { $0 == 200 && isGradioConfig($1) }
+    }
+
+    /// `GET /config` of a Gradio app starts `{"version":"6.30.0","api_prefix":...` and carries the
+    /// `components` list (measured against Gradio 6.30.0; the FastAPI JSON writer used by every
+    /// Gradio 3-6 puts `version` first).
+    static func isGradioConfig(_ body: String) -> Bool {
+        let head = body.drop(while: { $0.isWhitespace }).prefix(16)
+        return jsonStringField(body, key: "version") != nil
+            && head.contains("\"version\"")
+            && body.contains("\"components\"")
+    }
+
+    /// The string value of a `"key": "value"` pair, found by text search so a body that was cut at the
+    /// 16 KiB read limit still yields its leading fields. `nil` when absent or implausible.
+    static func jsonStringField(_ body: String, key: String) -> String? {
+        guard let keyRange = body.range(of: "\"\(key)\"") else { return nil }
+        var rest = body[keyRange.upperBound...].drop(while: { $0.isWhitespace })
+        guard rest.first == ":" else { return nil }
+        rest = rest.dropFirst().drop(while: { $0.isWhitespace })
+        guard rest.first == "\"" else { return nil }
+        rest = rest.dropFirst()
+        guard let end = rest.firstIndex(of: "\"") else { return nil }
+        let value = String(rest[rest.startIndex..<end])
+        return value.isEmpty || value.count > 40 ? nil : value
+    }
+
+    /// Where each local AI / ML service reports its own version, and how to read it. Ollama
+    /// `GET /api/version` -> `{"version":"0.40.4"}`; Jupyter Server `GET /api` -> `{"version": "2.21.1"}`;
+    /// MLflow `GET /version` -> `3.17.1`; Gradio `GET /config` -> `{"version":"6.30.0",...}`.
+    static func aiServiceVersion(signatureID: String, port: Int, timeout: TimeInterval = 2.0) -> String? {
+        let path: String
+        switch signatureID {
+        case "ollama-exposed": path = "/api/version"
+        case "jupyter-noauth": path = "/api"
+        case "mlflow-noauth": path = "/version"
+        case "gradio-noauth": path = "/config"
+        default: return nil
+        }
+        guard let response = httpGet(port: port, path: path, timeout: timeout), response.status == 200 else { return nil }
+        if signatureID == "mlflow-noauth" {
+            let v = response.body.trimmingCharacters(in: .whitespacesAndNewlines)
+            let plausible = v.count <= 20 && (v.first?.isNumber ?? false)
+                && v.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "." || $0 == "-") }
+            return plausible ? v : nil
+        }
+        return jsonStringField(response.body, key: "version")
     }
 
     /// RFB handshake up to the security-type list only; never selects a type, so no
@@ -610,7 +783,7 @@ public enum ActiveVulnScan {
         switch signatureID {
         case "redis-default-noauth": return probeRedisVersion(port: port, timeout: timeout)
         case "memcached-noauth": return probeMemcachedVersion(port: port, timeout: timeout)
-        default: return nil
+        default: return aiServiceVersion(signatureID: signatureID, port: port, timeout: timeout)
         }
     }
 
@@ -792,6 +965,7 @@ public enum ActiveVulnScan {
         "redis-default-noauth", "memcached-noauth", "mongod-default-noauth",
         "elasticsearch-noauth", "couchdb-noauth", "jenkins-noauth", "vnc-noauth",
         "smb1-enabled", "smb-signing-not-required", "hexstrike-noauth",
+        "ollama-exposed", "jupyter-noauth", "mlflow-noauth", "gradio-noauth",
     ]
 
     /// Whether `runScan` would attempt anything at all for this port — i.e. it either
@@ -832,6 +1006,10 @@ public enum ActiveVulnScan {
                 case "jenkins-noauth": confirmed = probeJenkinsNoAuth(port: port.port)
                 case "vnc-noauth": confirmed = probeVNCNoAuth(port: port.port)
                 case "hexstrike-noauth": confirmed = probeHexStrikeNoAuth(port: port.port)
+                case "ollama-exposed": confirmed = probeOllamaExposed(port: port.port)
+                case "jupyter-noauth": confirmed = probeJupyterNoAuth(port: port.port)
+                case "mlflow-noauth": confirmed = probeMLflowNoAuth(port: port.port)
+                case "gradio-noauth": confirmed = probeGradioNoAuth(port: port.port)
                 case "smb1-enabled": confirmed = probeSMBNegotiate(port: port.port).map { $0 == .smb1 }
                 case "smb-signing-not-required": confirmed = probeSMBNegotiate(port: port.port).map { $0 == .smb2SigningNotRequired }
                 default: confirmed = nil

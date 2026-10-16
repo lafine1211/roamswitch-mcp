@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.11 (build 158).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.12 (build 159).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -554,6 +554,10 @@ enum PackageCveScanLanguages {
         let ecosystem: String
         let name: String
         let version: String
+        /// Absolute path of the lockfile this dependency was read from, so a
+        /// finding can say which project (repository) it belongs to. Empty
+        /// for dependencies parsed from a plain string (the parsers' tests).
+        var lockfile: String = ""
     }
 
     private static func jsonObject(_ text: String) -> [String: Any]? {
@@ -812,7 +816,9 @@ enum PackageCveScanLanguages {
             if let parser = lockfileParsers[entry.name],
                let data = SafeScanFS.readRegularFile(atPath: entry.path, maxBytes: SafeScanFS.maxLockfileBytes),
                let text = String(data: data, encoding: .utf8) {
-                out.append(contentsOf: parser(text))
+                out.append(contentsOf: parser(text).map {
+                    WatchedDependency(ecosystem: $0.ecosystem, name: $0.name, version: $0.version, lockfile: entry.path)
+                })
             }
         }
         return out
@@ -828,8 +834,21 @@ enum PackageCveScanLanguages {
         let cvssScore: Double
         let fixedVersion: String
         let summary: String
+        /// Absolute path of the lockfile the package was found in.
+        var lockfile: String = ""
 
-        var id: String { "\(cveId)|\(ecosystem)|\(package)|\(installedVersion)" }
+        var id: String { "\(lockfile)|\(cveId)|\(ecosystem)|\(package)|\(installedVersion)" }
+
+        /// The project folder (the lockfile's directory), with the home folder
+        /// shortened to `~`.
+        var projectDisplay: String {
+            guard !lockfile.isEmpty else { return "" }
+            let dir = (lockfile as NSString).deletingLastPathComponent
+            return (dir as NSString).abbreviatingWithTildeInPath
+        }
+
+        /// The lockfile's own name (`package-lock.json`, `Cargo.lock`, ...).
+        var lockfileName: String { (lockfile as NSString).lastPathComponent }
     }
 
     /// Scans every watched folder for known lockfiles, then checks each
@@ -856,10 +875,15 @@ enum PackageCveScanLanguages {
                     cveId: cve.cveId,
                     cvssScore: cve.cvssScore,
                     fixedVersion: tightestFixedVersion(ecosystem: dep.ecosystem, installedVersion: dep.version, entry: cve),
-                    summary: cve.summary
+                    summary: cve.summary,
+                    lockfile: dep.lockfile
                 ))
             }
         }
-        return findings
+        // Grouped by project, so the findings of one repository sit together.
+        return findings.sorted {
+            if $0.lockfile != $1.lockfile { return $0.lockfile < $1.lockfile }
+            return $0.cvssScore > $1.cvssScore
+        }
     }
 }
