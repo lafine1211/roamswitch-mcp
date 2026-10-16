@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.11.12 (build 159). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.11.13 (build 160). Do not edit here; see SYNC.md.
 
 import XCTest
 import Network
@@ -155,6 +155,89 @@ final class ActiveVulnScanTests: XCTestCase {
         // domain) is normal application behavior, not an open redirect.
         let port = spawnHTTPStub(response: "HTTP/1.1 302 Found\r\nLocation: /dashboard\r\nContent-Length: 0\r\n\r\n")
         XCTAssertEqual(ActiveVulnScan.probeOpenRedirect(port: port), false)
+    }
+
+    // MARK: - SSRF
+
+    /// A target that behaves like a vulnerable "fetch this URL" endpoint: takes the URL from
+    /// the first parameter of the request line whose name is in `fetchParams` and requests
+    /// it. With `followRedirects` it follows a 302 the way most HTTP clients do by default.
+    private func spawnFetchingTarget(fetchParams: Set<String>, followRedirects: Bool) -> Int {
+        final class NoRedirect: NSObject, URLSessionTaskDelegate {
+            func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                            newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
+                completionHandler(nil)
+            }
+        }
+        let listener = try! NWListener(using: .tcp, on: .any)
+        let ready = DispatchSemaphore(value: 0)
+        var boundPort: Int = 0
+        listener.stateUpdateHandler = { state in
+            if case .ready = state, boundPort == 0 {
+                boundPort = Int(listener.port?.rawValue ?? 0)
+                ready.signal()
+            }
+        }
+        listener.newConnectionHandler = { connection in
+            connection.stateUpdateHandler = { state in
+                guard state == .ready else { return }
+                connection.receive(minimumIncompleteLength: 1, maximumLength: 8192) { data, _, _, _ in
+                    let text = String(decoding: data ?? Data(), as: UTF8.self)
+                    let target = text.split(separator: " ").dropFirst().first.map(String.init) ?? ""
+                    if let components = URLComponents(string: "http://x" + target) {
+                        for item in components.queryItems ?? [] where fetchParams.contains(item.name) {
+                            guard let value = item.value, let url = URL(string: value) else { continue }
+                            let config = URLSessionConfiguration.ephemeral
+                            config.timeoutIntervalForRequest = 2
+                            let session = followRedirects
+                                ? URLSession(configuration: config)
+                                : URLSession(configuration: config, delegate: NoRedirect(), delegateQueue: nil)
+                            let done = DispatchSemaphore(value: 0)
+                            session.dataTask(with: url) { _, _, _ in done.signal() }.resume()
+                            _ = done.wait(timeout: .now() + 3)
+                            session.invalidateAndCancel()
+                        }
+                    }
+                    let reply = Data("HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nOK".utf8)
+                    connection.send(content: reply, completion: .contentProcessed { _ in connection.cancel() })
+                }
+            }
+            connection.start(queue: .global())
+        }
+        listener.start(queue: .global())
+        _ = ready.wait(timeout: .now() + 2)
+        return boundPort
+    }
+
+    func testSSRFFlagsATargetThatFetchesTheURLItIsGiven() {
+        let port = spawnFetchingTarget(fetchParams: ["url"], followRedirects: false)
+        XCTAssertEqual(ActiveVulnScan.probeSSRFFetch(port: port), true)
+    }
+
+    func testSSRFFindsTheFetchUnderAnotherParameterNameAndFollowsRedirects() {
+        let port = spawnFetchingTarget(fetchParams: ["image"], followRedirects: true)
+        XCTAssertEqual(ActiveVulnScan.probeSSRFFetch(port: port), true)
+    }
+
+    func testSSRFDoesNotFlagATargetThatIgnoresURLParameters() {
+        let port = spawnHTTPStub(response: "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK")
+        XCTAssertEqual(ActiveVulnScan.probeSSRFFetch(port: port, timeout: 0.5), false)
+    }
+
+    func testSSRFIsInconclusiveNotSafeWhenTheTargetIsUnreachable() {
+        // Bind and release a port so nothing is listening on it.
+        let listener = try! NWListener(using: .tcp, on: .any)
+        let ready = DispatchSemaphore(value: 0)
+        var port = 0
+        listener.stateUpdateHandler = { state in
+            if case .ready = state, port == 0 { port = Int(listener.port?.rawValue ?? 0); ready.signal() }
+        }
+        listener.newConnectionHandler = { $0.cancel() }
+        listener.start(queue: .global())
+        _ = ready.wait(timeout: .now() + 2)
+        listener.cancel()
+        Thread.sleep(forTimeInterval: 0.2)
+        XCTAssertNil(ActiveVulnScan.probeSSRFFetch(port: port, timeout: 0.3))
     }
 
     // MARK: - Known-CVE version matching

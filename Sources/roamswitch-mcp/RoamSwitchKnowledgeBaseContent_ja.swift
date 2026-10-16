@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.12 (build 159).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.13 (build 160).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -151,7 +151,7 @@ extension RoamSwitchKnowledgeBase {
                 • 有効化: メニュー「ポート・デバイス監視」→「実証型脆弱性診断（能動的到達確認）」。これはポート診断画面の「実証確認を実行」ボタンを解禁するだけで、単独では何も送信しません。実行時も毎回「実証確認を送信しますか？」と確認します。
                 • 対象は127.0.0.1のみ: 他のホストへは一切送信しません。
                 • 無認証確認: Redis（PING）、Memcached（stats）、MongoDB（listDatabases）に、単発・短タイムアウトの非破壊プローブを送信。
-                • 汎用開発サーバー診断: CORS誤設定（Origin反射＋資格情報許可）、パストラバーサル、オープンリダイレクトを確認。
+                • 汎用開発サーバー診断: CORS誤設定（Origin反射＋資格情報許可）、パストラバーサル、オープンリダイレクト、SSRF（渡されたURLを取りに行くサーバー。このマシン上の自前の待ち受けを指すURLでも）を確認。
                 • 既知CVEのバージョン照合: 無認証で到達できたRedis / Memcachedのバージョンを非破壊クエリで取得し、既知CVEのバージョン範囲と照合。攻撃ペイロードは送信しません。
                 • MCPツール `run_active_vuln_scan` からも実行できます（プローブの宛先は127.0.0.1（ローカルホスト）だけです）。
                 """,
@@ -697,7 +697,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "RoamSwitch.appには読み取り専用のMCP（Model Context Protocol）サーバーが同梱されており、ClaudeなどのAIアシスタントからMacのセキュリティ状況を問い合わせられます。設定変更や遮断などの操作系ツールは一切ありません。",
                 details: """
                 • 通信: ローカルの標準入出力（stdio）のみ。バイナリは `/Applications/RoamSwitch.app/Contents/MacOS/RoamSwitchMCPServer`。
-                • 主なツール（全31種）: `get_security_report`（総合診断）、`verify_security_findings`（診断の指摘が今も残っているかの再確認・読み取り専用）、`get_exposed_ports`、`get_guard_status`、`audit_url_safety`、`audit_secrets`、`audit_mcp_configs`（MCPクライアントの設定ファイルにある危険な記述を点検。ローカル・読み取り専用。メニュー「マルウェア対策」→「🧩 MCP設定（AI連携）を監査…」の専用画面でも実行できる）、`audit_security_logs`、`get_quarantine_status`、`get_notification_history`、`get_canary_status`、`get_port_anomaly_incidents`、`get_runtime_threat_status`、`get_incident_timeline`（封じ込めインシデント履歴）、`get_network_history`（ネットワーク履歴学習）、`run_package_cve_scan`、`run_package_cve_scan_languages`、`run_active_vuln_scan`（127.0.0.1への非破壊プローブのみ）、`run_npm_audit_signatures`（外部サーバー=npmレジストリへ通信する唯一のツール。Pro・オプトイン）、`get_app_help`（このナレッジベース）。
+                • 主なツール（全32種）: `get_security_report`（総合診断）、`verify_security_findings`（診断の指摘が今も残っているかの再確認・読み取り専用）、`get_exposed_ports`、`get_guard_status`、`audit_url_safety`、`audit_secrets`、`audit_mcp_configs`（MCPクライアントの設定ファイルにある危険な記述を点検。ローカル・読み取り専用。メニュー「マルウェア対策」→「🧩 MCP設定（AI連携）を監査…」の専用画面でも実行できる）、`audit_agent_setup`（AIエージェントに読ませる指示ファイル・スキルとOpenClawの設定にある危険な記述を点検。見えないUnicode文字・指示の上書き・curl | sh・秘密の持ち出しの形など。ローカル・読み取り専用。メニュー「マルウェア対策」→「🤖 AIエージェントの指示ファイルを監査…」の専用画面でも実行できる）、`audit_security_logs`、`get_quarantine_status`、`get_notification_history`、`get_canary_status`、`get_port_anomaly_incidents`、`get_runtime_threat_status`、`get_incident_timeline`（封じ込めインシデント履歴）、`get_network_history`（ネットワーク履歴学習）、`run_package_cve_scan`、`run_package_cve_scan_languages`、`run_active_vuln_scan`（127.0.0.1への非破壊プローブのみ）、`run_npm_audit_signatures`（外部サーバー=npmレジストリへ通信する唯一のツール。Pro・オプトイン）、`get_app_help`（このナレッジベース）。
                 • プロセス実行の記録(Pro・読み取り専用): `search_exec_events`(起動イベントの検索)、`get_process_tree`(祖先・子孫のプロセスツリー)。
                 • リソース: `roamswitch://docs/features`、`roamswitch://docs/alerts-and-messages`、`roamswitch://docs/settings-guide`、`roamswitch://docs/troubleshooting`。
                 • 言語: 回答はアプリの言語設定に従います。`get_app_help` は `language` 引数（ja / en / zh-Hans / zh-Hant / ko / de / fr / es / it / pt-PT）で言語を指定できます。

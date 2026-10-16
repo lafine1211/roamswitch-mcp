@@ -1,0 +1,785 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.13 (build 160).
+// The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
+// are not compiled into the shipping app and are overwritten on the next sync.
+// Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
+// ─────────────────────────────────────────────────────────────────────────────
+import Foundation
+
+/// Static audit of the files that steer an AI coding agent on this Mac, plus the OpenClaw
+/// gateway configuration.
+///
+/// Why: an agent obeys text. A line hidden in `CLAUDE.md`, `AGENTS.md`, a custom command, a
+/// subagent or a skill is a standing instruction the user never reviewed, and a skill can also
+/// carry scripts and precompiled code. The classic tricks are invisible Unicode tag characters
+/// (a whole sentence that no editor shows), "ignore your previous instructions" and "do not tell
+/// the user" wording, a `curl | sh` or base64-decoded payload, a reference to key files next to an
+/// upload, and instructions inside an HTML comment (invisible once the Markdown is rendered). The
+/// OpenClaw gateway is a second door: a gateway with authentication switched off, a wildcard
+/// browser origin, an auth token that is too short, or one of its `dangerously…` switches turned
+/// on lets the wrong party drive the agent.
+///
+/// Read-only and local: it opens a fixed list of well-known files and folders (plus the project
+/// folders registered in RoamSwitch), never the network, and never reports a secret. A token is
+/// reported by length only. The text of an instruction file is untrusted data (it is exactly what
+/// an attacker writes), so only a rule's name, a line number, a URL host and, for hidden Unicode
+/// tag characters, the decoded hidden text (sanitized and cut short) are copied into the result,
+/// and the MCP tool marks the whole result as untrusted.
+///
+/// Every rule here is deterministic; none of it decides that something is malicious. A match
+/// means "a human should look at this line", and the messages say so. The rules were written from
+/// the public OpenClaw documentation (docs.openclaw.ai, gateway security pages) and from how these
+/// injection tricks are published in the open; they do not copy any third-party rule set.
+enum AgentSetupAuditor {
+
+    struct Finding: Codable, Equatable {
+        /// Stable id, see `findingIDs`.
+        let id: String
+        /// `high` or `medium`.
+        let severity: String
+        /// `instructions` or `openclaw`.
+        let area: String
+        let file: String
+        /// Short technical fact (rule, line number, URL host, key path), never a secret.
+        let detail: String
+        /// Localized explanation and what to do about it.
+        let message: String
+    }
+
+    struct Result: Equatable {
+        var scannedFiles: [String] = []
+        /// Skill folders (a folder with a `SKILL.md`) that were looked into.
+        var skillCount = 0
+        var openClawConfigFound = false
+        var findings: [Finding] = []
+        /// Files that exist but could not be read. Reported so "nothing found" is never
+        /// mistaken for "everything was checked".
+        var unreadableFiles: [String] = []
+    }
+
+    /// One file as read from disk: its bytes and POSIX permission bits (nil if unknown).
+    /// `inSkill` marks files that live inside a skill folder.
+    struct FileInput {
+        let path: String
+        let data: Data
+        let mode: UInt16?
+        var inSkill = false
+    }
+
+    static let findingIDs = [
+        "hidden_tag_characters", "invisible_characters", "override_instruction", "remote_script_exec",
+        "encoded_payload_exec", "credential_access", "credential_exfil_shape", "exfil_endpoint",
+        "persistence_instruction", "skill_precompiled_code", "agent_file_writable",
+        "openclaw_auth_disabled", "openclaw_wide_bind", "openclaw_weak_token", "openclaw_origin_wildcard",
+        "openclaw_dangerous_flag", "openclaw_broad_trusted_proxy", "openclaw_proxy_trust_loosened",
+        "openclaw_open_dm", "openclaw_mdns_full", "openclaw_audit_suppressed", "openclaw_loose_permissions",
+    ]
+
+    static let maxTextBytes = 512 * 1024
+    static let maxFiles = 2000
+    static let maxFilesPerSkill = 200
+    static let maxProjectFolders = 50
+
+    // MARK: - Candidate files
+
+    /// Single files read in the user's home.
+    static func homeInstructionFiles(home: String) -> [String] {
+        [
+            "\(home)/.claude/CLAUDE.md",
+            "\(home)/.codex/AGENTS.md",
+            "\(home)/.gemini/GEMINI.md",
+            "\(home)/.codeium/windsurf/memories/global_rules.md",
+        ]
+    }
+
+    /// Folders under the user's home whose Markdown / text files are instructions.
+    static func homeInstructionFolders(home: String) -> [String] {
+        [
+            "\(home)/.claude/commands", "\(home)/.claude/agents",
+            "\(home)/.codex/prompts", "\(home)/.cursor/rules",
+        ]
+    }
+
+    /// Folders that hold one sub-folder per skill.
+    static func homeSkillRoots(home: String) -> [String] {
+        [
+            "\(home)/.claude/skills", "\(home)/.codex/skills", "\(home)/.agents/skills",
+            "\(home)/.openclaw/skills", "\(home)/.openclaw/workspace/skills",
+        ]
+    }
+
+    static func projectInstructionFiles(folder: String) -> [String] {
+        [
+            "CLAUDE.md", "CLAUDE.local.md", "AGENTS.md", "GEMINI.md", ".cursorrules", ".windsurfrules",
+            ".clinerules", ".github/copilot-instructions.md",
+        ].map { "\(folder)/\($0)" }
+    }
+
+    static func projectInstructionFolders(folder: String) -> [String] {
+        [".claude/commands", ".claude/agents", ".cursor/rules", ".clinerules"].map { "\(folder)/\($0)" }
+    }
+
+    static func projectSkillRoots(folder: String) -> [String] {
+        [".claude/skills", ".agents/skills", "skills"].map { "\(folder)/\($0)" }
+    }
+
+    static func openClawConfigPath(home: String, environment: [String: String] = ProcessInfo.processInfo.environment) -> String {
+        if let custom = environment["OPENCLAW_CONFIG_PATH"], custom.hasPrefix("/") { return custom }
+        return "\(home)/.openclaw/openclaw.json"
+    }
+
+    // MARK: - Run
+
+    static func run(home: String = NSHomeDirectory(), projectFolders: [String]) -> Result {
+        let fm = FileManager.default
+        var inputs: [FileInput] = []
+        var unreadable: [String] = []
+        var skillCount = 0
+
+        func read(_ path: String, inSkill: Bool) {
+            guard inputs.count < maxFiles else { return }
+            guard let attrs = try? fm.attributesOfItem(atPath: path) else { return }
+            let type = attrs[.type] as? FileAttributeType
+            guard type == .typeRegular || type == .typeSymbolicLink else { return }
+            let mode = (attrs[.posixPermissions] as? NSNumber).map { UInt16($0.intValue & 0o7777) }
+            let size = (attrs[.size] as? NSNumber)?.intValue ?? 0
+            // Large files are read only as far as their first bytes (enough for the binary check).
+            guard let handle = FileHandle(forReadingAtPath: path) else { unreadable.append(path); return }
+            defer { try? handle.close() }
+            let data = (try? handle.read(upToCount: size > maxTextBytes ? 8 : maxTextBytes)) ?? Data()
+            if size > maxTextBytes, !inSkill { unreadable.append(path); return }
+            inputs.append(FileInput(path: path, data: data, mode: mode, inSkill: inSkill))
+        }
+
+        func files(in folder: String, maxDepth: Int) -> [String] {
+            guard let enumerator = fm.enumerator(atPath: folder) else { return [] }
+            var out: [String] = []
+            for case let rel as String in enumerator {
+                if rel.split(separator: "/").count > maxDepth { enumerator.skipDescendants(); continue }
+                if rel.split(separator: "/").contains(where: { $0 == ".git" || $0 == "node_modules" }) { enumerator.skipDescendants(); continue }
+                var isDir: ObjCBool = false
+                let full = "\(folder)/\(rel)"
+                if fm.fileExists(atPath: full, isDirectory: &isDir), !isDir.boolValue { out.append(full) }
+                if out.count >= maxFilesPerSkill * 5 { break }
+            }
+            return out.sorted()
+        }
+
+        let folders = Array(projectFolders.prefix(maxProjectFolders))
+        var singles = homeInstructionFiles(home: home)
+        var instructionFolders = homeInstructionFolders(home: home)
+        var skillRoots = homeSkillRoots(home: home)
+        for folder in folders {
+            singles += projectInstructionFiles(folder: folder)
+            instructionFolders += projectInstructionFolders(folder: folder)
+            skillRoots += projectSkillRoots(folder: folder)
+        }
+        for path in singles { read(path, inSkill: false) }
+        for folder in instructionFolders {
+            for path in files(in: folder, maxDepth: 4) where isInstructionText(path) { read(path, inSkill: false) }
+        }
+        for root in skillRoots {
+            guard let skills = try? fm.contentsOfDirectory(atPath: root) else { continue }
+            for skill in skills.sorted() where !skill.hasPrefix(".") {
+                let dir = "\(root)/\(skill)"
+                var isDir: ObjCBool = false
+                guard fm.fileExists(atPath: dir, isDirectory: &isDir), isDir.boolValue else { continue }
+                guard fm.fileExists(atPath: "\(dir)/SKILL.md") else { continue }
+                skillCount += 1
+                for path in files(in: dir, maxDepth: 4).prefix(maxFilesPerSkill) { read(path, inSkill: true) }
+            }
+        }
+
+        // OpenClaw configuration and state directory.
+        var openClaw: FileInput?
+        let configPath = openClawConfigPath(home: home)
+        if let attrs = try? fm.attributesOfItem(atPath: configPath), (attrs[.type] as? FileAttributeType) != .typeDirectory {
+            if let data = fm.contents(atPath: configPath), data.count <= maxTextBytes {
+                let mode = (attrs[.posixPermissions] as? NSNumber).map { UInt16($0.intValue & 0o7777) }
+                openClaw = FileInput(path: configPath, data: data, mode: mode)
+            } else {
+                unreadable.append(configPath)
+            }
+        }
+        var stateDirs: [(String, UInt16)] = []
+        for dir in ["\(home)/.openclaw", "\(home)/.openclaw/credentials"] {
+            if let attrs = try? fm.attributesOfItem(atPath: dir), (attrs[.type] as? FileAttributeType) == .typeDirectory,
+               let mode = (attrs[.posixPermissions] as? NSNumber).map({ UInt16($0.intValue & 0o7777) }) {
+                stateDirs.append((dir, mode))
+            }
+        }
+
+        var result = audit(files: inputs, openClawConfig: openClaw, openClawDirectories: stateDirs)
+        result.skillCount = skillCount
+        result.unreadableFiles += unreadable
+        return result
+    }
+
+    /// Text-looking instruction files in a commands / agents / rules folder.
+    static func isInstructionText(_ path: String) -> Bool {
+        let name = (path as NSString).lastPathComponent.lowercased()
+        if name.hasPrefix(".") { return false }
+        let ext = (name as NSString).pathExtension
+        return ["md", "mdc", "markdown", "txt", ""].contains(ext)
+    }
+
+    // MARK: - Pure audit
+
+    static func audit(files: [FileInput], openClawConfig: FileInput?, openClawDirectories: [(String, UInt16)] = []) -> Result {
+        var result = Result()
+        for file in files {
+            result.scannedFiles.append(file.path)
+            result.findings += auditInstructionFile(file)
+        }
+        if let config = openClawConfig {
+            if let found = auditOpenClawConfig(config) {
+                result.openClawConfigFound = true
+                result.findings += found
+            } else {
+                result.openClawConfigFound = true
+                result.unreadableFiles.append(config.path)
+            }
+        }
+        for (dir, mode) in openClawDirectories where mode & 0o077 != 0 {
+            result.findings.append(Finding(
+                id: "openclaw_loose_permissions", severity: "medium", area: "openclaw", file: dir,
+                detail: "mode \(String(mode, radix: 8)) (recommended 700)", message: message("openclaw_loose_permissions")))
+        }
+        if let config = openClawConfig, let mode = config.mode, mode & 0o077 != 0 {
+            result.findings.append(Finding(
+                id: "openclaw_loose_permissions", severity: "medium", area: "openclaw", file: config.path,
+                detail: "mode \(String(mode, radix: 8)) (recommended 600)", message: message("openclaw_loose_permissions")))
+        }
+        return result
+    }
+
+    // MARK: - Instruction and skill files
+
+    private struct Hit {
+        let id: String
+        var severity: String
+        let line: Int
+        let detail: String
+    }
+
+    private static let binaryExtensions: Set<String> = ["pyc", "pyo", "pyd", "so", "dylib", "dll", "exe", "node", "class", "jar", "wasm"]
+    private static let imageLikeExtensions: Set<String> = ["png", "jpg", "jpeg", "gif", "webp", "ico", "pdf", "svg", "ttf", "otf", "woff", "woff2", "zip", "gz", "tar", "mp3", "mp4", "mov"]
+
+    static func auditInstructionFile(_ file: FileInput) -> [Finding] {
+        var findings: [Finding] = []
+        let ext = (file.path as NSString).pathExtension.lowercased()
+
+        func add(_ id: String, _ severity: String, _ detail: String) {
+            findings.append(Finding(id: id, severity: severity, area: "instructions", file: file.path, detail: detail, message: message(id)))
+        }
+
+        if let mode = file.mode, mode & 0o022 != 0 {
+            add("agent_file_writable", "medium", "mode \(String(mode, radix: 8)) is writable by group or others")
+        }
+
+        // Precompiled code inside a skill: it cannot be read, so it cannot be reviewed.
+        if file.inSkill, isPrecompiled(file.data, ext: ext) {
+            add("skill_precompiled_code", "medium", ext.isEmpty ? "executable file" : ".\(ext) file")
+            return findings
+        }
+        if imageLikeExtensions.contains(ext) { return findings }
+        // Not text (NUL bytes or invalid UTF-8): nothing a text rule can say about it.
+        guard !file.data.prefix(8192).contains(0), let text = String(data: file.data, encoding: .utf8) else { return findings }
+
+        let isMarkdownLike = ["md", "mdc", "markdown", "txt", ""].contains(ext)
+        let lines = text.components(separatedBy: "\n")
+        let inComment = htmlCommentLines(lines)
+        var hits: [Hit] = []
+
+        // Hidden Unicode.
+        if let tag = hiddenTagText(text) {
+            hits.append(Hit(id: "hidden_tag_characters", severity: "high", line: tag.line,
+                            detail: "line \(tag.line): \(tag.count) tag characters" + (tag.decoded.isEmpty ? "" : ", hidden text \"\(sanitized(tag.decoded))\"")))
+        }
+        if let invisible = firstInvisible(text) {
+            hits.append(Hit(id: "invisible_characters", severity: "medium", line: invisible.line,
+                            detail: "line \(invisible.line): U+\(String(format: "%04X", invisible.scalar)) (\(invisible.count) in total)"))
+        }
+
+        var credentialLine: Int?
+        var exfilLine: Int?
+        for (index, rawLine) in lines.enumerated() {
+            let number = index + 1
+            let line = rawLine
+            let lower = line.lowercased()
+            let commented = inComment[index]
+            func bump(_ severity: String) -> String { commented ? "high" : severity }
+            func note(_ detail: String) -> String { "line \(number)\(commented ? " (inside an HTML comment)" : ""): \(detail)" }
+
+            if isMarkdownLike, matchesUnquoted(overridePatterns, lower) {
+                hits.append(Hit(id: "override_instruction", severity: bump("medium"), line: number, detail: note("instruction-override wording")))
+            }
+            if matches(remoteExecPatterns, lower) {
+                let host = firstURLHost(in: line)
+                let rawIP = host.map { isIPAddress($0) } ?? false
+                hits.append(Hit(id: "remote_script_exec", severity: bump(rawIP ? "high" : "medium"), line: number,
+                                detail: note("downloads and runs a script" + (host.map { " from \(sanitized($0))" } ?? ""))))
+            }
+            if matches(encodedExecPatterns, lower) {
+                hits.append(Hit(id: "encoded_payload_exec", severity: "high", line: number, detail: note("decodes text and runs it")))
+            }
+            if !hasNegation(lower), matches(credentialPatterns, lower) {
+                if credentialLine == nil { credentialLine = number }
+                hits.append(Hit(id: "credential_access", severity: bump("medium"), line: number, detail: note("refers to a credential file or store")))
+            }
+            if let host = matchedExfilHost(lower) {
+                if exfilLine == nil { exfilLine = number }
+                hits.append(Hit(id: "exfil_endpoint", severity: bump("medium"), line: number, detail: note("mentions \(host)")))
+            } else if matches(uploadPatterns, line), !lower.contains("localhost"), !lower.contains("127.0.0.1") {
+                if exfilLine == nil { exfilLine = number }
+            }
+            if !hasNegation(lower), matches(persistencePatterns, lower) {
+                hits.append(Hit(id: "persistence_instruction", severity: bump("medium"), line: number, detail: note("sets up something that survives a restart")))
+            }
+        }
+        if let credential = credentialLine, let exfil = exfilLine {
+            hits.append(Hit(id: "credential_exfil_shape", severity: "high", line: credential,
+                            detail: "credential reference at line \(credential) and an upload or drop-site reference at line \(exfil) in the same file"))
+        }
+
+        // One finding per rule per file: the first line, plus how many more there were.
+        var seen: [String: (Hit, Int)] = [:]
+        var order: [String] = []
+        for hit in hits {
+            if let existing = seen[hit.id] {
+                let strongest = existing.0.severity == "high" || hit.severity != "high" ? existing.0 : hit
+                seen[hit.id] = (strongest, existing.1 + 1)
+            } else {
+                seen[hit.id] = (hit, 1)
+                order.append(hit.id)
+            }
+        }
+        for id in order {
+            guard let (hit, count) = seen[id] else { continue }
+            add(id, hit.severity, hit.detail + (count > 1 ? " (+\(count - 1) more)" : ""))
+        }
+        return findings
+    }
+
+    // MARK: Rules
+
+    private static func regex(_ pattern: String, caseInsensitive: Bool = true) -> NSRegularExpression {
+        // swiftlint:disable:next force_try
+        try! NSRegularExpression(pattern: pattern, options: caseInsensitive ? [.caseInsensitive] : [])
+    }
+
+    private static func matches(_ patterns: [NSRegularExpression], _ lowercasedLine: String) -> Bool {
+        let range = NSRange(lowercasedLine.startIndex..., in: lowercasedLine)
+        return patterns.contains { $0.firstMatch(in: lowercasedLine, options: [], range: range) != nil }
+    }
+
+    /// "ignore previous instructions", "do not tell the user" and their Japanese forms.
+    private static let overridePatterns: [NSRegularExpression] = [
+        regex(#"(ignore|disregard|forget)\s+(all\s+|any\s+|the\s+|your\s+)*(previous|prior|above|earlier|system)\s+(instructions?|prompts?|rules?|messages?)"#),
+        regex(#"(do not|don't|never|dont)\s+(tell|inform|mention|reveal|show)\s+(this\s+to\s+)?(the\s+)?user"#),
+        regex(#"without\s+(telling|informing|notifying|alerting)\s+(the\s+)?user"#),
+        regex(#"(以前|これまで|上記|先ほど)の?(指示|命令|ルール|プロンプト)を?(すべて|全て)?(無視|忘れ)"#),
+        regex(#"ユーザー(に)?は?(言わ|伝え|知らせ|見せ|気づか)(ない|せない)で"#),
+        regex(#"<\|im_(start|end)\|>"#),
+    ]
+
+    /// Like `matches`, but a phrase that is itself quoted ("ignore previous instructions" in quotation
+    /// marks, 「…」 or backticks) is a mention, as in a warning or a list of examples, not an order.
+    private static func matchesUnquoted(_ patterns: [NSRegularExpression], _ lowercasedLine: String) -> Bool {
+        let whole = NSRange(lowercasedLine.startIndex..., in: lowercasedLine)
+        let openers: Set<Character> = ["\"", "'", "`", "「", "『", "“", "‘", "«", "("]
+        for pattern in patterns {
+            for match in pattern.matches(in: lowercasedLine, options: [], range: whole) {
+                guard let range = Range(match.range, in: lowercasedLine) else { continue }
+                let before = lowercasedLine[..<range.lowerBound].last
+                if let before, openers.contains(before) { continue }
+                return true
+            }
+        }
+        return false
+    }
+
+    /// Fetch-and-run: `curl … | sh`, `bash <(curl …)`, `iex (irm …)`.
+    private static let remoteExecPatterns: [NSRegularExpression] = [
+        regex(#"(curl|wget)\b[^\n|]*\|\s*(sudo\s+)?(ba|z|da|k)?sh\b"#),
+        regex(#"(curl|wget)\b[^\n|]*\|\s*(sudo\s+)?(python[0-9.]*|node|perl|ruby)\b"#),
+        regex(#"(ba|z)?sh\s+<\(\s*(curl|wget)"#),
+        regex(#"(iex|invoke-expression)\b.{0,40}(iwr|irm|invoke-webrequest|invoke-restmethod|downloadstring)"#),
+        regex(#"(iwr|irm|invoke-webrequest|invoke-restmethod)\b[^\n|]*\|\s*(iex|invoke-expression)"#),
+    ]
+
+    /// Decode-and-run.
+    private static let encodedExecPatterns: [NSRegularExpression] = [
+        regex(#"base64\s+(-d|-D|--decode)\b[^\n|]*\|\s*(sudo\s+)?(ba|z|da|k)?sh\b"#),
+        regex(#"base64\s+(-d|-D|--decode)\b[^\n|]*\|\s*(python[0-9.]*|node|perl|ruby)\b"#),
+        regex(#"(exec|eval)\s*\(\s*(base64\.b64decode|atob|buffer\.from)"#),
+        regex(#"(frombase64string|\[convert\]::frombase64)"#),
+    ]
+
+    /// Files and stores that hold keys, tokens, cookies and passwords.
+    private static let credentialPatterns: [NSRegularExpression] = [
+        regex(#"\.ssh/(id_[a-z0-9_]+|authorized_keys)\b"#),
+        regex(#"\.aws/(credentials|config)\b"#),
+        regex(#"\.config/gcloud\b|\.azure/|\.kube/config|\.docker/config\.json|\.npmrc\b|\.netrc\b|\.git-credentials\b|\.pypirc\b"#),
+        regex(#"library/keychains|security\s+(find|dump)-(generic|internet)-password|login\.keychain"#),
+        regex(#"login data\b|cookies\.sqlite|key[34]\.db|logins\.json"#),
+        regex(#"(cat|type|read|print|cp|copy|upload|send)\s+[^\n]*\.env(\s|$|["'])"#),
+        regex(#"\.openclaw/(credentials|openclaw\.json)|\.claude\.json|\.gnupg/"#),
+    ]
+
+    /// Hosts that attackers use as a drop site or a quick tunnel (public, widely documented).
+    private static let exfilHosts = [
+        "discord.com/api/webhooks", "discordapp.com/api/webhooks", "hooks.slack.com/services", "api.telegram.org/bot",
+        "pastebin.com", "paste.ee", "transfer.sh", "webhook.site", "requestbin", "pipedream.net", "interact.sh",
+        "oast.pro", "oast.live", "oast.site", "oast.online", "oast.fun", "oast.me", "burpcollaborator", "ngrok.io", "ngrok-free.app", "trycloudflare.com", "file.io", "anonfiles",
+    ]
+
+    /// A host counts only at the start of a name: `oast.` must not match `toast.` or `coast.`.
+    private static let exfilHostPatterns: [(String, NSRegularExpression)] = exfilHosts.map {
+        ($0, regex("(?<![a-z0-9-])" + NSRegularExpression.escapedPattern(for: $0)))
+    }
+
+    private static func matchedExfilHost(_ lowercasedLine: String) -> String? {
+        let range = NSRange(lowercasedLine.startIndex..., in: lowercasedLine)
+        return exfilHostPatterns.first { $0.1.firstMatch(in: lowercasedLine, options: [], range: range) != nil }?.0
+    }
+
+    /// Sending local data to a remote URL.
+    /// Case-sensitive and matched against the original line: `-F` (form upload) and `-f` (fail) differ.
+    private static let uploadPatterns: [NSRegularExpression] = [
+        regex(#"curl\b[^\n]*\s(-d|--data[a-z-]*|-F|--form|-T|--upload-file)\b[^\n]*https?://"#, caseInsensitive: false),
+        regex(#"\b(nc|ncat|netcat)\s+[^\n]*[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}"#, caseInsensitive: false),
+        regex(#"requests\.(post|put)\s*\(\s*['"]https?://"#, caseInsensitive: false),
+    ]
+
+    /// Cron, launchd, systemd, shell profiles, authorized_keys.
+    private static let persistencePatterns: [NSRegularExpression] = [
+        regex(#"\bcrontab\s+-(\s|$)|\(crontab\s+-l"#),
+        regex(#"launchctl\s+(load|bootstrap|enable)\b|library/launchagents|library/launchdaemons"#),
+        regex(#"systemctl\s+(--user\s+)?enable\b"#),
+        regex(#">>\s*~?/?[^\s]*\.(bashrc|zshrc|zprofile|profile|bash_profile)\b"#),
+        regex(#">>?\s*~?/?[^\s]*authorized_keys"#),
+    ]
+
+    /// A line that forbids the thing it mentions ("never read ~/.ssh") is not an instruction to do it.
+    private static let negationWords = [
+        "never", "do not", "don't", "dont", "must not", "should not", "avoid", "forbid", "prohibit", "deny", "denied",
+        "disallow", "refuse", "not allowed", "禁止", "しないで", "しない", "読まない", "触らない", "触れない", "使わない", "避け",
+    ]
+
+    private static func hasNegation(_ lowercasedLine: String) -> Bool {
+        negationWords.contains { lowercasedLine.contains($0) }
+    }
+
+    // MARK: Helpers
+
+    /// For each line, whether it is (partly) inside an HTML comment (`<!-- … -->`), which a
+    /// rendered Markdown page does not show.
+    static func htmlCommentLines(_ lines: [String]) -> [Bool] {
+        var open = false
+        var out: [Bool] = []
+        for line in lines {
+            var inside = open
+            var rest = Substring(line)
+            while !rest.isEmpty {
+                if open {
+                    inside = true
+                    if let end = rest.range(of: "-->") { rest = rest[end.upperBound...]; open = false } else { rest = "" }
+                } else if let start = rest.range(of: "<!--") {
+                    inside = true
+                    rest = rest[start.upperBound...]
+                    open = true
+                } else { break }
+            }
+            out.append(inside)
+        }
+        return out
+    }
+
+    /// Unicode tag characters (U+E0000-E007F) render as nothing, yet a model reads them as
+    /// ASCII text. The legitimate use is the end of an emoji flag sequence after U+1F3F4.
+    static func hiddenTagText(_ text: String) -> (line: Int, count: Int, decoded: String)? {
+        var line = 1
+        var firstLine: Int?
+        var count = 0
+        var decoded = ""
+        var inFlagSequence = false
+        for scalar in text.unicodeScalars {
+            let v = scalar.value
+            if v == 0x0A { line += 1 }
+            if v == 0x1F3F4 { inFlagSequence = true }
+            if (0xE0000...0xE007F).contains(v) {
+                if inFlagSequence { continue }
+                count += 1
+                if firstLine == nil { firstLine = line }
+                if (0xE0020...0xE007E).contains(v), let ascii = UnicodeScalar(v - 0xE0000) { decoded.unicodeScalars.append(ascii) }
+            } else if v != 0x1F3F4 {
+                inFlagSequence = false
+            }
+        }
+        guard let first = firstLine, count > 0 else { return nil }
+        return (first, count, decoded)
+    }
+
+    /// Zero-width and bidirectional-control characters. A joiner / non-joiner (U+200C, U+200D)
+    /// is ordinary in emoji and in several scripts and is not counted; a byte-order mark at the
+    /// very start of the file is not counted either.
+    static func firstInvisible(_ text: String) -> (line: Int, scalar: UInt32, count: Int)? {
+        var line = 1
+        var first: (Int, UInt32)?
+        var count = 0
+        var index = 0
+        for scalar in text.unicodeScalars {
+            let v = scalar.value
+            if v == 0x0A { line += 1 }
+            let invisible = v == 0x200B || v == 0x2060 || (v == 0xFEFF && index > 0)
+                || (0x202A...0x202E).contains(v) || (0x2066...0x2069).contains(v)
+            if invisible {
+                count += 1
+                if first == nil { first = (line, v) }
+            }
+            index += 1
+        }
+        guard let f = first else { return nil }
+        return (f.0, f.1, count)
+    }
+
+    private static func firstURLHost(in line: String) -> String? {
+        guard let range = line.range(of: #"https?://[^/\s'"<>)]+"#, options: .regularExpression) else { return nil }
+        var host = String(line[range])
+        host = host.replacingOccurrences(of: "https://", with: "").replacingOccurrences(of: "http://", with: "")
+        if let at = host.lastIndex(of: "@") { host = String(host[host.index(after: at)...]) }
+        if let colon = host.lastIndex(of: ":"), !host.hasPrefix("[") { host = String(host[..<colon]) }
+        return host.isEmpty ? nil : host
+    }
+
+    private static func isIPAddress(_ host: String) -> Bool {
+        let parts = host.split(separator: ".")
+        return parts.count == 4 && parts.allSatisfy { Int($0) != nil } || host.hasPrefix("[")
+    }
+
+    /// Executables and bytecode: Mach-O, ELF, PE, Java class, Python bytecode (by extension and magic).
+    private static func isPrecompiled(_ data: Data, ext: String) -> Bool {
+        if binaryExtensions.contains(ext) { return true }
+        let head = [UInt8](data.prefix(4))
+        guard head.count == 4 else { return false }
+        let magics: [[UInt8]] = [
+            [0xFE, 0xED, 0xFA, 0xCE], [0xFE, 0xED, 0xFA, 0xCF], [0xCE, 0xFA, 0xED, 0xFE], [0xCF, 0xFA, 0xED, 0xFE],
+            [0xCA, 0xFE, 0xBA, 0xBE], [0x7F, 0x45, 0x4C, 0x46],
+        ]
+        if magics.contains(head) { return true }
+        return head[0] == 0x4D && head[1] == 0x5A && data.prefix(8192).contains(0) // "MZ" (PE) that is not text
+    }
+
+    /// Printable, bounded text for anything that came from a file.
+    static func sanitized(_ text: String, limit: Int = 60) -> String {
+        let cleaned = String(text.unicodeScalars.filter { $0.value >= 0x20 && $0.value != 0x7F && !(0x200B...0x200F).contains($0.value) && !(0x202A...0x202E).contains($0.value) && !(0x2066...0x2069).contains($0.value) }.map(Character.init))
+        return cleaned.count > limit ? String(cleaned.prefix(limit)) + "…" : cleaned
+    }
+
+    // MARK: - OpenClaw configuration
+
+    /// Placeholder-looking or short values are not echoed; only a length is.
+    static func auditOpenClawConfig(_ file: FileInput) -> [Finding]? {
+        guard let root = (try? JSONSerialization.jsonObject(with: file.data, options: [.json5Allowed])) as? [String: Any] else { return nil }
+        var findings: [Finding] = []
+        func add(_ id: String, _ severity: String, _ detail: String) {
+            findings.append(Finding(id: id, severity: severity, area: "openclaw", file: file.path, detail: detail, message: message(id)))
+        }
+        let gateway = root["gateway"] as? [String: Any] ?? [:]
+        let auth = gateway["auth"] as? [String: Any] ?? [:]
+        let bind = (gateway["bind"] as? String)?.lowercased() ?? "loopback"
+        let wide = ["lan", "tailnet", "custom", "0.0.0.0", "::"].contains(bind)
+        let mode = (auth["mode"] as? String)?.lowercased()
+
+        if mode == "none" {
+            add("openclaw_auth_disabled", wide ? "high" : "medium", "gateway.auth.mode is none, gateway.bind is \(sanitized(bind))")
+        } else if wide {
+            add("openclaw_wide_bind", "medium", "gateway.bind is \(sanitized(bind)) (default loopback)")
+        }
+        if let token = auth["token"] as? String, !token.isEmpty, token.count < 24, mode == nil || mode == "token" {
+            add("openclaw_weak_token", "high", "gateway.auth.token is \(token.count) characters (at least 24 are expected)")
+        }
+        if let ui = gateway["controlUi"] as? [String: Any], let origins = ui["allowedOrigins"] as? [Any],
+           origins.contains(where: { ($0 as? String)?.trimmingCharacters(in: .whitespaces) == "*" }) {
+            add("openclaw_origin_wildcard", "high", "gateway.controlUi.allowedOrigins contains *")
+        }
+        if let proxies = gateway["trustedProxies"] as? [Any],
+           let broad = proxies.compactMap({ $0 as? String }).first(where: { ["*", "0.0.0.0/0", "::/0"].contains($0.trimmingCharacters(in: .whitespaces)) }) {
+            add("openclaw_broad_trusted_proxy", "high", "gateway.trustedProxies contains \(sanitized(broad))")
+        }
+        var loosened: [String] = []
+        if (gateway["allowRealIpFallback"] as? Bool) == true { loosened.append("gateway.allowRealIpFallback") }
+        if let nodes = gateway["nodes"] as? [String: Any], let pairing = nodes["pairing"] as? [String: Any],
+           let cidrs = pairing["autoApproveCidrs"] as? [Any], !cidrs.isEmpty { loosened.append("gateway.nodes.pairing.autoApproveCidrs") }
+        if let trusted = auth["trustedProxy"] as? [String: Any], (trusted["allowLoopback"] as? Bool) == true { loosened.append("gateway.auth.trustedProxy.allowLoopback") }
+        if !loosened.isEmpty { add("openclaw_proxy_trust_loosened", "medium", loosened.joined(separator: ", ")) }
+
+        let dangerous = dangerousPaths(in: root)
+        if !dangerous.isEmpty {
+            add("openclaw_dangerous_flag", "high", dangerous.prefix(8).joined(separator: ", ") + (dangerous.count > 8 ? " (+\(dangerous.count - 8) more)" : ""))
+        }
+
+        let open = openDMPaths(in: root)
+        if !open.isEmpty {
+            add("openclaw_open_dm", "medium", open.prefix(8).joined(separator: ", ") + (open.count > 8 ? " (+\(open.count - 8) more)" : ""))
+        }
+        if let discovery = root["discovery"] as? [String: Any], let mdns = discovery["mdns"] as? [String: Any],
+           (mdns["mode"] as? String)?.lowercased() == "full" {
+            add("openclaw_mdns_full", "medium", "discovery.mdns.mode is full (default minimal)")
+        }
+        if let security = root["security"] as? [String: Any], let audit = security["audit"] as? [String: Any] {
+            let suppressions = audit["suppressions"]
+            if (suppressions as? [Any])?.isEmpty == false || (suppressions as? [String: Any])?.isEmpty == false {
+                add("openclaw_audit_suppressed", "medium", "security.audit.suppressions is not empty")
+            }
+        }
+        return findings
+    }
+
+    /// Paths of switches the OpenClaw documentation names as dangerous and turned on:
+    /// every `dangerously…` key set to true (the retired `dangerouslyDisableDeviceAuth` has no effect and is ignored),
+    /// `allowUnsafeExternalContent`, `tools.exec.applyPatch.workspaceOnly=false` and
+    /// `plugins.entries.acpx.config.permissionMode=approve-all`.
+    static func dangerousPaths(in root: [String: Any]) -> [String] {
+        var out: [String] = []
+        func walk(_ value: Any, _ path: String) {
+            if let dict = value as? [String: Any] {
+                for (key, child) in dict.sorted(by: { $0.key < $1.key }) {
+                    let childPath = path.isEmpty ? key : "\(path).\(key)"
+                    if key.hasPrefix("dangerously"), key != "dangerouslyDisableDeviceAuth", (child as? Bool) == true { out.append(sanitized(childPath, limit: 120)) }
+                    else if key == "allowUnsafeExternalContent", (child as? Bool) == true { out.append(sanitized(childPath, limit: 120)) }
+                    else if childPath == "tools.exec.applyPatch.workspaceOnly", (child as? Bool) == false { out.append(childPath) }
+                    else if childPath == "plugins.entries.acpx.config.permissionMode", (child as? String) == "approve-all" { out.append(childPath) }
+                    else { walk(child, childPath) }
+                }
+            } else if let array = value as? [Any] {
+                for (index, child) in array.enumerated() { walk(child, "\(path)[\(index)]") }
+            }
+        }
+        walk(root, "")
+        return out
+    }
+
+    /// `dmPolicy: "open"` / `groupPolicy: "open"` / `dm.policy: "open"`, and an `allowFrom` that contains `*`.
+    static func openDMPaths(in root: [String: Any]) -> [String] {
+        var out: [String] = []
+        func walk(_ value: Any, _ path: String) {
+            if let dict = value as? [String: Any] {
+                for (key, child) in dict.sorted(by: { $0.key < $1.key }) {
+                    let childPath = path.isEmpty ? key : "\(path).\(key)"
+                    if ["dmPolicy", "groupPolicy"].contains(key), (child as? String)?.lowercased() == "open" { out.append(sanitized(childPath, limit: 120)) }
+                    else if key == "policy", path.hasSuffix(".dm"), (child as? String)?.lowercased() == "open" { out.append(sanitized(childPath, limit: 120)) }
+                    else if key == "allowFrom", let list = child as? [Any], list.contains(where: { ($0 as? String) == "*" }) { out.append(sanitized(childPath, limit: 120)) }
+                    else { walk(child, childPath) }
+                }
+            } else if let array = value as? [Any] {
+                for (index, child) in array.enumerated() { walk(child, "\(path)[\(index)]") }
+            }
+        }
+        walk(root, "")
+        return out
+    }
+
+    // MARK: - Messages
+
+    /// The short card title of a finding id. Japanese is the source text.
+    static func title(_ id: String) -> String {
+        switch id {
+        case "hidden_tag_characters": return loc("画面に見えない指示が隠されています(タグ文字)")
+        case "invisible_characters": return loc("表示されない文字が含まれています")
+        case "override_instruction": return loc("指示の上書き・隠し事を求める文があります")
+        case "remote_script_exec": return loc("ネットのスクリプトをそのまま実行します")
+        case "encoded_payload_exec": return loc("符号化した文字列を復号して実行します")
+        case "credential_access": return loc("秘密を含むファイルを扱う記述があります")
+        case "credential_exfil_shape": return loc("秘密の参照と外部送信が同じファイルにあります")
+        case "exfil_endpoint": return loc("データの受け口によく使われる宛先があります")
+        case "persistence_instruction": return loc("再起動後も残る仕掛けを作る記述があります")
+        case "skill_precompiled_code": return loc("スキルに読めないコンパイル済みコードがあります")
+        case "agent_file_writable": return loc("所有者以外も書き込めるファイルです")
+        case "openclaw_auth_disabled": return loc("OpenClaw のゲートウェイの認証が無効です")
+        case "openclaw_wide_bind": return loc("OpenClaw のゲートウェイが外から届く状態です")
+        case "openclaw_weak_token": return loc("OpenClaw のトークンが短すぎます")
+        case "openclaw_origin_wildcard": return loc("OpenClaw のコントロール画面がすべてのサイトを許可しています")
+        case "openclaw_dangerous_flag": return loc("OpenClaw の「危険」スイッチがオンです")
+        case "openclaw_broad_trusted_proxy": return loc("OpenClaw がすべての相手をプロキシとして信頼しています")
+        case "openclaw_proxy_trust_loosened": return loc("OpenClaw のプロキシ・ノードの信頼が広げられています")
+        case "openclaw_open_dm": return loc("OpenClaw が誰からでもメッセージを受け付けます")
+        case "openclaw_mdns_full": return loc("OpenClaw が詳しい情報をネットワークに広告しています")
+        case "openclaw_audit_suppressed": return loc("OpenClaw の自己診断の指摘が非表示になっています")
+        case "openclaw_loose_permissions": return loc("OpenClaw の設定が他のユーザーに読める権限です")
+        default: return id
+        }
+    }
+
+    /// The localized explanation of a finding id. Japanese is the source text.
+    static func message(_ id: String) -> String {
+        switch id {
+        case "hidden_tag_characters":
+            return loc("このファイルには、画面に何も表示されない Unicode のタグ文字が含まれています。人の目には見えませんが、AI はこれを文字として読めるため、見えない指示を仕込む手口に使われます。意図して入れたものでなければ、その部分を取り除いてください。")
+        case "invisible_characters":
+            return loc("このファイルには、ゼロ幅文字や文字の向きを変える制御文字など、画面に表示されない文字が含まれています。見えない文字で語句を隠して検査をすり抜ける手口に使われます。意図して入れたものでなければ取り除いてください。")
+        case "override_instruction":
+            return loc("「以前の指示を無視する」「ユーザーには伝えない」といった、AI に対する指示の上書きや隠し事を求める書き方があります。注意喚起や例として書かれた文であれば問題ありませんが、AI への命令として書かれていないか確認してください。")
+        case "remote_script_exec":
+            return loc("ネットからスクリプトを取得して、そのまま実行する書き方（curl … | sh など）があります。取得先の内容が後から差し替えられると、AI がそれを実行してしまいます。中身を確認できる形に変えるか、取得先が信頼できるか確認してください。")
+        case "encoded_payload_exec":
+            return loc("base64 などで符号化した文字列を復号して、そのまま実行する書き方があります。何を実行するのか読めなくするために使われる手口です。復号した内容を確認し、意図したものでなければ取り除いてください。")
+        case "credential_access":
+            return loc("SSH 鍵、クラウドの認証情報、パスワード保存場所、ブラウザの Cookie など、秘密を含むファイルを扱う記述があります。AI にそれらを読ませる指示になっていないか確認してください。")
+        case "credential_exfil_shape":
+            return loc("同じファイルに、秘密を含むファイルの参照と、外部へ送る（アップロード・受け口サービス）記述の両方があります。秘密を持ち出す指示の形に似ています。内容を読んで、意図したものか確認してください。")
+        case "exfil_endpoint":
+            return loc("Webhook やファイル共有、トンネルなど、データの受け口によく使われるサービスの宛先が書かれています。そこへ何を送る記述なのか確認してください。")
+        case "persistence_instruction":
+            return loc("cron・launchd・systemd・シェルの起動ファイル・authorized_keys など、再起動後も残る仕掛けを作る記述があります。AI にそれらを設定させる指示になっていないか確認してください。")
+        case "skill_precompiled_code":
+            return loc("このスキルには、人が読めないコンパイル済みのコード（実行ファイルやバイトコード）が入っています。中身を確認できないため、出どころが確かな場合を除いて使わないでください。")
+        case "agent_file_writable":
+            return loc("このファイルは、所有者以外も書き込める権限になっています。他のユーザーやプロセスが指示を書き換えれば、次に AI が読んだときにその内容に従います。chmod go-w で書き込み権限を外してください。")
+        case "openclaw_auth_disabled":
+            return loc("OpenClaw のゲートウェイの認証が無効（gateway.auth.mode が none）です。到達できる相手は誰でも、このゲートウェイ経由でエージェントを操作できます。トークン認証に戻してください。")
+        case "openclaw_wide_bind":
+            return loc("OpenClaw のゲートウェイが、このPCの外からも届く待ち受け方（lan・tailnet など）になっています。認証は必須ですが、意図して公開していない場合は loopback に戻し、公開する場合はファイアウォールで届く範囲を絞ってください。")
+        case "openclaw_weak_token":
+            return loc("OpenClaw のゲートウェイのトークンが短すぎます（24文字未満）。推測や総当たりで破られる恐れがあります。openssl rand -hex 32 などで作り直してください。")
+        case "openclaw_origin_wildcard":
+            return loc("OpenClaw のコントロール画面が、すべてのサイト（*）からのブラウザ操作を許可しています。悪意のある Web ページから、ゲートウェイを操作される恐れがあります。許可するオリジンを明示してください。")
+        case "openclaw_dangerous_flag":
+            return loc("OpenClaw が「危険」と明記している安全機能の無効化スイッチ（dangerously… など）がオンになっています。意図して設定したものでなければオフに戻してください。")
+        case "openclaw_broad_trusted_proxy":
+            return loc("OpenClaw が、すべての相手（0.0.0.0/0 など）を信頼するプロキシとして扱う設定になっています。ヘッダーを偽装されて、認証や接続元の判定をすり抜けられる恐れがあります。実際のプロキシのアドレスだけに絞ってください。")
+        case "openclaw_proxy_trust_loosened":
+            return loc("OpenClaw が、プロキシやノードの信頼を広げる設定（X-Real-IP の信頼・ノードの自動承認・ループバックのプロキシ許可）になっています。意図した構成か確認してください。")
+        case "openclaw_open_dm":
+            return loc("OpenClaw が、誰からでも DM やグループのメッセージを受け付ける設定（open）になっています。見知らぬ相手の文章が、ツールを持つエージェントへの指示になり得ます。許可リスト方式に変えられないか検討してください。")
+        case "openclaw_mdns_full":
+            return loc("OpenClaw が mDNS で、実行ファイルのパス（ユーザー名を含みます）やホスト名を同じネットワークに広告しています（full）。近くの端末への手がかりになるため、必要がなければ minimal に戻してください。")
+        case "openclaw_audit_suppressed":
+            return loc("OpenClaw の自己診断の指摘を非表示にする設定（security.audit.suppressions）があります。隠した指摘が見直されなくなるため、今も隠す必要があるか確認してください。")
+        case "openclaw_loose_permissions":
+            return loc("OpenClaw の設定フォルダまたは設定ファイルが、所有者以外にも読める権限になっています。トークンや認証情報が他のユーザーに読まれる恐れがあります。フォルダは 700、ファイルは 600 にしてください。")
+        default:
+            return id
+        }
+    }
+}
+
+/// JSON payload of the MCP tool `audit_agent_setup` (same shape on the Linux edition).
+public struct AgentSetupAuditResultPayload: Codable, Equatable {
+    public struct FindingPayload: Codable, Equatable {
+        public let id: String
+        public let severity: String
+        public let area: String
+        public let file: String
+        public let detail: String
+        public let message: String
+    }
+    public let scannedFileCount: Int
+    public let scannedFiles: [String]
+    public let skillCount: Int
+    public let openClawConfigFound: Bool
+    /// Files that exist but could not be read or parsed (so they were NOT audited).
+    public let unreadableFiles: [String]
+    public let findings: [FindingPayload]
+}

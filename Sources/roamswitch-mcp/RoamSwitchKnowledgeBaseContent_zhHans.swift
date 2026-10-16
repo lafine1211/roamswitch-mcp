@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.12 (build 159).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.13 (build 160).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -152,7 +152,7 @@ extension RoamSwitchKnowledgeBase {
                 • 启用方法：菜单「端口与设备监控」→「实证型漏洞验证（主动可达性确认）」。该选项只是解锁端口诊断界面中的「执行实证验证」按钮，单独开启不会发送任何内容。每次执行时也会确认「是否发送验证请求？」。
                 • 仅针对 127.0.0.1：绝不会向其他主机发送任何内容。
                 • 无认证确认：向 Redis（PING）、Memcached（stats）、MongoDB（listDatabases）发送单次、短超时的非破坏性探测。
-                • 通用开发服务器诊断：检查 CORS 配置错误（Origin 反射＋允许凭据）、路径遍历和开放重定向。
+                • 通用开发服务器诊断：检查 CORS 配置错误（Origin 反射＋允许凭据）、路径遍历、开放重定向和 SSRF（会请求所收到 URL 的服务器，即使该 URL 指向本机上自建的监听端口）。
                 • 已知 CVE 版本比对：通过非破坏性查询获取可无认证访问的 Redis / Memcached 版本，并与已知 CVE 的受影响版本范围进行比对。不会发送攻击载荷。
                 • 也可通过 MCP 工具 `run_active_vuln_scan` 执行（其探测仅发往本地主机）。
                 """,
@@ -683,7 +683,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "RoamSwitch.app 内置了只读的 MCP（Model Context Protocol）服务器，Claude 等 AI 助手可以查询 Mac 的安全状况。其中完全没有更改设置或执行阻断等操作类工具。",
                 details: """
                 • 通信：仅使用本地标准输入输出（stdio）。二进制文件为 `/Applications/RoamSwitch.app/Contents/MacOS/RoamSwitchMCPServer`。
-                • 主要工具（共 31 个）：`get_security_report`（综合诊断）、`verify_security_findings`（重新确认诊断中指出的问题是否仍然存在，只读）、`get_exposed_ports`、`get_guard_status`、`audit_url_safety`、`audit_secrets`、`audit_mcp_configs`（检查 MCP 客户端配置文件中的危险条目；本地、只读；也可在「恶意软件防护」→「🧩 审计 MCP 配置（AI 集成）…」的专用窗口中运行）、`audit_security_logs`、`get_quarantine_status`、`get_notification_history`、`get_canary_status`、`get_port_anomaly_incidents`、`get_runtime_threat_status`、`get_incident_timeline`（遏制事件历史）、`get_network_history`（网络历史学习）、`run_package_cve_scan`、`run_package_cve_scan_languages`、`run_active_vuln_scan`（仅向 127.0.0.1 发送非破坏性探测）、`run_npm_audit_signatures`（唯一会与外部服务器即 npm 注册表通信的工具，仅限 Pro 且需主动开启）、`get_app_help`（本知识库）。
+                • 主要工具（共 32 个）：`get_security_report`（综合诊断）、`verify_security_findings`（重新确认诊断中指出的问题是否仍然存在，只读）、`get_exposed_ports`、`get_guard_status`、`audit_url_safety`、`audit_secrets`、`audit_mcp_configs`（检查 MCP 客户端配置文件中的危险条目；本地、只读；也可在「恶意软件防护」→「🧩 审计 MCP 配置（AI 集成）…」的专用窗口中运行）、`audit_agent_setup`（检查提供给 AI 智能体的指示文件、技能和 OpenClaw 设置中的危险内容，如不可见的 Unicode 字符、指示覆盖、curl | sh、窃取机密的形态；本地、只读；也可在「恶意软件防护」→「🤖 审计 AI 智能体的指示文件…」窗口中运行）、`audit_security_logs`、`get_quarantine_status`、`get_notification_history`、`get_canary_status`、`get_port_anomaly_incidents`、`get_runtime_threat_status`、`get_incident_timeline`（遏制事件历史）、`get_network_history`（网络历史学习）、`run_package_cve_scan`、`run_package_cve_scan_languages`、`run_active_vuln_scan`（仅向 127.0.0.1 发送非破坏性探测）、`run_npm_audit_signatures`（唯一会与外部服务器即 npm 注册表通信的工具，仅限 Pro 且需主动开启）、`get_app_help`（本知识库）。
                 • 进程执行记录（Pro，只读）：`search_exec_events`（搜索启动事件）和 `get_process_tree`（某进程的祖先与后代）。
                 • 资源：`roamswitch://docs/features`、`roamswitch://docs/alerts-and-messages`、`roamswitch://docs/settings-guide`、`roamswitch://docs/troubleshooting`。
                 • 语言：回答遵循应用的语言设置。`get_app_help` 可通过 `language` 参数（ja / en / zh-Hans / zh-Hant / ko / de / fr / es / it / pt-PT）指定语言。

@@ -46,11 +46,11 @@ CORE=(AppLanguage TrustedNetwork GatewayFingerprint WiFiSecurityMonitor \
       BrowserCredentialWatchStatusReader \
       PortAnomalyStatusReader RuntimeThreatStatusReader NotificationHistory \
       ContainmentIncidentTimeline NetworkHistoryGuard MCPSensorAuditStatusReader \
-      RansomwareSnapshotStatusReader MCPExecRecorderTools)
+      RansomwareSnapshotStatusReader MCPExecRecorderTools AgentSetupAuditor)
 
 # Sources that live in the app's Shared/ folder (also compiled into the helper).
 SHARED=(RansomwareSnapshotLogic ExecEventModel ExecLogStore ExecProcessTree ExecReadAPI \
-        CryptoSecretDetection SafeScanFS ExecCommandMasker LinkFilterEngine)
+        CryptoSecretDetection SafeScanFS ExecCommandMasker LinkFilterEngine KnownAttackServers)
 
 # App test files that only exercise types present in this repo. Their
 # `@testable import RoamSwitch` is rewritten to this package's module name.
@@ -60,7 +60,7 @@ SHARED=(RansomwareSnapshotLogic ExecEventModel ExecLogStore ExecProcessTree Exec
 TESTS=(LinkSafetyAuditorTests CryptoSecretDetectionTests MCPKnowledgeBaseTests MCPProtocolTests \
        MCPResponseFormattingTests ARPSpoofMonitorTests MCPServerRobustnessTests ParserRobustnessTests \
        TyposquatGuardTests RansomwareRecoveryMCPTests RoamSwitchMCPSkillsContentTests \
-       ActiveVulnScanTests MCPConfigAuditorTests)
+       ActiveVulnScanTests MCPConfigAuditorTests AgentSetupAuditorTests KnownAttackServersTests)
 
 TDST="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/Tests/roamswitch-mcpTests"
 

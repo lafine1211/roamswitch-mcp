@@ -71,7 +71,7 @@ final class StdioSmokeTests: XCTestCase {
                         "get_ransomware_entropy_guard_status", "get_honeytoken_status",
                         "get_browser_credential_watch_status", "get_forensic_evidence_bundles",
                         "get_vulnerability_scan_history", "verify_security_findings",
-                        "audit_mcp_configs"])
+                        "audit_mcp_configs", "audit_agent_setup"])
     }
 
     func testAuditURLSafety_flagsPhishing_offline() throws {

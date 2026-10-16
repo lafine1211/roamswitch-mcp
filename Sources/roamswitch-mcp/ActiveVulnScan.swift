@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.12 (build 159).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.13 (build 160).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -957,6 +957,119 @@ public enum ActiveVulnScan {
         return sawAnyResponse ? false : nil
     }
 
+    // MARK: - SSRF (server fetches a URL it is given)
+
+    /// Parameter names tried at the root path, then `url` at a few conventional "fetch this
+    /// URL for me" paths. Like `redirectParamNames`, a server taking its URL under another
+    /// name is simply not flagged: this check is biased toward false negatives.
+    private static let ssrfRootParams = ["url", "uri", "link", "src", "image", "target", "dest", "callback"]
+    private static let ssrfPaths = ["/proxy", "/fetch", "/image", "/preview"]
+    /// How long to keep watching our own listener after a candidate request was answered: a
+    /// server that fetches the URL does so while handling the request or right after it.
+    private static let ssrfSettle: TimeInterval = 0.15
+
+    /// A throw-away listener bound to `127.0.0.1` only. It counts the requests it receives and
+    /// answers each with `reply`. Plain BSD sockets, so it needs no entitlement and cannot be
+    /// reached from another machine.
+    private final class HopListener {
+        let port: Int
+        private let fd: Int32
+        private let reply: Data
+        private let lock = NSLock()
+        private var count = 0
+        private var stopped = false
+        private let finished = DispatchSemaphore(value: 0)
+
+        init?(reply: String) {
+            self.reply = Data(reply.utf8)
+            let fd = socket(AF_INET, SOCK_STREAM, 0)
+            guard fd >= 0 else { return nil }
+            var addr = sockaddr_in()
+            addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+            addr.sin_family = sa_family_t(AF_INET)
+            addr.sin_port = 0
+            addr.sin_addr.s_addr = UInt32(0x7F000001).bigEndian
+            let bound = withUnsafePointer(to: &addr) {
+                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
+            }
+            guard bound == 0, listen(fd, 8) == 0 else { close(fd); return nil }
+            var out = sockaddr_in()
+            var len = socklen_t(MemoryLayout<sockaddr_in>.size)
+            let named = withUnsafeMutablePointer(to: &out) {
+                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { getsockname(fd, $0, &len) }
+            }
+            guard named == 0 else { close(fd); return nil }
+            self.fd = fd
+            self.port = Int(UInt16(bigEndian: out.sin_port))
+            DispatchQueue.global(qos: .utility).async { [self] in acceptLoop() }
+        }
+
+        private var isStopped: Bool { lock.lock(); defer { lock.unlock() }; return stopped }
+
+        private func acceptLoop() {
+            defer { finished.signal() }
+            while !isStopped {
+                var pfd = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
+                guard poll(&pfd, 1, 50) > 0 else { continue }
+                let client = accept(fd, nil, nil)
+                if client < 0 { continue }
+                var tv = timeval(tv_sec: 0, tv_usec: 500_000)
+                setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+                var buf = [UInt8](repeating: 0, count: 1024)
+                _ = read(client, &buf, buf.count)
+                lock.lock(); count += 1; lock.unlock()
+                _ = reply.withUnsafeBytes { write(client, $0.baseAddress, reply.count) }
+                close(client)
+            }
+        }
+
+        var hits: Int { lock.lock(); defer { lock.unlock() }; return count }
+
+        func stop() {
+            lock.lock(); stopped = true; lock.unlock()
+            _ = finished.wait(timeout: .now() + 2)
+            close(fd)
+        }
+    }
+
+    /// Server-side request forgery: hands the target a URL that points at a listener of ours
+    /// on `127.0.0.1`, in the parameters a "fetch this URL" feature usually takes, and reports
+    /// whether the target actually connected to it. Our listener answers with a 302 to a second
+    /// listener of ours, so a target that also follows redirects is seen too, which is how an
+    /// attacker's own redirect server (a `/r302?u=<target>` page, found on attack servers by
+    /// JPCERT/CC in 2026-10) gets past a check that only looks at the first URL.
+    ///
+    /// Both listeners are loopback-only and answer a plain GET; nothing outside this machine
+    /// is contacted and nothing is written. A hit proves the target fetches URLs it is given
+    /// and does not refuse an address on this machine. No hit is not proof of safety (see the
+    /// name lists above), so only a hit is flagged. Same contract as `probeOpenRedirect`:
+    /// `nil` when the target never answered.
+    static func probeSSRFFetch(port: Int, timeout: TimeInterval = 2.0) -> Bool? {
+        guard let second = HopListener(reply: "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok") else { return nil }
+        guard let first = HopListener(reply: "HTTP/1.1 302 Found\r\nLocation: http://127.0.0.1:\(second.port)/ssrf-redirect-hop\r\nContent-Length: 0\r\nConnection: close\r\n\r\n") else {
+            second.stop()
+            return nil
+        }
+        defer { first.stop(); second.stop() }
+        let probeURL = "http://127.0.0.1:\(first.port)/ssrf-probe"
+
+        var candidates: [(path: String, param: String)] = ssrfRootParams.map { ("/", $0) }
+        candidates += ssrfPaths.map { ($0, "url") }
+        var sawAnyResponse = false
+        for candidate in candidates {
+            var components = URLComponents(string: "http://127.0.0.1:\(port)\(candidate.path)")!
+            components.queryItems = [URLQueryItem(name: candidate.param, value: probeURL)]
+            guard let url = components.url else { continue }
+            var request = URLRequest(url: url, timeoutInterval: timeout)
+            request.httpMethod = "GET"
+            if syncHTTPRequestNoRedirect(request, timeout: timeout) != nil { sawAnyResponse = true }
+            let deadline = Date().addingTimeInterval(ssrfSettle)
+            while first.hits == 0 && Date() < deadline { Thread.sleep(forTimeInterval: 0.01) }
+            if first.hits > 0 { return true }
+        }
+        return sawAnyResponse ? false : nil
+    }
+
     // MARK: - Orchestration
 
     /// Which `ServiceSignatures` ids Phase 2 has an actual probe implemented for.
@@ -1125,6 +1238,21 @@ public enum ActiveVulnScan {
                     )
                 },
                 outcome: CheckOutcome(port: port.port, processName: port.processName, check: loc("オープンリダイレクト（未検証の外部リダイレクト）"))
+            )
+
+            runOne(
+                probeName: "webvuln-ssrf",
+                probe: { probeSSRFFetch(port: port.port) },
+                makeFinding: {
+                    Finding(
+                        port: port.port,
+                        processName: port.processName,
+                        title: loc("SSRF（サーバーが指定されたURLを取りに行く）"),
+                        description: loc("URLを受け取りやすいパラメータ（url/uri/src/image/target など）に、このマシン上の待ち受けを指すURLを渡したところ、サーバーがそこへ実際に接続しました。サーバーが渡されたURLを、このマシン内のアドレスかどうかを確かめずに取りに行くため、攻撃者は内部のサービスやクラウドのメタデータ（169.254.169.254）へ到達させ、認証情報を読み出せます。攻撃者が自分のサーバーのURLを渡し、そこから内部アドレスへのリダイレクト（302）を返させて、最初のURLだけを調べる対策をすり抜ける手口も確認されています。"),
+                        recommendation: loc("取得してよい宛先を、必要なものだけの許可リストにしてください。ホスト名は自分で名前解決し、解決後のアドレスがループバック・プライベート・リンクローカル（169.254.169.254を含む）なら拒否します。リダイレクトは追わないか、追うたびに同じ検査をかけてください。クラウド上のサーバーでは、メタデータをIMDSv2（トークン必須）に切り替えることも有効です。")
+                    )
+                },
+                outcome: CheckOutcome(port: port.port, processName: port.processName, check: loc("SSRF（サーバーが指定されたURLを取りに行く）"))
             )
         }
 

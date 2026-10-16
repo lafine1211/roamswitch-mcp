@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.12 (build 159).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.13 (build 160).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -152,7 +152,7 @@ extension RoamSwitchKnowledgeBase {
                 • 활성화 방법: 포트·기기 모니터링 → "실증형 취약점 검증(능동적 도달 확인)". 이 설정은 포트 진단 화면의 "실증 확인 실행" 버튼을 여는 것일 뿐 그 자체로는 아무것도 전송하지 않으며, 실행할 때마다 "검증 요청을 전송하시겠습니까?"라고 먼저 묻습니다.
                 • 127.0.0.1로만 전송: 다른 호스트로는 절대 전송하지 않습니다.
                 • 비인증 접근: Redis(PING), Memcached(stats), MongoDB(listDatabases)에 단발성, 짧은 타임아웃의 비파괴적 프로브를 보냅니다.
-                • 일반 개발 서버: CORS 설정 오류(자격 증명 포함 Origin 반사), 경로 순회, 오픈 리다이렉트를 확인합니다.
+                • 일반 개발 서버: CORS 설정 오류(자격 증명 포함 Origin 반사), 경로 순회, 오픈 리다이렉트, SSRF(전달받은 URL을 가져오는 서버. 이 머신의 자체 대기 포트를 가리키는 URL 포함)를 확인합니다.
                 • 알려진 CVE 버전 대조: 인증 없이 도달 가능한 Redis/Memcached의 버전을 비파괴적 쿼리로 읽어 알려진 CVE 버전 범위와 대조합니다. 공격용 페이로드는 전송하지 않습니다.
                 • MCP 도구 `run_active_vuln_scan`으로도 사용할 수 있습니다(프로브는 localhost로만 전송합니다).
                 """,
@@ -683,7 +683,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "RoamSwitch.app에는 읽기 전용 MCP(Model Context Protocol) 서버가 포함되어 있어 Claude 같은 AI 도우미가 Mac의 보안 상태를 물어볼 수 있습니다. 설정을 바꾸거나 무언가를 차단하는 도구는 없습니다.",
                 details: """
                 • 전송 방식: 로컬 stdio만 사용합니다. 실행 파일: `/Applications/RoamSwitch.app/Contents/MacOS/RoamSwitchMCPServer`.
-                • 주요 도구(총 31개): `get_security_report`(보안 진단), `verify_security_findings`(진단에서 지적된 항목이 아직 남아 있는지 다시 확인, 읽기 전용), `get_exposed_ports`, `get_guard_status`, `audit_url_safety`, `audit_secrets`, `audit_mcp_configs`(MCP 클라이언트 설정 파일의 위험한 항목 점검, 로컬·읽기 전용. 악성코드 보호 → "🧩 MCP 설정(AI 연동) 감사…"의 전용 창에서도 실행 가능), `audit_security_logs`, `get_quarantine_status`, `get_notification_history`, `get_canary_status`, `get_port_anomaly_incidents`, `get_runtime_threat_status`, `get_incident_timeline`(봉쇄 사고 타임라인), `get_network_history`(네트워크 이력 학습), `run_package_cve_scan`, `run_package_cve_scan_languages`, `run_active_vuln_scan`(127.0.0.1로만 비파괴적 프로브를 보냄), `run_npm_audit_signatures`(외부 서버, 즉 npm 레지스트리와 통신하는 유일한 도구, Pro·옵트인), `get_app_help`(이 지식 베이스).
+                • 주요 도구(총 32개): `get_security_report`(보안 진단), `verify_security_findings`(진단에서 지적된 항목이 아직 남아 있는지 다시 확인, 읽기 전용), `get_exposed_ports`, `get_guard_status`, `audit_url_safety`, `audit_secrets`, `audit_mcp_configs`(MCP 클라이언트 설정 파일의 위험한 항목 점검, 로컬·읽기 전용. 악성코드 보호 → "🧩 MCP 설정(AI 연동) 감사…"의 전용 창에서도 실행 가능), `audit_agent_setup`(AI 에이전트에게 읽히는 지시 파일·스킬·OpenClaw 설정의 위험한 내용(보이지 않는 Unicode 문자, 지시 덮어쓰기, curl | sh, 비밀 유출 형태 등) 점검, 로컬·읽기 전용. 메뉴 「악성코드 방어」→「🤖 AI 에이전트 지시 파일 감사…」 창에서도 실행 가능), `audit_security_logs`, `get_quarantine_status`, `get_notification_history`, `get_canary_status`, `get_port_anomaly_incidents`, `get_runtime_threat_status`, `get_incident_timeline`(봉쇄 사고 타임라인), `get_network_history`(네트워크 이력 학습), `run_package_cve_scan`, `run_package_cve_scan_languages`, `run_active_vuln_scan`(127.0.0.1로만 비파괴적 프로브를 보냄), `run_npm_audit_signatures`(외부 서버, 즉 npm 레지스트리와 통신하는 유일한 도구, Pro·옵트인), `get_app_help`(이 지식 베이스).
                 • 프로세스 실행 기록(Pro, 읽기 전용): `search_exec_events`(실행 이벤트 검색), `get_process_tree`(프로세스의 조상·자손 트리).
                 • 리소스: `roamswitch://docs/features`, `roamswitch://docs/alerts-and-messages`, `roamswitch://docs/settings-guide`, `roamswitch://docs/troubleshooting`.
                 • 언어: 응답은 앱의 언어 설정을 따릅니다. `get_app_help`는 `language` 인자(ja / en / zh-Hans / zh-Hant / ko / de / fr / es / it / pt-PT)를 받습니다.

@@ -37,7 +37,7 @@ block traffic, no license or payment code, no UI. Just the code that *observes* 
 
 ## Tools exposed (`tools/list`)
 
-31 tools (the length of `toolDefinitions` in `MCPServer.swift`, which is what `tools/list` returns).
+32 tools (the length of `toolDefinitions` in `MCPServer.swift`, which is what `tools/list` returns).
 Every one is read-only. `get_exposed_ports` and the opt-in `run_active_vuln_scan` are pinned to
 `127.0.0.1`; the one tool that contacts an external host is the opt-in, Pro-only
 `run_npm_audit_signatures`, which runs `npm audit signatures` against the npm registry. The
@@ -95,6 +95,13 @@ address.
   tools, plaintext `http://` servers on a non-loopback host, shell one-liner launch commands,
   entries pointing at HexStrike AI, group/world-writable config files and Claude Code's
   `enableAllProjectMcpServers`. Never returns env or header values or arguments. No network.
+- `audit_agent_setup` — reads the instruction files and skills of AI coding agents (under
+  `~/.claude`, `~/.codex`, `~/.cursor`, `~/.gemini`, `~/.agents`, `~/.openclaw`, plus `CLAUDE.md`,
+  `AGENTS.md` and similar in registered project folders) and OpenClaw's `openclaw.json`, read-only and
+  without any network access. It flags 22 kinds of risky content, such as invisible Unicode tag
+  characters, instruction overrides, fetch-and-run, encoded execution, references to secret files with
+  outbound sending, compiled code inside a skill, and OpenClaw with authentication disabled. A match
+  is a place for a person to read and check, not a claim of malice.
 
 ### Vulnerability & CVE
 

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.12 (build 159).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.13 (build 160).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -152,7 +152,7 @@ extension RoamSwitchKnowledgeBase {
                 • 啟用方式：「連接埠與裝置監控」→「實證型漏洞驗證（主動可達性確認）」。這只會解鎖連接埠稽核畫面中的「執行實證驗證」按鈕，本身不會傳送任何內容，每次執行前都會先詢問「是否傳送驗證請求？」。
                 • 僅限 127.0.0.1：絕不會傳送至其他主機。
                 • 無驗證存取：對 Redis（PING）、Memcached（stats）、MongoDB（listDatabases）進行單次、短逾時、非破壞性的探測。
-                • 通用開發伺服器：檢查 CORS 設定錯誤（反射 Origin 並允許憑證）、路徑穿越與開放重新導向。
+                • 通用開發伺服器：檢查 CORS 設定錯誤（反射 Origin 並允許憑證）、路徑穿越、開放重新導向與 SSRF（會請求所收到 URL 的伺服器，即使該 URL 指向本機上自建的監聽連接埠）。
                 • 已知 CVE 版本比對：對於無需驗證即可存取的 Redis / Memcached，會以非破壞性查詢讀取版本，並與已知 CVE 版本範圍比對。不會傳送任何攻擊酬載。
                 • 也可透過 MCP 工具 `run_active_vuln_scan` 使用（其探測僅傳送至本機）。
                 """,
@@ -683,7 +683,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "RoamSwitch.app 內建唯讀的 MCP（Model Context Protocol）伺服器，讓 Claude 等 AI 助理可以查詢您 Mac 的安全狀態。其中沒有任何可以變更設定或封鎖任何項目的工具。",
                 details: """
                 • 傳輸方式：僅限本機 stdio。執行檔位置：`/Applications/RoamSwitch.app/Contents/MacOS/RoamSwitchMCPServer`。
-                • 主要工具（共 31 個）：`get_security_report`（安全稽核）、`verify_security_findings`（重新確認稽核所指出的問題是否仍然存在，唯讀）、`get_exposed_ports`、`get_guard_status`、`audit_url_safety`、`audit_secrets`、`audit_mcp_configs`（檢查 MCP 用戶端設定檔中的危險項目；本機、唯讀；也可在「惡意軟體防護」→「🧩 稽核 MCP 設定（AI 整合）…」的專用視窗中執行）、`audit_security_logs`、`get_quarantine_status`、`get_notification_history`、`get_canary_status`、`get_port_anomaly_incidents`、`get_runtime_threat_status`、`get_incident_timeline`（圍堵事件時間軸）、`get_network_history`（網路歷史學習）、`run_package_cve_scan`、`run_package_cve_scan_languages`、`run_active_vuln_scan`（僅對 127.0.0.1 進行非破壞性探測）、`run_npm_audit_signatures`（唯一會與外部伺服器即 npm 登錄庫通訊的工具，僅限 Pro 且需主動啟用），以及 `get_app_help`（本知識庫）。
+                • 主要工具（共 32 個）：`get_security_report`（安全稽核）、`verify_security_findings`（重新確認稽核所指出的問題是否仍然存在，唯讀）、`get_exposed_ports`、`get_guard_status`、`audit_url_safety`、`audit_secrets`、`audit_mcp_configs`（檢查 MCP 用戶端設定檔中的危險項目；本機、唯讀；也可在「惡意軟體防護」→「🧩 稽核 MCP 設定（AI 整合）…」的專用視窗中執行）、`audit_agent_setup`（檢查提供給 AI 代理的指示檔、技能和 OpenClaw 設定中的危險內容，如不可見的 Unicode 字元、指示覆蓋、curl | sh、竊取機密的形態；本機、唯讀；也可在「惡意軟體防護」→「🤖 稽核 AI 代理的指示檔…」視窗中執行）、`audit_security_logs`、`get_quarantine_status`、`get_notification_history`、`get_canary_status`、`get_port_anomaly_incidents`、`get_runtime_threat_status`、`get_incident_timeline`（圍堵事件時間軸）、`get_network_history`（網路歷史學習）、`run_package_cve_scan`、`run_package_cve_scan_languages`、`run_active_vuln_scan`（僅對 127.0.0.1 進行非破壞性探測）、`run_npm_audit_signatures`（唯一會與外部伺服器即 npm 登錄庫通訊的工具，僅限 Pro 且需主動啟用），以及 `get_app_help`（本知識庫）。
                 • 程序執行記錄（Pro，唯讀）：`search_exec_events`（搜尋啟動事件）和 `get_process_tree`（某程序的祖先與後代）。
                 • 資源：`roamswitch://docs/features`、`roamswitch://docs/alerts-and-messages`、`roamswitch://docs/settings-guide`、`roamswitch://docs/troubleshooting`。
                 • 語言：回答依應用程式的語言設定而定。`get_app_help` 接受 `language` 參數（ja / en / zh-Hans / zh-Hant / ko / de / fr / es / it / pt-PT）。
