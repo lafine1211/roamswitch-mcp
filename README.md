@@ -93,8 +93,10 @@ address.
   locations (Claude Desktop, Claude Code, Cursor, Windsurf, VS Code, Cline, Gemini CLI) plus the
   project-level `.mcp.json` files in registered folders, and flags risky entries: auto-approved
   tools, plaintext `http://` servers on a non-loopback host, shell one-liner launch commands,
-  entries pointing at HexStrike AI, group/world-writable config files and Claude Code's
-  `enableAllProjectMcpServers`. Never returns env or header values or arguments. No network.
+  entries pointing at HexStrike AI, group/world-writable config files, Claude Code's
+  `enableAllProjectMcpServers`, and a config file that holds both a server that reads text other people
+  wrote and a server that can run commands or write files (the pairing indirect prompt injection needs;
+  recognised by well-known package names). Never returns env or header values or arguments. No network.
 - `audit_agent_setup` — reads the instruction files and skills of AI coding agents (under
   `~/.claude`, `~/.codex`, `~/.cursor`, `~/.gemini`, `~/.agents`, `~/.openclaw`, plus `CLAUDE.md`,
   `AGENTS.md` and similar in registered project folders) and OpenClaw's `openclaw.json`, read-only and
