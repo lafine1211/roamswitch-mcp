@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.14 (build 161).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.0 (build 162).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -438,6 +438,7 @@ extension RoamSwitchKnowledgeBase {
                 • 監視停止の警告: ヘルパーに3回連続で接続できない場合は、改ざん検知が機能していないことを通知します。
                 • 補足: リンク保護がhostsフォールバックで動作している間は、RoamSwitch自身が `/etc/hosts` の管理セクションを書き換えることがあります。LaunchAgent / Daemon は feat_persistence_monitor_guard が担当します。
                 • 既定値: Proライセンスの初回有効化時に自動でオン。メニュー「マルウェア対策」→「重要システムファイルの改ざんを定期監視 (Pro)」。
+                • SSHの手がかり: 通知には、同じ時間帯（変更の30分前から）にSSHでログインしていたセッション（接続元・アカウント・認証方法・まだ接続中か）を添えます。時間が重なっているというだけの手がかりで、書き換えたのがそのセッションだとは分かりません（この Mac は書き込んだプロセスを記録していません）。SSHのログインが見つからなければ、その旨を書きます。
                 """,
                 recommendation: "通知が来たら、`sudo visudo` や設定変更など自分で行った作業かを確認してください。心当たりがなければ、該当ファイルの内容を直ちに確認し、パスワードの変更を検討してください。"
             ),
@@ -624,6 +625,20 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "IPごとの許可リストはなく、遮断は10分で自動的に解除されます。自宅や社内で正規のスキャンツール(資産管理・脆弱性診断等)を定期的に走らせている場合、誤検知で繰り返し遮断される可能性があるため、その間は自動遮断だけをオフにして検知(通知)のみ有効にしておくことを検討してください。"
             ),
             LocalizedEntry(
+                id: "feat_ssh_guard",
+                title: "SSH総当たりの検知と遮断 (Pro)",
+                summary: "リモートログイン（SSH）がオンのときだけ、sshd のログを読み、短時間にログインへ何度も失敗した送信元を検知して通知します。既定で、その送信元からの SSH への新しい接続を1時間（繰り返すたびに4倍、上限7日）遮断します。Pro版限定。",
+                details: """
+                • 仕組み: 特権ヘルパーが `log stream`（統合ログ）で sshd の行を読みます。リモートログインがオフのMacでは何も読みません（1分ごとにサービスが読み込まれているかを調べるだけ）。ログの行はユーザー名を攻撃者が決められるため、特権ヘルパーでは解釈せず、権限を落とした別プロセスで解釈します。接続元のアドレスは行の末尾（sshd自身が書く部分）から読むので、ユーザー名に偽のアドレスを入れても第三者は遮断されません。`logger -t sshd` など sshd 以外が書いた行は無視します。
+                • 数える失敗: `Failed password`、`Invalid user`、認証前の切断、`maximum authentication attempts exceeded`。同じ試行が複数行に出るので二重には数えず、`Failed publickey` は数えません。既定は10分間に6回。IPv6 は /64 にまとめて数えます。
+                • 遮断: pf の規則で、SSH のポート（22と sshd_config の Port）への新しい接続（SYN）だけを落とします。確立済みのセッションは切りません。ゲートウェイ・DNS・自分自身のアドレスは遮断しません。ポートスキャンの遮断・VPNキルスイッチ・ポート遮断とは別に管理され、互いを壊しません。ネットワークの隔離（Air-Gap）は起動しません。期限切れの解除は1分ごとの掃除で行うので、最大1分ほど遅れます。
+                • 除外: 除外リスト（IP/CIDR）、いま SSH で接続中の送信元、30日以内に公開鍵認証で成功した送信元は遮断しません。fail2ban・sshguard・DenyHosts が動いている Mac では遮断を譲り、検知と通知だけにします。
+                • 通知: 遮断したときと、失敗を重ねた送信元からログインが成功したとき（重大。セッションは切りません）だけ、送信元ごとにまとめて通知します。失敗1件ごとには鳴りません。ログイン（Accepted）は接続元・アカウント・認証方法・鍵の指紋つきで記録され（最新200件）、重要システムファイルの改ざん通知の手がかりにも使われます。ATT&CK: T1110。
+                • 開き方: メニューバーの「ポート・デバイス監視」→「🔑 SSH総当たりの検知と遮断 (Pro)」。条件・除外リスト・遮断中の一覧と解除は「SSH総当たりの遮断の設定…」。Pro有効化時に自動でオン（自分でオフにした選択は保たれる）。MCP: `get_ssh_guard_incidents`（読み取り専用）。
+                """,
+                recommendation: "出先などで自分の接続元が変わる場合は、先に公開鍵認証で一度ログインするか、除外リストに範囲を書いておくと、誤って遮断されません。遮断されてしまったら、設定画面の一覧から解除できます。パスワード認証をやめて公開鍵認証だけにすると、総当たりは意味を持たなくなります。"
+            ),
+            LocalizedEntry(
                 id: "feat_sensor_pairing",
                 title: "RoamSwitch Sensor ペアリング (ペアリングコード方式, Pro)",
                 summary: "同一LAN上に置く別製品「RoamSwitch Sensor」(専用の能動監査ハブ)との相互信頼ペアリングを管理します。Sensor側で発行されるペアリングコードを使った能動ペアリング方式で、mDNSによる自動探索は使用しません(固定IPで運用されるSensorが前提)。Pro版限定。",
@@ -697,7 +712,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "RoamSwitch.appには読み取り専用のMCP（Model Context Protocol）サーバーが同梱されており、ClaudeなどのAIアシスタントからMacのセキュリティ状況を問い合わせられます。設定変更や遮断などの操作系ツールは一切ありません。",
                 details: """
                 • 通信: ローカルの標準入出力（stdio）のみ。バイナリは `/Applications/RoamSwitch.app/Contents/MacOS/RoamSwitchMCPServer`。
-                • 主なツール（全32種）: `get_security_report`（総合診断）、`verify_security_findings`（診断の指摘が今も残っているかの再確認・読み取り専用）、`get_exposed_ports`、`get_guard_status`、`audit_url_safety`、`audit_secrets`、`audit_mcp_configs`（MCPクライアントの設定ファイルにある危険な記述を点検。ローカル・読み取り専用。メニュー「マルウェア対策」→「🧩 MCP設定（AI連携）を監査…」の専用画面でも実行できる）、`audit_agent_setup`（AIエージェントに読ませる指示ファイル・スキルとOpenClawの設定にある危険な記述を点検。見えないUnicode文字・指示の上書き・curl | sh・秘密の持ち出しの形など。ローカル・読み取り専用。メニュー「マルウェア対策」→「🤖 AIエージェントの指示ファイルを監査…」の専用画面でも実行できる）、`audit_security_logs`、`get_quarantine_status`、`get_notification_history`、`get_canary_status`、`get_port_anomaly_incidents`、`get_runtime_threat_status`、`get_incident_timeline`（封じ込めインシデント履歴）、`get_network_history`（ネットワーク履歴学習）、`run_package_cve_scan`、`run_package_cve_scan_languages`、`run_active_vuln_scan`（127.0.0.1への非破壊プローブのみ）、`run_npm_audit_signatures`（外部サーバー=npmレジストリへ通信する唯一のツール。Pro・オプトイン）、`get_app_help`（このナレッジベース）。
+                • 主なツール（全33種）: `get_security_report`（総合診断）、`verify_security_findings`（診断の指摘が今も残っているかの再確認・読み取り専用）、`get_exposed_ports`、`get_guard_status`、`audit_url_safety`、`audit_secrets`、`audit_mcp_configs`（MCPクライアントの設定ファイルにある危険な記述を点検。第三者の文章を読むサーバーとコマンド実行系のサーバーが同じ設定にある構成（間接プロンプトインジェクションの前提）も指摘する。ローカル・読み取り専用。メニュー「マルウェア対策」→「🧩 MCP設定（AI連携）を監査…」の専用画面でも実行できる）、`audit_agent_setup`（AIエージェントに読ませる指示ファイル・スキルとOpenClawの設定にある危険な記述を点検。見えないUnicode文字・指示の上書き・curl | sh・秘密の持ち出しの形など。ローカル・読み取り専用。メニュー「マルウェア対策」→「🤖 AIエージェントの指示ファイルを監査…」の専用画面でも実行できる）、`audit_security_logs`、`get_quarantine_status`、`get_notification_history`、`get_canary_status`、`get_port_anomaly_incidents`、`get_ssh_guard_incidents`（SSH総当たりの記録と最近のSSHログイン・読み取り専用）、`get_runtime_threat_status`、`get_incident_timeline`（封じ込めインシデント履歴）、`get_network_history`（ネットワーク履歴学習）、`run_package_cve_scan`、`run_package_cve_scan_languages`、`run_active_vuln_scan`（127.0.0.1への非破壊プローブのみ）、`run_npm_audit_signatures`（外部サーバー=npmレジストリへ通信する唯一のツール。Pro・オプトイン）、`get_app_help`（このナレッジベース）。
                 • プロセス実行の記録(Pro・読み取り専用): `search_exec_events`(起動イベントの検索)、`get_process_tree`(祖先・子孫のプロセスツリー)。
                 • リソース: `roamswitch://docs/features`、`roamswitch://docs/alerts-and-messages`、`roamswitch://docs/settings-guide`、`roamswitch://docs/troubleshooting`。
                 • 言語: 回答はアプリの言語設定に従います。`get_app_help` は `language` 引数（ja / en / zh-Hans / zh-Hant / ko / de / fr / es / it / pt-PT）で言語を指定できます。
@@ -1062,6 +1077,7 @@ extension RoamSwitchKnowledgeBase {
                 • 発生原因: 管理者による設定変更（`sudo visudo`、SSH設定の編集など）、ソフトウェアによる変更、または攻撃者による権限昇格・バックドア設置。
                 • 自動防御: 通知のみ。変更後の状態を自動で正規とはみなしません。
                 • 関連警告: 「重要システムファイルの改ざん検知が機能していません」は、特権ヘルパーに接続できずスキャンが続けて失敗していることを示します。
+                • SSHの手がかり: 通知には、同じ時間帯（変更の30分前から）にSSHでログインしていたセッション（接続元・アカウント・認証方法・まだ接続中か）を添えます。時間が重なっているというだけの手がかりで、書き換えたのがそのセッションだとは分かりません（この Mac は書き込んだプロセスを記録していません）。SSHのログインが見つからなければ、その旨を書きます。
                 """,
                 recommendation: """
                 1. 通知に表示されたファイルを、自分や管理者が変更したか確認してください。
@@ -1157,7 +1173,7 @@ extension RoamSwitchKnowledgeBase {
                 title: "Pro有効化時に自動でオンになるガードと、オプトインのガード",
                 summary: "Proライセンスを初めて有効化すると、通知が中心で誤検知が少なく、追加の権限や設定が要らない自律防御ガードが自動でオンになります。通常の利用を妨げうるものや、追加の権限・設定・外部通信が要るものはオプトインのままです。その後は各ガードでユーザーが選んだオン / オフが尊重されます。",
                 details: """
-                • 自動でオン（初回のPro有効化時に1回だけ）: 未知のリスニングポートの自動遮断、着信ポートスキャン検知（検知元を10分間自動遮断することを含む）、ランサムウェアおとりファイル検知とエントロピー検知、認証情報ハニートークン、ARPスプーフィング検知時の自動遮断、XProtectのマルウェア検知時の自動ネットワーク遮断、自動ログ監査、重要システムファイルの改ざん監視、依存関係ロックファイルの改ざん監視。ARPとXProtectの自動遮断がオンになった際は、その旨の案内を1度だけ表示します。
+                • 自動でオン（初回のPro有効化時に1回だけ）: 未知のリスニングポートの自動遮断、着信ポートスキャン検知（検知元を10分間自動遮断することを含む）、SSH総当たり検知（リモートログインがオンのときだけ働く）、ランサムウェアおとりファイル検知とエントロピー検知、認証情報ハニートークン、ARPスプーフィング検知時の自動遮断、XProtectのマルウェア検知時の自動ネットワーク遮断、自動ログ監査、重要システムファイルの改ざん監視、依存関係ロックファイルの改ざん監視。ARPとXProtectの自動遮断がオンになった際は、その旨の案内を1度だけ表示します。
                 • Proで既定オン: Web・メール保護、自動起動登録(LaunchAgent/Daemon)の監視、DNS脅威保護（外出先のネットワークにだけ適用）、リンク保護（明らかな詐欺サイトの自動ブロック）。
                 • 既定オフ（オプトイン）: ClickFix対策の自動遮断、Dockerリスク検知、BadUSB物理ポートガード、USBストレージ自動遮断、ゲートウェイARP/NDP固定、Bluetooth自動オフ、プロセス実行の記録、ブラウザ認証情報アクセス監視、VPNトンネル、Sensorペアリング、実証型脆弱性診断、npm署名検証。それぞれ、通常の利用を妨げうる（ネットワークの遮断、入力機器、外付けドライブ、音声）、追加の権限やインストール（フルディスクアクセス、アクセシビリティ、blueutil）が要る、許可リストなど利用者自身の設定が要る、外部のサーバーと通信する、のいずれかに当たるためです。DNS脅威保護のプロバイダーは任意で選べます。
                 • 無料でも既定オン: クリップボード保護（APIキー・ClickFixコマンド）。

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.14 (build 161).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.0 (build 162).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -505,6 +505,15 @@ enum RoamSwitchMCPSkillsContent {
        pinned: the scope ties the name to a publisher, not to the version
        that will run. Say that if the user asks whether such a server is
        fully pinned.
+       The `injection_exposure` finding is a pairing, recognised only by
+       well-known package names: a server that reads text other people
+       wrote (web fetch, browser, search, chat, mail, GitHub) next to a
+       different server that can run commands or write files. It does not
+       show that any page, issue or mail holds an injected instruction, and
+       its absence says nothing about servers with other names. Report it as
+       medium, say that it concerns indirect prompt injection (ATT&CK
+       T1698), and if the acting server also has an `auto_approve` finding
+       in the same result, state that chain and let the user judge it.
     7. Before telling the user something is fixed, re-measure it with
        `verify_security_findings` and report its answer, including
        `inconclusive` when that is what it returned.

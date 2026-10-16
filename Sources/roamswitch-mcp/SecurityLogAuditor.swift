@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.14 (build 161).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.0 (build 162).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -246,18 +246,23 @@ final class SecurityLogAuditor {
     /// Output kept from one query (excess is drained and dropped).
     private static let maxLogOutputBytes = 64 * 1024 * 1024
 
+    /// Predicate targeting critical security subsystems and processes. macOS 26 (OpenSSH 10) writes the login lines
+    /// from `sshd-session` instead of `sshd`, so both are listed (exact names: a prefix match would also pull in
+    /// unrelated `sshd-*` helpers and their noise).
+    static let securityLogPredicate = """
+    process == "sudo" OR \
+    process == "sshd" OR \
+    process == "sshd-session" OR \
+    process == "loginwindow" OR \
+    subsystem == "com.apple.security.syspolicy" OR \
+    subsystem == "com.apple.XProtectFramework.PluginService" OR \
+    process == "XProtectRemediator"
+    """
+
     private func fetchSecurityLogs(hours: Int) -> [SecurityLogEvent] {
         var results: [SecurityLogEvent] = []
 
-        // Predicate targeting critical security subsystems and processes
-        let predicate = """
-        process == "sudo" OR \
-        process == "sshd" OR \
-        process == "loginwindow" OR \
-        subsystem == "com.apple.security.syspolicy" OR \
-        subsystem == "com.apple.XProtectFramework.PluginService" OR \
-        process == "XProtectRemediator"
-        """
+        let predicate = Self.securityLogPredicate
 
         // Defence in depth: never query more than 7 days, whatever the caller passed.
         let hours = min(max(hours, 1), 168)

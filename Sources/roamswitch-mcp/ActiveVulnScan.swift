@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.14 (build 161).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.0 (build 162).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -1101,6 +1101,10 @@ public enum ActiveVulnScan {
     /// "nmap NSE所見" findings for the test's stub-server port (and adds ~15s per scan),
     /// making count-based assertions depend on the developer's environment. Production
     /// callers always take the default (on).
+    /// Signatures whose finding is about being reachable from the network: probed only for a
+    /// listener bound beyond loopback (`ListeningPortInfo.isGloballyExposed`).
+    static let networkExposureOnlyIDs: Set<String> = ["ollama-exposed", "jupyter-noauth", "mlflow-noauth", "gradio-noauth"]
+
     static func runScan(ports: [ListeningPortInfo], probeLogURL: URL = probeLogURL, includeNmapNSE: Bool = true) -> ScanRunResult {
         var result = ScanRunResult()
         var logEntries: [ProbeRunRecord] = []
@@ -1108,6 +1112,9 @@ public enum ActiveVulnScan {
         for port in ports {
             let signatures = ServiceSignatures.match(processName: port.processName, executablePath: port.executablePath)
             for signature in signatures where probeableSignatureIDs.contains(signature.id) {
+                // The AI services' findings say "usable from the network", which is only true when
+                // the listener is bound beyond loopback. A copy on 127.0.0.1 is not reported.
+                if networkExposureOnlyIDs.contains(signature.id) && !port.isGloballyExposed { continue }
                 let startedAt = Date()
                 let confirmed: Bool?
                 switch signature.id {

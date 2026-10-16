@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.11.14 (build 161). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.12.0 (build 162). Do not edit here; see SYNC.md.
 
 import XCTest
 import Network
@@ -285,6 +285,16 @@ final class ActiveVulnScanTests: XCTestCase {
         listener.start(queue: .global())
         _ = ready.wait(timeout: .now() + 2)
         return boundPort
+    }
+
+    func testRunScanLeavesAIServicesOnLoopbackAlone() {
+        // The AI services' findings say "usable from the network": a copy bound to 127.0.0.1 is not reported,
+        // one bound beyond loopback is.
+        let port = spawnStubServer(reply: http200(ollamaRoot))
+        let local = [ListeningPortInfo(processName: "ollama", pid: 1, port: port, isGloballyExposed: false, executablePath: nil)]
+        XCTAssertTrue(runScanIsolated(ports: local).findings.isEmpty)
+        let exposed = [ListeningPortInfo(processName: "ollama", pid: 1, port: port, isGloballyExposed: true, executablePath: nil)]
+        XCTAssertFalse(runScanIsolated(ports: exposed).findings.isEmpty)
     }
 
     func testRunScanAppendsCVEFindingForVulnerableRedisVersion() {

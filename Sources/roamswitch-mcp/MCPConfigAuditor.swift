@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.14 (build 161).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.0 (build 162).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -30,7 +30,7 @@ enum MCPConfigAuditor {
     struct Finding: Codable, Equatable {
         /// Stable id: `auto_approve`, `remote_plain_http`, `shell_wrapper`, `hexstrike`,
         /// `world_writable_config`, `auto_trust_project_servers`, `unpinned_package_launcher`,
-        /// `container_host_access`, `code_loading_env`.
+        /// `container_host_access`, `code_loading_env`, `injection_exposure`.
         let id: String
         /// `high` or `medium`.
         let severity: String
@@ -129,10 +129,14 @@ enum MCPConfigAuditor {
                 ))
             }
 
-            for (serverName, config) in servers(in: root).prefix(maxServersPerFile) {
+            let fileServers = Array(servers(in: root).prefix(maxServersPerFile))
+            for (serverName, config) in fileServers {
                 fileHasMCPContent = true
                 result.serverCount += 1
                 result.findings += audit(server: serverName, config: config, file: file.path)
+            }
+            if let exposure = injectionExposure(servers: fileServers, file: file.path) {
+                result.findings.append(exposure)
             }
 
             if fileHasMCPContent, let mode = file.mode, mode & 0o022 != 0 {
@@ -295,6 +299,53 @@ enum MCPConfigAuditor {
             ))
         }
         return findings
+    }
+
+    /// Launch-line fragments (package or image names) of well-known servers whose job is to bring text
+    /// that other people wrote into the model's context: web fetch, headless browsers, web search,
+    /// chat, mail, and the GitHub server (issues and pull requests are open to anyone for a public repo).
+    private static let untrustedContentReaders: [String] = [
+        "mcp-server-fetch", "server-fetch", "server-puppeteer", "@playwright/mcp", "playwright-mcp",
+        "server-brave-search", "firecrawl-mcp", "tavily-mcp", "exa-mcp-server", "chrome-devtools-mcp",
+        "@browsermcp/mcp", "server-slack", "server-github", "github-mcp-server", "server-gmail", "gmail-mcp",
+    ]
+
+    /// The same for well-known servers that run commands or write files on this Mac.
+    private static let machineActors: [String] = [
+        "desktop-commander", "mcp-shell", "shell-mcp", "mcp-server-commands", "server-shell",
+        "terminal-controller", "iterm-mcp", "mcp-server-docker", "mcp-server-kubernetes", "server-filesystem",
+    ]
+
+    private static func launchText(_ config: [String: Any]) -> String {
+        let command = (config["command"] as? String) ?? ""
+        let args = (config["args"] as? [Any])?.compactMap { $0 as? String } ?? []
+        let url = (config["url"] as? String) ?? (config["serverUrl"] as? String) ?? ""
+        return ([command, url] + args).joined(separator: " ").lowercased()
+    }
+
+    /// Indirect prompt injection (ATT&CK T1698) needs two things in one setup: a server that reads text
+    /// an attacker can write (a web page, an issue, a mail) and a different server that can run commands
+    /// or change files here. A page can then carry the instruction and the model carries it out. This
+    /// cannot see what a server's tools say or whether the model obeys them; it only reports that the
+    /// combination is configured, by recognising well-known package and image names in the launch line.
+    /// One finding per file; server names come from the file and are sanitized.
+    static func injectionExposure(servers: [(String, [String: Any])], file: String) -> Finding? {
+        var readers: [String] = []
+        var actors: [String] = []
+        for (rawName, config) in servers {
+            let text = launchText(config)
+            if untrustedContentReaders.contains(where: { text.contains($0) }) { readers.append(sanitized(rawName)) }
+            else if machineActors.contains(where: { text.contains($0) }) { actors.append(sanitized(rawName)) }
+        }
+        guard !readers.isEmpty, !actors.isEmpty else { return nil }
+        func list(_ names: [String]) -> String {
+            names.prefix(3).joined(separator: ", ") + (names.count > 3 ? " (+\(names.count - 3))" : "")
+        }
+        return Finding(
+            id: "injection_exposure", severity: "medium", file: file, server: nil,
+            detail: "reads outside content: \(list(readers)); acts on this Mac: \(list(actors))",
+            message: loc("この設定には、Web ページ・メール・チャット・Issue など第三者が書いた文章を AI に読ませる MCP サーバーと、このマシンでコマンドを実行したりファイルを書き換えたりできる MCP サーバーが、同時に入っています。読み込んだ文章に紛れた命令（間接プロンプトインジェクション）を AI が実行すると、手元の操作をしていなくてもコマンドやファイル変更が走ります。実行系のツールは毎回の確認を残し、読み取り用のサーバーとは別のクライアントやプロファイルに分けてください。")
+        )
     }
 
     /// Variables that make the process load a library or script of the caller's choosing before its

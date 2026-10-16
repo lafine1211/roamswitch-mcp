@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.14 (build 161).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.0 (build 162).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -365,6 +365,57 @@ public struct MCPPortAnomalyIncidentsPayload: Codable, Equatable {
     public let incidents: [MCPPortAnomalyIncidentPayload]
 }
 
+/// One SSH login as `get_ssh_guard_incidents` reports it (an `Accepted` line of sshd's log).
+public struct MCPSSHSessionPayload: Codable, Equatable {
+    public let time: String
+    public let user: String
+    public let ip: String
+    public let port: Int
+    public let method: String
+    public let keyType: String?
+    public let fingerprint: String?
+    /// Whether the connection was still open when the app last looked (the newest sessions only).
+    public let active: Bool?
+}
+
+/// One SSH brute-force record. `kind`: `banned` (the source reached the limit and was banned),
+/// `detected` (it reached the limit but nothing was banned; `note` says why), `successAfterFailures`
+/// (a login succeeded from a source that had been failing; `session` is that login).
+public struct MCPSSHGuardIncidentPayload: Codable, Equatable {
+    public let timestamp: String
+    public let kind: String
+    public let source: String
+    public let failureCount: Int
+    public let windowSecs: Int
+    public let banSecs: Int?
+    public let ports: [Int]
+    public let note: String?
+    public let usersTried: [String]
+    public let session: MCPSSHSessionPayload?
+}
+
+public struct MCPSSHBanPayload: Codable, Equatable {
+    public let source: String
+    public let expiresAt: String
+    public let remainingSecs: Int
+}
+
+public struct MCPSSHGuardPayload: Codable, Equatable {
+    public let isEnabled: Bool
+    public let attackTechnique: String
+    public let incidentsNote: String
+    public let incidents: [MCPSSHGuardIncidentPayload]
+    public let statusNote: String
+    public let statusAsOf: String?
+    public let remoteLoginOn: Bool?
+    public let watching: Bool?
+    public let sshPorts: [Int]
+    public let otherBanningTool: String?
+    public let activeBans: [MCPSSHBanPayload]
+    public let sessionsNote: String
+    public let recentSessions: [MCPSSHSessionPayload]
+}
+
 /// Field-for-field mirror of `SensorAuditFinding` (`Shared/HelperProtocol.swift`),
 /// itself a mirror of `roamswitch-sensor`'s `ScanFinding`.
 public struct MCPSensorAuditFindingPayload: Codable, Equatable {
@@ -520,6 +571,7 @@ public enum MCPResponseFormatting {
     static let criticalPathFimKey = "RoamSwitch.CriticalPathFimEnabled"               // CriticalPathFimGuard — false; Pro default-on
     static let lockfileTamperGuardKey = "RoamSwitch.LockfileTamperGuardEnabled"       // LockfileTamperGuard — false; Pro default-on
     static let portScanGuardKey = "RoamSwitch.PortScanGuardEnabled"                   // PortScanGuard — false; Pro default-on
+    static let sshGuardKey = "RoamSwitch.SSHGuardEnabled"                             // SSHGuard — false; Pro default-on (works only while Remote Login is on)
     static let persistenceMonitorKey = "RoamSwitch.PersistenceMonitorEnabled"         // PersistenceMonitorGuard — true
     static let gatewayARPLockKey = "RoamSwitch.GatewayARPLockEnabled"                 // GatewayARPLockManager — false
     static let scheduledLogAuditKey = "RoamSwitch.ScheduledLogAuditEnabled"           // ScheduledLogAuditGuard — false; Pro default-on
@@ -828,6 +880,7 @@ public enum MCPResponseFormatting {
         var guards: [MCPGuardEntryPayload] = []
         guards.append(entry("portAnomalyGuard", portAnomalyGuardKey, defaultWhenUnset: false))
         guards.append(entry("portScanGuard", portScanGuardKey, defaultWhenUnset: false))
+        guards.append(entry("sshGuard", sshGuardKey, defaultWhenUnset: false))
         guards.append(entry("arpSpoofAutoContainment", arpSpoofAutoContainmentKey, defaultWhenUnset: false))
         guards.append(entry("usbKeyboardGuard", usbKeyboardGuardKey, defaultWhenUnset: false))
         guards.append(entry("usbStorageGuard", usbStorageGuardKey, defaultWhenUnset: false))
@@ -909,6 +962,7 @@ public enum MCPResponseFormatting {
         case .ransomwareEntropy: return loc("汎用ランサムウェア検知（エントロピー解析）")
         case .honeytoken: return loc("認証情報ハニートークン")
         case .browserCredentialWatch: return loc("ブラウザ認証情報アクセス監視")
+        case .sshGuard: return loc("SSH総当たり検知")
         }
     }
 
@@ -916,6 +970,7 @@ public enum MCPResponseFormatting {
         switch action {
         case "air_gap": return loc("ネットワーク全遮断 (Air-Gap)")
         case "port_block": return loc("ポートのLAN公開を遮断")
+        case "ssh_block": return loc("SSH接続元を遮断（新しい接続のみ）")
         case "notify_only": return loc("通知のみ（遮断は行わない）")
         case "air_gap_degraded": return loc("Air-Gapを縮退モードへ移行（新規の外部通信は遮断を継続）")
         default: return action

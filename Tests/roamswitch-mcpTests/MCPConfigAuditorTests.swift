@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.11.14 (build 161). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.12.0 (build 162). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -246,6 +246,38 @@ final class MCPConfigAuditorTests: XCTestCase {
         XCTAssertFalse(r.findings.isEmpty)
         let encoded = String(data: try! JSONEncoder().encode(r.findings), encoding: .utf8)!
         XCTAssertFalse(encoded.contains(secret), "no env/header/argument/userinfo value may reach the result")
+    }
+
+    func testReaderPlusActorInOneFileIsFlaggedOncePerFile() {
+        let r = audit(#"{"mcpServers":{"web":{"command":"uvx","args":["mcp-server-fetch==1.0.0"]},"gh":{"command":"npx","args":["-y","@modelcontextprotocol/server-github@1.2.3"]},"fs":{"command":"npx","args":["-y","@modelcontextprotocol/server-filesystem@1.0.0","/tmp"]},"dc":{"command":"npx","args":["@wonderwhy-er/desktop-commander@1.0.0"]}}}"#)
+        let hits = r.findings.filter { $0.id == "injection_exposure" }
+        XCTAssertEqual(hits.count, 1)
+        XCTAssertEqual(hits.first?.severity, "medium")
+        XCTAssertNil(hits.first?.server)
+        XCTAssertEqual(hits.first?.detail, "reads outside content: gh, web; acts on this Mac: dc, fs")
+    }
+
+    func testReaderAloneOrActorAloneIsNotFlagged() {
+        let readerOnly = audit(#"{"mcpServers":{"web":{"command":"uvx","args":["mcp-server-fetch==1.0.0"]},"pw":{"command":"npx","args":["@playwright/mcp@1.0.0"]}}}"#)
+        XCTAssertFalse(ids(readerOnly).contains("injection_exposure"))
+        let actorOnly = audit(#"{"mcpServers":{"fs":{"command":"npx","args":["@modelcontextprotocol/server-filesystem@1.0.0","/tmp"]},"sh":{"command":"uvx","args":["mcp-server-commands==1.0.0"]}}}"#)
+        XCTAssertFalse(ids(actorOnly).contains("injection_exposure"))
+    }
+
+    func testReaderAndActorInDifferentFilesAreNotCombined() {
+        let r = MCPConfigAuditor.audit(files: [
+            .init(path: "/Users/u/.cursor/mcp.json", data: Data(#"{"mcpServers":{"web":{"command":"uvx","args":["mcp-server-fetch==1.0.0"]}}}"#.utf8), mode: 0o600),
+            .init(path: "/Users/u/.gemini/settings.json", data: Data(#"{"mcpServers":{"fs":{"command":"npx","args":["@modelcontextprotocol/server-filesystem@1.0.0","/tmp"]}}}"#.utf8), mode: 0o600),
+        ])
+        XCTAssertFalse(ids(r).contains("injection_exposure"))
+    }
+
+    func testInjectionExposureNeverCopiesArgumentsOrEnv() {
+        let r = audit(#"{"mcpServers":{"web":{"command":"uvx","args":["mcp-server-fetch==1.0.0","--token=SECRETARG"],"env":{"K":"SECRETENV"}},"sh":{"command":"uvx","args":["mcp-server-commands==1.0.0"]}}}"#)
+        let f = r.findings.first { $0.id == "injection_exposure" }
+        XCTAssertNotNil(f)
+        XCTAssertFalse((f?.detail ?? "").contains("SECRET"))
+        XCTAssertFalse((f?.message ?? "").contains("SECRET"))
     }
 
     func testServerNamesAreSanitizedAndBounded() {

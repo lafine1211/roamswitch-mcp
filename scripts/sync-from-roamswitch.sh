@@ -46,11 +46,11 @@ CORE=(AppLanguage TrustedNetwork GatewayFingerprint WiFiSecurityMonitor \
       BrowserCredentialWatchStatusReader \
       PortAnomalyStatusReader RuntimeThreatStatusReader NotificationHistory \
       ContainmentIncidentTimeline NetworkHistoryGuard MCPSensorAuditStatusReader \
-      RansomwareSnapshotStatusReader MCPExecRecorderTools AgentSetupAuditor)
+      RansomwareSnapshotStatusReader MCPExecRecorderTools AgentSetupAuditor SSHGuardStatusReader)
 
 # Sources that live in the app's Shared/ folder (also compiled into the helper).
 SHARED=(RansomwareSnapshotLogic ExecEventModel ExecLogStore ExecProcessTree ExecReadAPI \
-        CryptoSecretDetection SafeScanFS ExecCommandMasker LinkFilterEngine KnownAttackServers)
+        CryptoSecretDetection SafeScanFS ExecCommandMasker LinkFilterEngine KnownAttackServers SSHGuardCore)
 
 # App test files that only exercise types present in this repo. Their
 # `@testable import RoamSwitch` is rewritten to this package's module name.

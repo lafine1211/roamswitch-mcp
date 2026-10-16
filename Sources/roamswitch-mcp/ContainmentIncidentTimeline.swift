@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.14 (build 161).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.0 (build 162).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -42,6 +42,9 @@ public enum ContainmentIncidentSource: String, Codable {
     /// maps to T1539 (Steal Web Session Cookie). Added additively, same as
     /// the cases above.
     case browserCredentialWatch
+    /// `SSHGuard` banned an SSH brute-force source, or a login succeeded after a run of failures. Always maps to
+    /// T1110 (Brute Force). Added additively, same as the cases above.
+    case sshGuard
 }
 
 /// What a ransomware canary actually observed, as a stable identifier —
@@ -242,6 +245,8 @@ public enum ContainmentIncidentTimeline {
             return "T1552" // Unsecured Credentials — current callers always pass this explicitly anyway
         case .browserCredentialWatch:
             return "T1539" // Steal Web Session Cookie — current callers always pass this explicitly anyway
+        case .sshGuard:
+            return "T1110" // Brute Force — current callers always pass this explicitly anyway
         case .runtimeThreat, .portAnomaly, .clickFix, .execRecorder:
             // XProtect/Gatekeeper/port-anomaly summaries don't carry a
             // Falco-style rule name to pattern-match on macOS, so this

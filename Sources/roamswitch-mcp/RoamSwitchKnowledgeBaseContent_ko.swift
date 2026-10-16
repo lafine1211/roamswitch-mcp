@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.14 (build 161).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.0 (build 162).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -424,6 +424,7 @@ extension RoamSwitchKnowledgeBase {
                 • 사각지대 경고: 헬퍼에 3회 연속 접속하지 못하면 변조 탐지가 작동하지 않고 있다고 알려줍니다.
                 • 참고: 링크 보호가 hosts 대체 모드로 동작하는 동안 RoamSwitch 자체가 관리하는 `/etc/hosts` 구역을 다시 쓸 수 있습니다. LaunchAgent / Daemon은 feat_persistence_monitor_guard가 담당합니다.
                 • 기본값: Pro를 처음 활성화할 때 자동으로 켜집니다. 메뉴: 악성코드 보호 → "중요 시스템 파일 변조를 정기적으로 감시 (Pro)".
+                • SSH 단서: 알림에는 같은 시간대(변경 30분 전부터)에 SSH로 로그인해 있던 세션(접속 주소·계정·인증 방식·아직 연결 중인지)을 덧붙입니다. 시간이 겹친다는 것뿐인 단서이며, 그 세션이 파일을 변경했는지는 알 수 없습니다(이 Mac은 어떤 프로세스가 기록했는지 남기지 않습니다). SSH 로그인이 발견되지 않았을 때는 그렇게 적습니다.
                 """,
                 recommendation: "경고를 받으면 직접 변경한 것인지(예: `sudo visudo`나 설정 편집) 확인하세요. 그렇지 않다면 즉시 파일 내용을 확인하고 비밀번호 변경을 고려하세요."
             ),
@@ -610,6 +611,20 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "IP별 허용 목록은 없으며, 차단은 10분 후 자동으로 해제됩니다. 집이나 회사에서 정당한 스캔 도구(자산 관리, 취약점 진단 등)를 정기적으로 실행한다면, 반복적인 오탐 차단을 피하기 위해 실행 중에는 자동 차단만 꺼두고 탐지(알림)만 켜두는 것을 고려하세요."
             ),
             LocalizedEntry(
+                id: "feat_ssh_guard",
+                title: "SSH 무차별 대입 탐지 및 차단 (Pro)",
+                summary: "원격 로그인(SSH)이 켜져 있을 때만 sshd 로그를 읽고, 짧은 시간에 로그인에 여러 번 실패한 발신지를 탐지해 알립니다. 기본적으로 그 발신지의 SSH 새 연결을 1시간(반복할 때마다 4배, 상한 7일) 차단합니다. Pro 전용.",
+                details: """
+                • 동작 방식: 권한 있는 헬퍼가 `log stream`(통합 로그)으로 sshd 줄을 읽습니다. 원격 로그인이 꺼진 Mac에서는 아무것도 읽지 않습니다(1분마다 서비스가 로드되어 있는지만 확인). 로그 줄의 사용자 이름은 공격자가 정할 수 있으므로 헬퍼는 줄을 직접 해석하지 않고, 권한을 낮춘 별도 프로세스가 해석합니다. 접속 주소는 줄의 끝(sshd가 직접 쓰는 부분)에서 읽으므로 사용자 이름에 가짜 주소를 넣어도 제3자가 차단되지 않습니다. `logger -t sshd`처럼 sshd 외의 프로그램이 쓴 줄은 무시합니다.
+                • 세는 실패: `Failed password`, `Invalid user`, 인증 전 연결 종료, `maximum authentication attempts exceeded`. 같은 시도가 여러 줄에 나타나므로 이중으로 세지 않으며 `Failed publickey`는 세지 않습니다. 기본은 10분 안에 6회. IPv6는 /64 단위로 합산합니다.
+                • 차단: pf 규칙으로 SSH 포트(22와 sshd_config의 Port)로의 새 연결(SYN)만 버립니다. 이미 확립된 세션은 끊지 않습니다. 게이트웨이, DNS, 이 Mac 자신의 주소는 차단하지 않습니다. 포트 스캔 차단, VPN 킬 스위치, 포트 차단과 따로 관리되어 서로를 깨뜨리지 않습니다. 네트워크 격리(Air-Gap)는 시작하지 않습니다. 만료된 차단은 1분마다 하는 정리에서 풀리므로 최대 1분 정도 늦어질 수 있습니다.
+                • 제외: 제외 목록(IP/CIDR)에 적은 발신지, 지금 SSH로 연결 중인 발신지, 30일 이내에 공개 키로 로그인에 성공한 발신지는 차단하지 않습니다. fail2ban, sshguard, DenyHosts가 실행 중인 Mac에서는 차단을 양보하고 탐지와 알림만 합니다.
+                • 알림: 차단했을 때와, 실패를 거듭한 발신지에서 로그인에 성공했을 때(심각 수준, 세션은 끊지 않음)만 발신지별로 모아 알립니다. 실패 한 건마다 알리지 않습니다. 로그인(Accepted)은 접속 주소, 계정, 인증 방식, 키 지문과 함께 기록되며(최근 200건) 중요 시스템 파일 변조 알림의 단서로도 쓰입니다. ATT&CK: T1110.
+                • 여는 방법: 메뉴 막대의 '포트·기기 감시' → '🔑 SSH 무차별 대입 탐지 및 차단 (Pro)'. 조건, 제외 목록, 차단 중인 목록과 해제는 'SSH 무차별 대입 차단 설정…'에서 합니다. Pro를 활성화하면 자동으로 켜집니다(직접 끈 선택은 유지됨). MCP: `get_ssh_guard_incidents`(읽기 전용).
+                """,
+                recommendation: "외출 등으로 내 접속 주소가 바뀌는 경우, 먼저 공개 키로 한 번 로그인하거나 제외 목록에 범위를 적어 두면 실수로 차단되지 않습니다. 차단되었다면 설정 창의 목록에서 해제할 수 있습니다. 비밀번호 인증을 끄고 공개 키 인증만 쓰면 무차별 대입은 의미가 없어집니다."
+            ),
+            LocalizedEntry(
                 id: "feat_sensor_pairing",
                 title: "RoamSwitch Sensor 페어링 (페어링 코드 방식, Pro)",
                 summary: "동일 LAN에 있는 별도 제품인 “RoamSwitch Sensor”(전용 능동 감사 허브)와의 상호 신뢰 페어링을 관리합니다. Sensor가 발급하는 페어링 코드를 사용하는 능동 페어링 방식이며, Sensor가 고정 IP로 운영됨을 전제로 mDNS 자동 검색은 사용하지 않습니다. Pro 전용.",
@@ -683,7 +698,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "RoamSwitch.app에는 읽기 전용 MCP(Model Context Protocol) 서버가 포함되어 있어 Claude 같은 AI 도우미가 Mac의 보안 상태를 물어볼 수 있습니다. 설정을 바꾸거나 무언가를 차단하는 도구는 없습니다.",
                 details: """
                 • 전송 방식: 로컬 stdio만 사용합니다. 실행 파일: `/Applications/RoamSwitch.app/Contents/MacOS/RoamSwitchMCPServer`.
-                • 주요 도구(총 32개): `get_security_report`(보안 진단), `verify_security_findings`(진단에서 지적된 항목이 아직 남아 있는지 다시 확인, 읽기 전용), `get_exposed_ports`, `get_guard_status`, `audit_url_safety`, `audit_secrets`, `audit_mcp_configs`(MCP 클라이언트 설정 파일의 위험한 항목 점검, 로컬·읽기 전용. 악성코드 보호 → "🧩 MCP 설정(AI 연동) 감사…"의 전용 창에서도 실행 가능), `audit_agent_setup`(AI 에이전트에게 읽히는 지시 파일·스킬·OpenClaw 설정의 위험한 내용(보이지 않는 Unicode 문자, 지시 덮어쓰기, curl | sh, 비밀 유출 형태 등) 점검, 로컬·읽기 전용. 메뉴 「악성코드 방어」→「🤖 AI 에이전트 지시 파일 감사…」 창에서도 실행 가능), `audit_security_logs`, `get_quarantine_status`, `get_notification_history`, `get_canary_status`, `get_port_anomaly_incidents`, `get_runtime_threat_status`, `get_incident_timeline`(봉쇄 사고 타임라인), `get_network_history`(네트워크 이력 학습), `run_package_cve_scan`, `run_package_cve_scan_languages`, `run_active_vuln_scan`(127.0.0.1로만 비파괴적 프로브를 보냄), `run_npm_audit_signatures`(외부 서버, 즉 npm 레지스트리와 통신하는 유일한 도구, Pro·옵트인), `get_app_help`(이 지식 베이스).
+                • 주요 도구(총 33개): `get_security_report`(보안 진단), `verify_security_findings`(진단에서 지적된 항목이 아직 남아 있는지 다시 확인, 읽기 전용), `get_exposed_ports`, `get_guard_status`, `audit_url_safety`, `audit_secrets`, `audit_mcp_configs`(MCP 클라이언트 설정 파일의 위험한 항목 점검(다른 사람이 쓴 글을 읽는 서버와 명령 실행 서버가 한 설정에 함께 있는 구성, 즉 간접 프롬프트 인젝션의 전제도 지적), 로컬·읽기 전용. 악성코드 보호 → "🧩 MCP 설정(AI 연동) 감사…"의 전용 창에서도 실행 가능), `audit_agent_setup`(AI 에이전트에게 읽히는 지시 파일·스킬·OpenClaw 설정의 위험한 내용(보이지 않는 Unicode 문자, 지시 덮어쓰기, curl | sh, 비밀 유출 형태 등) 점검, 로컬·읽기 전용. 메뉴 「악성코드 방어」→「🤖 AI 에이전트 지시 파일 감사…」 창에서도 실행 가능), `audit_security_logs`, `get_quarantine_status`, `get_notification_history`, `get_canary_status`, `get_port_anomaly_incidents`, `get_ssh_guard_incidents`(SSH 무차별 대입 기록과 최근 SSH 로그인, 읽기 전용), `get_runtime_threat_status`, `get_incident_timeline`(봉쇄 사고 타임라인), `get_network_history`(네트워크 이력 학습), `run_package_cve_scan`, `run_package_cve_scan_languages`, `run_active_vuln_scan`(127.0.0.1로만 비파괴적 프로브를 보냄), `run_npm_audit_signatures`(외부 서버, 즉 npm 레지스트리와 통신하는 유일한 도구, Pro·옵트인), `get_app_help`(이 지식 베이스).
                 • 프로세스 실행 기록(Pro, 읽기 전용): `search_exec_events`(실행 이벤트 검색), `get_process_tree`(프로세스의 조상·자손 트리).
                 • 리소스: `roamswitch://docs/features`, `roamswitch://docs/alerts-and-messages`, `roamswitch://docs/settings-guide`, `roamswitch://docs/troubleshooting`.
                 • 언어: 응답은 앱의 언어 설정을 따릅니다. `get_app_help`는 `language` 인자(ja / en / zh-Hans / zh-Hant / ko / de / fr / es / it / pt-PT)를 받습니다.
@@ -1048,6 +1063,7 @@ extension RoamSwitchKnowledgeBase {
                 • 원인: 관리자의 설정 변경(`sudo visudo`, SSH 설정 편집), 소프트웨어에 의한 변경, 또는 공격자의 권한 상승이나 백도어 설치입니다.
                 • 자동 방어: 알림만 발송됩니다. 새로운 상태가 자동으로 정당한 것으로 인정되는 일은 없습니다.
                 • 관련 메시지: "중요 시스템 파일 변조 감지가 작동하지 않습니다"는 특권 헬퍼에 접속할 수 없어 검사가 반복해서 실패하고 있다는 뜻입니다.
+                • SSH 단서: 알림에는 같은 시간대(변경 30분 전부터)에 SSH로 로그인해 있던 세션(접속 주소·계정·인증 방식·아직 연결 중인지)을 덧붙입니다. 시간이 겹친다는 것뿐인 단서이며, 그 세션이 파일을 변경했는지는 알 수 없습니다(이 Mac은 어떤 프로세스가 기록했는지 남기지 않습니다). SSH 로그인이 발견되지 않았을 때는 그렇게 적습니다.
                 """,
                 recommendation: """
                 1. 알림에 표시된 파일을 본인이나 관리자가 변경했는지 확인하세요.
@@ -1143,7 +1159,7 @@ extension RoamSwitchKnowledgeBase {
                 title: "Pro 활성화 시 자동으로 켜지는 가드와 선택적으로 켜는 가드",
                 summary: "Pro 라이선스를 처음 활성화하면, 주로 알림만 보내고 오탐이 적으며 추가 권한이나 설정이 필요 없는 자율 방어 가드가 자동으로 켜집니다. 일반적인 사용을 방해할 수 있는 것이나 추가 권한·설정·외부 통신이 필요한 것은 옵트인으로 남습니다. 그 후에는 각 가드에 대해 사용자가 내린 켜기/끄기 선택이 존중됩니다.",
                 details: """
-                • 자동으로 켜짐(Pro를 처음 활성화할 때 한 번): 알 수 없는 리스닝 포트 자동 차단, 수신 포트 스캔 탐지(스캔 발신지에 대한 10분간 자동 차단 포함), 랜섬웨어 미끼 파일 탐지와 엔트로피 탐지, 자격 증명 허니토큰, ARP 스푸핑 감지 시 자동 차단, XProtect 악성코드 탐지 시 자동 네트워크 차단, 자동 로그 감사, 중요 시스템 파일 변조 감시, 의존 잠금 파일 변조 감시. ARP와 XProtect 차단이 켜질 때는 이를 설명하는 일회성 안내가 표시됩니다.
+                • 자동으로 켜짐(Pro를 처음 활성화할 때 한 번): 알 수 없는 리스닝 포트 자동 차단, 수신 포트 스캔 탐지(스캔 발신지에 대한 10분간 자동 차단 포함), SSH 무차별 대입 탐지(원격 로그인이 켜져 있을 때만 동작), 랜섬웨어 미끼 파일 탐지와 엔트로피 탐지, 자격 증명 허니토큰, ARP 스푸핑 감지 시 자동 차단, XProtect 악성코드 탐지 시 자동 네트워크 차단, 자동 로그 감사, 중요 시스템 파일 변조 감시, 의존 잠금 파일 변조 감시. ARP와 XProtect 차단이 켜질 때는 이를 설명하는 일회성 안내가 표시됩니다.
                 • Pro에서 기본값 켜짐: 웹 및 이메일 보호, 자동 실행 등록(LaunchAgent/Daemon) 감시, DNS 위협 보호(외출 중인 네트워크에만 적용), 링크 보호(명백한 사기 사이트 자동 차단).
                 • 기본값 꺼짐(선택적 사용): ClickFix 자동 차단, Docker 위험 탐지, BadUSB 물리 포트 가드, USB 저장장치 자동 차단, 게이트웨이 ARP/NDP 고정, Bluetooth 자동 끄기, 프로세스 실행 기록, 브라우저 자격 증명 접근 모니터링, VPN 터널, Sensor 페어링, 실증형 취약점 검증, npm 서명 검증. 이들은 각각 일반적인 사용을 방해할 수 있거나(네트워크 차단, 입력 장치, 외장 드라이브, 소리), 추가 권한이나 설치(전체 디스크 접근, 손쉬운 사용, blueutil)가 필요하거나, 허용 목록 같은 사용자 설정이 필요하거나, 외부 서버와 통신합니다. DNS 위협 보호의 제공업체는 사용자가 선택합니다.
                 • 무료 버전에서도 기본값 켜짐: 클립보드 보호(API 키와 ClickFix 명령어).

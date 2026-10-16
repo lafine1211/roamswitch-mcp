@@ -37,7 +37,7 @@ block traffic, no license or payment code, no UI. Just the code that *observes* 
 
 ## Tools exposed (`tools/list`)
 
-32 tools (the length of `toolDefinitions` in `MCPServer.swift`, which is what `tools/list` returns).
+33 tools (the length of `toolDefinitions` in `MCPServer.swift`, which is what `tools/list` returns).
 Every one is read-only. `get_exposed_ports` and the opt-in `run_active_vuln_scan` are pinned to
 `127.0.0.1`; the one tool that contacts an external host is the opt-in, Pro-only
 `run_npm_audit_signatures`, which runs `npm audit signatures` against the npm registry. The
@@ -142,6 +142,10 @@ RoamSwitch has severed the network.
   an active Air-Gap.**
 - `get_canary_status` — Ransomware Canary Guard: decoy bait-file counts and up to the 50 most
   recent incidents.
+- `get_ssh_guard_incidents` — SSH Brute-Force Guard (Pro): the records of sources that were banned from
+  new SSH connections (newest first, at most 200), detections where nothing was banned, and logins that
+  succeeded after failures; the sources banned right now and the recent SSH logins (who, from where, which
+  method and key fingerprint). Read-only: it cannot ban or unban anything. Local state only, no network.
 - `get_port_anomaly_incidents` — Port Anomaly Guard: baseline state, currently auto-isolated
   ports, and up to the 50 most recent incidents (previously-unseen executables that began
   listening on an externally-exposed port).

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.11.14 (build 161).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.0 (build 162).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -424,6 +424,7 @@ extension RoamSwitchKnowledgeBase {
                 • 监控停止警告：连续 3 次无法连接辅助程序时，会通知篡改检测未在运行。
                 • 补充：在链接保护以 hosts 回退方式运行期间，RoamSwitch 自身可能会改写 `/etc/hosts` 的托管区段。LaunchAgent / Daemon 由 feat_persistence_monitor_guard 负责。
                 • 默认值：首次激活 Pro 许可证时自动开启。菜单「恶意软件防护」→「定期监控重要系统文件是否被篡改 (Pro)」。
+                • SSH 线索：通知会附上同一时间段（自变更前 30 分钟起）通过 SSH 登录的会话（来源、账户、认证方式、是否仍在连接）。这只是时间重合带来的线索，无法确定是否是该会话改动了文件（本 Mac 不会记录是哪个进程写入的）。没有发现 SSH 登录时，也会如实写明。
                 """,
                 recommendation: "收到通知后，请确认是否为您自己进行的操作（如 `sudo visudo` 或修改配置）。若无印象，请立即检查相应文件的内容，并考虑更改密码。"
             ),
@@ -610,6 +611,20 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "没有按IP的许可清单，封锁会在10分钟后自动解除。如果您在家庭或公司环境中定期运行合法的扫描工具(资产清点、漏洞扫描等)，建议在其运行期间关闭自动封锁(仅保留检测/通知)，以避免因误报而反复封锁。"
             ),
             LocalizedEntry(
+                id: "feat_ssh_guard",
+                title: "SSH 暴力破解检测与封锁 (Pro)",
+                summary: "仅在远程登录（SSH）开启时读取 sshd 日志，检测在短时间内多次登录失败的来源并通知您。默认会在 1 小时内封锁该来源对 SSH 的新连接（每次重复变为 4 倍，上限 7 天）。仅限 Pro。",
+                details: """
+                • 工作方式：特权辅助程序通过 `log stream`（统一日志）读取 sshd 的日志行。远程登录关闭的 Mac 不会读取任何内容（每分钟只检查一次服务是否已加载）。日志行中的用户名由攻击者决定，因此特权辅助程序自己不解析这些行，而是交给降低了权限的独立进程解析。来源地址从行的末尾（sshd 自己写入的部分）读取，因此在用户名里写入假地址也无法让第三方被封锁。`logger -t sshd` 等非 sshd 写入的行会被忽略。
+                • 计入的失败：`Failed password`、`Invalid user`、认证前断开、`maximum authentication attempts exceeded`。同一次尝试会出现在多行里，不会重复计数；`Failed publickey` 不计入。默认 10 分钟内 6 次。IPv6 按 /64 合并计数。
+                • 封锁：通过 pf 规则，仅丢弃对 SSH 端口（22 以及 sshd_config 的 Port）的新连接（SYN）。已建立的会话不会被断开。网关、DNS 和本 Mac 自身的地址不会被封锁。它与端口扫描封锁、VPN 终止开关和端口封锁分开管理，互不破坏。不会启动网络隔离（Air-Gap）。到期的解除由每分钟一次的清理完成，因此最多会延迟约 1 分钟。
+                • 排除：排除列表（IP/CIDR）中的来源、当前正通过 SSH 连接的来源、30 天内通过公钥登录成功的来源不会被封锁。在运行着 fail2ban、sshguard 或 DenyHosts 的 Mac 上，封锁交给它们，只做检测和通知。
+                • 通知：仅在封锁时，以及多次失败的来源登录成功时（严重级别，不会断开会话）按来源汇总通知。单次失败不会触发通知。登录（Accepted）会连同来源、账户、认证方式和密钥指纹一起记录（最近 200 条），也用作重要系统文件篡改通知的线索。ATT&CK：T1110。
+                • 打开方式：菜单栏的“端口与设备监控”→“🔑 SSH 暴力破解检测与封锁 (Pro)”。条件、排除列表以及被封锁来源的列表（可解除）在“SSH 暴力破解封锁设置…”中。启用 Pro 时自动开启（自行关闭的选择会被保留）。MCP：`get_ssh_guard_incidents`（只读）。
+                """,
+                recommendation: "如果外出时自己的来源地址会变，请先用公钥登录一次，或把该范围写进排除列表，以免被误封。若已被封锁，可在设置窗口的列表中解除。停用密码认证、只用公钥认证，暴力破解就失去了意义。"
+            ),
+            LocalizedEntry(
                 id: "feat_sensor_pairing",
                 title: "RoamSwitch Sensor 配对 (配对码方式, Pro)",
                 summary: "管理与同一局域网上的独立产品 “RoamSwitch Sensor”(专用主动审计集线器)之间的相互信任配对。采用由 Sensor 签发配对码的主动配对方式，假定 Sensor 以固定 IP 运行，因此不再使用 mDNS 自动发现。仅限 Pro。",
@@ -683,7 +698,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "RoamSwitch.app 内置了只读的 MCP（Model Context Protocol）服务器，Claude 等 AI 助手可以查询 Mac 的安全状况。其中完全没有更改设置或执行阻断等操作类工具。",
                 details: """
                 • 通信：仅使用本地标准输入输出（stdio）。二进制文件为 `/Applications/RoamSwitch.app/Contents/MacOS/RoamSwitchMCPServer`。
-                • 主要工具（共 32 个）：`get_security_report`（综合诊断）、`verify_security_findings`（重新确认诊断中指出的问题是否仍然存在，只读）、`get_exposed_ports`、`get_guard_status`、`audit_url_safety`、`audit_secrets`、`audit_mcp_configs`（检查 MCP 客户端配置文件中的危险条目；本地、只读；也可在「恶意软件防护」→「🧩 审计 MCP 配置（AI 集成）…」的专用窗口中运行）、`audit_agent_setup`（检查提供给 AI 智能体的指示文件、技能和 OpenClaw 设置中的危险内容，如不可见的 Unicode 字符、指示覆盖、curl | sh、窃取机密的形态；本地、只读；也可在「恶意软件防护」→「🤖 审计 AI 智能体的指示文件…」窗口中运行）、`audit_security_logs`、`get_quarantine_status`、`get_notification_history`、`get_canary_status`、`get_port_anomaly_incidents`、`get_runtime_threat_status`、`get_incident_timeline`（遏制事件历史）、`get_network_history`（网络历史学习）、`run_package_cve_scan`、`run_package_cve_scan_languages`、`run_active_vuln_scan`（仅向 127.0.0.1 发送非破坏性探测）、`run_npm_audit_signatures`（唯一会与外部服务器即 npm 注册表通信的工具，仅限 Pro 且需主动开启）、`get_app_help`（本知识库）。
+                • 主要工具（共 33 个）：`get_security_report`（综合诊断）、`verify_security_findings`（重新确认诊断中指出的问题是否仍然存在，只读）、`get_exposed_ports`、`get_guard_status`、`audit_url_safety`、`audit_secrets`、`audit_mcp_configs`（检查 MCP 客户端配置文件中的危险条目（包括读取他人撰写文字的服务器与可执行命令的服务器同处一份配置，即间接提示注入的前提）；本地、只读；也可在「恶意软件防护」→「🧩 审计 MCP 配置（AI 集成）…」的专用窗口中运行）、`audit_agent_setup`（检查提供给 AI 智能体的指示文件、技能和 OpenClaw 设置中的危险内容，如不可见的 Unicode 字符、指示覆盖、curl | sh、窃取机密的形态；本地、只读；也可在「恶意软件防护」→「🤖 审计 AI 智能体的指示文件…」窗口中运行）、`audit_security_logs`、`get_quarantine_status`、`get_notification_history`、`get_canary_status`、`get_port_anomaly_incidents`、`get_ssh_guard_incidents`（SSH 暴力破解记录与最近的 SSH 登录；只读）、`get_runtime_threat_status`、`get_incident_timeline`（遏制事件历史）、`get_network_history`（网络历史学习）、`run_package_cve_scan`、`run_package_cve_scan_languages`、`run_active_vuln_scan`（仅向 127.0.0.1 发送非破坏性探测）、`run_npm_audit_signatures`（唯一会与外部服务器即 npm 注册表通信的工具，仅限 Pro 且需主动开启）、`get_app_help`（本知识库）。
                 • 进程执行记录（Pro，只读）：`search_exec_events`（搜索启动事件）和 `get_process_tree`（某进程的祖先与后代）。
                 • 资源：`roamswitch://docs/features`、`roamswitch://docs/alerts-and-messages`、`roamswitch://docs/settings-guide`、`roamswitch://docs/troubleshooting`。
                 • 语言：回答遵循应用的语言设置。`get_app_help` 可通过 `language` 参数（ja / en / zh-Hans / zh-Hant / ko / de / fr / es / it / pt-PT）指定语言。
@@ -1048,6 +1063,7 @@ extension RoamSwitchKnowledgeBase {
                 • 触发原因：管理员修改配置（`sudo visudo`、编辑 SSH 配置等）、软件进行的修改，或攻击者进行权限提升、设置后门。
                 • 自动防御：仅通知。不会自动将修改后的状态视为正规状态。
                 • 相关警告：「重要文件篡改检测未正常运行」表示无法连接特权辅助程序，扫描持续失败。
+                • SSH 线索：通知会附上同一时间段（自变更前 30 分钟起）通过 SSH 登录的会话（来源、账户、认证方式、是否仍在连接）。这只是时间重合带来的线索，无法确定是否是该会话改动了文件（本 Mac 不会记录是哪个进程写入的）。没有发现 SSH 登录时，也会如实写明。
                 """,
                 recommendation: """
                 1. 请确认通知中显示的文件是否由您本人或管理员修改。
@@ -1143,7 +1159,7 @@ extension RoamSwitchKnowledgeBase {
                 title: "激活 Pro 时自动开启的防护与需手动启用的防护",
                 summary: "首次激活 Pro 许可证时，以通知为主、误报少且无需额外权限或设置的自主防御防护会自动开启。可能妨碍正常使用的防护，以及需要额外权限、设置或对外通信的防护，仍需手动启用。此后会尊重用户对各项防护选择的开启 / 关闭状态。",
                 details: """
-                • 自动开启（仅在首次激活 Pro 时执行一次）：自动阻止未知监听端口、入站端口扫描检测（含对扫描来源 10 分钟的自动封锁）、勒索软件诱饵文件检测与熵检测、凭据蜜罐令牌、检测到 ARP 欺骗时自动阻止、XProtect 检测到恶意软件时自动断网、自动日志审计、重要系统文件篡改监控、依赖锁定文件篡改监控。ARP 与 XProtect 的自动阻断开启时，会显示一次相关提示。
+                • 自动开启（仅在首次激活 Pro 时执行一次）：自动阻止未知监听端口、入站端口扫描检测（含对扫描来源 10 分钟的自动封锁）、SSH 暴力破解检测（仅在远程登录开启时工作）、勒索软件诱饵文件检测与熵检测、凭据蜜罐令牌、检测到 ARP 欺骗时自动阻止、XProtect 检测到恶意软件时自动断网、自动日志审计、重要系统文件篡改监控、依赖锁定文件篡改监控。ARP 与 XProtect 的自动阻断开启时，会显示一次相关提示。
                 • Pro 默认开启：网页与邮件保护、监控自动启动注册(LaunchAgent/Daemon)、DNS 威胁防护（仅在外出网络中应用）、链接保护（自动拦截明显的欺诈网站）。
                 • 默认关闭（需手动启用）：ClickFix 防护的自动阻断、Docker 风险检测、BadUSB 物理端口防护、USB 存储设备自动阻止、网关 ARP/NDP 固定、Bluetooth 自动关闭、进程执行记录、浏览器凭据访问监控、VPN 隧道、Sensor 配对、实证型漏洞验证、npm 签名验证。它们要么可能妨碍正常使用（断网、输入设备、外接存储、声音），要么需要额外的权限或安装（完全磁盘访问、辅助功能、blueutil），要么需要许可列表等自行设置，要么会与外部服务器通信。DNS 威胁防护的服务商选择为可选项。
                 • 免费版也默认开启：剪贴板保护（API 密钥、ClickFix 命令）。
