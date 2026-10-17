@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.1 (build 163).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.2 (build 164).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -542,6 +542,7 @@ extension RoamSwitchKnowledgeBase {
                 • Détection : différence de référence SHA-256 via CryptoKit, avec détection quasi temps réel par FSEvents et une analyse de secours horaire.
                 • Urgence de la notification : si npm/yarn/pnpm est en cours d'exécution au moment de la détection, cela est consigné dans l'historique des notifications avec une alerte discrète ; sinon, il s'agit d'une alerte critique standard. La détection elle-même n'est jamais ignorée dans les deux cas.
                 • Désactivé automatiquement en cas de perte de la licence Pro.
+                • Accepter les modifications : la référence n'avance jamais d'elle-même. Pour une modification faite par vous (p. ex. npm install), choisissez « Mettre à jour la référence des fichiers de verrouillage à l'état actuel… » dans la barre des menus pour que l'état actuel devienne la référence. Les modifications déjà signalées sont enregistrées, la même notification n'est donc pas répétée après un redémarrage de l'app.
                 """,
                 recommendation: "Enregistrez les projets importants dans l'onglet « Dépendances » de la vérification CVE des paquets et laissez cette fonction activée (par défaut une fois Pro actif)."
             ),

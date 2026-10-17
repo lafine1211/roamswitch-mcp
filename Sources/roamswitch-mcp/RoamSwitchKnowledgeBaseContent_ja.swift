@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.1 (build 163).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.2 (build 164).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -556,6 +556,7 @@ extension RoamSwitchKnowledgeBase {
                 • 検知方式: CryptoKitによるSHA-256ベースライン差分。FSEventsによる近似リアルタイム検知＋1時間ごとのバックストップスキャン。
                 • 通知の緊急度: npm/yarn/pnpm自体が実行中に検知した場合は、その旨を通知履歴に記録した上で静かな通知にとどめます。非実行中の改ざんは通常の緊急通知です。検知自体は両ケースで必ず行われます。
                 • ライセンス喪失時は自動的に無効化されます。
+                • 変更の受け入れ: 通知の基準は自動では進みません。自分で行った変更(npm installなど)であれば、メニューバーの「ロックファイルの基準を現在の状態に更新…」で受け入れると、現在の状態が基準になります。通知済みの変更は保存され、アプリを再起動しても同じ通知は繰り返されません。
                 """,
                 recommendation: "重要なプロジェクトはパッケージCVE照合の「依存関係」タブに登録し、Pro版有効化時の既定オンのままにしておくことを推奨します。"
             ),

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.1 (build 163).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.2 (build 164).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -542,6 +542,7 @@ extension RoamSwitchKnowledgeBase {
                 • 偵測方式：透過 CryptoKit 進行 SHA-256 基準差異比對，結合 FSEvents 近即時偵測與每小時一次的備援掃描。
                 • 通知緊急程度：若偵測時 npm/yarn/pnpm 本身正在執行，會記錄於通知記錄中並以靜音方式通知；未執行時的竄改則為一般緊急通知。無論何種情況，偵測本身都必定執行。
                 • 若 Pro 授權失效將自動停用。
+                • 接受變更:基準不會自動更新。如果是你自己做的變更(例如 npm install),請在選單列選擇「將鎖定檔基準更新為目前狀態…」,目前狀態就會成為基準。已通知的變更會被儲存,重新啟動 App 後不會重複同一則通知。
                 """,
                 recommendation: "建議將重要專案登記到套件 CVE 比對的「相依關係」分頁中，並保持此功能開啟（啟用 Pro 後預設開啟）。"
             ),

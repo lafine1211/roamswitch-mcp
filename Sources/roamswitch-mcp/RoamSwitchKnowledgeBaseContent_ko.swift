@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.1 (build 163).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.2 (build 164).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -542,6 +542,7 @@ extension RoamSwitchKnowledgeBase {
                 • 감지 방식: CryptoKit을 이용한 SHA-256 베이스라인 차분. FSEvents를 통한 근실시간 감지와 1시간마다의 백스톱 스캔을 병행합니다.
                 • 알림 긴급도: 감지 시점에 npm/yarn/pnpm 자체가 실행 중이면 알림 기록에는 남기되 조용한 알림으로 처리합니다. 실행 중이 아닐 때의 변조는 일반적인 긴급 알림입니다. 감지 자체는 두 경우 모두 항상 수행됩니다.
                 • Pro 라이선스를 잃으면 자동으로 비활성화됩니다.
+                • 변경 받아들이기: 기준은 자동으로 갱신되지 않습니다. 직접 한 변경(npm install 등)이라면 메뉴 막대의 「락 파일 기준을 현재 상태로 업데이트…」로 현재 상태를 기준으로 삼을 수 있습니다. 이미 알린 변경은 저장되므로 앱을 다시 시작해도 같은 알림이 반복되지 않습니다.
                 """,
                 recommendation: "중요한 프로젝트는 패키지 CVE 대조의 \"의존성\" 탭에 등록하고, Pro 활성화 시 기본값인 켜짐 상태를 유지하는 것을 권장합니다."
             ),

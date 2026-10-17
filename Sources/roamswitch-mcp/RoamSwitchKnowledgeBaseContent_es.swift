@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.1 (build 163).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.2 (build 164).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -542,6 +542,7 @@ extension RoamSwitchKnowledgeBase {
                 • Detección: diferencia de línea base SHA-256 mediante CryptoKit, con detección casi en tiempo real vía FSEvents más un análisis de respaldo cada hora.
                 • Urgencia de la notificación: si npm/yarn/pnpm se está ejecutando en el momento de la detección, se registra en el historial de notificaciones con una alerta silenciosa; en caso contrario es una alerta crítica normal. La detección en sí nunca se omite en ningún caso.
                 • Se desactiva automáticamente si se pierde la licencia Pro.
+                • Aceptar cambios: la referencia nunca avanza sola. Para un cambio hecho por usted (p. ej. npm install), elija «Actualizar la referencia de lockfiles al estado actual…» en la barra de menús para que el estado actual pase a ser la referencia. Los cambios ya notificados se guardan, por lo que la misma notificación no se repite al reiniciar la app.
                 """,
                 recommendation: "Registre los proyectos importantes en la pestaña «Dependencias» del cotejo de CVE de paquetes y déjelo activado (predeterminado con Pro activo)."
             ),

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.1 (build 163).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.2 (build 164).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -542,6 +542,7 @@ extension RoamSwitchKnowledgeBase {
                 • Erkennung: SHA-256-Baseline-Diff via CryptoKit, mit FSEvents-Nahzeiterkennung plus stündlichem Backstop-Scan.
                 • Dringlichkeit: Läuft npm/yarn/pnpm selbst zum Erkennungszeitpunkt, wird dies im Mitteilungsverlauf vermerkt und nur leise benachrichtigt; andernfalls erfolgt eine normale kritische Benachrichtigung. Die Erkennung selbst wird in beiden Fällen durchgeführt.
                 • Wird bei Verlust der Pro-Lizenz automatisch deaktiviert.
+                • Änderungen akzeptieren: Die Basis wird nie automatisch fortgeschrieben. Bei einer eigenen Änderung (z. B. npm install) wählen Sie in der Menüleiste „Lockfile-Basis auf aktuellen Zustand aktualisieren…“, damit der aktuelle Zustand zur Basis wird. Bereits gemeldete Änderungen werden gespeichert, sodass dieselbe Meldung nach einem Neustart der App nicht wiederholt wird.
                 """,
                 recommendation: "Registrieren Sie wichtige Projekte im Tab „Abhängigkeiten“ des Paket-CVE-Abgleichs und lassen Sie dies aktiviert (Standard bei aktivem Pro)."
             ),

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.1 (build 163).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.2 (build 164).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -541,6 +541,7 @@ extension RoamSwitchKnowledgeBase {
                 • Detection: a CryptoKit SHA-256 baseline diff, with near-real-time FSEvents detection plus an hourly backstop scan.
                 • Notification urgency: if npm/yarn/pnpm itself is running at detection time, it's recorded in notification history with a quiet, non-critical alert; otherwise it's a standard critical alert. Detection itself is never skipped either way.
                 • Automatically disabled if the Pro license is lost.
+                • Accepting changes: the baseline never advances on its own. For a change you made yourself (e.g. npm install), choose "Update lockfile baseline to current state…" in the menu bar to make the current state the baseline. Already-announced changes are saved, so the same notification is not repeated after relaunching the app.
                 """,
                 recommendation: "Register important projects in the Package CVE Scan window's \"Dependencies\" tab and leave this on (the default once Pro is active)."
             ),
