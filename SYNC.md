@@ -61,6 +61,9 @@ All files live in `Sources/roamswitch-mcp/`.
 | `MCPConfigAuditor.swift` | `RoamSwitch/MCPConfigAuditor.swift` |
 | `AgentSetupAuditor.swift` | `RoamSwitch/AgentSetupAuditor.swift` |
 | `AgentSetupBaseline.swift` | `RoamSwitch/AgentSetupBaseline.swift` |
+| `PromptInjectionSignals.swift` | `RoamSwitch/PromptInjectionSignals.swift` |
+| `AgentSetupSarif.swift` | `RoamSwitch/AgentSetupSarif.swift` |
+| `DetectionCoverage.swift` | `RoamSwitch/DetectionCoverage.swift` |
 | `SecretLeakScanning.swift` | `RoamSwitch/SecretLeakScanning.swift` |
 | `CryptoSecretDetection.swift` | `Shared/CryptoSecretDetection.swift` (from `Shared/`) |
 | `SecurityLogAuditor.swift` | `RoamSwitch/SecurityLogAuditor.swift` |
@@ -85,6 +88,7 @@ All files live in `Sources/roamswitch-mcp/`.
 | `LinkFilterEngine.swift` | `Shared/LinkFilterEngine.swift` (from `Shared/`) |
 | `KnownAttackServers.swift` | `Shared/KnownAttackServers.swift` (from `Shared/`) |
 | `SSHGuardCore.swift` | `Shared/SSHGuardCore.swift` (from `Shared/`) |
+| `GuardReaderHealth.swift` | `Shared/GuardReaderHealth.swift` (from `Shared/`) |
 | `SSHGuardStatusReader.swift` | `RoamSwitch/SSHGuardStatusReader.swift` |
 
 This is exactly the source set the app compiles into its `RoamSwitchMCPServer` target
@@ -122,8 +126,15 @@ via `@testable import RoamSwitch`. Only `main.swift` (the stdin→stdout pump) i
 | `RoamSwitchMCPSkillsContentTests.swift` | `RoamSwitchTests/RoamSwitchMCPSkillsContentTests.swift` |
 | `ActiveVulnScanTests.swift` | `RoamSwitchTests/ActiveVulnScanTests.swift` (was previously not mirrored — added 2026-09, see this repo's history) |
 | `MCPConfigAuditorTests.swift` | `RoamSwitchTests/MCPConfigAuditorTests.swift` |
+| `PromptInjectionSignalsTests.swift` | `RoamSwitchTests/PromptInjectionSignalsTests.swift` |
+| `AgentSetupSarifTests.swift` | `RoamSwitchTests/AgentSetupSarifTests.swift` |
+| `DetectionCoverageTests.swift` | `RoamSwitchTests/DetectionCoverageTests.swift` |
+| `LocalAIRuntimeTests.swift` | `RoamSwitchTests/LocalAIRuntimeTests.swift` |
+| `GuardReaderHealthTests.swift` | `RoamSwitchTests/GuardReaderHealthTests.swift` |
 | `StdioSmokeTests.swift` | **not mirrored** — specific to this repo (drives the built binary over stdio) |
 | `MutationFuzzTests.swift` | **not mirrored** — specific to this repo |
+
+`GuardReaderHealthAppTests.swift` and `DetectionCoverageAppTests.swift` are **not mirrored**: it needs `ExecRuleID` (compiled into the app only) and the app's `Localizable.xcstrings`.
 
 App tests for guards that are not in this repo (`PortAnomalyGuardTests`, `RansomwareCanaryGuardTests`,
 `WebMailDownloadGuardTests`, `DNSThreatGuardTests`, `DangerousPortExposureTests`) are not mirrored.

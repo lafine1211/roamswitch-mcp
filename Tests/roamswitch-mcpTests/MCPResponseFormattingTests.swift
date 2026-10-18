@@ -451,9 +451,16 @@ final class MCPResponseFormattingTests: XCTestCase {
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         XCTAssertEqual(Set(json.keys), ["results", "caveats", "timestamp"])
         let first = try XCTUnwrap((json["results"] as? [[String: Any]])?.first)
-        XCTAssertEqual(Set(first.keys), ["checkId", "title", "verdict", "reason", "statusText", "detail"])
+        // The original six keys stay; `verificationStatus` and `rationale` are always present, and
+        // `counterEvidence` / `severityChangesIf` appear only for a known check that still fails.
+        XCTAssertEqual(Set(first.keys), ["checkId", "title", "verdict", "reason", "statusText", "detail", "verificationStatus", "rationale"])
         XCTAssertEqual(first["verdict"] as? String, "stillPresent")
         XCTAssertEqual(first["reason"] as? String, "failing")
+        XCTAssertEqual(first["verificationStatus"] as? String, "verified")
+
+        let known = try JSONSerialization.jsonObject(with: JSONEncoder().encode(verify([verifyItem("luks_encryption", passed: false)]))) as? [String: Any]
+        let knownFirst = try XCTUnwrap((known?["results"] as? [[String: Any]])?.first)
+        XCTAssertEqual(Set(knownFirst.keys), ["checkId", "title", "verdict", "reason", "statusText", "detail", "verificationStatus", "rationale", "counterEvidence", "severityChangesIf"])
     }
 
     func testMakeVerifyPayload_caveatsOnlyForEvaluatedItems() {
@@ -658,5 +665,98 @@ final class MCPResponseFormattingTests: XCTestCase {
             let d = try XCTUnwrap(tools.first { ($0["name"] as? String) == name }?["description"] as? String)
             XCTAssertTrue(d.contains("ICMP ping"), name)
         }
+    }
+}
+
+/// `verify_security_findings` discipline fields: status, rationale, counter-evidence, severity conditions.
+final class VerifyFindingDisciplineTests: XCTestCase {
+
+    private let allCheckIds = [
+        "luks_encryption", "lsm_active", "gatekeeper_app_verification", "auto_security_updates", "os_builtin_malware_detection",
+        "host_firewall", "network_stealth_mode", "wifi_encryption_strength", "arp_spoof_monitor", "gateway_arp_lock",
+        "ssh_hardening", "sudo_hygiene", "exposed_ports", "malware_scanning", "dns_threat_guard",
+        "browser_phishing_protection", "usb_zero_trust", "accessory_connection_protection",
+    ]
+    private let allReasons = [
+        "failing", "passing", "not_applicable", "helper_unavailable", "gateway_unknown", "no_baseline",
+        "location_unavailable", "tool_failed", "not_verifiable", "not_measured", "unknown_check_id",
+    ]
+
+    func testStatusValuesFollowTheVerdict() {
+        XCTAssertEqual(VerifyFindingDiscipline.status(verdict: .stillPresent, reason: "failing"), "verified")
+        XCTAssertEqual(VerifyFindingDiscipline.status(verdict: .resolved, reason: "passing"), "verified")
+        XCTAssertEqual(VerifyFindingDiscipline.status(verdict: .resolved, reason: "not_applicable"), "false_positive")
+        for reason in ["helper_unavailable", "no_baseline", "tool_failed", "not_verifiable", "unknown_check_id"] {
+            XCTAssertEqual(VerifyFindingDiscipline.status(verdict: .inconclusive, reason: reason), "unverified", reason)
+        }
+    }
+
+    func testEveryCheckHasCounterEvidenceAndSeverityConditions() {
+        for id in allCheckIds {
+            XCTAssertFalse((VerifyFindingDiscipline.counterEvidence(checkId: id) ?? "").isEmpty, id)
+            XCTAssertFalse((VerifyFindingDiscipline.severityChangesIf(checkId: id) ?? "").isEmpty, id)
+        }
+        XCTAssertNil(VerifyFindingDiscipline.counterEvidence(checkId: "nope"))
+        XCTAssertNil(VerifyFindingDiscipline.severityChangesIf(checkId: "nope"))
+    }
+
+    func testEveryReasonHasADistinctRationale() {
+        let texts = allReasons.map { VerifyFindingDiscipline.rationale(reason: $0) }
+        XCTAssertEqual(Set(texts).count, allReasons.count)
+        XCTAssertFalse(texts.contains(""))
+    }
+
+    func testTheTableCoversExactlyTheChecksTheAuditProduces() {
+        // The ids come from the audit itself, so a new check without texts fails here.
+        let report = SecurityHealthChecker.shared.generateComprehensiveReport(
+            wifiInfo: WiFiInfo(ssid: nil, bssid: nil, securityLevel: .notConnected),
+            arpStatus: ARPMonitorStatus(isSpoofingDetected: false, message: "", previousMAC: nil, currentMAC: nil, gatewayKnown: true, hadBaseline: true),
+            listeningPorts: [],
+            activeSecurityLevel: .balanced
+        )
+        let produced = Set(report.items.map(\.checkId).filter { !$0.isEmpty })
+        XCTAssertEqual(produced, Set(allCheckIds))
+    }
+
+    private func item(_ id: String, passed: Bool = true, applicable: Bool = true, reason: String? = nil) -> SecurityAuditItem {
+        SecurityAuditItem(category: "cat", title: "title-\(id)", isPassed: passed, statusText: "status-\(id)", detail: "detail-\(id)", recommendation: "rec",
+                          settingsURL: nil, isApplicable: applicable, checkId: id, inconclusiveReason: reason)
+    }
+
+    func testPayloadCarriesTheDisciplineFieldsPerVerdict() throws {
+        let items = [
+            item("luks_encryption", passed: false),
+            item("lsm_active"),
+            item("host_firewall", passed: true, applicable: false),
+            item("sudo_hygiene", reason: "helper_unavailable"),
+        ]
+        let report = ComprehensiveSecurityReport(score: 50, grade: "C", totalChecks: 4, passedChecks: 1, items: items, timestamp: Date())
+        let payload = MCPResponseFormatting.makeVerifyPayload(report: report, requestedCheckIds: items.map(\.checkId) + ["nope"], wifiInterfacePresent: false, wifiSSIDResolved: true)
+        func r(_ id: String) throws -> MCPVerifiedFindingPayload { try XCTUnwrap(payload.results.first { $0.checkId == id }) }
+
+        let failing = try r("luks_encryption")
+        XCTAssertEqual(failing.verdict, .stillPresent)
+        XCTAssertEqual(failing.verificationStatus, "verified")
+        XCTAssertEqual(failing.reason, "failing")
+        XCTAssertNotNil(failing.counterEvidence)
+        XCTAssertNotNil(failing.severityChangesIf)
+
+        let passing = try r("lsm_active")
+        XCTAssertEqual(passing.verificationStatus, "verified")
+        XCTAssertNil(passing.counterEvidence, "a passing check has nothing to argue against")
+        XCTAssertNil(passing.severityChangesIf)
+
+        let byDesign = try r("host_firewall")
+        XCTAssertEqual(byDesign.verificationStatus, "false_positive")
+        XCTAssertNil(byDesign.counterEvidence)
+
+        let unsure = try r("sudo_hygiene")
+        XCTAssertEqual(unsure.verificationStatus, "unverified")
+        XCTAssertNil(unsure.counterEvidence)
+        XCTAssertFalse(unsure.rationale.isEmpty)
+
+        let unknown = try r("nope")
+        XCTAssertEqual(unknown.verificationStatus, "unverified")
+        XCTAssertEqual(unknown.reason, "unknown_check_id")
     }
 }

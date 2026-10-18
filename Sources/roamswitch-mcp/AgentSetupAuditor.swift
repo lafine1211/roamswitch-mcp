@@ -1130,6 +1130,10 @@ public struct AgentSetupAuditResultPayload: Codable, Equatable {
         public let file: String
         public let detail: String
         public let message: String
+        /// OWASP Top 10 for LLM Applications (2025) ids this rule belongs to (RoamSwitch's own classification).
+        public let owaspLlm: [String]
+        /// MITRE ATT&CK technique ids, empty where no technique fits plainly.
+        public let attackId: [String]
     }
     public let scannedFileCount: Int
     public let scannedFiles: [String]

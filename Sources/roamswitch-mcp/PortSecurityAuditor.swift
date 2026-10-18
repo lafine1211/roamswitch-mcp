@@ -35,6 +35,8 @@ public struct PortSecurityAuditResult: Identifiable, Equatable {
     public let isFirewallShielded: Bool
     public let findings: [PortAuditFinding]
     public let httpHeaders: [String: String]?
+    /// Local AI runtimes recognised from the port and headers (see `LocalAIRuntime`).
+    var aiRuntimes: [LocalAIRuntime.Match] = []
 }
 
 final class PortSecurityAuditor {
@@ -96,6 +98,10 @@ final class PortSecurityAuditor {
             let (headers, httpFindings) = self.probeHTTPService(port: portInfo.port)
             findings.append(contentsOf: httpFindings)
 
+            // 4. Local AI runtime identification (port + response headers already read above).
+            let aiRuntimes = LocalAIRuntime.identify(port: portInfo.port, headers: headers)
+            findings.append(contentsOf: self.aiRuntimeFindings(aiRuntimes, port: portInfo.port, isGlobal: portInfo.isGloballyExposed, isFirewallBlocking: isFirewallBlocking))
+
             // Calculate Overall Risk
             let overall: PortSecurityRiskLevel
             if findings.contains(where: { $0.riskLevel == .critical }) {
@@ -111,7 +117,8 @@ final class PortSecurityAuditor {
                 overallRisk: overall,
                 isFirewallShielded: isFirewallBlocking,
                 findings: findings,
-                httpHeaders: headers
+                httpHeaders: headers,
+                aiRuntimes: aiRuntimes
             )
 
             completion(result)
@@ -275,6 +282,36 @@ final class PortSecurityAuditor {
             }
     }
 
+    // MARK: - Local AI runtime identification
+
+    /// A finding for each recognised AI runtime, except a port-only match on a port the plain port audit
+    /// already reports (that would be the same finding twice). `confirmed` follows the exposure risk
+    /// (critical when reachable and unshielded); `likely` is at most `warning` and is skipped when the
+    /// port is not reachable from the network, so a guess never outranks the plain port finding.
+    func aiRuntimeFindings(_ matches: [LocalAIRuntime.Match], port: Int, isGlobal: Bool, isFirewallBlocking: Bool) -> [PortAuditFinding] {
+        matches.compactMap { match in
+            if match.basis == ["port"], LocalAIRuntime.portsWithPlainFinding.contains(port) { return nil }
+            switch match.confidence {
+            case .confirmed:
+                let risk: PortSecurityRiskLevel = isGlobal ? (isFirewallBlocking ? .warning : .critical) : .safe
+                return PortAuditFinding(
+                    title: String(format: loc("ローカルAI実行基盤を検出: %@"), match.product),
+                    riskLevel: risk,
+                    description: String(format: loc("ヘッダーや既定ポートの照合で、このポートで %@ が動いていると判断しました。認証を付けていない状態でネットワークから届くと、推論の実行やモデルの操作を第三者に使われる恐れがあります。"), match.product),
+                    recommendation: loc("待ち受けを 127.0.0.1 だけにするか、認証付きのリバースプロキシや VPN の内側に置いてください。どのソフトか分からない場合は、このポートを使っているプロセスを確認してください。")
+                )
+            case .likely:
+                guard isGlobal else { return nil }
+                return PortAuditFinding(
+                    title: String(format: loc("ローカルAI実行基盤の可能性: %@"), match.product),
+                    riskLevel: .warning,
+                    description: String(format: loc("ヘッダーまたは既定ポートが %@ と一致しました。別のソフトが同じポートやヘッダーを使うこともあるため、推定です。そのとおりなら、認証を付けていない状態でネットワークから届くと、推論の実行やモデルの操作を第三者に使われる恐れがあります。"), match.product),
+                    recommendation: loc("待ち受けを 127.0.0.1 だけにするか、認証付きのリバースプロキシや VPN の内側に置いてください。どのソフトか分からない場合は、このポートを使っているプロセスを確認してください。")
+                )
+            }
+        }
+    }
+
     // MARK: - Non-destructive HTTP Probe
 
     private func probeHTTPService(port: Int) -> ([String: String]?, [PortAuditFinding]) {
@@ -306,7 +343,8 @@ final class PortSecurityAuditor {
                 var headerMap: [String: String] = [:]
                 for (k, v) in http.allHeaderFields {
                     if let key = k as? String, let val = v as? String {
-                        headerMap[key.lowercased()] = val
+                        // Header names and values are chosen by whatever listens on the port.
+                        headerMap[MCPUntrustedText.sanitize(key.lowercased(), maxLength: 100)] = MCPUntrustedText.sanitize(val)
                     }
                 }
                 responseHeaders = headerMap

@@ -37,7 +37,7 @@ block traffic, no license or payment code, no UI. Just the code that *observes* 
 
 ## Tools exposed (`tools/list`)
 
-33 tools (the length of `toolDefinitions` in `MCPServer.swift`, which is what `tools/list` returns).
+34 tools (the length of `toolDefinitions` in `MCPServer.swift`, which is what `tools/list` returns).
 Every one is read-only. `get_exposed_ports` and the opt-in `run_active_vuln_scan` are pinned to
 `127.0.0.1`; the one tool that contacts an external host is the opt-in, Pro-only
 `run_npm_audit_signatures`, which runs `npm audit signatures` against the npm registry. The
@@ -70,7 +70,11 @@ address.
   download/DNS guards, runtime threat, ransomware canary, ClickFix, Docker events, critical-path FIM,
   persistence monitor, gateway ARP lock, scheduled log audit, clipboard secret-leak auditor, Air-Gap
   Wi-Fi kill, WireGuard / Tailscale kill-switch, Link Guard + feed updates, active vuln scan), each
-  flagged `usingDefault` when never toggled; plus Link Guard mode, VPN backend, DNS threat guard
+  flagged `usingDefault` when never toggled. Each also has a `liveState` (on / off / partial / unknown): for the
+  guards that read a stream or a file (SSH brute-force, port-scan, exec recorder, runtime threat, ClickFix,
+  critical-path FIM, lockfile tamper, ransomware entropy and canary, persistence monitor, download guard, browser credential watch) it says whether the guard can see its input — `off` when its reader cannot read the source,
+  `partial` after input was lost in the last 24 hours — and `readers` gives the counted record (restarts, gaps,
+  dropped lines where they can be counted, and `filesUnreadable` — files the last scan had to skip because they could not be read). Plus Link Guard mode, VPN backend, DNS threat guard
   provider/scope, isolated dev-server ports, USB storage allowlist size, current protection level
   and trusted-network state (read from the app's preferences domain — see *Standalone* below).
   Settings only: live VPN tunnel state lives in the privileged helper and is not reported.
@@ -103,7 +107,10 @@ address.
   without any network access. It flags 22 kinds of risky content, such as invisible Unicode tag
   characters, instruction overrides, fetch-and-run, encoded execution, references to secret files with
   outbound sending, compiled code inside a skill, and OpenClaw with authentication disabled. A match
-  is a place for a person to read and check, not a claim of malice.
+  is a place for a person to read and check, not a claim of malice. Each finding carries `owaspLlm`
+  (OWASP Top 10 for LLM Applications 2025 ids) and `attackId` (MITRE ATT&CK technique ids, empty where
+  none fits plainly), RoamSwitch's own classification. `format: "sarif"` returns the same findings as a
+  SARIF 2.1.0 log for CI and code-scanning tools (decoded hidden text is never included).
 
 ### Vulnerability & CVE
 
@@ -158,6 +165,13 @@ RoamSwitch has severed the network.
   severity, summary, process, MITRE ATT&CK ID (only where confidently mappable), action taken,
   and open/released/allowlisted status. ARP-spoof containment is recorded only here. Same name
   as the Linux edition's tool.
+- `get_detection_coverage` — "what can RoamSwitch NOT see?": a fixed table of MITRE ATT&CK techniques
+  used to weaken, evade or outlast a Mac's defenses, returned as `techniques` (`id`, `name`, `coverage`
+  detects / partial / none, `coveredBy` ids of the guards, process-exec rules and audit checks behind it,
+  a one-sentence `blindSpot`, and `liveState` on / off / partial / unknown / not_applicable from the
+  Settings toggles of the covering guards, not proof they run), a `summary` (with `coveredButOff`) and
+  `guards`. Same shape as the Linux edition. RoamSwitch's own assessment, checked
+  against the code; it runs, simulates and reproduces no evasion. No network.
 - `get_network_history` — the always-on Evil-Twin detector's memory: remembered SSIDs with a
   gateway-device *count* and last-seen time (MAC addresses are never returned), plus look-alike
   SSID pairs that never shared a gateway.

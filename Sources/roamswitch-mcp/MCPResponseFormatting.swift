@@ -48,6 +48,15 @@ public struct MCPVerifiedFindingPayload: Codable, Equatable {
     public let reason: String
     public let statusText: String
     public let detail: String
+    /// How well the verdict is established: `verified`, `false_positive` (does not apply by design) or
+    /// `unverified` (the probe could not be trusted). See `VerifyFindingDiscipline`.
+    public let verificationStatus: String
+    /// One sentence on why the verdict has that status, chosen by `reason`.
+    public let rationale: String
+    /// Only when the check still fails: the strongest reason it could be benign.
+    public let counterEvidence: String?
+    /// Only when the check still fails: what would raise or lower the concern.
+    public let severityChangesIf: String?
 }
 
 public struct MCPVerifySecurityFindingsPayload: Codable, Equatable {
@@ -73,6 +82,17 @@ public struct MCPPortPayload: Codable, Equatable {
     public let overallRisk: String?
     public let findings: [MCPPortFindingPayload]
     public let httpHeaders: [String: String]?
+    /// Local AI runtimes recognised from the port and the response headers (absent when none was).
+    public let aiRuntimes: [MCPAIRuntimePayload]?
+}
+
+/// `confidence` is `confirmed` (single-purpose default port, a marker the product itself sets, or a header
+/// that agrees with its default port) or `likely` (shared default port or a header a fronting proxy could
+/// add). `basis` lists what matched: `port`, `header`, `server-banner`. Same shape on the Linux edition.
+public struct MCPAIRuntimePayload: Codable, Equatable {
+    public let product: String
+    public let confidence: String
+    public let basis: [String]
 }
 
 public struct MCPActiveVulnScanFindingPayload: Codable, Equatable {
@@ -470,6 +490,32 @@ public struct MCPGuardEntryPayload: Codable, Equatable {
     /// changed it), so `enabledInSettings` is the guard's own built-in
     /// default. Optional for wire compatibility with pre-1.9.25 clients.
     public let usingDefault: Bool?
+    /// `on`, `off`, `partial` or `unknown`. Unlike `enabledInSettings` (the toggle), this says whether the guard can
+    /// see its input: a guard whose reader cannot read its source is `off`, one that lost input within the last day
+    /// is `partial`, one that has not reported is `unknown`. Absent from older builds.
+    public var liveState: String? = nil
+    /// For a guard that reads a stream or a file: what its reader(s) have lost. Absent for the others.
+    public var readers: [MCPReaderHealthPayload]? = nil
+}
+
+/// What one input source of a guard has lost (see `GuardReaderHealth`). Times are ISO 8601.
+/// `gaps` counts the times the input stopped while it should have been flowing; nothing is replayed afterwards, so what
+/// happened in between was not seen. `reason`: reader_not_running, start_refused, launch_failed, too_many_restarts,
+/// permission, tool_missing, restarting, not_running, source_missing, unreadable_file, helper_unreachable, watch_failed.
+public struct MCPReaderHealthPayload: Codable, Equatable {
+    public let source: String
+    public let unreadable: Bool
+    public let reason: String?
+    public let restarts: Int
+    public let lastRestartAt: String?
+    public let gaps: Int
+    public let lastGapAt: String?
+    public let linesDropped: UInt64?
+    public let oversizeDropped: UInt64?
+    /// Files the last scan or batch skipped because they could not be opened or read (nil where the guard has no such step),
+    /// and when a scan last skipped one. The guard's detection is unchanged; those files were not looked at.
+    public var filesUnreadable: Int? = nil
+    public var filesUnreadableAt: String? = nil
 }
 
 /// Every field added after the original five is optional so older
@@ -749,7 +795,11 @@ public enum MCPResponseFormatting {
                     verdict: .inconclusive,
                     reason: "unknown_check_id",
                     statusText: "",
-                    detail: ""
+                    detail: "",
+                    verificationStatus: VerifyFindingDiscipline.status(verdict: .inconclusive, reason: "unknown_check_id"),
+                    rationale: VerifyFindingDiscipline.rationale(reason: "unknown_check_id"),
+                    counterEvidence: nil,
+                    severityChangesIf: nil
                 )
             }
             let classification = SecurityCheckVerification.classify(item)
@@ -759,7 +809,11 @@ public enum MCPResponseFormatting {
                 verdict: classification.verdict,
                 reason: classification.reason,
                 statusText: item.statusText,
-                detail: item.detail
+                detail: item.detail,
+                verificationStatus: VerifyFindingDiscipline.status(verdict: classification.verdict, reason: classification.reason),
+                rationale: VerifyFindingDiscipline.rationale(reason: classification.reason),
+                counterEvidence: classification.verdict == .stillPresent ? VerifyFindingDiscipline.counterEvidence(checkId: item.checkId) : nil,
+                severityChangesIf: classification.verdict == .stillPresent ? VerifyFindingDiscipline.severityChangesIf(checkId: item.checkId) : nil
             )
         }
         let evaluated = Set(results.filter { $0.reason != "unknown_check_id" }.map(\.checkId))
@@ -801,11 +855,11 @@ public enum MCPResponseFormatting {
         auditResult: PortSecurityAuditResult?
     ) -> MCPPortPayload {
         MCPPortPayload(
-            processName: portInfo.processName,
+            processName: MCPUntrustedText.sanitize(portInfo.processName),
             pid: portInfo.pid,
             port: portInfo.port,
             isGloballyExposed: portInfo.isGloballyExposed,
-            executablePath: portInfo.executablePath,
+            executablePath: portInfo.executablePath.map { MCPUntrustedText.sanitize($0) },
             auditPerformed: auditResult != nil,
             overallRisk: auditResult?.overallRisk.rawValue,
             findings: (auditResult?.findings ?? []).map {
@@ -816,7 +870,8 @@ public enum MCPResponseFormatting {
                     recommendation: $0.recommendation
                 )
             },
-            httpHeaders: auditResult?.httpHeaders
+            httpHeaders: auditResult?.httpHeaders,
+            aiRuntimes: (auditResult?.aiRuntimes).flatMap { $0.isEmpty ? nil : $0.map { MCPAIRuntimePayload(product: $0.product, confidence: $0.confidence.rawValue, basis: $0.basis) } }
         )
     }
 
@@ -864,14 +919,33 @@ public enum MCPResponseFormatting {
 
     public static func makeGuardStatusPayload(
         gatewayMAC: String?,
-        defaults: UserDefaults = .standard
+        defaults: UserDefaults = .standard,
+        readerHealth: [String: GuardReaderHealth]? = nil,
+        now: Date = Date()
     ) -> MCPGuardStatusPayload {
         let level = resolveActiveSecurityLevel(gatewayMAC: gatewayMAC, defaults: defaults)
+        let health = readerHealth ?? GuardReaderHealthStore.all(defaults: defaults)
+        let iso = ISO8601DateFormatter()
+        func time(_ t: Double?) -> String? { t.map { iso.string(from: Date(timeIntervalSince1970: $0)) } }
 
         func entry(_ key: String, _ defaultsKey: String, defaultWhenUnset: Bool) -> MCPGuardEntryPayload {
             let isUnset = defaults.object(forKey: defaultsKey) == nil
             let enabled = isUnset ? defaultWhenUnset : defaults.bool(forKey: defaultsKey)
-            return MCPGuardEntryPayload(key: key, enabledInSettings: enabled, usingDefault: isUnset)
+            return MCPGuardEntryPayload(key: key, enabledInSettings: enabled, usingDefault: isUnset,
+                                        liveState: GuardReaderHealthStore.guardLiveState(guardKey: key, enabledInSettings: enabled, records: health, now: now.timeIntervalSince1970),
+                                        readers: readers(for: key))
+        }
+        func readers(for key: String) -> [MCPReaderHealthPayload]? {
+            let ids = GuardReaderHealthStore.sourceIDs(forGuard: key)
+            guard !ids.isEmpty else { return nil }
+            return ids.compactMap { id in
+                health[id].map {
+                    MCPReaderHealthPayload(source: id, unreadable: $0.unreadable, reason: $0.reason, restarts: $0.restarts,
+                                           lastRestartAt: time($0.lastRestartAt), gaps: $0.gaps, lastGapAt: time($0.lastGapAt),
+                                           linesDropped: $0.linesDropped, oversizeDropped: $0.oversizeDropped,
+                                           filesUnreadable: $0.filesUnreadable, filesUnreadableAt: time($0.filesUnreadableAt))
+                }
+            }
         }
 
         let storedLinkMode = defaults.string(forKey: linkGuardModeKey)
@@ -904,7 +978,8 @@ public enum MCPResponseFormatting {
         guards.append(entry("airGapAutoWiFiKill", airGapAutoWiFiKillKey, defaultWhenUnset: true))
         guards.append(entry("wireGuardVPN", wireGuardVPNKey, defaultWhenUnset: false))
         guards.append(entry("tailscaleKillSwitch", tailscaleKillSwitchKey, defaultWhenUnset: false))
-        guards.append(MCPGuardEntryPayload(key: "linkGuard", enabledInSettings: linkMode != .off, usingDefault: storedLinkMode == nil))
+        guards.append(MCPGuardEntryPayload(key: "linkGuard", enabledInSettings: linkMode != .off, usingDefault: storedLinkMode == nil,
+                                           liveState: linkMode != .off ? "on" : "off"))
         guards.append(entry("linkGuardFeedUpdates", linkGuardUpdatesKey, defaultWhenUnset: true))
         guards.append(entry("activeVulnScan", ActiveVulnScan.enabledDefaultsKey, defaultWhenUnset: false))
 
@@ -931,6 +1006,7 @@ public enum MCPResponseFormatting {
         var caveats: [String] = []
         caveats.append(loc("各ガードの実際の有効性はRoamSwitch Pro版のライセンス状態にも依存しますが、このツールは別プロセスのためライセンス状態を正確に確認できません。上記はSettingsのトグル状態のみを示しています。"))
         caveats.append(loc("usingDefault が true の項目は、ユーザーが一度も切り替えていない既定値です。ポート異常ガード・着信ポートスキャン検知・ARPスプーフィング自動封じ込め・ランタイム脅威封じ込め・ランサムウェア検知（カナリア・エントロピー）・認証情報ハニートークン・重要パスの改ざん監視・依存関係ロックファイルの改ざん監視・定期ログ監査は、Pro版を有効化した時点で一度だけ自動的にオンになります。USBキーボード／ストレージ・Bluetooth・ClickFix・Docker・ゲートウェイARP固定・プロセス実行記録・ブラウザ認証情報の監視・VPNは、Proでも既定ではオフです。"))
+        caveats.append(loc("liveState が off のとき、そのガードは入力を読めていません(readers に理由があります)。partial は、直近24時間に入力を取りこぼしたことを示します。gaps は、読み取りが止まってから再開するまでの間に起きたことを見られなかった回数で、再開しても遡って読むことはありません。unknown は、まだ状態の報告がないことを示します。ヘルパーが止まっていると記録は更新されません。"))
         caveats.append(loc("VPNトンネルの実際の接続状態とキルスイッチの適用状態は特権ヘルパーが管理しているため、このツールからは確認できません。VPN関連の項目は設定値のみを示しています。"))
 
         return MCPGuardStatusPayload(
@@ -1136,5 +1212,96 @@ enum MCPRansomwareRecoveryFormatting {
             },
             notes: generalNotes
         )
+    }
+}
+
+// MARK: - Finding discipline for verify_security_findings
+
+/// The fields `verify_security_findings` adds so a reader can tell how far a verdict can be trusted.
+/// Everything here is a fixed, hand-written text chosen by the language-independent `checkId` / `reason`
+/// codes (no model, no free text from the machine), in the app's display language.
+///
+/// - `verificationStatus` says how well the *verdict* is established, not which way it points:
+///   `verified` (the check applies and was measured: `stillPresent` or `resolved`/`passing`),
+///   `false_positive` (by design the check does not apply with the current settings, so it never stood
+///   as a finding), `unverified` (the probe could not be trusted; the verdict is `inconclusive`).
+/// - `rationale` explains the status in one sentence, per `reason` code.
+/// - `counterEvidence` is the strongest reason a failing check could be benign, and `severityChangesIf`
+///   what would raise or lower the concern. Both are only given when the check still fails.
+///
+/// Same field names and status values on the Linux edition.
+enum VerifyFindingDiscipline {
+    static func status(verdict: SecurityCheckVerification, reason: String) -> String {
+        switch verdict {
+        case .inconclusive: return "unverified"
+        case .resolved: return reason == "not_applicable" ? "false_positive" : "verified"
+        case .stillPresent: return "verified"
+        }
+    }
+
+    static func rationale(reason: String) -> String {
+        switch reason {
+        case "failing": return loc("同じ判定条件で測り直した結果、この項目は今も不合格です。")
+        case "passing": return loc("同じ判定条件で測り直した結果、この項目は合格しています。")
+        case "not_applicable": return loc("この項目は、現在の設定では適用対象外です(意図した設定のため、指摘としては成立しません)。")
+        case "helper_unavailable": return loc("特権ヘルパーに接続できず、確認できませんでした。判断は保留です。")
+        case "gateway_unknown": return loc("ゲートウェイを特定できず、確認できませんでした。判断は保留です。")
+        case "no_baseline": return loc("比較の基準になる、登録済みの信頼ネットワークがなく、確認できませんでした。判断は保留です。")
+        case "location_unavailable": return loc("位置情報の権限がなく、Wi-Fiの情報を読めませんでした。判断は保留です。")
+        case "tool_failed": return loc("確認に必要なコマンドの実行に失敗しました。判断は保留です。")
+        case "not_verifiable": return loc("この項目は、今の方法では状態を確かめられません。判断は保留です。")
+        case "not_measured": return loc("この項目はまだ測定が終わっていません。時間をおいて、もう一度確認してください。判断は保留です。")
+        case "unknown_check_id": return loc("この checkId は存在しません。get_security_report で有効な checkId を確認してください。")
+        default: return loc("この項目は、今の方法では状態を確かめられません。判断は保留です。")
+        }
+    }
+
+    /// Hand-written, per check. nil for an id this table does not know.
+    static func counterEvidence(checkId: String) -> String? {
+        switch checkId {
+        case "luks_encryption": return loc("FileVaultが無効でも、持ち出さない据え置きのMacで、機密データを保存していなければ、実害は小さい構成です。")
+        case "lsm_active": return loc("開発や研究のためにSIPを意図して無効、または一部だけ無効にしているMacでは、この状態は設定どおりです。")
+        case "gatekeeper_app_verification": return loc("署名のないアプリを意図して実行している開発用のMacでは、この状態は設定どおりのことがあります。")
+        case "auto_security_updates": return loc("更新を手動、または管理ツール(MDM)で適用している場合は、自動更新がオフでもパッチは当たっています。")
+        case "os_builtin_malware_detection": return loc("判定は確認した時点の状態です。一時的に停止中と読めた可能性があるため、時間をおいて同じ結果になるか確かめてください。")
+        case "host_firewall": return loc("この判定は、RoamSwitchの保護レベルが示す状態で、macOS自体のファイアウォール設定を測ったものではありません。自宅など信頼できるネットワークだけで使うMacなら、優先度は下がります。")
+        case "network_stealth_mode": return loc("ステルスモードは存在を見えにくくするだけで、待ち受けているポートそのものは守りません。公開しているポートが無ければ、影響は小さいです。")
+        case "wifi_encryption_strength": return loc("Wi-Fiが暗号化されていなくても、VPNなどで通信自体が暗号化されていれば、盗聴の影響は小さくなります。")
+        case "arp_spoof_monitor": return loc("ARPの変化は、ルーターの交換や、ゲートウェイが複数台ある構成でも起きます。実際の攻撃ではない可能性があります。")
+        case "gateway_arp_lock": return loc("ゲートウェイARP固定は予防策で、オフでも攻撃を受けているとは限りません。この判定はRoamSwitchの設定値で、実際に効いていることの実測ではありません。")
+        case "ssh_hardening": return loc("リモートログイン(SSH)が外部から届かない状態(ファイアウォールで遮断、または信頼できるネットワークの中だけ)なら、設定の甘さは悪用されにくいです。")
+        case "sudo_hygiene": return loc("NOPASSWDは、自動化スクリプトのために、特定のコマンドだけを対象にして意図して設定している場合があります。")
+        case "exposed_ports": return loc("公開ポートは、意図して起動した開発サーバーなどかもしれません。また、root所有のリスナーはこの確認では見えません。")
+        case "malware_scanning": return loc("この判定は、RoamSwitchの設定値(ダウンロード自動スキャンのオン/オフ)です。ClamAV以外のマルウェア対策を使っているなら、オフでも無防備とは限りません。")
+        case "dns_threat_guard": return loc("この判定は、RoamSwitchの設定値です。ルーターなど別のDNSサービスで悪質なドメインを遮断しているなら、オフでも保護はあります。")
+        case "browser_phishing_protection": return loc("Safariを使わず、別のブラウザだけで閲覧している場合、Safariの詐欺Webサイト警告の設定は日常の保護に影響しません。")
+        case "usb_zero_trust": return loc("この判定は、RoamSwitchの設定値です。外部のUSB機器を使わない据え置きのMacでは、物理ポートからの攻撃のリスクは小さいです。")
+        case "accessory_connection_protection": return loc("この設定が扱うのは、Macがロックされている間の新しいアクセサリの接続だけです。使用中の接続は対象外です。")
+        default: return nil
+        }
+    }
+
+    static func severityChangesIf(checkId: String) -> String? {
+        switch checkId {
+        case "luks_encryption": return loc("ノートPCなど持ち出すMac、または機密データや認証情報を保存しているMacなら、重大になります。別の方法でディスク全体が暗号化されていると確認できれば、下がります。")
+        case "lsm_active": return loc("通常の作業(Web閲覧、ダウンロードしたアプリの実行)に使うMacでSIPが無効なら、重大になります。隔離した検証専用の環境なら、下がります。")
+        case "gatekeeper_app_verification": return loc("ダウンロードしたアプリを頻繁に開くMacなら、重大になります。実行するアプリが自作のものだけなら、下がります。")
+        case "auto_security_updates": return loc("macOSが最新でない場合は、重大になります。システム設定で最新の状態と確認できれば、下がります。")
+        case "os_builtin_malware_detection": return loc("macOSの更新が長く止まっている場合は、重大になります。再確認で稼働中に戻れば、下がります。")
+        case "host_firewall": return loc("公衆Wi-Fiなど信頼できないネットワークで使うなら、重大になります。外部から届くポートが無ければ、下がります。")
+        case "network_stealth_mode": return loc("公衆Wi-Fiなど信頼できないネットワークで使うなら、上がります。信頼できるネットワークだけで使うなら、下がります。")
+        case "wifi_encryption_strength": return loc("VPNを使わずに、暗号化のないWi-FiやWEPに接続しているなら、重大になります。WPA2またはWPA3の接続に切り替えれば、解消します。")
+        case "arp_spoof_monitor": return loc("ゲートウェイのMACアドレスが予期せず変わり、同時に通信の途切れや証明書エラーも出ているなら、重大になります。ルーターを交換した直後なら、下がります。")
+        case "gateway_arp_lock": return loc("カフェなど信頼できないネットワークをよく使うなら、上がります。自宅など信頼できるネットワークだけなら、下がります。")
+        case "ssh_hardening": return loc("SSHがインターネットや共有のLANから届く状態なら、重大になります。パスワード認証を止めて鍵認証のみにし、rootログインを禁止すれば、解消します。")
+        case "sudo_hygiene": return loc("すべてのコマンドを対象にした NOPASSWD: ALL なら、重大になります。限定された1つのコマンドだけなら、下がります。")
+        case "exposed_ports": return loc("認証のないデータベース、AIの推論サーバー、管理画面が公開されているなら、重大になります。待ち受けを127.0.0.1に限定するか、ファイアウォールで遮断すれば、下がります。")
+        case "malware_scanning": return loc("ブラウザやメールで受け取ったファイルをよく開くなら、上がります。受け取るファイルが少ない環境なら、下がります。")
+        case "dns_threat_guard": return loc("公衆Wi-Fiなど信頼できないネットワークで使うなら、上がります。信頼できるネットワークだけなら、下がります。")
+        case "browser_phishing_protection": return loc("Safariで知らない相手のリンクを開くことがあるなら、上がります。")
+        case "usb_zero_trust": return loc("共有スペースや外出先で、他人がMacに触れられるなら、上がります。")
+        case "accessory_connection_protection": return loc("席を離れたMacに他人が触れられる場所で使うなら、上がります。")
+        default: return nil
+        }
     }
 }

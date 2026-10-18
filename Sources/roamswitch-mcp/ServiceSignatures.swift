@@ -193,3 +193,88 @@ enum ServiceSignatures {
         }
     }
 }
+
+/// Local AI runtimes recognised from the listening port and from the response headers the port audit
+/// already reads (`PortSecurityAuditor.probeHTTPService`: one GET to 127.0.0.1, headers only; no body and
+/// no page title is read).
+///
+/// Two confidence tiers, and the tier decides what a match may do:
+/// - `confirmed`: a single-purpose default port (Ollama, 11434) or a marker the product itself puts in a
+///   response (llama.cpp's server names itself in the `Server` header), or a header marker that agrees with
+///   the product's default port.
+/// - `likely`: a port that is the product's default but shared with other software (ComfyUI, LiteLLM,
+///   Ray Dashboard, Gradio, LM Studio, vLLM-style servers), or a header that a fronting proxy could also
+///   forward (`x-litellm-*`, TGI's `x-compute-type` family). A `likely` match is reported at warning level
+///   at most, and only when the port is reachable from the network; it never raises a finding above the
+///   plain port finding.
+///
+/// Only products whose defaults are documented by the products themselves are listed. The Linux edition
+/// has the same catalog.
+enum LocalAIRuntime {
+    enum Confidence: String, Equatable { case confirmed, likely }
+
+    struct Match: Equatable {
+        let product: String
+        let confidence: Confidence
+        /// What matched: `port`, `header`, `server-banner`.
+        let basis: [String]
+    }
+
+    private struct Entry {
+        let product: String
+        /// Default port of the product, if it has one.
+        let port: Int?
+        /// The port is single-purpose, i.e. alone enough for `confirmed`.
+        let portIsDedicated: Bool
+        /// Lower-cased header-name prefixes that only this product emits.
+        let headerPrefixes: [String]
+        /// Exact lower-cased header names that only this product emits.
+        let headerNames: [String]
+        /// Substring of the (lower-cased) `Server` header that names the product.
+        let serverBanner: String?
+    }
+
+    private static let catalog: [Entry] = [
+        Entry(product: "Ollama", port: 11434, portIsDedicated: true, headerPrefixes: [], headerNames: [], serverBanner: nil),
+        Entry(product: "LM Studio server", port: 1234, portIsDedicated: false, headerPrefixes: [], headerNames: [], serverBanner: nil),
+        Entry(product: "Gradio / AI web UI", port: 7860, portIsDedicated: false, headerPrefixes: [], headerNames: [], serverBanner: nil),
+        Entry(product: "vLLM-style inference server", port: 8000, portIsDedicated: false, headerPrefixes: [], headerNames: [], serverBanner: nil),
+        Entry(product: "ComfyUI", port: 8188, portIsDedicated: false, headerPrefixes: [], headerNames: [], serverBanner: nil),
+        Entry(product: "Ray Dashboard", port: 8265, portIsDedicated: false, headerPrefixes: [], headerNames: [], serverBanner: nil),
+        Entry(product: "LiteLLM proxy", port: 4000, portIsDedicated: false, headerPrefixes: ["x-litellm-"], headerNames: [], serverBanner: nil),
+        // Text Generation Inference puts these timing/token headers on its generation responses; they
+        // may be absent from a plain GET of "/", in which case nothing matches here.
+        Entry(product: "Text Generation Inference", port: nil, portIsDedicated: false, headerPrefixes: [],
+              headerNames: ["x-compute-type", "x-prompt-tokens", "x-generated-tokens", "x-compute-time"], serverBanner: nil),
+        Entry(product: "llama.cpp server", port: nil, portIsDedicated: false, headerPrefixes: [], headerNames: [], serverBanner: "llama.cpp"),
+    ]
+
+    /// Ports the plain port audit (`checkKnownDangerousPort`) already reports on, so a port-only match there
+    /// adds data but no second finding.
+    static let portsWithPlainFinding: Set<Int> = [11434, 1234, 7860, 8000]
+
+    /// `headers` are the lower-cased response headers of the port's HTTP root, if it answered.
+    static func identify(port: Int, headers: [String: String]?) -> [Match] {
+        var out: [Match] = []
+        for entry in catalog {
+            var basis: [String] = []
+            let portMatches = entry.port == port
+            if portMatches { basis.append("port") }
+            var headerMatches = false
+            if let headers {
+                headerMatches = headers.keys.contains { key in
+                    let k = key.lowercased()
+                    return entry.headerNames.contains(k) || entry.headerPrefixes.contains { k.hasPrefix($0) }
+                }
+                if headerMatches { basis.append("header") }
+                if let banner = entry.serverBanner, (headers["server"] ?? "").lowercased().contains(banner) { basis.append("server-banner") }
+            }
+            guard !basis.isEmpty else { continue }
+            let confirmed = basis.contains("server-banner")
+                || (portMatches && entry.portIsDedicated)
+                || (portMatches && headerMatches)
+            out.append(Match(product: entry.product, confidence: confirmed ? .confirmed : .likely, basis: basis))
+        }
+        return out
+    }
+}

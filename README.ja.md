@@ -37,7 +37,7 @@
 
 ## 提供ツール（`tools/list`）
 
-全 31 ツール（`MCPServer.swift` の `toolDefinitions` の要素数で、`tools/list` が返す数と同じ）。
+全 34 ツール（`MCPServer.swift` の `toolDefinitions` の要素数で、`tools/list` が返す数と同じ）。
 すべて読み取り専用です。`get_exposed_ports` と、既定で無効な `run_active_vuln_scan` は `127.0.0.1`
 限定です。外部のホストへ通信するのは、Pro 限定・既定で無効の `run_npm_audit_signatures`
 （`npm audit signatures` が npm レジストリへ問い合わせる）だけです。診断系のツール
@@ -142,6 +142,11 @@
   重大度、概要、プロセス、確度の高い場合のみ MITRE ATT&CK ID、実施した対処、未解決 / 解除済み /
   許可済みの状態）。ARP スプーフィング封じ込めの記録はここにしかありません。Linux 版と同名の
   ツールです。
+- `get_detection_coverage` — 「RoamSwitch が見えないものは何か」。Mac の防御を弱める・回避する・生き延びる
+  ための MITRE ATT&CK の手口を固定の表にし、手口ごとに `coverage`（detects / partial / none）、
+  それを担うガード・プロセス実行ルール・診断項目、1 文の `blindSpot`（限界）、`liveState`
+  （担当ガードの設定スイッチの状態。動作の証明ではありません）を返します。実装を確認して付けた
+  RoamSwitch 自身の評価で、回避手口の実行・再現は一切しません。ネットワークには出ません。
 - `get_network_history` — 常時稼働の Evil Twin 検知が記憶しているネットワーク履歴。SSID ごとの
   ゲートウェイ機器の**件数**と最終接続日時（MAC アドレスは出力しません）、および共通の
   ゲートウェイを持たないのに名前が酷似した SSID の組を返します。

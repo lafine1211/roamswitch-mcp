@@ -303,11 +303,13 @@ public struct ExecRecorderStatus: Codable, Equatable {
     public var restartCount: Int
     public var nextRetryAt: Double?
     public var lastError: String?
+    /// When eslogger last ended and a restart was scheduled (unix seconds). Nothing is replayed over that gap.
+    public var lastRestartAt: Double?
 
     public init(
         state: String = "stopped", updatedAt: Double = Date().timeIntervalSince1970, startedAt: Double? = nil,
         eventsRecorded: UInt64 = 0, eventsDropped: UInt64 = 0, malformedLines: UInt64 = 0, alertsRaised: UInt64 = 0,
-        restartCount: Int = 0, nextRetryAt: Double? = nil, lastError: String? = nil
+        restartCount: Int = 0, nextRetryAt: Double? = nil, lastError: String? = nil, lastRestartAt: Double? = nil
     ) {
         self.state = state
         self.updatedAt = updatedAt
@@ -319,6 +321,7 @@ public struct ExecRecorderStatus: Codable, Equatable {
         self.restartCount = restartCount
         self.nextRetryAt = nextRetryAt
         self.lastError = lastError
+        self.lastRestartAt = lastRestartAt
     }
 
     public static func read(path: String = ExecRecorderPaths.statusFile) -> ExecRecorderStatus? {
