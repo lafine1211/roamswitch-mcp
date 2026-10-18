@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.4 (build 166).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.5 (build 167).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -26,6 +26,12 @@ import Foundation
 /// tag characters, the decoded hidden text (sanitized and cut short) are copied into the result,
 /// and the MCP tool marks the whole result as untrusted.
 ///
+/// Beyond the text rules there are four more: a skill or file name that mixes lookalike letters of
+/// different alphabets, a whitespace padding that pushes text out of view, encoded text (a base64
+/// blob or a `data:text/` URI) and an over-broad `allowed-tools` grant. And there is change
+/// detection: once a person accepts the current state (`AgentSetupBaseline`), later runs report
+/// files and MCP server definitions whose content changed, and ones that are new.
+///
 /// Every rule here is deterministic; none of it decides that something is malicious. A match
 /// means "a human should look at this line", and the messages say so. The rules were written from
 /// the public OpenClaw documentation (docs.openclaw.ai, gateway security pages) and from how these
@@ -37,7 +43,7 @@ enum AgentSetupAuditor {
         let id: String
         /// `high` or `medium`.
         let severity: String
-        /// `instructions` or `openclaw`.
+        /// `instructions`, `openclaw` or `mcp` (an MCP server definition that changed).
         let area: String
         let file: String
         /// Short technical fact (rule, line number, URL host, key path), never a secret.
@@ -55,6 +61,11 @@ enum AgentSetupAuditor {
         /// Files that exist but could not be read. Reported so "nothing found" is never
         /// mistaken for "everything was checked".
         var unreadableFiles: [String] = []
+        /// Digests of everything audited, in the form `AgentSetupBaseline` stores. What a person
+        /// accepts is exactly this snapshot, i.e. what the result on screen was computed from.
+        var snapshot = AgentSetupBaseline.Snapshot()
+        /// When the state this run was compared with was accepted (ISO 8601), nil if none was.
+        var baselineAcceptedAt: String?
     }
 
     /// One file as read from disk: its bytes and POSIX permission bits (nil if unknown).
@@ -64,12 +75,16 @@ enum AgentSetupAuditor {
         let data: Data
         let mode: UInt16?
         var inSkill = false
+        /// Hex SHA-256 of the whole file (nil for the pure `audit`, which has only the bytes it was given).
+        var sha256: String?
     }
 
     static let findingIDs = [
         "hidden_tag_characters", "invisible_characters", "override_instruction", "remote_script_exec",
         "encoded_payload_exec", "credential_access", "credential_exfil_shape", "exfil_endpoint",
         "persistence_instruction", "skill_precompiled_code", "agent_file_writable",
+        "homoglyph_name", "whitespace_padding", "hidden_encoded_text", "skill_broad_tool_grant",
+        "agent_file_changed", "agent_file_added", "mcp_server_changed", "mcp_server_added",
         "openclaw_auth_disabled", "openclaw_wide_bind", "openclaw_weak_token", "openclaw_origin_wildcard",
         "openclaw_dangerous_flag", "openclaw_broad_trusted_proxy", "openclaw_proxy_trust_loosened",
         "openclaw_open_dm", "openclaw_mdns_full", "openclaw_audit_suppressed", "openclaw_loose_permissions",
@@ -130,7 +145,8 @@ enum AgentSetupAuditor {
 
     // MARK: - Run
 
-    static func run(home: String = NSHomeDirectory(), projectFolders: [String]) -> Result {
+    static func run(home: String = NSHomeDirectory(), projectFolders: [String],
+                    baselineURL: URL = AgentSetupBaseline.defaultURL) -> Result {
         let fm = FileManager.default
         var inputs: [FileInput] = []
         var unreadable: [String] = []
@@ -148,7 +164,9 @@ enum AgentSetupAuditor {
             defer { try? handle.close() }
             let data = (try? handle.read(upToCount: size > maxTextBytes ? 8 : maxTextBytes)) ?? Data()
             if size > maxTextBytes, !inSkill { unreadable.append(path); return }
-            inputs.append(FileInput(path: path, data: data, mode: mode, inSkill: inSkill))
+            // The digest covers the whole file, also when only its first bytes were read above.
+            let digest = size > maxTextBytes ? AgentSetupBaseline.sha256Hex(ofFileAt: path) : AgentSetupBaseline.sha256Hex(data)
+            inputs.append(FileInput(path: path, data: data, mode: mode, inSkill: inSkill, sha256: digest))
         }
 
         func files(in folder: String, maxDepth: Int) -> [String] {
@@ -196,7 +214,7 @@ enum AgentSetupAuditor {
         if let attrs = try? fm.attributesOfItem(atPath: configPath), (attrs[.type] as? FileAttributeType) != .typeDirectory {
             if let data = fm.contents(atPath: configPath), data.count <= maxTextBytes {
                 let mode = (attrs[.posixPermissions] as? NSNumber).map { UInt16($0.intValue & 0o7777) }
-                openClaw = FileInput(path: configPath, data: data, mode: mode)
+                openClaw = FileInput(path: configPath, data: data, mode: mode, sha256: AgentSetupBaseline.sha256Hex(data))
             } else {
                 unreadable.append(configPath)
             }
@@ -212,7 +230,61 @@ enum AgentSetupAuditor {
         var result = audit(files: inputs, openClawConfig: openClaw, openClawDirectories: stateDirs)
         result.skillCount = skillCount
         result.unreadableFiles += unreadable
+
+        // Change detection: what is there now, and how it differs from the state a person accepted.
+        var snapshot = AgentSetupBaseline.Snapshot()
+        snapshot.scopes = [home] + folders
+        for input in inputs + (openClaw.map { [$0] } ?? []) {
+            if let digest = input.sha256 { snapshot.files[input.path] = AgentSetupBaseline.Entry(sha256: digest, fields: nil) }
+        }
+        snapshot.servers = MCPConfigAuditor.serverSnapshot(home: home, projectFolders: folders)
+        result.snapshot = snapshot
+        if let store = AgentSetupBaseline.load(from: baselineURL) {
+            result.baselineAcceptedAt = store.acceptedAt
+            result.findings += driftFindings(AgentSetupBaseline.compare(store, with: snapshot),
+                                             acceptedAt: store.acceptedAt, existing: result.findings)
+        }
         return result
+    }
+
+    /// Records the state `result` was computed from as the accepted one. The caller is a person
+    /// (a button, a command-line flag); an audit run and the MCP tool never call this.
+    @discardableResult
+    static func acceptCurrentState(_ result: Result, baselineURL: URL = AgentSetupBaseline.defaultURL) throws -> AgentSetupBaseline.Store {
+        try AgentSetupBaseline.accept(result.snapshot, to: baselineURL)
+    }
+
+    /// MCP server keys whose change alters what runs or what it may do without asking.
+    private static let serverRiskFields: Set<String> = [
+        "command", "args", "url", "serverUrl", "env", "headers", "cwd", "type", "transport", "alwaysAllow", "autoApprove",
+    ]
+
+    /// Findings for what differs from the accepted state. A changed file is `high` when the same file
+    /// also has a `high` finding in this run: it changed into something that looks wrong.
+    static func driftFindings(_ changes: [AgentSetupBaseline.Change], acceptedAt: String, existing: [Finding]) -> [Finding] {
+        let day = AgentSetupBaseline.day(of: acceptedAt)
+        var out: [Finding] = []
+        for change in changes {
+            switch change {
+            case .fileChanged(let path):
+                let worse = existing.contains { $0.file == path && $0.severity == "high" }
+                out.append(Finding(id: "agent_file_changed", severity: worse ? "high" : "medium", area: "instructions", file: path,
+                                   detail: "content differs from the state accepted on \(day)", message: message("agent_file_changed")))
+            case .fileAdded(let path):
+                out.append(Finding(id: "agent_file_added", severity: "medium", area: "instructions", file: path,
+                                   detail: "not present when the state was accepted on \(day)", message: message("agent_file_added")))
+            case .serverChanged(let path, let name, let fields):
+                let risky = fields.isEmpty || fields.contains { serverRiskFields.contains($0) }
+                let what = fields.isEmpty ? "definition" : fields.map { sanitized($0, limit: 24) }.joined(separator: ", ")
+                out.append(Finding(id: "mcp_server_changed", severity: risky ? "high" : "medium", area: "mcp", file: path,
+                                   detail: "server \"\(sanitized(name, limit: 40))\": \(what) changed since \(day)", message: message("mcp_server_changed")))
+            case .serverAdded(let path, let name):
+                out.append(Finding(id: "mcp_server_added", severity: "medium", area: "mcp", file: path,
+                                   detail: "server \"\(sanitized(name, limit: 40))\" was not configured when the state was accepted on \(day)",
+                                   message: message("mcp_server_added")))
+            }
+        }
+        return out
     }
 
     /// Text-looking instruction files in a commands / agents / rules folder.
@@ -289,6 +361,8 @@ enum AgentSetupAuditor {
         let isMarkdownLike = ["md", "mdc", "markdown", "txt", ""].contains(ext)
         let lines = text.components(separatedBy: "\n")
         let inComment = htmlCommentLines(lines)
+        let inMarkdownComment = markdownCommentLines(lines)
+        let front = isMarkdownLike ? frontMatter(lines) : nil
         var hits: [Hit] = []
 
         // Hidden Unicode.
@@ -301,15 +375,43 @@ enum AgentSetupAuditor {
                             detail: "line \(invisible.line): U+\(String(format: "%04X", invisible.scalar)) (\(invisible.count) in total)"))
         }
 
+        // Names: a skill, a file or a front-matter name that mixes lookalike letters of two alphabets.
+        for (label, name) in identifiers(of: file.path, frontMatter: front) {
+            if let mixed = mixedScript(name) {
+                hits.append(Hit(id: "homoglyph_name", severity: mixed.script == "Cyrillic" ? "high" : "medium", line: 1,
+                                detail: "\(label) \"\(sanitized(name, limit: 40))\" mixes Latin and \(mixed.script) letters (U+\(String(format: "%04X", mixed.scalar)))"))
+            }
+        }
+        // Text pushed out of view by a long run of blanks or empty lines.
+        for padding in whitespacePaddings(lines) {
+            hits.append(Hit(id: "whitespace_padding", severity: "medium", line: padding.line, detail: "line \(padding.line): \(padding.detail)"))
+        }
+        // allowed-tools that lets the file run any command without asking.
+        if let front, let value = frontMatterValue(front, keys: ["allowed-tools", "allowed_tools"]) {
+            let broad = splitGrants(value).compactMap(broadGrant)
+            if !broad.isEmpty {
+                let shown = broad.prefix(3).map { sanitized($0, limit: 40) }.joined(separator: ", ")
+                hits.append(Hit(id: "skill_broad_tool_grant", severity: "medium", line: 1,
+                                detail: "allowed-tools grants unrestricted commands: \(shown)" + (broad.count > 3 ? " (+\(broad.count - 3) more)" : "")))
+            }
+        }
+
         var credentialLine: Int?
         var exfilLine: Int?
         for (index, rawLine) in lines.enumerated() {
             let number = index + 1
             let line = rawLine
             let lower = line.lowercased()
-            let commented = inComment[index]
+            let commentKind: String? = inComment[index] ? "an HTML comment" : (inMarkdownComment[index] ? "a hidden Markdown comment" : nil)
+            let commented = commentKind != nil
             func bump(_ severity: String) -> String { commented ? "high" : severity }
-            func note(_ detail: String) -> String { "line \(number)\(commented ? " (inside an HTML comment)" : ""): \(detail)" }
+            func note(_ detail: String) -> String { "line \(number)\(commentKind.map { " (inside \($0))" } ?? ""): \(detail)" }
+
+            for blob in encodedTexts(in: line) {
+                let tail = blob.rule.map { ", the text contains \($0)" } ?? ""
+                hits.append(Hit(id: "hidden_encoded_text", severity: bump(blob.rule != nil ? "high" : "medium"), line: number,
+                                detail: note("\(blob.length) encoded characters\(blob.isDataURI ? " in a data:text URI" : " that decode to text")\(tail)")))
+            }
 
             if isMarkdownLike, matchesUnquoted(overridePatterns, lower) {
                 hits.append(Hit(id: "override_instruction", severity: bump("medium"), line: number, detail: note("instruction-override wording")))
@@ -577,6 +679,236 @@ enum AgentSetupAuditor {
         return cleaned.count > limit ? String(cleaned.prefix(limit)) + "…" : cleaned
     }
 
+    // MARK: - Names, padding, encoded text, tool grants
+
+    /// The names a file is known by: its own name, a skill's folder name and the `name:` of its front
+    /// matter. Each is checked for lookalike letters (a Cyrillic `а` in `reаd_file`).
+    static func identifiers(of path: String, frontMatter front: [String]?) -> [(String, String)] {
+        var out: [(String, String)] = []
+        let url = URL(fileURLWithPath: path)
+        let stem = url.deletingPathExtension().lastPathComponent
+        if !stem.isEmpty { out.append(("file name", stem)) }
+        if url.lastPathComponent.lowercased() == "skill.md" {
+            let folder = url.deletingLastPathComponent().lastPathComponent
+            if !folder.isEmpty { out.append(("skill folder name", folder)) }
+        }
+        if let front, let name = frontMatterValue(front, keys: ["name"]), !name.isEmpty { out.append(("front matter name", name)) }
+        return out
+    }
+
+    /// Whether `name` has letters of the Latin alphabet and of another alphabet that has lookalikes
+    /// of Latin letters (Cyrillic, Greek, Armenian). A name in Japanese, or Latin with kana, is fine.
+    static func mixedScript(_ name: String) -> (script: String, scalar: UInt32)? {
+        var hasLatin = false
+        var other: (String, UInt32)?
+        for scalar in name.unicodeScalars where scalar.properties.isAlphabetic {
+            let v = scalar.value
+            if (0x41...0x5A).contains(v) || (0x61...0x7A).contains(v) || ((0xC0...0x24F).contains(v) && v != 0xD7 && v != 0xF7) || (0x1E00...0x1EFF).contains(v) {
+                hasLatin = true
+            } else if other == nil {
+                if (0x400...0x52F).contains(v) || (0x2DE0...0x2DFF).contains(v) || (0xA640...0xA69F).contains(v) { other = ("Cyrillic", v) }
+                else if (0x370...0x3FF).contains(v) || (0x1F00...0x1FFF).contains(v) { other = ("Greek", v) }
+                else if (0x530...0x58F).contains(v) { other = ("Armenian", v) }
+            }
+        }
+        guard hasLatin, let other else { return nil }
+        return (other.0, other.1)
+    }
+
+    /// Blanks that take no room on screen the way text does: space, tab, no-break and the wide spaces.
+    private static func isPaddingScalar(_ v: UInt32) -> Bool {
+        v == 0x20 || v == 0x09 || v == 0xA0 || v == 0x1680 || (0x2000...0x200A).contains(v) || v == 0x202F || v == 0x205F || v == 0x3000
+    }
+
+    static let horizontalPaddingRun = 100
+    static let verticalPaddingLines = 30
+
+    /// A run of at least `horizontalPaddingRun` blanks in front of text on the same line, or at least
+    /// `verticalPaddingLines` empty lines in front of text. An editor shows neither the text that
+    /// follows (it is far to the right or far below) nor any sign that it exists.
+    static func whitespacePaddings(_ lines: [String]) -> [(line: Int, detail: String)] {
+        var out: [(line: Int, detail: String)] = []
+        var blankStart: Int?
+        var blankCount = 0
+        for (index, line) in lines.enumerated() {
+            var run = 0
+            var hasText = false
+            var horizontal: Int?
+            for scalar in line.unicodeScalars {
+                let v = scalar.value
+                if isPaddingScalar(v) { run += 1; continue }
+                if v == 0x0D { continue }
+                hasText = true
+                if run >= horizontalPaddingRun, horizontal == nil { horizontal = run }
+                run = 0
+            }
+            if let horizontal { out.append((index + 1, "\(horizontal) blanks before text")) }
+            if hasText {
+                if blankCount >= verticalPaddingLines, let start = blankStart { out.append((start + 1, "\(blankCount) empty lines before text")) }
+                blankStart = nil
+                blankCount = 0
+            } else {
+                if blankStart == nil { blankStart = index }
+                blankCount += 1
+            }
+        }
+        return out
+    }
+
+    private static let base64BlobPattern = regex(#"[A-Za-z0-9+/]{60,}={0,2}"#, caseInsensitive: false)
+    private static let dataTextURIPattern = regex(#"data:text/[a-z0-9.+-]+(?:;[a-z0-9=._-]+)*;base64,([A-Za-z0-9+/]+={0,2})"#)
+
+    /// Encoded text in one line: a `data:text/…;base64,` URI, or a base64 run of 60 characters or
+    /// more that decodes to readable UTF-8 text (the chance of that for anything else, such as a
+    /// hash, a key or an image, is negligible). `rule` names what the decoded text itself would
+    /// trip if it were written out. The decoded text is never copied into a result.
+    static func encodedTexts(in line: String) -> [(length: Int, isDataURI: Bool, rule: String?)] {
+        var out: [(length: Int, isDataURI: Bool, rule: String?)] = []
+        let whole = NSRange(line.startIndex..., in: line)
+        var covered: [Range<String.Index>] = []
+        for match in dataTextURIPattern.matches(in: line, options: [], range: whole) {
+            guard let full = Range(match.range, in: line), let payload = Range(match.range(at: 1), in: line) else { continue }
+            covered.append(full)
+            out.append((line[payload].count, true, decodedText(String(line[payload])).flatMap(wording(in:))))
+        }
+        for match in base64BlobPattern.matches(in: line, options: [], range: whole) {
+            guard let range = Range(match.range, in: line), !covered.contains(where: { $0.overlaps(range) }) else { continue }
+            guard let text = decodedText(String(line[range])) else { continue }
+            out.append((line[range].count, false, wording(in: text)))
+        }
+        return out
+    }
+
+    /// Base64 → UTF-8 text with no control characters (other than line breaks and tab), at least 24 bytes.
+    private static func decodedText(_ encoded: String) -> String? {
+        var body = encoded.trimmingCharacters(in: CharacterSet(charactersIn: "="))
+        if body.count % 4 == 1 { body.removeLast() }
+        body += String(repeating: "=", count: (4 - body.count % 4) % 4)
+        guard let data = Data(base64Encoded: body), data.count >= 24 else { return nil }
+        // The run may end inside a multi-byte character when text follows it directly.
+        guard let text = (0...3).lazy.compactMap({ String(data: data.dropLast($0), encoding: .utf8) }).first else { return nil }
+        for scalar in text.unicodeScalars where scalar.value < 0x20 && ![0x09, 0x0A, 0x0D].contains(scalar.value) { return nil }
+        return text
+    }
+
+    /// What kind of rule decoded text trips, as a short phrase; nil if none.
+    private static func wording(in text: String) -> String? {
+        for raw in text.components(separatedBy: "\n") {
+            let lower = raw.lowercased()
+            if matchesUnquoted(overridePatterns, lower) { return "instruction-override wording" }
+            if matches(remoteExecPatterns, lower) || matches(encodedExecPatterns, lower) { return "a command that downloads or decodes and runs code" }
+            if matches(credentialPatterns, lower) { return "a reference to a credential file" }
+            if matchedExfilHost(lower) != nil { return "a drop-site address" }
+        }
+        return nil
+    }
+
+    /// Lines of a Markdown link-reference definition used as a comment (`[//]: # (text)`,
+    /// `[comment]: <> "text"`). Markdown renders none of it.
+    static func markdownCommentLines(_ lines: [String]) -> [Bool] {
+        lines.map { markdownCommentPattern.firstMatch(in: $0, options: [], range: NSRange($0.startIndex..., in: $0)) != nil }
+    }
+
+    private static let markdownCommentPattern = regex(#"^\s*\[[^\]]+\]:\s*(?:#|<>)\s*[(\"'].*$"#, caseInsensitive: false)
+
+    /// The YAML front matter of a Markdown file (`---` … `---` at the very top), without the fences.
+    static func frontMatter(_ lines: [String]) -> [String]? {
+        func fence(_ line: String) -> Bool {
+            line.replacingOccurrences(of: "\u{FEFF}", with: "").trimmingCharacters(in: .whitespacesAndNewlines) == "---"
+        }
+        guard let first = lines.first, fence(first) else { return nil }
+        for index in 1..<min(lines.count, 200) where fence(lines[index]) || lines[index].trimmingCharacters(in: .whitespacesAndNewlines) == "..." {
+            return Array(lines[1..<index])
+        }
+        return nil
+    }
+
+    /// The value of a top-level front-matter key, flattened to one string: an inline value, an inline
+    /// list (`[a, b]`) or a block list (`- a` lines) joined by commas. Matching is case-insensitive.
+    static func frontMatterValue(_ front: [String], keys: [String]) -> String? {
+        for (index, raw) in front.enumerated() {
+            guard !raw.hasPrefix(" "), !raw.hasPrefix("\t"), let colon = raw.firstIndex(of: ":") else { continue }
+            let key = raw[..<colon].trimmingCharacters(in: .whitespaces).lowercased()
+            guard keys.contains(key) else { continue }
+            var value = raw[raw.index(after: colon)...].trimmingCharacters(in: .whitespacesAndNewlines)
+            if value.isEmpty || value == "|" || value == ">" {
+                var items: [String] = []
+                var next = index + 1
+                while next < front.count {
+                    let line = front[next]
+                    let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                    next += 1
+                    if trimmed.isEmpty { continue }
+                    guard line.hasPrefix(" ") || line.hasPrefix("\t") || trimmed.hasPrefix("-") else { break }
+                    items.append(trimmed.hasPrefix("-") ? String(trimmed.dropFirst()).trimmingCharacters(in: .whitespaces) : trimmed)
+                }
+                value = items.joined(separator: ",")
+            } else if value.hasPrefix("["), value.hasSuffix("]") {
+                value = String(value.dropFirst().dropLast())
+            }
+            if value.count >= 2, let q = value.first, q == "\"" || q == "'", value.last == q { value = String(value.dropFirst().dropLast()) }
+            return value
+        }
+        return nil
+    }
+
+    /// Splits an `allowed-tools` value into grants. Commas and blanks separate grants, except inside
+    /// a specifier: `Bash(git status:*)` is one grant, and a parenthesis inside a specifier is a
+    /// literal character (the specifier ends at a `)` followed by a separator or the end).
+    static func splitGrants(_ value: String) -> [String] {
+        var grants: [String] = []
+        var current = ""
+        var inSpecifier = false
+        let chars = Array(value)
+        for (i, c) in chars.enumerated() {
+            if inSpecifier {
+                current.append(c)
+                if c == ")" {
+                    let next = i + 1 < chars.count ? chars[i + 1] : nil
+                    if next == nil || next == "," || next!.isWhitespace { inSpecifier = false }
+                }
+            } else if c == "(" {
+                inSpecifier = true
+                current.append(c)
+            } else if c == "," || c.isWhitespace {
+                if !current.isEmpty { grants.append(current); current = "" }
+            } else {
+                current.append(c)
+            }
+        }
+        if !current.isEmpty { grants.append(current) }
+        return grants.map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "\"'")) }.filter { !$0.isEmpty }
+    }
+
+    /// Commands that run whatever they are given: a shell, an interpreter, a package runner, a
+    /// downloader, a remote shell, a privilege switch. `Bash(python3:*)` is no narrower than `Bash`.
+    private static let arbitraryExecCommands: Set<String> = [
+        "sh", "bash", "zsh", "dash", "ksh", "fish", "csh", "tcsh", "python", "python2", "python3", "node", "deno", "bun",
+        "perl", "ruby", "php", "lua", "eval", "exec", "sudo", "doas", "su", "env", "xargs", "curl", "wget", "nc", "ncat",
+        "netcat", "ssh", "scp", "sftp", "osascript", "npx", "bunx", "uvx", "pipx", "pwsh", "powershell", "cmd",
+    ]
+
+    /// The grant itself if it allows any shell command: `*`, `Bash`, `Bash(*)`, `Bash(:*)`, or a
+    /// wildcard on a command that runs anything (`Bash(curl:*)`, `Bash(python3 *)`). A grant narrowed
+    /// to a fixed script or subcommand (`Bash(python3 scripts/lint.py:*)`, `Bash(git status:*)`) is fine.
+    static func broadGrant(_ grant: String) -> String? {
+        if grant == "*" || grant == "**" { return grant }
+        var name = grant
+        var specifier: String?
+        if let open = grant.firstIndex(of: "("), grant.hasSuffix(")") {
+            name = String(grant[..<open])
+            specifier = String(grant[grant.index(after: open)..<grant.index(before: grant.endIndex)])
+        }
+        guard ["bash", "shell"].contains(name.lowercased()) else { return nil }
+        guard let specifier else { return grant }
+        var base = specifier.trimmingCharacters(in: .whitespaces)
+        if base.isEmpty || ["*", "**", ":*", "*:*"].contains(base) { return grant }
+        guard let suffix = [":*", " *", "*"].first(where: { base.hasSuffix($0) }) else { return nil }
+        base = String(base.dropLast(suffix.count)).trimmingCharacters(in: .whitespaces)
+        guard !base.contains(" ") else { return nil }
+        return arbitraryExecCommands.contains((base as NSString).lastPathComponent.lowercased()) ? grant : nil
+    }
+
     // MARK: - OpenClaw configuration
 
     /// Placeholder-looking or short values are not echoed; only a length is.
@@ -697,6 +1029,14 @@ enum AgentSetupAuditor {
         case "persistence_instruction": return loc("再起動後も残る仕掛けを作る記述があります")
         case "skill_precompiled_code": return loc("スキルに読めないコンパイル済みコードがあります")
         case "agent_file_writable": return loc("所有者以外も書き込めるファイルです")
+        case "homoglyph_name": return loc("名前に見た目が似た別の文字が混ざっています")
+        case "whitespace_padding": return loc("空白や空行の連続で、続きが画面の外に押し出されています")
+        case "hidden_encoded_text": return loc("符号化された文章が埋め込まれています")
+        case "skill_broad_tool_grant": return loc("ツールの許可（allowed-tools）が広すぎます")
+        case "agent_file_changed": return loc("確認済みにした後で内容が変わっています")
+        case "agent_file_added": return loc("確認済みにした後で増えたファイルです")
+        case "mcp_server_changed": return loc("確認済みにした後で MCP サーバーの設定が変わっています")
+        case "mcp_server_added": return loc("確認済みにした後で MCP サーバーが増えています")
         case "openclaw_auth_disabled": return loc("OpenClaw のゲートウェイの認証が無効です")
         case "openclaw_wide_bind": return loc("OpenClaw のゲートウェイが外から届く状態です")
         case "openclaw_weak_token": return loc("OpenClaw のトークンが短すぎます")
@@ -737,6 +1077,22 @@ enum AgentSetupAuditor {
             return loc("このスキルには、人が読めないコンパイル済みのコード（実行ファイルやバイトコード）が入っています。中身を確認できないため、出どころが確かな場合を除いて使わないでください。")
         case "agent_file_writable":
             return loc("このファイルは、所有者以外も書き込める権限になっています。他のユーザーやプロセスが指示を書き換えれば、次に AI が読んだときにその内容に従います。chmod go-w で書き込み権限を外してください。")
+        case "homoglyph_name":
+            return loc("スキルやファイルの名前に、ラテン文字とよく似た別の文字（キリル文字やギリシャ文字など）が混ざっています。見た目は本物の名前と区別がつきませんが、実際は別の名前なので、本物になりすます手口に使われます。名前を打ち直して、混ざっている文字を取り除いてください。")
+        case "whitespace_padding":
+            return loc("空白や空行が異常に長く続いた後ろに、文章が置かれています。エディタで開いても続きは画面の外にあって見えず、そこに指示を隠す手口に使われます。その位置まで移動して、後ろに書かれている内容を確認し、不要な空白は取り除いてください。")
+        case "hidden_encoded_text":
+            return loc("base64 などで符号化された文章（data:text/… の形を含みます）が埋め込まれています。符号化されていると人は中身を読めませんが、AI は復号して扱える場合があります。復号した内容を確認し、意図したものでなければ取り除いてください。")
+        case "skill_broad_tool_grant":
+            return loc("このファイルの allowed-tools が、どんなシェルコマンドでも実行できる許可（Bash 全体や *）、または任意のコードを実行できるコマンドの許可（sh・python・curl など）になっています。動いている間は、確認なしで何でも実行されることになります。使うコマンドだけに絞った書き方（例: Bash(git status:*)）に変えてください。")
+        case "agent_file_changed":
+            return loc("このファイルは、確認済みにした時点から内容が変わっています。自分で編集した場合は問題ありません。覚えのない変更なら、差し替えられた可能性があるので、内容を確認してください。確認できたら、確認済みにし直してください。")
+        case "agent_file_added":
+            return loc("このファイルは、確認済みにした時点では存在しませんでした。自分でスキルや設定を追加した場合は問題ありません。覚えがなければ、誰がどこから置いたのか確認してください。確認できたら、確認済みにし直してください。")
+        case "mcp_server_changed":
+            return loc("この MCP サーバーの起動コマンドや接続先などの設定が、確認済みにした時点から変わっています。MCP サーバーは設定された通りのコマンドを実行するので、差し替えられていると任意のコードが動きます。自分で変更した覚えがなければ、設定ファイルを開いて内容を確認してください。確認できたら、確認済みにし直してください。")
+        case "mcp_server_added":
+            return loc("この MCP サーバーは、確認済みにした時点では設定されていませんでした。追加した覚えがなければ、設定ファイルを開いて、どのコマンドや接続先を指しているか確認してください。確認できたら、確認済みにし直してください。")
         case "openclaw_auth_disabled":
             return loc("OpenClaw のゲートウェイの認証が無効（gateway.auth.mode が none）です。到達できる相手は誰でも、このゲートウェイ経由でエージェントを操作できます。トークン認証に戻してください。")
         case "openclaw_wide_bind":
@@ -782,4 +1138,6 @@ public struct AgentSetupAuditResultPayload: Codable, Equatable {
     /// Files that exist but could not be read or parsed (so they were NOT audited).
     public let unreadableFiles: [String]
     public let findings: [FindingPayload]
+    /// When the accepted state the drift findings compare against was recorded (ISO 8601); nil if none.
+    public let baselineAcceptedAt: String?
 }

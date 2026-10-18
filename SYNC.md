@@ -60,6 +60,7 @@ All files live in `Sources/roamswitch-mcp/`.
 | `TyposquatGuard.swift` | `RoamSwitch/TyposquatGuard.swift` |
 | `MCPConfigAuditor.swift` | `RoamSwitch/MCPConfigAuditor.swift` |
 | `AgentSetupAuditor.swift` | `RoamSwitch/AgentSetupAuditor.swift` |
+| `AgentSetupBaseline.swift` | `RoamSwitch/AgentSetupBaseline.swift` |
 | `SecretLeakScanning.swift` | `RoamSwitch/SecretLeakScanning.swift` |
 | `CryptoSecretDetection.swift` | `Shared/CryptoSecretDetection.swift` (from `Shared/`) |
 | `SecurityLogAuditor.swift` | `RoamSwitch/SecurityLogAuditor.swift` |

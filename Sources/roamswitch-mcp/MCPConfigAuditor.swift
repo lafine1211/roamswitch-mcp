@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.4 (build 166).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.5 (build 167).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -106,6 +106,26 @@ enum MCPConfigAuditor {
         var result = audit(files: inputs)
         result.unreadableFiles += unreadable
         return result
+    }
+
+    /// Digest of every MCP server definition in the same config files `run` reads, for change
+    /// detection (see `AgentSetupBaseline`). Config path -> server name -> digest. Only digests
+    /// leave this function: a server's arguments and environment can hold a token.
+    static func serverSnapshot(home: String = NSHomeDirectory(), projectFolders: [String]) -> [String: [String: AgentSetupBaseline.Entry]] {
+        let fm = FileManager.default
+        var out: [String: [String: AgentSetupBaseline.Entry]] = [:]
+        for path in serverConfigPaths(home: home) + projectConfigPaths(folders: projectFolders) {
+            guard let attrs = try? fm.attributesOfItem(atPath: path),
+                  let size = attrs[.size] as? NSNumber, size.intValue <= maxFileBytes,
+                  let data = fm.contents(atPath: path),
+                  let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { continue }
+            var entries: [String: AgentSetupBaseline.Entry] = [:]
+            for (name, config) in servers(in: root).prefix(maxServersPerFile) {
+                if let entry = AgentSetupBaseline.serverEntry(config) { entries[name] = entry }
+            }
+            if !entries.isEmpty { out[path] = entries }
+        }
+        return out
     }
 
     // MARK: - Pure audit
