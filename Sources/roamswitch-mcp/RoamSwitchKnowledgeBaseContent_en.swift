@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.5 (build 167).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.6 (build 168).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -230,6 +230,37 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "Install ClamAV and enable it, and add any custom browser download folder to the watched folders."
             ),
             LocalizedEntry(
+                id: "feat_web_rules",
+                title: "Web Shell & Malicious Web Code Detection (PHP / JS / JSP / ASP / .htaccess) (Pro)",
+                summary: "Detects malicious code at the web-application layer (web shells, obfuscated injectors, PHP disguised as images, .htaccess abuse) with a small rule language that uses no regular expressions. Developer web folders are also scanned daily and on demand.",
+                details: """
+                • Where rules come from: three layers: the rules built into the product, a signed daily feed (receive-only; saved to `~/Library/Application Support/RoamSwitch/web_rules.json`), and your own rules (`~/Library/Application Support/RoamSwitch/rules.d/*.json`). Your own rule files are read only if they belong to you or root and are not writable by group or others.
+                • Checking what you wrote: the JSON Schema of a rule file can be written out from Settings with "Export the schema" (`~/Library/Application Support/RoamSwitch/web_rules.schema.json`). Point your editor at it for key completion and typo warnings. "Check a rule file…" shows, for the file you pick, how many rules are usable, the typos (an unknown key comes with the closest known key as a suggestion) and which existing rules it would replace. When a custom rule replaces a built-in or feed rule with the same id, Settings shows it as a note, not a warning.
+                • Instant detection: applied in the same static inspection to web files saved or changed in the folders watched by Web & Mail Protection (feat_webmail_download_guard). Unlike the Linux edition it cannot block before access; everything is detected after the fact (EndpointSecurity is not used).
+                • Developer web folders: `~/Sites`, `/Library/WebServer/Documents`, `~/Herd`, `~/Library/Application Support/Herd`, `/Applications/MAMP/htdocs`, `~/Library/Application Support/Local`, `~/Local Sites`, the folders of the package CVE check, and the folders watched by Web & Mail Protection are scanned once a day and on demand. The daily scan does not enter `node_modules` (dependencies) or `.git` (the instant detection in watched folders and a manual scan of a chosen folder do check `node_modules`). Test folders such as `tests` and `fixtures` are not subject to the rules.
+                • Quarantine: by default only critical detections go through the same flow as other threats (moved to the quarantine vault; restore or delete from "Manage quarantined files"). High detections only produce a notification, the hook and a list in Settings; the file is not touched (you can also choose "quarantine critical and high" or "do not quarantine"). Medium and low are report-only and stay in the notification history. A file you "exclude and restore" is not detected again by Web Rules (a separate list from ClamAV's exclusions).
+                • Post-detection hook: put an executable at `~/Library/Application Support/RoamSwitch/hooks/post-detection` and it runs on every detection, with JSON on standard input (it must belong to you or root, not be writable by group or others, and so must its parent folder; stopped after 30 seconds).
+                • Account response (off by default): when enabled in Settings, for a detection whose file was moved to the quarantine vault, the login shell of the file's owner is disabled (nothing happens if a high detection was left in place or quarantine failed). It needs an administrator password and does nothing to the logged-in user, root or accounts below UID 501. The original shell is recorded and can be restored from Settings.
+                • Limits: only the first 4 MB of a file is examined, and because matching is on fixed sequences of words, strings split up by building variable names and the like are not followed.
+                """,
+                recommendation: "Mac with developer web folders: enable Pro and keep the defaults. A file you think is a false positive can be restored from the quarantine vault and will not be detected again."
+            ),
+            LocalizedEntry(
+                id: "feat_event_forwarding",
+                title: "Event Forwarding (SIEM, syslog, webhook) (Pro, Off by Default)",
+                summary: "Forwards the incidents and notifications RoamSwitch recorded to destinations you type yourself (syslog, a JSON Lines file, a signed webhook). It is off by default and sends nothing.",
+                details: """
+                • What is sent: only host name, event ID, time, kind, severity, rule, action taken, process ID and name, and a summary. File contents, the screen and typed text are never sent. There is no destination on RoamSwitch's side.
+                • Destinations: syslog (`udp://`, `tcp://`, `tls://`; RFC 5424 or CEF; TCP and TLS use octet counting or newline framing), a JSON Lines file (0600, rotated by size), a signed webhook (the curl that ships with macOS; the address and the HMAC-SHA256 key are kept in the Keychain and given to curl on standard input, not as arguments).
+                • TLS: the certificate chain and the host name are checked, and nothing is sent if they cannot be verified. A private CA can be given as a PEM file; then that CA is the only one trusted.
+                • On failure: TCP, TLS and webhook events go to an on-disk queue (0600, capped by size and age, kept across restarts) and are retried with a growing delay. UDP and the file are not retried. Events not yet sent when the app quits are kept in the queue for the retrying sinks.
+                • Safety: strings an attacker controls, such as process names and command lines, are escaped for each format, and control characters such as newlines become `\\xNN`, so a fake record cannot be slipped in.
+                • Settings: menu → Malware Protection → "Event forwarding (SIEM)…". "Send a test" checks the destinations before you save. It only runs while a Pro license is active.
+                • Difference from the Linux edition: formats, settings and retry behaviour are the same. The Linux edition's organisation-policy (Fleet) destinations and its refusal of internal webhook addresses do not exist on Mac.
+                """,
+                recommendation: "Enable it if you have a SIEM or syslog server and want incidents kept off the machine as well. For personal use only, leave it off."
+            ),
+            LocalizedEntry(
                 id: "feat_ai_model_guard",
                 title: "Dangerous AI Model Format (Pickle / PyTorch) Download Warning (Pro)",
                 summary: "When a `.pkl` / `.pickle` / `.pt` model file is downloaded from Hugging Face, Civitai, or similar, warns that the Pickle format can run arbitrary code when loaded, and recommends SafeTensors / GGUF.",
@@ -402,6 +433,7 @@ extension RoamSwitchKnowledgeBase {
                 • Notification only: it's a risky configuration, not a confirmed compromise (a monitoring agent may be run privileged on purpose), so nothing is blocked automatically.
                 • Off by default: most users don't use Docker, so it's off even with Pro.
                 • Test: "⚠️ Docker Risk Detection Simulation (Test Mode)…" checks the notification path without touching Docker.
+                • Exegol (pentest environment) containers: when a container flagged for privileged mode or similar carries `org.exegol.*` labels or uses an official Exegol image (`registry.exegol.com/exegol`, `nwodtuhs/exegol`), the notification gets one more line saying so. Being an Exegol container is never a reason to notify by itself (many people start them on purpose).
                 """,
                 recommendation: "If you use Docker for development, enable it to spot container-escape risks early."
             ),

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.5 (build 167).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.6 (build 168).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -231,6 +231,37 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "ClamAV를 설치하고 활성화한 후, 브라우저의 다운로드 폴더를 별도로 지정했다면 감시 대상 폴더에 추가하세요."
             ),
             LocalizedEntry(
+                id: "feat_web_rules",
+                title: "웹셸·악성 웹 코드 탐지 (PHP / JS / JSP / ASP / .htaccess) (Pro)",
+                summary: "정규 표현식을 쓰지 않는 작은 규칙 언어로 웹 애플리케이션 계층의 악성 코드(웹셸, 난독화된 삽입 코드, 이미지로 위장한 PHP, .htaccess 악용)를 탐지합니다. 개발용 웹 폴더도 하루에 한 번과 수동으로 검사합니다.",
+                details: """
+                • 규칙의 출처: 세 겹입니다. 제품에 내장된 규칙, 서명된 일일 피드(수신 전용. `~/Library/Application Support/RoamSwitch/web_rules.json`에 저장), 사용자 정의 규칙(`~/Library/Application Support/RoamSwitch/rules.d/*.json`)입니다. 사용자 정의 규칙 파일은 소유자가 본인이나 root이고 그룹·다른 사용자가 쓸 수 없는 파일만 읽습니다.
+                • 작성 내용 확인: 규칙 파일의 JSON Schema는 설정의 "스키마 내보내기"로 꺼낼 수 있습니다(`~/Library/Application Support/RoamSwitch/web_rules.schema.json`). 편집기에 지정하면 키 자동 완성과 오타 경고가 동작합니다. "규칙 파일 검사…"는 선택한 파일의 사용 가능한 규칙 수, 오타(모르는 키에는 가장 가까운 키를 후보로 덧붙임), 기존 규칙을 대체하는지 여부를 보여 줍니다. 사용자 정의 규칙이 내장 또는 피드 규칙과 같은 id로 대체한 경우, 설정 화면에는 경고가 아니라 참고 메모로 표시됩니다.
+                • 즉시 탐지: 웹·메일 보호(feat_webmail_download_guard)의 감시 폴더에 저장·변경된 웹 파일에, 같은 정적 검사 안에서 적용합니다. Linux 버전처럼 접근 전에 막을 수는 없고 모두 사후 탐지입니다(EndpointSecurity는 사용하지 않습니다).
+                • 개발용 웹 폴더: `~/Sites`, `/Library/WebServer/Documents`, `~/Herd`, `~/Library/Application Support/Herd`, `/Applications/MAMP/htdocs`, `~/Library/Application Support/Local`, `~/Local Sites`, 패키지 CVE 대조 대상 폴더, 웹·메일 보호의 감시 폴더를 하루 한 번과 수동으로 검사합니다. 하루 한 번의 검사는 `node_modules`(의존 패키지)와 `.git`에 들어가지 않습니다(감시 중인 폴더의 즉시 탐지와, 폴더를 지정한 수동 검사에서는 `node_modules`도 검사합니다). `tests`, `fixtures` 같은 테스트용 폴더에는 규칙을 적용하지 않습니다.
+                • 격리: 기본적으로 critical 탐지만 다른 위협과 같은 흐름(격리 보관소로 이동, "격리된 파일 관리"에서 복원·삭제)의 대상입니다. high는 알림과 훅, 설정 화면의 목록만 있고 파일은 건드리지 않습니다(설정에서 "critical과 high 격리" 또는 "격리하지 않음"으로 바꿀 수도 있습니다). medium과 low는 보고만 하며 알림 기록에 남습니다. "제외하고 복원"한 파일은 웹 규칙에서 다시 탐지되지 않습니다(ClamAV 제외와는 별도 목록입니다).
+                • 탐지 후 훅: `~/Library/Application Support/RoamSwitch/hooks/post-detection`에 실행 파일을 두면 탐지할 때마다 JSON을 표준 입력으로 넘겨 실행합니다(소유자가 본인이나 root, 그룹·다른 사용자가 쓸 수 없음, 상위 폴더도 같음이 조건. 30초 후 중단).
+                • 계정 조치(기본값 꺼짐): 설정에서 켜면, 파일이 격리 보관소로 옮겨진 탐지에 대해 그 파일 소유자의 로그인 셸을 비활성화합니다(high를 그대로 둔 경우나 격리에 실패한 경우에는 아무것도 하지 않습니다). 관리자 비밀번호 확인이 필요하며, 로그인 중인 사용자, root, UID 501 미만 계정에는 아무것도 하지 않습니다. 원래 셸은 기록되며 설정에서 되돌릴 수 있습니다.
+                • 한계: 파일 앞부분 4MB만 검사하고 고정된 단어의 나열로 판단하므로, 변수 이름 조립 등으로 쪼개진 문자열은 따라가지 못합니다.
+                """,
+                recommendation: "개발용 웹 폴더가 있는 Mac이라면 Pro를 켜고 기본 설정 그대로 쓰세요. 오탐으로 보이는 파일은 격리 보관소에서 복원하면 다시 탐지되지 않습니다."
+            ),
+            LocalizedEntry(
+                id: "feat_event_forwarding",
+                title: "이벤트 전달 (SIEM·syslog·웹훅) (Pro, 기본값 꺼짐)",
+                summary: "RoamSwitch가 기록한 인시던트와 알림을, 사용자가 직접 입력한 대상(syslog, JSON Lines 파일, 서명된 웹훅)으로 전달합니다. 기본값은 꺼짐이며 아무것도 보내지 않습니다.",
+                details: """
+                • 보내는 항목: 호스트 이름, 이벤트 ID, 시각, 종류, 심각도, 규칙, 조치, 프로세스 ID와 이름, 요약뿐입니다. 파일 내용, 화면, 입력한 문자는 보내지 않습니다. RoamSwitch 쪽에는 전송 대상이 없습니다.
+                • 대상: syslog(`udp://`, `tcp://`, `tls://`; 형식은 RFC 5424 또는 CEF; TCP·TLS는 바이트 수 포함 또는 줄바꿈으로 구분), JSON Lines 파일(0600, 크기로 세대 교체), 서명된 웹훅(macOS 기본 curl 사용; 주소와 HMAC-SHA256 키는 키체인에 저장하고 curl에는 인수가 아니라 표준 입력으로 전달).
+                • TLS: 인증서 체인과 호스트 이름을 확인하며, 확인할 수 없으면 보내지 않습니다. 사내 CA는 PEM 파일로 지정할 수 있으며, 그 경우 신뢰하는 것은 그 CA뿐입니다.
+                • 실패했을 때: TCP·TLS·웹훅은 디스크 대기열(0600, 크기와 시간에 상한이 있고 재시작 후에도 남음)에 넣고 간격을 늘려 가며 재전송합니다. UDP와 파일은 재전송하지 않습니다. 앱을 종료할 때 보내지 못한 분도 재전송 대상이면 대기열에 남깁니다.
+                • 안전 조치: 프로세스 이름이나 명령줄처럼 공격자가 정할 수 있는 문자열은 형식별로 이스케이프하고, 줄바꿈 등의 제어 문자는 `\\xNN`으로 바꿉니다. 가짜 레코드를 끼워 넣을 수 없습니다.
+                • 설정: 메뉴→악성코드 방어→"이벤트 전달 (SIEM)…". "테스트 보내기"로 저장 전에 대상을 확인할 수 있습니다. Pro 라이선스가 유효할 때만 동작합니다.
+                • Linux 버전과의 차이: 형식, 설정 항목, 재전송 동작은 Linux 버전과 같습니다. Linux 버전에 있는 조직 정책(Fleet)에 의한 전송 대상 지정과 내부 주소 웹훅 거부는 Mac 버전에 없습니다.
+                """,
+                recommendation: "SIEM이나 syslog 서버가 있고 인시던트를 단말 밖에도 남기고 싶을 때 켜세요. 개인 용도라면 꺼 두어도 됩니다."
+            ),
+            LocalizedEntry(
                 id: "feat_ai_model_guard",
                 title: "위험한 AI 모델 형식(Pickle / PyTorch) 다운로드 경고 (Pro)",
                 summary: "Hugging Face, Civitai 등에서 `.pkl` / `.pickle` / `.pt` 모델 파일을 다운로드하면 Pickle 형식이 로드 시 임의 코드를 실행할 수 있음을 경고하고 SafeTensors / GGUF 사용을 권장합니다.",
@@ -403,6 +434,7 @@ extension RoamSwitchKnowledgeBase {
                 • 알림만 발송: 확인된 침해가 아니라 위험한 "설정"이므로(예: 모니터링 에이전트가 의도적으로 특권 모드로 실행되는 경우도 있음) 아무것도 자동으로 차단하지 않습니다.
                 • 기본값 꺼짐: 대부분의 사용자는 Docker를 사용하지 않으므로 Pro에서도 기본값은 꺼짐입니다.
                 • 테스트: "⚠️ Docker 위험 감지 시뮬레이션(동작 확인)…"으로 Docker를 건드리지 않고 알림 경로를 확인할 수 있습니다.
+                • Exegol(침투 테스트 환경) 컨테이너: 특권 모드 등으로 감지된 컨테이너가 `org.exegol.*` 라벨을 가졌거나 Exegol 공식 이미지(`registry.exegol.com/exegol`, `nwodtuhs/exegol`)를 쓰면, 알림에 그 사실을 알리는 한 줄이 추가됩니다. Exegol 컨테이너라는 이유만으로는 알리지 않습니다(의도적으로 시작하는 사람이 많기 때문입니다).
                 """,
                 recommendation: "개발에 Docker를 사용한다면 컨테이너 탈출 위험을 조기에 발견하기 위해 활성화하세요."
             ),

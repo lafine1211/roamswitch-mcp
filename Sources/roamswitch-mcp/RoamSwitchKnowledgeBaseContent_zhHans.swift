@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.5 (build 167).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.6 (build 168).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -231,6 +231,37 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "请在安装 ClamAV 后启用此功能；如果浏览器的保存位置设置为自定义文件夹，请将其添加到监控文件夹中。"
             ),
             LocalizedEntry(
+                id: "feat_web_rules",
+                title: "Web Shell 与恶意 Web 代码检测（PHP / JS / JSP / ASP / .htaccess）(Pro)",
+                summary: "用不使用正则表达式的小型规则语言，检测 Web 应用层的恶意代码（Web Shell、混淆的注入代码、伪装成图片的 PHP、.htaccess 滥用）。开发用的 Web 文件夹也会每天扫描一次，并可手动扫描。",
+                details: """
+                • 规则来源：三层，即产品内置的规则、带签名的每日订阅源（仅接收；保存到 `~/Library/Application Support/RoamSwitch/web_rules.json`）以及用户自定义规则（`~/Library/Application Support/RoamSwitch/rules.d/*.json`）。用户自定义的规则文件，只有所有者为自己或 root、且组和其他人不可写时才会读取。
+                • 检查所写内容：规则文件的 JSON Schema 可在设置中通过「导出 Schema」写出（`~/Library/Application Support/RoamSwitch/web_rules.schema.json`）。在编辑器中指定它，即可补全键并提示拼写错误。「检查规则文件…」会针对所选文件显示可用规则数、拼写错误（遇到未知的键会附上最接近的已知键作为建议），以及它会替换哪些现有规则。自定义规则以相同的 id 替换内置规则或订阅源规则时，设置中会作为备注而非警告显示。
+                • 即时检测：对 Web 与邮件防护（feat_webmail_download_guard）所监视文件夹中保存或更改的 Web 文件，在同一次静态检查中应用。与 Linux 版不同，无法在访问前阻止，全部为事后检测（不使用 EndpointSecurity）。
+                • 开发用 Web 文件夹：`~/Sites`、`/Library/WebServer/Documents`、`~/Herd`、`~/Library/Application Support/Herd`、`/Applications/MAMP/htdocs`、`~/Library/Application Support/Local`、`~/Local Sites`、软件包 CVE 核对的目标文件夹，以及 Web 与邮件防护的监视文件夹，每天扫描一次，也可手动扫描。每天一次的扫描不会进入 `node_modules`（依赖包）和 `.git`（监视文件夹的即时检测，以及手动指定文件夹的扫描会检查 `node_modules`）。`tests`、`fixtures` 等测试用文件夹不适用规则。
+                • 隔离：默认只有 critical 的检测会走与其他威胁相同的流程（移入隔离库，可在「管理隔离文件」中恢复或删除）。high 只有通知、钩子和设置中的列表，不会动文件（也可改为「隔离 critical 和 high」或「不隔离」）。medium 和 low 仅报告，保留在通知历史中。被「排除并恢复」的文件，Web 规则不会再次检测（与 ClamAV 的排除是不同的列表）。
+                • 检测后钩子：把可执行文件放在 `~/Library/Application Support/RoamSwitch/hooks/post-detection`，每次检测都会运行它，并通过标准输入传入 JSON（要求所有者为自己或 root，组和其他人不可写，其上级文件夹也一样；30 秒后中止）。
+                • 账户处置（默认关闭）：在设置中启用后，对于文件已被移入隔离库的检测，会禁用该文件所有者的登录 shell（保留 high 或隔离失败时不做任何事）。需要管理员密码确认，对已登录的用户、root 以及 UID 小于 501 的账户不做任何事。原来的 shell 会被记录，可在设置中恢复。
+                • 局限：只检查文件开头的 4MB，且按固定的词语序列匹配，因此无法追踪通过拼接变量名等方式拆分的字符串。
+                """,
+                recommendation: "如果 Mac 上有开发用的 Web 文件夹，请启用 Pro 并保持默认设置。认为是误报的文件，从隔离库恢复后不会再被检测。"
+            ),
+            LocalizedEntry(
+                id: "feat_event_forwarding",
+                title: "事件转发（SIEM·syslog·Webhook）(Pro·默认关闭)",
+                summary: "把 RoamSwitch 记录的事件和通知转发到您自己填写的目标（syslog、JSON Lines 文件、带签名的 Webhook）。默认关闭，不发送任何内容。",
+                details: """
+                • 发送的内容：仅有主机名、事件 ID、时间、类型、严重程度、规则、采取的措施、进程 ID 和进程名、摘要。不会发送文件内容、屏幕和输入的文字。RoamSwitch 一方没有任何目标。
+                • 目标：syslog（`udp://`、`tcp://`、`tls://`；格式为 RFC 5424 或 CEF；TCP/TLS 采用带字节数或换行分隔）、JSON Lines 文件（0600，按大小轮换）、带签名的 Webhook（使用 macOS 自带的 curl；地址和 HMAC-SHA256 密钥保存在钥匙串中，通过标准输入而不是参数交给 curl）。
+                • TLS：验证证书链和主机名，无法验证则不发送。可用 PEM 文件指定私有 CA，此时只信任该 CA。
+                • 失败时：TCP、TLS 和 Webhook 的事件进入磁盘队列（0600，按大小和时间设上限，重启后仍保留），并以逐渐变长的间隔重发。UDP 和文件不重发。退出应用时尚未发出的事件，会为需要重发的目标保留在队列中。
+                • 安全措施：进程名、命令行等攻击者可控的字符串会按各格式转义，换行等控制字符会变成 `\\xNN`，无法混入伪造的记录。
+                • 设置：菜单→恶意软件防护→「事件转发（SIEM）…」。「发送测试」可在保存前确认目标。仅在 Pro 许可证有效时运行。
+                • 与 Linux 版的区别：格式、设置项和重发行为相同。Linux 版的组织策略（Fleet）指定目标，以及拒绝内部地址的 Webhook，Mac 版没有。
+                """,
+                recommendation: "如果有 SIEM 或 syslog 服务器，并希望事件也保存在本机之外，请启用。仅个人使用的话保持关闭即可。"
+            ),
+            LocalizedEntry(
                 id: "feat_ai_model_guard",
                 title: "危险 AI 模型格式（Pickle / PyTorch）下载警告 (Pro)",
                 summary: "当从 HuggingFace、Civitai 等下载 `.pkl` / `.pickle` / `.pt` 格式的模型文件时，警告其为加载时可执行任意代码的 Pickle 格式，并建议使用 SafeTensors / GGUF 格式。",
@@ -403,6 +434,7 @@ extension RoamSwitchKnowledgeBase {
                 • 仅通知：这属于危险的「配置」而非已确认的入侵（例如有意以特权模式运行监控代理等正当用途），因此不会自动阻断。
                 • 默认关闭：大多数用户不使用 Docker，因此即使在 Pro 版中默认也是关闭的。
                 • 测试：通过菜单中的「⚠️ Docker 风险检测模拟（验证运行）…」，无需使用 Docker 即可确认通知路径。
+                • Exegol（渗透测试环境）的容器：因特权等原因被检测到的容器，如果带有 `org.exegol.*` 标签或使用 Exegol 官方镜像（`registry.exegol.com/exegol`、`nwodtuhs/exegol`），通知中会多一句说明。仅仅是 Exegol 容器本身不会触发通知（很多人是有意启动的）。
                 """,
                 recommendation: "如果在开发中使用 Docker，建议启用此功能以尽早发现容器逃逸风险。"
             ),

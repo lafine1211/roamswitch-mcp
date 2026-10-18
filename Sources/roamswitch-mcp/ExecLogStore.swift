@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.5 (build 167).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.6 (build 168).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -21,6 +21,15 @@ import CryptoKit
 // DETECTABLE. It is tamper-EVIDENT, not tamper-proof: an attacker with root can
 // rewrite the whole chain, and dropping the newest, still-open segment (or
 // everything after the last seal) is not detectable.
+//
+// Checkpoints: the open segment has no seal yet, so by itself it would be unprotected until it
+// rotates. While records arrive, the writer therefore adds a line every `checkpointInterval`
+//   {"t":"cp","bytes":N,"hash":"<hex>"}
+// where N is the byte length of everything before this line and hash is the chain hash of exactly
+// those bytes (the same function as a seal). `verify` recomputes it, so a record edited, removed or
+// reordered ahead of a checkpoint is detected even in the open segment. What stays outside is the
+// stretch after the newest checkpoint (`uncheckedTailRecords`), and a checkpoint line cut off with
+// everything after it. Older logs have no checkpoint lines and verify as before.
 //
 // Retention marker: `<dir>/retention.json` ({"v":1,"removedThroughIndex":N,"removedCount":C,"updated":ts})
 // records that the oldest segments up to index N were deleted by the recorder's own
@@ -66,6 +75,9 @@ public struct ExecLogVerifyResult: Codable, Equatable {
     public var sealedSegments: Int
     public var ok: Bool
     public var problems: [String]
+    /// Records written after the newest checkpoint of the newest segment: the stretch `verify` cannot
+    /// cover yet. nil when that segment has no checkpoint (an older log, or the chain is off).
+    public var uncheckedTailRecords: Int? = nil
 }
 
 public final class ExecLogWriter {
@@ -93,6 +105,11 @@ public final class ExecLogWriter {
     private var nextIndex: UInt64 = 1
     private var lastChainHash = ExecLogChain.genesis
     private var hasher = SHA256()
+    private var recordsSinceCheckpoint = 0
+    private var lastCheckpointAt = Date()
+
+    /// Seconds between two checkpoints of the open segment (see the file header).
+    public static let checkpointInterval: TimeInterval = 10
 
     /// Command lines can contain secrets: the directory is owner-only (0700) and
     /// so is every segment (0600). Readers other than the owner (root, in the
@@ -163,12 +180,30 @@ public final class ExecLogWriter {
             if options.hashChain { hasher.update(data: buf) }
             currentBytes += buf.count
             currentCount += 1
+            recordsSinceCheckpoint += 1
         }
     }
 
     /// fsync the current segment (call after each flushed batch).
     public func flush() {
+        if options.hashChain, recordsSinceCheckpoint > 0,
+           Date().timeIntervalSince(lastCheckpointAt) >= Self.checkpointInterval {
+            writeCheckpoint()
+        }
         try? handle?.synchronize()
+    }
+
+    /// Seals the records written so far into the open segment with a checkpoint line, if any came in since
+    /// the last one. `flush()` does this on its own every `checkpointInterval`.
+    public func writeCheckpoint() {
+        guard options.hashChain, let h = handle, recordsSinceCheckpoint > 0 else { return }
+        let hash = ExecLogChain.hexString(hasher.finalize())
+        let line = Data("{\"t\":\"cp\",\"bytes\":\(currentBytes),\"hash\":\"\(hash)\"}\n".utf8)
+        do { try h.write(contentsOf: line) } catch { return }
+        hasher.update(data: line)
+        currentBytes += line.count
+        recordsSinceCheckpoint = 0
+        lastCheckpointAt = Date()
     }
 
     /// Seals and closes the current segment (helper stop / shutdown).
@@ -247,6 +282,8 @@ public final class ExecLogWriter {
         do { try h.write(contentsOf: hdrData) } catch { handle = nil; return }
         currentBytes = hdrData.count
         currentCount = 0
+        recordsSinceCheckpoint = 0
+        lastCheckpointAt = Date()
         hasher = SHA256()
         if options.hashChain {
             hasher.update(data: Data((prev + "\n").utf8))
@@ -267,6 +304,7 @@ public final class ExecLogWriter {
         currentURL = nil
         currentBytes = 0
         currentCount = 0
+        recordsSinceCheckpoint = 0
     }
 
     private func sealLine(hash: String, count: Int) -> String {
@@ -392,6 +430,36 @@ public enum ExecLogReader {
         return Seal(hash: h, count: (o["count"] as? NSNumber)?.intValue ?? 0)
     }
 
+    /// Checks every checkpoint line of one segment: it must name the byte offset it sits at and carry the
+    /// chain hash of everything before it. Returns true when one does not match.
+    static func hasBadCheckpoint(data: Data, prev: String) -> Bool {
+        var hasher = SHA256()
+        hasher.update(data: Data((prev + "\n").utf8))
+        let marker = Data("{\"t\":\"cp\"".utf8)
+        var start = data.startIndex
+        while start < data.endIndex {
+            let nl = data[start...].firstIndex(of: 0x0A)
+            let end = nl.map { $0 + 1 } ?? data.endIndex
+            let line = Data(data[start..<end])
+            if line.starts(with: marker) {
+                let expect = ExecLogChain.hexString(hasher.finalize())
+                guard let o = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any],
+                      (o["bytes"] as? NSNumber)?.intValue == data.distance(from: data.startIndex, to: start),
+                      (o["hash"] as? String) == expect else { return true }
+            }
+            hasher.update(data: line)
+            start = end
+        }
+        return false
+    }
+
+    /// Records after the newest checkpoint line; nil when the segment has none.
+    static func recordsAfterLastCheckpoint(_ lines: [Data]) -> Int? {
+        let marker = Data("{\"t\":\"cp\"".utf8)
+        guard let lastCP = lines.lastIndex(where: { $0.starts(with: marker) }) else { return nil }
+        return lines[(lastCP + 1)...].filter { !ExecLogChain.isMeta($0) }.count
+    }
+
     /// How far a segment's creation time must precede `since` before older segments are skipped.
     static let sinceSkewSecs: Double = 86_400
 
@@ -456,6 +524,7 @@ public enum ExecLogReader {
         var prevIndex: UInt64?
         var sawChained = false
         var prevWasUnchained = false
+        var uncheckedTail: Int?
         let marker = ExecLogRetentionMarker.read(dir: dir)
         for (i, url) in urls.enumerated() {
             let name = url.lastPathComponent
@@ -487,6 +556,10 @@ public enum ExecLogReader {
             sawChained = true
             if let p = prevSealHash, p != hdr.prev { problems.append("\(name): chain link does not match the previous segment's seal") }
             let isLast = i == urls.count - 1
+            if hasBadCheckpoint(data: data, prev: hdr.prev) {
+                problems.append("\(name): records before a checkpoint do not match it (edited, removed or reordered)")
+            }
+            if isLast { uncheckedTail = recordsAfterLastCheckpoint(lines) }
             if let lastLine = lines.last, let seal = parseSeal(lastLine) {
                 sealed += 1
                 // Body = everything before the seal line.
@@ -500,7 +573,7 @@ public enum ExecLogReader {
                 prevSealHash = nil
             }
         }
-        return ExecLogVerifyResult(segmentsChecked: urls.count, sealedSegments: sealed, ok: problems.isEmpty, problems: problems)
+        return ExecLogVerifyResult(segmentsChecked: urls.count, sealedSegments: sealed, ok: problems.isEmpty, problems: problems, uncheckedTailRecords: uncheckedTail)
     }
 
     /// Byte length of the final line including its trailing newline.

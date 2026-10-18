@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.5 (build 167).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.6 (build 168).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -240,9 +240,25 @@ extension RoamSwitchKnowledgeBase {
                 • 隔離: 既定では critical の検知だけが、他の脅威と同じ流れ（隔離Vaultへ移動、「隔離ファイルを管理」で復元・削除）の対象です。high は通知とフック、設定画面の一覧だけで、ファイルには触れません（設定で「critical と high を隔離」「隔離しない」にも変えられます）。medium と low は報告のみで、通知履歴に残ります。「除外して復元」したファイルは、Webルールでは再び検知されません（ClamAVの除外とは別の一覧です）。
                 • 検知後のフック: `~/Library/Application Support/RoamSwitch/hooks/post-detection` に実行ファイルを置くと、検知のたびに JSON を標準入力で渡して実行します（所有者が自分か root、グループ・他人が書き込めない、親フォルダも同様、が条件。30秒で打ち切り）。
                 • アカウント対処（既定はオフ）: 設定で有効にすると、ファイルを隔離Vaultへ移した検知について、そのファイルの持ち主のログインシェルを無効化します（high を残した場合や、隔離に失敗した場合は何もしません）。管理者パスワードでの確認が必要で、ログイン中のユーザー、root、UID 501 未満のアカウントには何もしません。元のシェルは記録され、設定画面から戻せます。
+                • 書き方の確認: ルールファイルの JSON Schema は、設定の「スキーマを書き出す」で取り出せます（`~/Library/Application Support/RoamSwitch/web_rules.schema.json`）。エディタに指定すると、キーの補完と書き間違いの指摘が効きます。「ルールファイルを検証…」は、選んだファイルの使えるルール数、書き間違い（知らないキーには近いキーを候補に添える）、既存のルールを置き換えるかどうかを示します。利用者定義のルールが、組み込みやフィードの規則と同じ id で置き換えたときは、警告ではなく注記として設定の画面に出ます。
                 • 限界: ファイルの先頭4MBだけを調べ、固定の語句の並びで見るため、変数名の組み立てなどで分割された文字列は追えません。
                 """,
                 recommendation: "開発用のWebフォルダがあるMacでは、Proを有効にして既定のまま使ってください。誤検知と思われるファイルは、隔離Vaultから復元すれば再び検知されません。"
+            ),
+            LocalizedEntry(
+                id: "feat_event_forwarding",
+                title: "イベントの転送（SIEM・syslog・Webhook）(Pro・既定オフ)",
+                summary: "RoamSwitch が記録したインシデントと通知を、利用者が入力した送り先（syslog、JSON Lines ファイル、署名付き Webhook）へ転送します。既定ではオフで、何も送りません。",
+                details: """
+                • 送るもの: ホスト名・イベントID・時刻・種類・重大度・ルール・対処・プロセスIDとプロセス名・概要だけです。ファイルの中身、画面、入力した文字は送りません。RoamSwitch 側の送り先はありません。
+                • 送り先: syslog（`udp://`・`tcp://`・`tls://`。形式は RFC 5424 か CEF。TCP・TLS は文字数つきか改行で区切る）、JSON Lines ファイル（0600。サイズで世代交代）、署名付き Webhook（macOS標準の curl。宛先と HMAC-SHA256 の鍵はキーチェーンに保存し、curl には引数ではなく標準入力で渡す）。
+                • TLS: 証明書の連鎖とホスト名を確認し、確認できなければ送りません。社内のCAは PEM ファイルで指定でき、その場合に信頼するのはそのCAだけです。
+                • 失敗したとき: TCP・TLS・Webhook は、ディスク上のキュー（0600。サイズと時間に上限があり、再起動後も残る）に入れ、間隔を空けて再送します。UDP とファイルは再送しません。アプリを終了するときに送り切れなかった分も、再送するものはキューに残します。
+                • 安全策: プロセス名やコマンドラインなど、攻撃者が決められる文字列は形式ごとにエスケープし、改行などの制御文字は `\\xNN` に直します。偽のレコードを混ぜられません。
+                • 設定: メニュー→マルウェア対策→「イベントの転送（SIEM）…」。「テストを送る」で、保存前に送り先を確かめられます。Pro のライセンスが有効なときだけ動きます。
+                • Linux版との違い: 形式・設定の項目・再送の動きは Linux版と同じです。Linux版にある、組織ポリシー（Fleet）による転送先の指定と、Webhook の内部アドレスの拒否は、Mac版にはありません。
+                """,
+                recommendation: "SIEM や syslog サーバーがある環境で、インシデントを端末の外にも残したいときに有効にしてください。個人で使うだけなら、オフのままで構いません。"
             ),
             LocalizedEntry(
                 id: "feat_ai_model_guard",
@@ -417,6 +433,7 @@ extension RoamSwitchKnowledgeBase {
                 • 通知のみ: 危険な「設定」であって侵害が確定したわけではないため（監視エージェントを意図的に特権で動かすなど正当な用途もある）、自動遮断は行いません。
                 • 既定オフ: Dockerを使わないユーザーが大半のため、Pro版でも既定はオフです。
                 • テスト: メニューの「⚠️ Dockerリスク検知のシミュレーション (動作確認)…」で、Dockerを使わずに通知経路を確認できます。
+                • Exegol（ペンテスト用環境）のコンテナ: 特権などで検知したコンテナが、`org.exegol.*` のラベルか Exegol の公式イメージ（`registry.exegol.com/exegol`、`nwodtuhs/exegol`）のものなら、通知にその旨の一文を足します。Exegol のコンテナだというだけでは通知しません（意図して起動する人が多いため）。
                 """,
                 recommendation: "Dockerを開発で使う場合は、コンテナ脱出リスクの早期発見のために有効化を推奨します。"
             ),

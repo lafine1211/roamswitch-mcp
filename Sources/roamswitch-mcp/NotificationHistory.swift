@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.5 (build 167).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.6 (build 168).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -49,12 +49,17 @@ public enum NotificationHistory {
         return now.timeIntervalSince(t) <= retention
     }
 
+    /// Called with every recorded notification. The app sets it to hand the text to the opt-in forwarder
+    /// (`EventForwarder`); it stays `nil` in the targets that only read the history.
+    public static var recordObserver: ((String, String) -> Void)?
+
     /// Records one notification and prunes anything older than `retention`.
     public static func record(title: String, body: String) {
         let now = Date()
         var entries = loadRaw().filter { isWithinRetention($0, now: now) }
         entries.append(NotificationHistoryEntry(timestamp: formatter.string(from: now), title: title, body: body))
         save(entries)
+        recordObserver?(title, body)
     }
 
     /// Returns entries within `retention`, most recent first.

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.5 (build 167).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.6 (build 168).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -120,6 +120,10 @@ public enum ContainmentIncidentTimeline {
 
     private static let queue = DispatchQueue(label: "com.tetsuharu.RoamSwitch.ContainmentIncidentTimeline")
 
+    /// Called with every record after it was stored. The app sets it to hand the event to the opt-in
+    /// forwarder (`EventForwarder`); it stays `nil` in the targets that only read this file's data.
+    public static var recordObserver: ((ContainmentIncidentEvent) -> Void)?
+
     private static func loadAll() -> [ContainmentIncidentEvent] {
         guard let data = try? Data(contentsOf: storeURL) else { return [] }
         return (try? JSONDecoder().decode([ContainmentIncidentEvent].self, from: data)) ?? []
@@ -163,6 +167,7 @@ public enum ContainmentIncidentTimeline {
             }
             saveAll(events)
         }
+        recordObserver?(event)
         return event.id
     }
 

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.5 (build 167).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.6 (build 168).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -231,6 +231,37 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "Instale e ative o ClamAV, e adicione qualquer pasta de descargas do navegador personalizada às pastas monitorizadas."
             ),
             LocalizedEntry(
+                id: "feat_web_rules",
+                title: "Deteção de web shells e código web malicioso (PHP / JS / JSP / ASP / .htaccess) (Pro)",
+                summary: "Deteta código malicioso da camada de aplicação web (web shells, injetores ofuscados, PHP disfarçado de imagem, abuso de .htaccess) com uma pequena linguagem de regras sem expressões regulares. As pastas web de desenvolvimento também são analisadas diariamente e a pedido.",
+                details: """
+                • Origem das regras: três camadas: as regras integradas no produto, um feed diário assinado (só receção; guardado em `~/Library/Application Support/RoamSwitch/web_rules.json`) e as suas próprias regras (`~/Library/Application Support/RoamSwitch/rules.d/*.json`). Os seus ficheiros de regras só são lidos se lhe pertencerem a si ou a root e não forem graváveis pelo grupo nem por outros.
+                • Verificar o que escreveu: o JSON Schema de um ficheiro de regras pode ser escrito a partir das definições com «Exportar o esquema» (`~/Library/Application Support/RoamSwitch/web_rules.schema.json`). Indique-o ao seu editor para completar chaves e avisar de gralhas. «Verificar um ficheiro de regras…» mostra, para o ficheiro escolhido, quantas regras são válidas, as gralhas (a uma chave desconhecida junta-se a chave conhecida mais próxima) e que regras existentes substituiria. Quando uma regra própria substitui uma regra integrada ou do feed com o mesmo id, as definições mostram-no como nota, não como aviso.
+                • Deteção imediata: aplicada, na mesma inspeção estática, aos ficheiros web guardados ou alterados nas pastas vigiadas pela Proteção web e de correio (feat_webmail_download_guard). Ao contrário da edição Linux, não pode bloquear antes do acesso; tudo é detetado a posteriori (não se usa o EndpointSecurity).
+                • Pastas web de desenvolvimento: `~/Sites`, `/Library/WebServer/Documents`, `~/Herd`, `~/Library/Application Support/Herd`, `/Applications/MAMP/htdocs`, `~/Library/Application Support/Local`, `~/Local Sites`, as pastas da verificação de CVE de pacotes e as vigiadas pela Proteção web e de correio são analisadas uma vez por dia e a pedido. A análise diária não entra em `node_modules` (dependências) nem em `.git` (a deteção imediata nas pastas vigiadas e uma análise manual de uma pasta escolhida verificam também `node_modules`). As pastas de teste como `tests` e `fixtures` não estão sujeitas às regras.
+                • Quarentena: por predefinição só as deteções critical seguem o mesmo fluxo das outras ameaças (movidas para o cofre de quarentena; restaurar ou eliminar em «Gerir ficheiros em quarentena»). As deteções high geram apenas uma notificação, o hook e uma lista nas definições; o ficheiro não é tocado (também pode escolher «pôr critical e high em quarentena» ou «não pôr em quarentena»). Medium e low são apenas comunicadas e ficam no histórico de notificações. Um ficheiro «excluído e restaurado» deixa de ser detetado pelas regras web (lista separada das exclusões do ClamAV).
+                • Hook após a deteção: coloque um executável em `~/Library/Application Support/RoamSwitch/hooks/post-detection` e ele é executado em cada deteção, com JSON na entrada padrão (condições: pertencer-lhe a si ou a root, não ser gravável pelo grupo nem por outros, o mesmo para a pasta superior; interrompido após 30 segundos).
+                • Ação sobre a conta (desativada por predefinição): se ativada nas definições, numa deteção cujo ficheiro foi movido para o cofre de quarentena, é desativada a shell de início de sessão do proprietário do ficheiro (não acontece nada se uma deteção high foi deixada ou se a quarentena falhou). Requer a palavra-passe de administrador e não afeta o utilizador com sessão iniciada, root nem contas com UID inferior a 501. A shell original é registada e pode ser restaurada nas definições.
+                • Limites: só são examinados os primeiros 4 MB de um ficheiro e, como a comparação é feita por sequências fixas de palavras, as cadeias partidas, por exemplo, ao compor nomes de variáveis não são seguidas.
+                """,
+                recommendation: "Num Mac com pastas web de desenvolvimento, ative o Pro e mantenha as predefinições. Um ficheiro que considere um falso positivo pode ser restaurado a partir do cofre de quarentena e deixará de ser detetado."
+            ),
+            LocalizedEntry(
+                id: "feat_event_forwarding",
+                title: "Reencaminhamento de eventos (SIEM, syslog, webhook) (Pro, desativado por predefinição)",
+                summary: "Reencaminha os incidentes e notificações que o RoamSwitch registou para destinos que você mesmo escreve (syslog, um ficheiro JSON Lines, um webhook assinado). Está desativado por predefinição e não envia nada.",
+                details: """
+                • O que é enviado: apenas nome do anfitrião, ID do evento, hora, tipo, gravidade, regra, ação tomada, ID e nome do processo e um resumo. O conteúdo dos ficheiros, o ecrã e o que escreve nunca são enviados. O RoamSwitch não tem nenhum destino próprio.
+                • Destinos: syslog (`udp://`, `tcp://`, `tls://`; RFC 5424 ou CEF; TCP e TLS com contagem de octetos ou mudança de linha), um ficheiro JSON Lines (0600, rodado por tamanho), um webhook assinado (o curl incluído no macOS; o endereço e a chave HMAC-SHA256 ficam na Keychain e são passados ao curl pela entrada padrão, não como argumentos).
+                • TLS: a cadeia de certificados e o nome do anfitrião são verificados e nada é enviado se não puderem ser confirmados. Uma AC privada pode ser indicada com um ficheiro PEM; nesse caso, é a única em que se confia.
+                • Em caso de falha: os eventos de TCP, TLS e webhook vão para uma fila em disco (0600, limitada por tamanho e idade, mantida após reiniciar) e são reenviados com intervalos crescentes. UDP e o ficheiro não são reenviados. Ao sair da app, os eventos ainda não enviados ficam na fila para os destinos que reenviam.
+                • Segurança: as cadeias que um atacante pode escolher, como nomes de processo e linhas de comandos, são escapadas conforme o formato, e os caracteres de controlo como mudanças de linha passam a `\\xNN`, pelo que não é possível inserir um registo falso.
+                • Definições: menu → Proteção contra malware → «Reencaminhamento de eventos (SIEM)…». «Enviar um teste» verifica os destinos antes de guardar. Só funciona enquanto houver uma licença Pro ativa.
+                • Diferença para a edição Linux: os formatos, as definições e os reenvios são os mesmos. Os destinos por política da organização (Fleet) e a recusa de endereços internos do webhook da edição Linux não existem no Mac.
+                """,
+                recommendation: "Ative-o se tiver um SIEM ou um servidor syslog e quiser guardar os incidentes também fora do computador. Para uso apenas pessoal, deixe-o desativado."
+            ),
+            LocalizedEntry(
                 id: "feat_ai_model_guard",
                 title: "Aviso de descarga de um formato de modelo de IA perigoso (Pickle / PyTorch) (Pro)",
                 summary: "Quando um ficheiro de modelo `.pkl` / `.pickle` / `.pt` é descarregado do Hugging Face, Civitai ou semelhante, avisa que o formato Pickle pode executar código arbitrário ao ser carregado, e recomenda SafeTensors / GGUF.",
@@ -403,6 +434,7 @@ extension RoamSwitchKnowledgeBase {
                 • Apenas notificação: trata-se de uma configuração arriscada, e não de um comprometimento confirmado (um agente de monitorização pode ser executado privilegiado de propósito), pelo que nada é bloqueado automaticamente.
                 • Desligada por predefinição: a maioria dos utilizadores não usa Docker, pelo que está desligada mesmo na Pro.
                 • Teste: «⚠️ Simulação de deteção de riscos do Docker (Modo de teste)…» verifica o caminho de notificação sem tocar no Docker.
+                • Contentores do Exegol (ambiente de pentest): quando um contentor assinalado por modo privilegiado ou outro motivo tem etiquetas `org.exegol.*` ou usa uma imagem oficial do Exegol (`registry.exegol.com/exegol`, `nwodtuhs/exegol`), a notificação acrescenta uma linha a indicá-lo. Ser um contentor do Exegol nunca basta, por si só, para notificar (muita gente inicia-o de propósito).
                 """,
                 recommendation: "Se usar o Docker para desenvolvimento, ative-a para detetar cedo os riscos de fuga do contentor."
             ),

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.5 (build 167).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.6 (build 168).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -231,6 +231,37 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "Installieren und aktivieren Sie ClamAV und fügen Sie individuelle Browser-Download-Ordner den überwachten Ordnern hinzu."
             ),
             LocalizedEntry(
+                id: "feat_web_rules",
+                title: "Erkennung von Webshells und bösartigem Webcode (PHP / JS / JSP / ASP / .htaccess) (Pro)",
+                summary: "Erkennt bösartigen Code in der Webanwendungsschicht (Webshells, verschleierte Injektoren, als Bild getarntes PHP, .htaccess-Missbrauch) mit einer kleinen Regelsprache ohne reguläre Ausdrücke. Entwickler-Webordner werden außerdem täglich und auf Abruf geprüft.",
+                details: """
+                • Herkunft der Regeln: drei Ebenen: die im Produkt eingebauten Regeln, ein signierter täglicher Feed (nur Empfang; gespeichert unter `~/Library/Application Support/RoamSwitch/web_rules.json`) und eigene Regeln (`~/Library/Application Support/RoamSwitch/rules.d/*.json`). Eigene Regeldateien werden nur gelesen, wenn sie Ihnen oder root gehören und für Gruppe und andere nicht schreibbar sind.
+                • Eigene Eingaben prüfen: Das JSON-Schema einer Regeldatei lässt sich in den Einstellungen mit „Schema exportieren“ ausgeben (`~/Library/Application Support/RoamSwitch/web_rules.schema.json`). Geben Sie es in Ihrem Editor an, dann gibt es Schlüsselvervollständigung und Tippfehler-Warnungen. „Regeldatei prüfen …“ zeigt für die gewählte Datei, wie viele Regeln nutzbar sind, die Tippfehler (zu einem unbekannten Schlüssel wird der ähnlichste bekannte vorgeschlagen) und welche bestehenden Regeln sie ersetzen würde. Ersetzt eine eigene Regel mit derselben id eine eingebaute oder Feed-Regel, zeigen die Einstellungen das als Hinweis, nicht als Warnung.
+                • Sofort-Erkennung: wird in derselben statischen Prüfung auf Webdateien angewendet, die in den von „Web- und Mail-Schutz“ (feat_webmail_download_guard) überwachten Ordnern gespeichert oder geändert werden. Anders als die Linux-Edition kann sie nicht vor dem Zugriff blockieren; alles wird nachträglich erkannt (EndpointSecurity wird nicht verwendet).
+                • Entwickler-Webordner: `~/Sites`, `/Library/WebServer/Documents`, `~/Herd`, `~/Library/Application Support/Herd`, `/Applications/MAMP/htdocs`, `~/Library/Application Support/Local`, `~/Local Sites`, die Ordner der Paket-CVE-Prüfung und die vom Web- und Mail-Schutz überwachten Ordner werden einmal täglich und auf Abruf geprüft. Die tägliche Prüfung betritt weder `node_modules` (Abhängigkeiten) noch `.git` (die Sofort-Erkennung in überwachten Ordnern und eine manuelle Prüfung eines gewählten Ordners prüfen `node_modules` mit). Testordner wie `tests` und `fixtures` unterliegen den Regeln nicht.
+                • Quarantäne: Standardmäßig durchlaufen nur critical-Funde denselben Ablauf wie andere Bedrohungen (Verschieben in den Quarantänetresor; Wiederherstellen oder Löschen unter „Quarantänedateien verwalten“). High-Funde führen nur zu einer Benachrichtigung, dem Hook und einer Liste in den Einstellungen; die Datei wird nicht angefasst (wählbar sind auch „critical und high in Quarantäne“ und „nicht in Quarantäne verschieben“). Medium und low werden nur gemeldet und bleiben im Benachrichtigungsverlauf. Eine Datei, die Sie „ausschließen und wiederherstellen“, wird von den Webregeln nicht erneut erkannt (eine eigene Liste, getrennt von den ClamAV-Ausschlüssen).
+                • Hook nach einem Fund: Legen Sie eine ausführbare Datei unter `~/Library/Application Support/RoamSwitch/hooks/post-detection` ab, dann wird sie bei jedem Fund mit JSON auf der Standardeingabe ausgeführt (Voraussetzung: gehört Ihnen oder root, für Gruppe und andere nicht schreibbar, ebenso der übergeordnete Ordner; Abbruch nach 30 Sekunden).
+                • Kontomaßnahme (standardmäßig aus): Ist sie in den Einstellungen aktiviert, wird bei einem Fund, dessen Datei in den Quarantänetresor verschoben wurde, die Login-Shell des Dateibesitzers deaktiviert (bei einem belassenen high-Fund oder fehlgeschlagener Quarantäne geschieht nichts). Dafür ist ein Administratorkennwort nötig; angemeldete Benutzer, root und Konten unter UID 501 bleiben unberührt. Die ursprüngliche Shell wird festgehalten und lässt sich in den Einstellungen wiederherstellen.
+                • Grenzen: Es werden nur die ersten 4 MB einer Datei geprüft, und da nach festen Wortfolgen gesucht wird, werden z. B. durch das Zusammensetzen von Variablennamen zerteilte Zeichenketten nicht verfolgt.
+                """,
+                recommendation: "Auf einem Mac mit Entwickler-Webordnern: Pro aktivieren und die Standardeinstellungen beibehalten. Eine Datei, die Sie für einen Fehlalarm halten, können Sie aus dem Quarantänetresor wiederherstellen; sie wird dann nicht erneut erkannt."
+            ),
+            LocalizedEntry(
+                id: "feat_event_forwarding",
+                title: "Ereignisweiterleitung (SIEM, Syslog, Webhook) (Pro, standardmäßig aus)",
+                summary: "Leitet die von RoamSwitch aufgezeichneten Vorfälle und Benachrichtigungen an Ziele weiter, die Sie selbst eintragen (Syslog, eine JSON-Lines-Datei, ein signierter Webhook). Standardmäßig aus; es wird nichts gesendet.",
+                details: """
+                • Gesendet wird nur: Hostname, Ereignis-ID, Zeit, Art, Schweregrad, Regel, ergriffene Maßnahme, Prozess-ID und -Name sowie eine Zusammenfassung. Dateiinhalte, der Bildschirm und Eingaben werden nie gesendet. Auf Seiten von RoamSwitch gibt es kein Ziel.
+                • Ziele: Syslog (`udp://`, `tcp://`, `tls://`; RFC 5424 oder CEF; TCP und TLS mit Oktettzählung oder Zeilenumbruch), eine JSON-Lines-Datei (0600, nach Größe rotiert), ein signierter Webhook (das in macOS enthaltene curl; Adresse und HMAC-SHA256-Schlüssel liegen im Schlüsselbund und gehen über die Standardeingabe an curl, nicht als Argumente).
+                • TLS: Zertifikatskette und Hostname werden geprüft; lässt sich das nicht bestätigen, wird nichts gesendet. Eine private CA kann als PEM-Datei angegeben werden; dann wird nur diese CA anerkannt.
+                • Bei Fehlern: Ereignisse für TCP, TLS und Webhook kommen in eine Warteschlange auf der Platte (0600, nach Größe und Alter begrenzt, übersteht Neustarts) und werden mit wachsendem Abstand erneut versucht. UDP und Datei werden nicht wiederholt. Beim Beenden noch nicht gesendete Ereignisse bleiben für die wiederholenden Ziele in der Warteschlange.
+                • Schutz: Von Angreifern bestimmbare Zeichenfolgen wie Prozessnamen und Befehlszeilen werden je Format maskiert, Steuerzeichen wie Zeilenumbrüche werden zu `\\xNN`. Gefälschte Datensätze lassen sich so nicht einschleusen.
+                • Einstellungen: Menü → Malware-Schutz → „Ereignisweiterleitung (SIEM) …“. „Test senden“ prüft die Ziele vor dem Speichern. Läuft nur, solange eine Pro-Lizenz aktiv ist.
+                • Unterschied zur Linux-Edition: Formate, Einstellungen und Wiederholverhalten sind gleich. Die Ziele per Organisationsrichtlinie (Fleet) und die Ablehnung interner Webhook-Adressen der Linux-Edition gibt es auf dem Mac nicht.
+                """,
+                recommendation: "Aktivieren Sie sie, wenn Sie einen SIEM- oder Syslog-Server haben und Vorfälle auch außerhalb des Geräts aufbewahren möchten. Bei rein privater Nutzung können Sie sie ausgeschaltet lassen."
+            ),
+            LocalizedEntry(
                 id: "feat_ai_model_guard",
                 title: "Warnung vor gefährlichem KI-Modellformat (Pickle / PyTorch) beim Download (Pro)",
                 summary: "Wird eine `.pkl`- / `.pickle`- / `.pt`-Modelldatei von Hugging Face, Civitai o. Ä. heruntergeladen, warnt RoamSwitch, dass das Pickle-Format beim Laden beliebigen Code ausführen kann, und empfiehlt SafeTensors / GGUF.",
@@ -403,6 +434,7 @@ extension RoamSwitchKnowledgeBase {
                 • Nur Benachrichtigung: Es handelt sich um eine riskante Konfiguration, nicht um eine bestätigte Kompromittierung (ein Überwachungs-Agent kann absichtlich privilegiert laufen), daher wird nichts automatisch blockiert.
                 • Standardmäßig deaktiviert: Die meisten Nutzer verwenden kein Docker, daher ist die Funktion auch bei Pro standardmäßig aus.
                 • Test: „⚠️ Docker-Risikoerkennungs-Simulation (Testmodus)…“ prüft den Benachrichtigungspfad, ohne Docker zu berühren.
+                • Container der Pentest-Umgebung Exegol: Trägt ein wegen Privilegiertem Modus o. Ä. gemeldeter Container `org.exegol.*`-Labels oder nutzt er ein offizielles Exegol-Image (`registry.exegol.com/exegol`, `nwodtuhs/exegol`), erhält die Meldung eine weitere Zeile dazu. Ein Exegol-Container allein löst nie eine Meldung aus (viele starten ihn absichtlich).
                 """,
                 recommendation: "Nutzen Sie Docker für die Entwicklung, aktivieren Sie diese Funktion, um Risiken eines Container-Ausbruchs früh zu erkennen."
             ),

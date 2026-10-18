@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.12.5 (build 167). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.12.6 (build 168). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -100,6 +100,30 @@ final class MCPKnowledgeBaseTests: XCTestCase {
             for ruleID in allExecRuleIDs {
                 XCTAssertTrue(entry.details.contains(ruleID), "\(code): feat_exec_recorder details is missing \(ruleID)")
             }
+        }
+    }
+
+    /// An entry that exists only in Japanese silently shows Japanese (or English) to everyone else, which is
+    /// how `feat_web_rules` went unnoticed in nine languages. These three are translated in all ten.
+    func testWebRulesForwardingAndDockerEntriesAreTranslatedInEveryLanguage() throws {
+        let ja = kb.items(language: "ja")
+        for id in ["feat_web_rules", "feat_event_forwarding", "feat_docker_event_guard"] {
+            let jaItem = try XCTUnwrap(ja.first { $0.id == id }, id)
+            for code in ["en", "zh-Hans", "zh-Hant", "ko", "de", "fr", "es", "it", "pt-PT"] {
+                let item = try XCTUnwrap(kb.items(language: code).first { $0.id == id }, "\(id) \(code)")
+                XCTAssertNotEqual(item.title, jaItem.title, "\(id) is not translated into \(code)")
+                XCTAssertNotEqual(item.details, jaItem.details, "\(id) details are not translated into \(code)")
+                XCTAssertFalse(item.details.isEmpty)
+            }
+        }
+        for code in ["ja", "en", "zh-Hans", "zh-Hant", "ko", "de", "fr", "es", "it", "pt-PT"] {
+            let items = kb.items(language: code)
+            let docker = try XCTUnwrap(items.first { $0.id == "feat_docker_event_guard" })
+            XCTAssertTrue(docker.details.contains("org.exegol"), "\(code): the Exegol line is missing")
+            let rules = try XCTUnwrap(items.first { $0.id == "feat_web_rules" })
+            XCTAssertTrue(rules.details.contains("web_rules.schema.json"), "\(code): the schema line is missing")
+            let fwd = try XCTUnwrap(items.first { $0.id == "feat_event_forwarding" })
+            XCTAssertTrue(fwd.details.contains("HMAC-SHA256"), code)
         }
     }
 }

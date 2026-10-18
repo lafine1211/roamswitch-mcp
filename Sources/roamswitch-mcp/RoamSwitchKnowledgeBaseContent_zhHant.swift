@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.5 (build 167).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.6 (build 168).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -231,6 +231,37 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "安裝並啟用 ClamAV，並將任何自訂的瀏覽器下載資料夾加入監控資料夾清單。"
             ),
             LocalizedEntry(
+                id: "feat_web_rules",
+                title: "Web Shell 與惡意 Web 程式碼偵測（PHP / JS / JSP / ASP / .htaccess）(Pro)",
+                summary: "用不使用正規表示式的小型規則語言，偵測 Web 應用層的惡意程式碼（Web Shell、混淆的注入程式碼、偽裝成圖片的 PHP、.htaccess 濫用）。開發用的 Web 資料夾也會每天掃描一次，並可手動掃描。",
+                details: """
+                • 規則來源：三層，即產品內建的規則、帶簽章的每日來源（僅接收；儲存到 `~/Library/Application Support/RoamSwitch/web_rules.json`）以及使用者自訂規則（`~/Library/Application Support/RoamSwitch/rules.d/*.json`）。使用者自訂的規則檔案，只有擁有者為自己或 root、且群組和其他人不可寫時才會讀取。
+                • 檢查所寫內容：規則檔案的 JSON Schema 可在設定中透過「匯出 Schema」寫出（`~/Library/Application Support/RoamSwitch/web_rules.schema.json`）。在編輯器中指定它，即可補全鍵並提示拼寫錯誤。「檢查規則檔案…」會針對所選檔案顯示可用規則數、拼寫錯誤（遇到未知的鍵會附上最接近的已知鍵作為建議），以及它會取代哪些現有規則。自訂規則以相同的 id 取代內建規則或來源規則時，設定中會以備註而非警告顯示。
+                • 即時偵測：對 Web 與郵件防護（feat_webmail_download_guard）所監視資料夾中儲存或變更的 Web 檔案，在同一次靜態檢查中套用。與 Linux 版不同，無法在存取前阻止，全部為事後偵測（不使用 EndpointSecurity）。
+                • 開發用 Web 資料夾：`~/Sites`、`/Library/WebServer/Documents`、`~/Herd`、`~/Library/Application Support/Herd`、`/Applications/MAMP/htdocs`、`~/Library/Application Support/Local`、`~/Local Sites`、套件 CVE 比對的目標資料夾，以及 Web 與郵件防護的監視資料夾，每天掃描一次，也可手動掃描。每天一次的掃描不會進入 `node_modules`（相依套件）和 `.git`（監視資料夾的即時偵測，以及手動指定資料夾的掃描會檢查 `node_modules`）。`tests`、`fixtures` 等測試用資料夾不套用規則。
+                • 隔離：預設只有 critical 的偵測會走與其他威脅相同的流程（移入隔離庫，可在「管理隔離檔案」中還原或刪除）。high 只有通知、掛鉤和設定中的清單，不會動檔案（也可改為「隔離 critical 和 high」或「不隔離」）。medium 和 low 僅回報，保留在通知記錄中。被「排除並還原」的檔案，Web 規則不會再次偵測（與 ClamAV 的排除是不同的清單）。
+                • 偵測後掛鉤：把可執行檔放在 `~/Library/Application Support/RoamSwitch/hooks/post-detection`，每次偵測都會執行它，並透過標準輸入傳入 JSON（要求擁有者為自己或 root，群組和其他人不可寫，其上層資料夾也一樣；30 秒後中止）。
+                • 帳號處置（預設關閉）：在設定中啟用後，對於檔案已被移入隔離庫的偵測，會停用該檔案擁有者的登入 shell（保留 high 或隔離失敗時不做任何事）。需要管理員密碼確認，對已登入的使用者、root 以及 UID 小於 501 的帳號不做任何事。原來的 shell 會被記錄，可在設定中還原。
+                • 限制：只檢查檔案開頭的 4MB，且依固定的詞語序列比對，因此無法追蹤透過組合變數名稱等方式拆開的字串。
+                """,
+                recommendation: "如果 Mac 上有開發用的 Web 資料夾，請啟用 Pro 並保持預設設定。認為是誤判的檔案，從隔離庫還原後不會再被偵測。"
+            ),
+            LocalizedEntry(
+                id: "feat_event_forwarding",
+                title: "事件轉送（SIEM·syslog·Webhook）(Pro·預設關閉)",
+                summary: "把 RoamSwitch 記錄的事件和通知轉送到您自己填寫的目標（syslog、JSON Lines 檔案、帶簽章的 Webhook）。預設關閉，不傳送任何內容。",
+                details: """
+                • 傳送的內容：僅有主機名稱、事件 ID、時間、類型、嚴重程度、規則、採取的措施、程序 ID 和程序名稱、摘要。不會傳送檔案內容、螢幕和輸入的文字。RoamSwitch 一方沒有任何目標。
+                • 目標：syslog（`udp://`、`tcp://`、`tls://`；格式為 RFC 5424 或 CEF；TCP/TLS 採用附位元組數或換行分隔）、JSON Lines 檔案（0600，依大小輪替）、帶簽章的 Webhook（使用 macOS 內建的 curl；位址和 HMAC-SHA256 金鑰儲存在鑰匙圈中，透過標準輸入而不是參數交給 curl）。
+                • TLS：驗證憑證鏈和主機名稱，無法驗證則不傳送。可用 PEM 檔案指定私有 CA，此時只信任該 CA。
+                • 失敗時：TCP、TLS 和 Webhook 的事件進入磁碟佇列（0600，依大小和時間設上限，重新啟動後仍保留），並以逐漸變長的間隔重送。UDP 和檔案不重送。結束應用程式時尚未送出的事件，會為需要重送的目標保留在佇列中。
+                • 安全措施：程序名稱、命令列等攻擊者可控的字串會依各格式跳脫，換行等控制字元會變成 `\\xNN`，無法混入偽造的記錄。
+                • 設定：選單→惡意軟體防護→「事件轉送（SIEM）…」。「傳送測試」可在儲存前確認目標。僅在 Pro 授權有效時執行。
+                • 與 Linux 版的差異：格式、設定項目和重送行為相同。Linux 版的組織策略（Fleet）指定目標，以及拒絕內部位址的 Webhook，Mac 版沒有。
+                """,
+                recommendation: "如果有 SIEM 或 syslog 伺服器，並希望事件也保存在本機之外，請啟用。僅個人使用的話保持關閉即可。"
+            ),
+            LocalizedEntry(
                 id: "feat_ai_model_guard",
                 title: "危險 AI 模型格式（Pickle / PyTorch）下載警告 (Pro)",
                 summary: "當從 Hugging Face、Civitai 等下載 `.pkl` / `.pickle` / `.pt` 模型檔時，會警告 Pickle 格式在載入時可能執行任意程式碼，並建議改用 SafeTensors / GGUF 格式。",
@@ -403,6 +434,7 @@ extension RoamSwitchKnowledgeBase {
                 • 僅發出通知：這是高風險的「設定」，並非確認的入侵事件（例如監控代理程式可能刻意以特權模式執行），因此不會自動封鎖任何內容。
                 • 預設關閉：大多數使用者並未使用 Docker，因此即使是 Pro 版也預設關閉。
                 • 測試方式：「⚠️ Docker 風險偵測模擬（驗證運作）…」可在不接觸 Docker 的情況下檢查通知路徑是否正常。
+                • Exegol（滲透測試環境）的容器：因特權等原因被偵測到的容器，如果帶有 `org.exegol.*` 標籤或使用 Exegol 官方映像檔（`registry.exegol.com/exegol`、`nwodtuhs/exegol`），通知中會多一句說明。僅僅是 Exegol 容器本身不會觸發通知（很多人是有意啟動的）。
                 """,
                 recommendation: "若您在開發時使用 Docker，建議開啟此功能以及早發現容器逃逸風險。"
             ),
