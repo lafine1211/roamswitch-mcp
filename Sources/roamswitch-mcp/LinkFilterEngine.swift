@@ -93,9 +93,19 @@ public final class LinkFilterEngine {
     /// Same decision, plus the JA3 fingerprint of the TLS connection this
     /// SNI was read from, if available — see `verdictRaw(forHost:ja3Hash:)`.
     public func verdict(forHost host: String, ja3Hash: String?) -> Verdict {
+        verdict(forHost: host, ja3Hash: ja3Hash, sourceApp: nil)
+    }
+
+    /// As above, and `sourceApp` (the app the connection came from, `NEFilterFlow.sourceAppIdentifier`) goes into
+    /// the event line so the notification can say which app tried to reach the host.
+    public func verdict(forHost host: String, ja3Hash: String?, sourceApp: String?) -> Verdict {
         let (v, reason) = verdictWithReason(forHost: host, ja3Hash: ja3Hash)
-        if v != .allow { recordEvent(v, host: host, reason: reason) }
+        if v != .allow { recordEvent(v, host: host, reason: reason, sourceApp: sourceApp) }
         return v
+    }
+
+    public func verdict(forHost host: String, sourceApp: String?) -> Verdict {
+        verdict(forHost: host, ja3Hash: nil, sourceApp: sourceApp)
     }
 
     /// Same decision as `verdict(forHost:)` but with no event recorded — used by
@@ -172,7 +182,26 @@ public final class LinkFilterEngine {
 
     // MARK: - Event log (extension → app notifications)
 
-    private func recordEvent(_ verdict: Verdict, host: String, reason: VerdictReason?) {
+    /// One `events.log` line: `<epoch> TAB block|warn TAB host TAB reason TAB sourceApp`. The 4th and 5th fields were
+    /// added later: a reader of an older version ignores them. Tabs and line breaks cannot occur in a field.
+    public static func eventLine(epoch: Int, kind: String, host: String, reason: String?, sourceApp: String?) -> String {
+        func field(_ s: String?) -> String {
+            String((s ?? "").unicodeScalars.filter { $0 != "\t" && $0 != "\n" && $0 != "\r" }.map(Character.init)).prefix(200).description
+        }
+        return "\(epoch)\t\(kind)\t\(field(host))\t\(field(reason))\t\(field(sourceApp))\n"
+    }
+
+    /// The parts of one `events.log` line; nil for a line that is not an event.
+    public static func parseEventLine(_ line: Substring) -> (kind: String, host: String, reason: String?, sourceApp: String?)? {
+        let f = line.split(separator: "\t", omittingEmptySubsequences: false)
+        guard f.count >= 3 else { return nil }
+        let kind = String(f[1]), host = String(f[2])
+        guard kind == "block" || kind == "warn" else { return nil }
+        func optional(_ i: Int) -> String? { f.count > i && !f[i].isEmpty ? String(f[i]) : nil }
+        return (kind, host, optional(3), optional(4))
+    }
+
+    private func recordEvent(_ verdict: Verdict, host: String, reason: VerdictReason?, sourceApp: String? = nil) {
         lock.lock()
         // One line per host per hour — a busy page pulls a domain repeatedly.
         if let t = lastReported[host], Date().timeIntervalSince(t) < 3600 { lock.unlock(); return }
@@ -186,7 +215,7 @@ public final class LinkFilterEngine {
         let kind = verdict == .block ? "block" : "warn"
         // 4th field (reason) is new — a version-skewed reader during an
         // upgrade moment must still parse the first 3 fields fine.
-        let line = "\(Int(Date().timeIntervalSince1970))\t\(kind)\t\(host)\t\(reason?.rawValue ?? "")\n"
+        let line = Self.eventLine(epoch: Int(Date().timeIntervalSince1970), kind: kind, host: host, reason: reason?.rawValue, sourceApp: sourceApp)
         guard let data = line.data(using: .utf8) else { return }
 
         if let h = try? FileHandle(forWritingTo: eventsURL) {

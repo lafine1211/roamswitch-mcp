@@ -1133,6 +1133,21 @@ extension RoamSwitchKnowledgeBase {
                 """
             ),
             LocalizedEntry(
+                id: "alert_honeytoken_access",
+                title: "🍯 Credential Honeytoken Access Detected",
+                summary: "Tells you a decoy credential file RoamSwitch planted (for example ~/.aws/credentials) was read.",
+                details: """
+                • What the notification shows: the decoy file's path, the accessing program (path and PID), its parent process, and the command (secrets masked).
+                • When the accessor cannot be identified: the notification says so and shows what was checked (the processes holding the file open, the process-exec record). The reading process has often exited already; if the process-exec recorder is on, the commands that started at the same moment are listed (they did not necessarily read the file).
+                • Automatic defense: notification and record only (a related decoy is added; the network is not cut).
+                """,
+                recommendation: """
+                1. Look at the accessing path and command and check whether you ran it yourself.
+                2. If you don't recognize it, check the program's location and signature, stop it, and revoke and reissue the credentials involved (AWS keys, SSH keys, Docker auth, and so on).
+                3. If the accessor is unknown, turn on the process-exec recorder; from then on the notification lists the commands that started at the same moment (feat_exec_recorder).
+                """
+            ),
+            LocalizedEntry(
                 id: "alert_airgap_failed",
                 title: "🚨 Automatic Network Cutoff Failed",
                 summary: "An urgent warning shown when an emergency cutoff (ransomware, ARP spoofing, XProtect detection, ClickFix, and so on) was attempted but the pf full block couldn't be applied.",

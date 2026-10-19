@@ -1134,6 +1134,21 @@ extension RoamSwitchKnowledgeBase {
                 """
             ),
             LocalizedEntry(
+                id: "alert_honeytoken_access",
+                title: "🍯 Rilevato accesso all'honeytoken delle credenziali",
+                summary: "Segnala che è stato letto un file di credenziali esca posizionato da RoamSwitch (ad esempio ~/.aws/credentials).",
+                details: """
+                • Cosa mostra la notifica: il percorso del file esca, il programma che ha effettuato l'accesso (percorso e PID), il suo processo padre e il comando (segreti mascherati).
+                • Quando chi ha effettuato l'accesso non è identificabile: la notifica lo dice e mostra cosa è stato controllato (i processi con il file aperto, la registrazione delle esecuzioni dei processi). Il processo che ha letto spesso è già terminato; se la registrazione delle esecuzioni è attiva, vengono elencati i comandi avviati nello stesso momento (non necessariamente hanno letto il file).
+                • Difesa automatica: solo notifica e registrazione (viene aggiunta un'esca correlata; la rete non viene interrotta).
+                """,
+                recommendation: """
+                1. Guardi il percorso e il comando di chi ha effettuato l'accesso e verifichi se l'ha eseguito lei stesso.
+                2. Se non lo riconosce, controlli posizione e firma del programma, lo fermi e revochi e riemetta le credenziali coinvolte (chiavi AWS, chiavi SSH, autenticazione Docker e così via).
+                3. Se chi ha effettuato l'accesso è sconosciuto, attivi la registrazione delle esecuzioni dei processi; da allora la notifica elencherà i comandi avviati nello stesso momento (feat_exec_recorder).
+                """
+            ),
+            LocalizedEntry(
                 id: "alert_airgap_failed",
                 title: "🚨 Interruzione automatica della rete non riuscita",
                 summary: "Un avviso urgente che appare quando è stata tentata un'interruzione di emergenza (ransomware, spoofing ARP, rilevamento XProtect, ClickFix, ecc.) ma non è stato possibile applicare il blocco completo di pf.",

@@ -1134,6 +1134,21 @@ extension RoamSwitchKnowledgeBase {
                 """
             ),
             LocalizedEntry(
+                id: "alert_honeytoken_access",
+                title: "🍯 偵測到憑證蜜罐權杖被存取",
+                summary: "提示 RoamSwitch 放置的偽造憑證檔案(例如 ~/.aws/credentials)被讀取。",
+                details: """
+                • 通知顯示的資訊:被讀取的偽造檔案路徑、存取它的程式(路徑與 PID)、其父行程,以及指令(金鑰等機密已被遮蓋)。
+                • 無法確定存取者時:通知會如實說明,並顯示已檢查的內容(開啟該檔案的行程、行程執行記錄)。讀取檔案的行程往往已經結束;若已開啟行程執行記錄,會列出同一時刻啟動的指令(它們不一定讀取了該檔案)。
+                • 自動防禦:僅通知與記錄(會追加放置相關的偽造檔案;不會切斷網路)。
+                """,
+                recommendation: """
+                1. 查看存取者的路徑與指令,確認是不是您自己執行的。
+                2. 若沒有印象,請檢查該程式的位置與簽章,停止它,並撤銷、重新核發相關憑證(AWS 金鑰、SSH 金鑰、Docker 驗證等)。
+                3. 若不知道存取者是誰,請開啟行程執行記錄;此後通知中會列出同一時刻啟動的指令(feat_exec_recorder)。
+                """
+            ),
+            LocalizedEntry(
                 id: "alert_airgap_failed",
                 title: "🚨 自動斷網失敗",
                 summary: "當嘗試進行緊急斷網（勒索軟體、ARP 詐騙、XProtect 偵測、ClickFix 等）卻無法完成 pf 全面封鎖時，顯示的緊急警告。",

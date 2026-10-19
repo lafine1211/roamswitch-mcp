@@ -1134,6 +1134,21 @@ extension RoamSwitchKnowledgeBase {
                 """
             ),
             LocalizedEntry(
+                id: "alert_honeytoken_access",
+                title: "🍯 检测到凭据蜜罐令牌被访问",
+                summary: "提示 RoamSwitch 放置的伪造凭据文件(例如 ~/.aws/credentials)被读取。",
+                details: """
+                • 通知显示的信息:被读取的伪造文件路径、访问它的程序(路径和 PID)、其父进程,以及命令(密钥等机密已被遮盖)。
+                • 无法确定访问者时:通知会如实说明,并显示已检查的内容(打开该文件的进程、进程执行记录)。读取文件的进程往往已经退出;若已开启进程执行记录,会列出同一时刻启动的命令(它们不一定读取了该文件)。
+                • 自动防御:仅通知和记录(会追加放置相关的伪造文件;不会切断网络)。
+                """,
+                recommendation: """
+                1. 查看访问者的路径和命令,确认是不是您自己执行的。
+                2. 若没有印象,请检查该程序的位置和签名,停止它,并吊销、重新签发相关凭据(AWS 密钥、SSH 密钥、Docker 认证等)。
+                3. 若不知道访问者是谁,请开启进程执行记录;此后通知中会列出同一时刻启动的命令(feat_exec_recorder)。
+                """
+            ),
+            LocalizedEntry(
                 id: "alert_airgap_failed",
                 title: "🚨 自动断网失败",
                 summary: "因勒索软件、ARP 欺骗、XProtect 检测、ClickFix 等尝试紧急断网，但未能通过 pf 应用全面阻断时发出的紧急警告。",

@@ -1134,6 +1134,21 @@ extension RoamSwitchKnowledgeBase {
                 """
             ),
             LocalizedEntry(
+                id: "alert_honeytoken_access",
+                title: "🍯 Accès au honeytoken d'identifiants détecté",
+                summary: "Signale qu'un fichier d'identification leurre posé par RoamSwitch (par exemple ~/.aws/credentials) a été lu.",
+                details: """
+                • Ce que montre la notification : le chemin du fichier leurre, le programme à l'origine de l'accès (chemin et PID), son processus parent et la commande (secrets masqués).
+                • Quand l'auteur de l'accès n'a pas pu être identifié : la notification le dit et indique ce qui a été vérifié (les processus ayant le fichier ouvert, l'enregistrement des exécutions de processus). Le processus qui a lu s'est souvent déjà terminé ; si l'enregistrement des exécutions est activé, les commandes lancées au même moment sont listées (elles n'ont pas forcément lu le fichier).
+                • Défense automatique : notification et enregistrement uniquement (un leurre associé est ajouté ; le réseau n'est pas coupé).
+                """,
+                recommendation: """
+                1. Regardez le chemin et la commande à l'origine de l'accès et vérifiez si vous l'avez lancé vous-même.
+                2. Si vous ne le reconnaissez pas, vérifiez l'emplacement et la signature du programme, arrêtez-le et révoquez puis réémettez les identifiants concernés (clés AWS, clés SSH, authentification Docker, etc.).
+                3. Si l'auteur de l'accès est inconnu, activez l'enregistrement des exécutions de processus ; ensuite, la notification listera les commandes lancées au même moment (feat_exec_recorder).
+                """
+            ),
+            LocalizedEntry(
                 id: "alert_airgap_failed",
                 title: "🚨 Échec de la coupure réseau automatique",
                 summary: "Un avertissement urgent affiché lorsqu'une coupure d'urgence (rançongiciel, usurpation ARP, détection XProtect, ClickFix, etc.) a été tentée mais que le blocage complet pf n'a pas pu être appliqué.",

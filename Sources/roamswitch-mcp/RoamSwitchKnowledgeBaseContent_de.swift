@@ -1134,6 +1134,21 @@ extension RoamSwitchKnowledgeBase {
                 """
             ),
             LocalizedEntry(
+                id: "alert_honeytoken_access",
+                title: "🍯 Zugriff auf Anmeldedaten-Honeytoken erkannt",
+                summary: "Meldet, dass eine von RoamSwitch ausgelegte Köder-Anmeldedatei (z. B. ~/.aws/credentials) gelesen wurde.",
+                details: """
+                • Was die Meldung zeigt: den Pfad der Köderdatei, das zugreifende Programm (Pfad und PID), seinen übergeordneten Prozess und den Befehl (Geheimnisse maskiert).
+                • Wenn der Zugreifende nicht ermittelt werden kann: Die Meldung sagt das und zeigt, was geprüft wurde (Prozesse mit geöffneter Datei, Aufzeichnung der Prozessstarts). Der lesende Prozess ist oft schon beendet; ist die Prozessaufzeichnung aktiv, werden die zur selben Zeit gestarteten Befehle aufgeführt (sie haben die Datei nicht zwingend gelesen).
+                • Automatische Abwehr: nur Meldung und Protokoll (ein weiterer Köder wird ausgelegt; das Netzwerk wird nicht getrennt).
+                """,
+                recommendation: """
+                1. Prüfen Sie anhand von Pfad und Befehl, ob Sie das selbst ausgeführt haben.
+                2. Wenn Sie es nicht kennen, prüfen Sie Speicherort und Signatur des Programms, beenden Sie es und widerrufen bzw. erneuern Sie die betroffenen Zugangsdaten (AWS-Schlüssel, SSH-Schlüssel, Docker-Anmeldung usw.).
+                3. Ist der Zugreifende unbekannt, schalten Sie die Prozessaufzeichnung ein; künftig nennt die Meldung die zur selben Zeit gestarteten Befehle (feat_exec_recorder).
+                """
+            ),
+            LocalizedEntry(
                 id: "alert_airgap_failed",
                 title: "🚨 Automatische Netzwerktrennung fehlgeschlagen",
                 summary: "Eine dringende Warnung, die erscheint, wenn eine Notfalltrennung (Ransomware, ARP-Spoofing, XProtect-Erkennung, ClickFix usw.) versucht wurde, die vollständige pf-Sperre aber nicht angewendet werden konnte.",

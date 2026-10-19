@@ -1134,6 +1134,21 @@ extension RoamSwitchKnowledgeBase {
                 """
             ),
             LocalizedEntry(
+                id: "alert_honeytoken_access",
+                title: "🍯 Acceso al honeytoken de credenciales detectado",
+                summary: "Avisa de que se leyó un archivo de credenciales señuelo colocado por RoamSwitch (por ejemplo ~/.aws/credentials).",
+                details: """
+                • Qué muestra el aviso: la ruta del archivo señuelo, el programa que accedió (ruta y PID), su proceso padre y el comando (secretos enmascarados).
+                • Cuando no se puede identificar a quien accedió: el aviso lo dice y muestra qué se comprobó (los procesos con el archivo abierto, el registro de ejecución de procesos). El proceso que leyó suele haber terminado ya; si el registro de ejecución está activado, se listan los comandos iniciados en ese mismo momento (no necesariamente leyeron el archivo).
+                • Defensa automática: solo aviso y registro (se coloca otro señuelo relacionado; la red no se corta).
+                """,
+                recommendation: """
+                1. Mire la ruta y el comando de quien accedió y compruebe si lo ejecutó usted.
+                2. Si no lo reconoce, compruebe la ubicación y la firma del programa, deténgalo y revoque y vuelva a emitir las credenciales implicadas (claves de AWS, claves SSH, autenticación de Docker, etc.).
+                3. Si no se sabe quién accedió, active el registro de ejecución de procesos; a partir de entonces el aviso incluirá los comandos iniciados en ese mismo momento (feat_exec_recorder).
+                """
+            ),
+            LocalizedEntry(
                 id: "alert_airgap_failed",
                 title: "🚨 Error al cortar la red automáticamente",
                 summary: "Una advertencia urgente que aparece cuando se intentó un corte de emergencia (ransomware, suplantación ARP, detección de XProtect, ClickFix, etc.) pero no se pudo aplicar el bloqueo completo de pf.",

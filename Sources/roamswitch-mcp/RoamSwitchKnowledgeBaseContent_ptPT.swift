@@ -1134,6 +1134,21 @@ extension RoamSwitchKnowledgeBase {
                 """
             ),
             LocalizedEntry(
+                id: "alert_honeytoken_access",
+                title: "🍯 Acesso ao honeytoken de credenciais detetado",
+                summary: "Avisa de que foi lido um ficheiro de credenciais-isco colocado pelo RoamSwitch (por exemplo ~/.aws/credentials).",
+                details: """
+                • O que a notificação mostra: o caminho do ficheiro-isco, o programa que acedeu (caminho e PID), o seu processo pai e o comando (segredos ocultados).
+                • Quando não é possível identificar quem acedeu: a notificação di-lo e mostra o que foi verificado (os processos com o ficheiro aberto, o registo de execução de processos). O processo que leu já terminou com frequência; se o registo de execução estiver ativo, são listados os comandos iniciados no mesmo momento (não leram necessariamente o ficheiro).
+                • Defesa automática: apenas notificação e registo (é colocado um isco relacionado; a rede não é cortada).
+                """,
+                recommendation: """
+                1. Veja o caminho e o comando de quem acedeu e verifique se foi você a executá-lo.
+                2. Se não o reconhecer, verifique a localização e a assinatura do programa, pare-o e revogue e volte a emitir as credenciais envolvidas (chaves AWS, chaves SSH, autenticação Docker, etc.).
+                3. Se não se souber quem acedeu, ative o registo de execução de processos; a partir daí a notificação listará os comandos iniciados no mesmo momento (feat_exec_recorder).
+                """
+            ),
+            LocalizedEntry(
                 id: "alert_airgap_failed",
                 title: "🚨 Falha ao cortar a rede automaticamente",
                 summary: "Um aviso urgente que aparece quando foi tentado um corte de emergência (ransomware, falsificação de ARP, deteção do XProtect, ClickFix, etc.) mas não foi possível aplicar o bloqueio completo do pf.",

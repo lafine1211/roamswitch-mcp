@@ -484,6 +484,7 @@ public struct RoamSwitchKnowledgeBase: Sendable {
             EntryMeta(id: "alert_critical_file_tampering", topic: t, tags: ["alert", "fim", "tampering", "sudoers", "sshd_config", "hosts", "danger"]),
             EntryMeta(id: "alert_log_audit_anomaly", topic: t, tags: ["alert", "log", "audit", "template-anomaly", "z-score"]),
             EntryMeta(id: "alert_secret_in_clipboard", topic: t, tags: ["alert", "secret", "apikey", "clipboard"]),
+            EntryMeta(id: "alert_honeytoken_access", topic: t, tags: ["alert", "honeytoken", "decoy", "credentials", "aws", "ssh", "docker", "t1552", "process", "command"]),
             EntryMeta(id: "alert_airgap_failed", topic: t, tags: ["alert", "airgap", "failed", "helper", "danger"]),
             EntryMeta(id: "alert_helper_disconnected", topic: t, tags: ["alert", "helper", "xpc", "error", "troubleshooting"]),
             EntryMeta(id: "alert_score_drop", topic: t, tags: ["alert", "score", "audit", "health", "recommendation"]),
