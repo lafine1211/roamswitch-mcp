@@ -46,7 +46,8 @@ CORE=(AppLanguage TrustedNetwork GatewayFingerprint WiFiSecurityMonitor \
       BrowserCredentialWatchStatusReader \
       PortAnomalyStatusReader RuntimeThreatStatusReader NotificationHistory \
       ContainmentIncidentTimeline NetworkHistoryGuard MCPSensorAuditStatusReader \
-      RansomwareSnapshotStatusReader MCPExecRecorderTools AgentSetupAuditor AgentSetupBaseline SSHGuardStatusReader PromptInjectionSignals AgentSetupSarif DetectionCoverage)
+      RansomwareSnapshotStatusReader MCPExecRecorderTools AgentSetupAuditor AgentSetupBaseline SSHGuardStatusReader PromptInjectionSignals AgentSetupSarif DetectionCoverage \
+      BackupRecency PackageCveEpss VulnerabilityAcceptance DependencySourceScan)
 
 # Sources that live in the app's Shared/ folder (also compiled into the helper).
 SHARED=(RansomwareSnapshotLogic ExecEventModel ExecLogStore ExecProcessTree ExecReadAPI \

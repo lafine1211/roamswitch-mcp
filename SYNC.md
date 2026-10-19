@@ -64,6 +64,10 @@ All files live in `Sources/roamswitch-mcp/`.
 | `PromptInjectionSignals.swift` | `RoamSwitch/PromptInjectionSignals.swift` |
 | `AgentSetupSarif.swift` | `RoamSwitch/AgentSetupSarif.swift` |
 | `DetectionCoverage.swift` | `RoamSwitch/DetectionCoverage.swift` |
+| `BackupRecency.swift` | `RoamSwitch/BackupRecency.swift` |
+| `PackageCveEpss.swift` | `RoamSwitch/PackageCveEpss.swift` |
+| `VulnerabilityAcceptance.swift` | `RoamSwitch/VulnerabilityAcceptance.swift` |
+| `DependencySourceScan.swift` | `RoamSwitch/DependencySourceScan.swift` |
 | `SecretLeakScanning.swift` | `RoamSwitch/SecretLeakScanning.swift` |
 | `CryptoSecretDetection.swift` | `Shared/CryptoSecretDetection.swift` (from `Shared/`) |
 | `SecurityLogAuditor.swift` | `RoamSwitch/SecurityLogAuditor.swift` |
