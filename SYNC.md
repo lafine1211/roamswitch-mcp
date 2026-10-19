@@ -92,7 +92,8 @@ All files live in `Sources/roamswitch-mcp/`.
 | `SSHGuardStatusReader.swift` | `RoamSwitch/SSHGuardStatusReader.swift` |
 
 This is exactly the source set the app compiles into its `RoamSwitchMCPServer` target
-(see `project.yml` in the app repo). Eleven of the files come from the app's `Shared/` folder
+(see `project.yml` in the app repo). Thirteen of the files come from the app's `Shared/` folder
+| `StrictJSON.swift` | `Shared/StrictJSON.swift` (from `Shared/`) |
 (compiled into the app and the privileged helper too); the sync script keeps them in its `SHARED`
 list, and everything else in its `CORE` list. `Localizable.xcstrings` is also in that target but is
 not mirrored (this package does not use it).
@@ -135,6 +136,7 @@ via `@testable import RoamSwitch`. Only `main.swift` (the stdin→stdout pump) i
 | `MutationFuzzTests.swift` | **not mirrored** — specific to this repo |
 
 `GuardReaderHealthAppTests.swift` and `DetectionCoverageAppTests.swift` are **not mirrored**: it needs `ExecRuleID` (compiled into the app only) and the app's `Localizable.xcstrings`.
+| `StrictJSONTests.swift` | `RoamSwitchTests/StrictJSONTests.swift` |
 
 App tests for guards that are not in this repo (`PortAnomalyGuardTests`, `RansomwareCanaryGuardTests`,
 `WebMailDownloadGuardTests`, `DNSThreatGuardTests`, `DangerousPortExposureTests`) are not mirrored.
