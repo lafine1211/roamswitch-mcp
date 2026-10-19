@@ -43,13 +43,17 @@ public struct GuardReaderHealth: Codable, Equatable {
     public var filesUnreadable: Int?
     /// When a scan last skipped at least one file (unix seconds).
     public var filesUnreadableAt: Double?
+    /// Folders the last scan could not list, so everything below them was not looked at (nil where the source has no folders).
+    public var foldersUnreadable: Int?
+    /// Files the last scan read only the beginning of, because they are longer than the read limit (nil where there is no limit).
+    public var filesTruncated: Int?
     public var updatedAt: Double = 0
 
     public init() {}
 
     private enum CodingKeys: String, CodingKey {
         case active, restarts, lastRestartAt, gaps, lastGapAt, inGap, unreadable, reason, linesDropped, oversizeDropped
-        case filesUnreadable, filesUnreadableAt, updatedAt
+        case filesUnreadable, filesUnreadableAt, foldersUnreadable, filesTruncated, updatedAt
     }
 
     public init(from decoder: Decoder) throws {
@@ -66,6 +70,8 @@ public struct GuardReaderHealth: Codable, Equatable {
         oversizeDropped = try c.decodeIfPresent(UInt64.self, forKey: .oversizeDropped)
         filesUnreadable = try c.decodeIfPresent(Int.self, forKey: .filesUnreadable)
         filesUnreadableAt = try c.decodeIfPresent(Double.self, forKey: .filesUnreadableAt)
+        foldersUnreadable = try c.decodeIfPresent(Int.self, forKey: .foldersUnreadable)
+        filesTruncated = try c.decodeIfPresent(Int.self, forKey: .filesTruncated)
         updatedAt = try c.decodeIfPresent(Double.self, forKey: .updatedAt) ?? 0
     }
 
@@ -135,6 +141,17 @@ public struct GuardReaderHealth: Codable, Equatable {
     public mutating func setFilesUnreadable(_ count: Int, now: Double) {
         filesUnreadable = count
         if count > 0 { filesUnreadableAt = now }
+        updatedAt = now
+    }
+
+    /// The result of one folder scan: files it could not open, folders it could not list (everything below them
+    /// unseen) and files it read only the start of. Each replaces the previous scan's count; the time moves only
+    /// when the scan skipped a file or folder.
+    public mutating func setScanResult(filesUnreadable files: Int, foldersUnreadable folders: Int, filesTruncated truncated: Int, now: Double) {
+        filesUnreadable = files
+        foldersUnreadable = folders
+        filesTruncated = truncated
+        if files > 0 || folders > 0 { filesUnreadableAt = now }
         updatedAt = now
     }
 
@@ -264,6 +281,9 @@ public enum GuardReaderHealthStore {
         "webMailDownloadGuard": GuardSources(sources: ["webMailDownloadFSEvents"], auxiliary: [], idleIsHealthy: false),
         "browserCredentialWatchGuard": GuardSources(sources: ["browserCredentialWatchFSEvents"], auxiliary: [], idleIsHealthy: false),
         "ransomwareCanaryGuard": GuardSources(sources: ["ransomwareCanaryFiles"], auxiliary: [], idleIsHealthy: false),
+        // A batch scan (daily and on demand), so being idle between runs is healthy; what it can report is what the last
+        // scan could not examine.
+        "webRulesFolderScan": GuardSources(sources: ["webRuleFolderScan"], auxiliary: [], idleIsHealthy: true),
     ]
 
     /// A gap this recent still marks the guard `partial`.
@@ -292,7 +312,8 @@ public enum GuardReaderHealthStore {
         if !def.idleIsHealthy && healths.contains(where: { !$0.active }) { return "off" }
         // Input lost recently, or the last scan had to skip files it could not read.
         func lostRecently(_ h: GuardReaderHealth) -> Bool {
-            h.inGap || (h.lastGapAt.map { now - $0 <= gapWindowSecs } ?? false) || (h.filesUnreadable ?? 0) > 0
+            h.inGap || (h.lastGapAt.map { now - $0 <= gapWindowSecs } ?? false)
+                || (h.filesUnreadable ?? 0) > 0 || (h.foldersUnreadable ?? 0) > 0 || (h.filesTruncated ?? 0) > 0
         }
         if healths.contains(where: lostRecently) { return "partial" }
         for id in def.auxiliary {

@@ -108,9 +108,13 @@ final class MCPResponseFormattingTests: XCTestCase {
         disableDefaultOnGuards()
         let payload = MCPResponseFormatting.makeGuardStatusPayload(gatewayMAC: nil, defaults: defaults)
 
-        XCTAssertEqual(payload.guards.count, 29)
-        XCTAssertEqual(Set(payload.guards.map(\.key)).count, 29, "guard keys must be unique")
-        XCTAssertTrue(payload.guards.allSatisfy { !$0.enabledInSettings })
+        // `webRulesFolderScan` is not a setting: it follows the Pro cache (the daily scan has no switch), so it is
+        // counted apart from the 29 toggles.
+        let toggles = payload.guards.filter { $0.key != "webRulesFolderScan" }
+        XCTAssertEqual(toggles.count, 29)
+        XCTAssertEqual(Set(payload.guards.map(\.key)).count, 30, "guard keys must be unique")
+        XCTAssertTrue(toggles.allSatisfy { !$0.enabledInSettings })
+        XCTAssertEqual(payload.guards.first { $0.key == "webRulesFolderScan" }?.enabledInSettings, false, "not Pro in this test's defaults")
         XCTAssertFalse(payload.caveats.isEmpty)
     }
 
@@ -124,7 +128,7 @@ final class MCPResponseFormattingTests: XCTestCase {
         let enabledKeys = Set(payload.guards.filter(\.enabledInSettings).map(\.key))
 
         XCTAssertEqual(enabledKeys, ["portAnomalyGuard", "arpSpoofAutoContainment", "clickFixGuard"])
-        XCTAssertTrue(payload.guards.allSatisfy { $0.usingDefault != nil })
+        XCTAssertTrue(payload.guards.filter { $0.key != "webRulesFolderScan" }.allSatisfy { $0.usingDefault != nil })
         XCTAssertEqual(payload.guards.first { $0.key == "clickFixGuard" }?.usingDefault, false)
         XCTAssertEqual(payload.guards.first { $0.key == "bluetoothGuard" }?.usingDefault, true)
     }
@@ -137,7 +141,7 @@ final class MCPResponseFormattingTests: XCTestCase {
             "webMailDownloadGuard", "dnsThreatGuard", "persistenceMonitor",
             "secretLeakClipboardAuditor", "airGapAutoWiFiKill", "linkGuard", "linkGuardFeedUpdates",
         ])
-        XCTAssertTrue(payload.guards.allSatisfy { $0.usingDefault == true })
+        XCTAssertTrue(payload.guards.filter { $0.key != "webRulesFolderScan" }.allSatisfy { $0.usingDefault == true })
         XCTAssertEqual(payload.linkGuardMode, "block")
         XCTAssertEqual(payload.vpnBackend, "wireguard")
         XCTAssertEqual(payload.tailscaleExitNodeConfigured, false)

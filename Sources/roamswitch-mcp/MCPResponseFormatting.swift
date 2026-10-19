@@ -516,6 +516,9 @@ public struct MCPReaderHealthPayload: Codable, Equatable {
     /// and when a scan last skipped one. The guard's detection is unchanged; those files were not looked at.
     public var filesUnreadable: Int? = nil
     public var filesUnreadableAt: String? = nil
+    /// Folders the last scan could not list (everything below them was not looked at), and files it read only the start of.
+    public var foldersUnreadable: Int? = nil
+    public var filesTruncated: Int? = nil
 }
 
 /// Every field added after the original five is optional so older
@@ -943,7 +946,8 @@ public enum MCPResponseFormatting {
                     MCPReaderHealthPayload(source: id, unreadable: $0.unreadable, reason: $0.reason, restarts: $0.restarts,
                                            lastRestartAt: time($0.lastRestartAt), gaps: $0.gaps, lastGapAt: time($0.lastGapAt),
                                            linesDropped: $0.linesDropped, oversizeDropped: $0.oversizeDropped,
-                                           filesUnreadable: $0.filesUnreadable, filesUnreadableAt: time($0.filesUnreadableAt))
+                                           filesUnreadable: $0.filesUnreadable, filesUnreadableAt: time($0.filesUnreadableAt),
+                                           foldersUnreadable: $0.foldersUnreadable, filesTruncated: $0.filesTruncated)
                 }
             }
         }
@@ -982,6 +986,12 @@ public enum MCPResponseFormatting {
                                            liveState: linkMode != .off ? "on" : "off"))
         guards.append(entry("linkGuardFeedUpdates", linkGuardUpdatesKey, defaultWhenUnset: true))
         guards.append(entry("activeVulnScan", ActiveVulnScan.enabledDefaultsKey, defaultWhenUnset: false))
+        // The web-rules folder scan has no switch of its own: it runs daily for Pro. Its entry follows the Pro cache.
+        let scanOn = defaults.bool(forKey: "RoamSwitch.IsProCache")
+        guards.append(MCPGuardEntryPayload(
+            key: "webRulesFolderScan", enabledInSettings: scanOn, usingDefault: nil,
+            liveState: GuardReaderHealthStore.guardLiveState(guardKey: "webRulesFolderScan", enabledInSettings: scanOn, records: health, now: now.timeIntervalSince1970),
+            readers: readers(for: "webRulesFolderScan")))
 
         // Mirrors `VPNBackend.fromStored` (TailscaleVPNManager.swift, AppKit-only).
         let storedBackend = (defaults.string(forKey: vpnBackendKey) ?? "").lowercased()

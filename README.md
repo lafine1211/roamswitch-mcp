@@ -72,9 +72,9 @@ address.
   Wi-Fi kill, WireGuard / Tailscale kill-switch, Link Guard + feed updates, active vuln scan), each
   flagged `usingDefault` when never toggled. Each also has a `liveState` (on / off / partial / unknown): for the
   guards that read a stream or a file (SSH brute-force, port-scan, exec recorder, runtime threat, ClickFix,
-  critical-path FIM, lockfile tamper, ransomware entropy and canary, persistence monitor, download guard, browser credential watch) it says whether the guard can see its input — `off` when its reader cannot read the source,
+  critical-path FIM, lockfile tamper, ransomware entropy and canary, persistence monitor, download guard, browser credential watch, web-rules folder scan) it says whether the guard can see its input — `off` when its reader cannot read the source,
   `partial` after input was lost in the last 24 hours — and `readers` gives the counted record (restarts, gaps,
-  dropped lines where they can be counted, and `filesUnreadable` — files the last scan had to skip because they could not be read). Plus Link Guard mode, VPN backend, DNS threat guard
+  dropped lines where they can be counted, and `filesUnreadable` / `foldersUnreadable` / `filesTruncated` — files the last scan could not read, folders it could not list, and files of which only the start was read). Plus Link Guard mode, VPN backend, DNS threat guard
   provider/scope, isolated dev-server ports, USB storage allowlist size, current protection level
   and trusted-network state (read from the app's preferences domain — see *Standalone* below).
   Settings only: live VPN tunnel state lives in the privileged helper and is not reported.

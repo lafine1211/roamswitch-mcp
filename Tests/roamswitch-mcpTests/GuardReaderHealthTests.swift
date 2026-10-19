@@ -283,6 +283,50 @@ final class GuardReaderHealthTests: XCTestCase {
         XCTAssertEqual(state(scan), "on")
     }
 
+    func testAFolderScanThatSkippedFoldersOrTruncatedFilesIsPartialUntilACleanScan() {
+        let now = 70_000.0
+        func state(_ h: GuardReaderHealth) -> String {
+            GuardReaderHealthStore.guardLiveState(guardKey: "webRulesFolderScan", enabledInSettings: true, records: ["webRuleFolderScan": h], now: now)
+        }
+        var h = healthy()
+        h.setScanResult(filesUnreadable: 0, foldersUnreadable: 0, filesTruncated: 0, now: now - 100)
+        XCTAssertEqual(state(h), "on")
+        h.setScanResult(filesUnreadable: 0, foldersUnreadable: 1, filesTruncated: 0, now: now - 90)
+        XCTAssertEqual(state(h), "partial", "a folder was not listed")
+        h.setScanResult(filesUnreadable: 0, foldersUnreadable: 0, filesTruncated: 2, now: now - 80)
+        XCTAssertEqual(state(h), "partial", "only the start of two files was read")
+        h.setScanResult(filesUnreadable: 1, foldersUnreadable: 0, filesTruncated: 0, now: now - 70)
+        XCTAssertEqual(state(h), "partial")
+        XCTAssertEqual(h.filesUnreadableAt, now - 70)
+        h.setScanResult(filesUnreadable: 0, foldersUnreadable: 0, filesTruncated: 0, now: now - 60)
+        XCTAssertEqual(state(h), "on")
+        XCTAssertEqual(h.filesUnreadableAt, now - 70, "the last skip is remembered")
+        XCTAssertEqual(GuardReaderHealthStore.guardLiveState(guardKey: "webRulesFolderScan", enabledInSettings: true, records: [:], now: now), "unknown",
+                       "no scan has reported yet")
+    }
+
+    func testGuardStatusListsTheWebRulesFolderScanWithItsCounts() throws {
+        var h = healthy(); h.setScanResult(filesUnreadable: 2, foldersUnreadable: 1, filesTruncated: 3, now: 999_000)
+        let suite = "com.tetsuharu.RoamSwitch.tests.reader-health-webscan"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(true, forKey: "RoamSwitch.IsProCache")
+        let payload = MCPResponseFormatting.makeGuardStatusPayload(gatewayMAC: nil, defaults: defaults, readerHealth: ["webRuleFolderScan": h],
+                                                                    now: Date(timeIntervalSince1970: 1_000_000))
+        let scan = try XCTUnwrap(payload.guards.first { $0.key == "webRulesFolderScan" })
+        XCTAssertTrue(scan.enabledInSettings)
+        XCTAssertEqual(scan.liveState, "partial")
+        let reader = try XCTUnwrap(scan.readers?.first)
+        XCTAssertEqual(reader.filesUnreadable, 2)
+        XCTAssertEqual(reader.foldersUnreadable, 1)
+        XCTAssertEqual(reader.filesTruncated, 3)
+        // Free: no daily scan runs.
+        defaults.set(false, forKey: "RoamSwitch.IsProCache")
+        let free = MCPResponseFormatting.makeGuardStatusPayload(gatewayMAC: nil, defaults: defaults, readerHealth: [:])
+        XCTAssertEqual(free.guards.first { $0.key == "webRulesFolderScan" }?.liveState, "off")
+    }
+
     func testGuardStatusShowsTheUnreadableFileCount() throws {
         var h = healthy(); h.enableFileCounter(); h.setFilesUnreadable(4, now: 999_000)
         let suite = "com.tetsuharu.RoamSwitch.tests.reader-health-files"
