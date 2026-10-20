@@ -41,7 +41,7 @@ CORE=(AppLanguage TrustedNetwork GatewayFingerprint WiFiSecurityMonitor \
       MCPResponseFormatting MCPProtocol MCPServer RoamSwitchMCPSkillsContent \
       PackageCveScan PackageCveMapData PackageCveScanLanguages PackageCveMapLanguagesData \
       PackageCveScriptScan NpmAuditSignatures TyposquatGuard MCPConfigAuditor \
-      SecretLeakScanning FrontendBundleScan TrustAnchorCheck SecurityLogAuditor LogTemplateAnalyzer QuarantineManager CanaryStatusReader \
+      SecretLeakScanning FrontendBundleScan TrustAnchorCheck ReflectedXssProbe SecurityLogAuditor LogTemplateAnalyzer QuarantineManager CanaryStatusReader \
       RansomwareEntropyStatusReader ForensicCaptureManager HoneytokenStatusReader \
       BrowserCredentialWatchStatusReader \
       PortAnomalyStatusReader RuntimeThreatStatusReader NotificationHistory \
@@ -65,7 +65,7 @@ TESTS=(LinkSafetyAuditorTests CryptoSecretDetectionTests MCPKnowledgeBaseTests M
        ActiveVulnScanTests MCPConfigAuditorTests AgentSetupAuditorTests KnownAttackServersTests PromptInjectionSignalsTests AgentSetupSarifTests DetectionCoverageTests LocalAIRuntimeTests GuardReaderHealthTests StrictJSONTests \
        AgentCredentialFileCheckTests BackupRecencyTests DependencySourceScanTests PackageCveEpssTests \
        ProbeCatalogTests MCPToolAnnotationsTests \
-       FrontendBundleScanTests ForensicChainTests TrustAnchorCheckTests)
+       FrontendBundleScanTests ForensicChainTests TrustAnchorCheckTests ReflectedXssProbeTests)
 
 TDST="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/Tests/roamswitch-mcpTests"
 

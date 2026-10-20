@@ -73,6 +73,7 @@ All files live in `Sources/roamswitch-mcp/`.
 | `SecretLeakScanning.swift` | `RoamSwitch/SecretLeakScanning.swift` |
 | `FrontendBundleScan.swift` | `RoamSwitch/FrontendBundleScan.swift` |
 | `TrustAnchorCheck.swift` | `RoamSwitch/TrustAnchorCheck.swift` |
+| `ReflectedXssProbe.swift` | `RoamSwitch/ReflectedXssProbe.swift` |
 | `CryptoSecretDetection.swift` | `Shared/CryptoSecretDetection.swift` (from `Shared/`) |
 | `SecurityLogAuditor.swift` | `RoamSwitch/SecurityLogAuditor.swift` |
 | `LogTemplateAnalyzer.swift` | `RoamSwitch/LogTemplateAnalyzer.swift` |
@@ -152,6 +153,7 @@ via `@testable import RoamSwitch`. Only `main.swift` (the stdin→stdout pump) i
 | `FrontendBundleScanTests.swift` | `RoamSwitchTests/FrontendBundleScanTests.swift` |
 | `ForensicChainTests.swift` | `RoamSwitchTests/ForensicChainTests.swift` |
 | `TrustAnchorCheckTests.swift` | `RoamSwitchTests/TrustAnchorCheckTests.swift` |
+| `ReflectedXssProbeTests.swift` | `RoamSwitchTests/ReflectedXssProbeTests.swift` |
 | `StdioSmokeTests.swift` | **not mirrored** — specific to this repo (drives the built binary over stdio) |
 | `MutationFuzzTests.swift` | **not mirrored** — specific to this repo |
 
