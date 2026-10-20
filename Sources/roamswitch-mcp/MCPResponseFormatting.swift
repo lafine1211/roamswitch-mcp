@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.9 (build 171).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.10 (build 172).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -101,6 +101,20 @@ public struct MCPActiveVulnScanFindingPayload: Codable, Equatable {
     public let title: String
     public let description: String
     public let recommendation: String
+    /// Additive. The probe that produced the finding (see `probesRun`), and how strong the evidence is:
+    /// `confirmed` (a request showed the weakness), `version_range_match` (only the version is in an affected
+    /// range), `external_tool_report` (nmap's own output, not verified by RoamSwitch).
+    public var probeName: String? = nil
+    public var evidenceKind: String? = nil
+}
+
+/// What one probe that ran declares it leaves on the machine (`ProbeSideEffect` raw values: `ioc_in_logs`,
+/// `temporary_listener`, `many_requests`; an empty list means only one ordinary request) and what a positive
+/// result from it means (`EvidenceKind`).
+public struct MCPProbeDeclarationPayload: Codable, Equatable {
+    public let probeName: String
+    public let sideEffects: [String]
+    public let evidenceKind: String
 }
 
 /// One probe that did NOT produce a finding — either the target was
@@ -126,6 +140,8 @@ public struct MCPActiveVulnScanResultPayload: Codable, Equatable {
     /// Checks that could not complete (unreachable/timeout) — never
     /// evidence of safety.
     public var inconclusive: [MCPScanCheckOutcomePayload] = []
+    /// Additive: the probes this run executed with their declared side effects.
+    public var probesRun: [MCPProbeDeclarationPayload] = []
     public let message: String
 }
 
@@ -137,12 +153,37 @@ public struct MCPPackageCveFindingPayload: Codable, Equatable {
     public let fixedVersion: String
     public let summary: String
     public let confidence: String
+    /// EPSS (0...1) from the signed feed, with the day it was taken. Absent when the feed carried none.
+    /// A statistical estimate of exploitation activity within 30 days, not a record that one occurred.
+    public var epss: Double? = nil
+    public var epssDate: String? = nil
+}
+
+/// How many of a scan's findings a person has accepted (see `VulnerabilityAcceptance`). Counts only: the
+/// accepted findings stay in `findings`, and no tool can accept one.
+public struct MCPVulnerabilityAcceptancePayload: Codable, Equatable {
+    /// Findings covered by an acceptance that has not expired.
+    public let accepted: Int
+    /// Of `accepted`, how many expire within 14 days.
+    public let expiringWithin14Days: Int
+    /// Findings whose acceptance has expired; they count as needing action again.
+    public let expired: Int
+    /// Findings not covered by an acceptance in force: `findings.count - accepted`.
+    public let needsAttention: Int
+
+    init(_ counts: VulnerabilityAcceptance.Counts) {
+        accepted = counts.accepted
+        expiringWithin14Days = counts.expiringSoon
+        expired = counts.expired
+        needsAttention = counts.needsAttention
+    }
 }
 
 public struct MCPPackageCveScanResultPayload: Codable, Equatable {
     public let mapInstalled: Bool
     public let mapVersion: String
     public let findings: [MCPPackageCveFindingPayload]
+    public let acceptance: MCPVulnerabilityAcceptancePayload
 }
 
 public struct MCPPackageCveLanguageFindingPayload: Codable, Equatable {
@@ -155,11 +196,14 @@ public struct MCPPackageCveLanguageFindingPayload: Codable, Equatable {
     public let cvssScore: Double
     public let fixedVersion: String
     public let summary: String
+    public var epss: Double? = nil
+    public var epssDate: String? = nil
 }
 
 public struct MCPPackageCveScanLanguagesResultPayload: Codable, Equatable {
     public let scannedFolderCount: Int
     public let findings: [MCPPackageCveLanguageFindingPayload]
+    public let acceptance: MCPVulnerabilityAcceptancePayload
 }
 
 public struct MCPPackageLifecycleScriptFindingPayload: Codable, Equatable {
@@ -176,9 +220,26 @@ public struct MCPPackageLifecycleScriptFindingPayload: Codable, Equatable {
     public let dangerPatternLabel: String?
 }
 
+/// Install-time code that appeared in a package since the state a person accepted in the RoamSwitch window.
+public struct MCPPackageInstallDriftPayload: Codable, Equatable {
+    public let packageName: String
+    public let oldVersion: String?
+    public let newVersion: String
+    /// `script_added`, `script_changed`, `native_added` or `new_package_with_install_code`.
+    public let kind: String
+    public let scriptName: String?
+    /// `high` or `medium`.
+    public let severity: String
+    public let dangerPatternLabel: String?
+}
+
 public struct MCPPackageLifecycleScriptScanResultPayload: Codable, Equatable {
     public let scannedFolderCount: Int
     public let findings: [MCPPackageLifecycleScriptFindingPayload]
+    /// When the state the `drift` list compares with was accepted (ISO 8601); nil if no state was ever accepted,
+    /// in which case `drift` is empty. This tool never accepts one, so an agent cannot accept its own change.
+    public let baselineAcceptedAt: String?
+    public let drift: [MCPPackageInstallDriftPayload]
 }
 
 public struct MCPTyposquatFindingPayload: Codable, Equatable {
@@ -192,6 +253,28 @@ public struct MCPTyposquatFindingPayload: Codable, Equatable {
 public struct MCPTyposquatScanResultPayload: Codable, Equatable {
     public let scannedFolderCount: Int
     public let findings: [MCPTyposquatFindingPayload]
+}
+
+public struct MCPDependencySourceFindingPayload: Codable, Equatable {
+    /// `pip_extra_index_url` or `npm_scope_not_pinned`.
+    public let kind: String
+    public let file: String
+    /// 1-based line (pip); absent for npm.
+    public let line: Int?
+    /// Host of the index or registry, never with credentials.
+    public let host: String
+    /// `@acme` (npm); absent for pip.
+    public let scope: String?
+    /// npm: how many packages of the scope the lockfile resolves from `host`; 0 for pip.
+    public let packageCount: Int
+}
+
+/// Result payload for `run_dependency_source_scan` — settings that allow dependency confusion, found by reading
+/// files. It never asks a registry whether a name could be claimed. See `DependencySourceScan`.
+public struct MCPDependencySourceScanResultPayload: Codable, Equatable {
+    public let scannedFolderCount: Int
+    public let findings: [MCPDependencySourceFindingPayload]
+    public let note: String
 }
 
 /// Result payload for `run_npm_audit_signatures` — unlike every other
@@ -613,6 +696,8 @@ public enum MCPResponseFormatting {
     static let ransomwareCanaryGuardKey = "RoamSwitch.RansomwareCanaryGuardEnabled"   // RansomwareCanaryGuard — false; Pro default-on
     static let ransomwareEntropyGuardKey = "RoamSwitch.RansomwareEntropyGuardEnabled" // RansomwareEntropyGuard — false; Pro default-on
     static let credentialHoneytokenGuardKey = "RoamSwitch.CredentialHoneytokenGuardEnabled" // CredentialHoneytokenGuard — false; Pro default-on
+    static let reverseShellWatchKey = "RoamSwitch.ReverseShellWatchEnabled"           // ReverseShellWatchGuard — false; Pro default-on
+    static let networkSettingsWatchKey = "RoamSwitch.NetworkSettingsWatchEnabled"     // NetworkSettingsWatchGuard — false; Pro default-on
     static let browserCredentialWatchGuardKey = "RoamSwitch.BrowserCredentialWatchGuardEnabled" // BrowserCredentialWatchGuard — false; opt-in even for Pro
     static let clickFixGuardKey = "RoamSwitch.ClickFixGuardEnabled"                   // ClickFixGuard — false
     static let execRecorderKey = "RoamSwitch.ExecRecorder.Enabled"                    // ExecRecorderManager — false (Pro, opt-in)
@@ -742,7 +827,7 @@ public enum MCPResponseFormatting {
 
     // MARK: verify_security_findings
 
-    /// 1回に指定できる checkId の上限(超過分は無視して注意書きを付ける)。全18項目より十分大きく、
+    /// 1回に指定できる checkId の上限(超過分は無視して注意書きを付ける)。全21項目より十分大きく、
     /// 巨大な引数でレスポンスが膨らまないための歯止め。
     public static let maxVerifyCheckIds = 50
     /// 未知の checkId をそのまま返すときの最大文字数(入力はエージェント由来で信頼できない)。
@@ -970,6 +1055,8 @@ public enum MCPResponseFormatting {
         guards.append(entry("ransomwareEntropyGuard", ransomwareEntropyGuardKey, defaultWhenUnset: false))
         guards.append(entry("credentialHoneytokenGuard", credentialHoneytokenGuardKey, defaultWhenUnset: false))
         guards.append(entry("browserCredentialWatchGuard", browserCredentialWatchGuardKey, defaultWhenUnset: false))
+        guards.append(entry("reverseShellWatch", reverseShellWatchKey, defaultWhenUnset: false))
+        guards.append(entry("networkSettingsWatch", networkSettingsWatchKey, defaultWhenUnset: false))
         guards.append(entry("clickFixGuard", clickFixGuardKey, defaultWhenUnset: false))
         guards.append(entry("execRecorder", execRecorderKey, defaultWhenUnset: false))
         guards.append(entry("dockerEventGuard", dockerEventGuardKey, defaultWhenUnset: false))
@@ -1048,7 +1135,11 @@ public enum MCPResponseFormatting {
         case .ransomwareEntropy: return loc("汎用ランサムウェア検知（エントロピー解析）")
         case .honeytoken: return loc("認証情報ハニートークン")
         case .browserCredentialWatch: return loc("ブラウザ認証情報アクセス監視")
+        case .reverseShellWatch: return loc("リバースシェル検知")
+        case .networkSettingsWatch: return loc("ネットワーク設定の変化の監視")
         case .sshGuard: return loc("SSH総当たり検知")
+        case .vulnerabilityAcceptance: return loc("脆弱性の受容")
+        case .criticalPathFim: return loc("重要ファイルの改ざん監視")
         }
     }
 
@@ -1059,6 +1150,7 @@ public enum MCPResponseFormatting {
         case "ssh_block": return loc("SSH接続元を遮断（新しい接続のみ）")
         case "notify_only": return loc("通知のみ（遮断は行わない）")
         case "air_gap_degraded": return loc("Air-Gapを縮退モードへ移行（新規の外部通信は遮断を継続）")
+        case "baseline_accepted": return loc("基準を更新（人の操作）")
         default: return action
         }
     }
@@ -1287,6 +1379,9 @@ enum VerifyFindingDiscipline {
         case "browser_phishing_protection": return loc("Safariを使わず、別のブラウザだけで閲覧している場合、Safariの詐欺Webサイト警告の設定は日常の保護に影響しません。")
         case "usb_zero_trust": return loc("この判定は、RoamSwitchの設定値です。外部のUSB機器を使わない据え置きのMacでは、物理ポートからの攻撃のリスクは小さいです。")
         case "accessory_connection_protection": return loc("この設定が扱うのは、Macがロックされている間の新しいアクセサリの接続だけです。使用中の接続は対象外です。")
+        case "backup_recency": return loc("Time Machine以外の方法(別のバックアップアプリなど)でバックアップしている場合、この判定は実態と違います。RoamSwitchが読めるのはTime Machineの記録だけです。")
+        case "proxy_autodiscovery": return loc("会社や学校が管理するMacで、プロキシ自動検出を管理者が意図して設定している場合は、この状態は設定どおりです。")
+        case "agent_credential_files": return loc("同期フォルダやgit管理下に見えても、そのファイルを同期や追跡の対象から外している場合は、実際には外に出ていません。RoamSwitchは、その除外設定までは確認しません。")
         default: return nil
         }
     }
@@ -1311,6 +1406,9 @@ enum VerifyFindingDiscipline {
         case "browser_phishing_protection": return loc("Safariで知らない相手のリンクを開くことがあるなら、上がります。")
         case "usb_zero_trust": return loc("共有スペースや外出先で、他人がMacに触れられるなら、上がります。")
         case "accessory_connection_protection": return loc("席を離れたMacに他人が触れられる場所で使うなら、上がります。")
+        case "backup_recency": return loc("ランサムウェアに暗号化されたら取り戻せない大事なファイルがあるなら、重大になります。大事なデータがすべて別の場所に世代管理つきで保存されているなら、下がります。")
+        case "proxy_autodiscovery": return loc("カフェやホテルなど、他人が管理するネットワークをよく使うなら、重大になります。自宅や職場の管理されたネットワークだけなら、下がります。")
+        case "agent_credential_files": return loc("ファイルが他のユーザーに読める権限や、公開されうる同期・git管理下にあるなら、重大になります。所有者だけが読める権限で、手元のディスクにだけあるなら、解消します。")
         default: return nil
         }
     }

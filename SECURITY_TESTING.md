@@ -1,6 +1,7 @@
 # Security testing
 
-The server is read-only, unprivileged, and opens no socket, so the realistic
+The server is unprivileged, opens no socket, and changes nothing the user owns (three tools only write
+local state such as a scan history), so the realistic
 failure modes are **denial of service** — a trap (force-unwrap, overflow) or a
 hang (unbounded loop, ReDoS, pathological allocation) triggered by input the
 program doesn't fully control:

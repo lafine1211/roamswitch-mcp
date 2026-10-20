@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.9 (build 171).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.10 (build 172).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -225,10 +225,12 @@ public enum ExecMCPMailbox {
 
     /// Creates the directory (0700) if needed and refuses one that is not a
     /// real directory owned by the current user.
+    /// `create: false` (the MCP server side) only checks and never makes the directory: it is the app that
+    /// creates it, so a missing one means the app has not run and a read-only tool must leave no folder behind.
     @discardableResult
-    static func prepare(dir: URL) -> Bool {
+    static func prepare(dir: URL, create: Bool = true) -> Bool {
         let fm = FileManager.default
-        try? fm.createDirectory(at: dir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        if create { try? fm.createDirectory(at: dir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700]) }
         guard let attrs = try? fm.attributesOfItem(atPath: dir.path),
               (attrs[.type] as? FileAttributeType) == .typeDirectory,
               (attrs[.ownerAccountID] as? NSNumber)?.uint32Value == getuid() else { return false }
@@ -261,7 +263,7 @@ public enum ExecMCPMailbox {
     /// Writes `request`, waits up to `timeout` for the app's response file,
     /// reads and deletes it. `nil` = the app did not answer (not running, ...).
     public static func submitAndWait(_ request: Request, dir: URL = defaultDirectory, timeout: Double = waitSecs) -> Response? {
-        guard isValidID(request.id), prepare(dir: dir),
+        guard isValidID(request.id), prepare(dir: dir, create: false),
               let data = try? JSONEncoder().encode(request), data.count <= maxRequestBytes else { return nil }
         let reqURL = requestURL(request.id, dir: dir)
         let respURL = responseURL(request.id, dir: dir)

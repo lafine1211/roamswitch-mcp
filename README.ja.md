@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 [RoamSwitch](https://roamswitch.com)（Mac のネットワーク境界を自動防衛するメニューバーアプリ）に
-同梱されている **読み取り専用の [MCP](https://modelcontextprotocol.io) サーバーと、その検知
+同梱されている **[MCP](https://modelcontextprotocol.io) サーバーと、その検知
 ロジック本体** です。RoamSwitch が何を計算し、AI クライアントへ何を渡しているのかを、誰でも
 そのまま読んで検証できるように公開しています。
 
@@ -24,11 +24,12 @@
 | ARP スプーフィング検知 | `ARPSpoofMonitor.swift` |
 | リスニングポート列挙・監査 | `ListeningPortMonitor.swift`, `PortSecurityAuditor.swift`, `ServiceSignatures.swift` |
 | Wi-Fi 暗号化強度の判定 | `WiFiSecurityMonitor.swift` |
-| macOS セキュリティ 18 項目診断 | `SecurityHealthChecker.swift` |
+| macOS セキュリティ 21 項目診断 | `SecurityHealthChecker.swift`, `BackupRecency.swift`, `ProxyAutoDiscoveryCheck.swift`, `AgentCredentialFileCheck.swift` |
 | フィッシング / ホモグラフ / URL 安全性（完全オフライン） | `LinkSafetyAuditor.swift` |
 | APIキー・シークレット漏洩検査（完全オフライン） | `SecretLeakScanning.swift` |
 | 統合ログのセキュリティ監査＋ログテンプレート異常検知 | `SecurityLogAuditor.swift`, `LogTemplateAnalyzer.swift` |
 | 実証型脆弱性検証（`127.0.0.1` 限定・オプトイン） | `ActiveVulnScan.swift`, `ActiveVulnCveMapData.swift` |
+| 依存関係の取得元の検査・EPSS 順位付け・受容リスクの記録 | `DependencySourceScan.swift`, `PackageCveEpss.swift`, `VulnerabilityAcceptance.swift` |
 | ネットワーク非依存のローカル CVE 照合（Homebrew＋ロックファイル） | `PackageCveScan.swift`, `PackageCveMapData.swift`, `PackageCveScanLanguages.swift`, `PackageCveMapLanguagesData.swift` |
 | 各ガードの状態リーダー（隔離Vault・カナリア・ポート異常・ランタイム脅威・通知履歴・封じ込めタイムライン・ネットワーク履歴） | `QuarantineManager.swift`, `CanaryStatusReader.swift`, `PortAnomalyStatusReader.swift`, `RuntimeThreatStatusReader.swift`, `NotificationHistory.swift`, `ContainmentIncidentTimeline.swift`, `NetworkHistoryGuard.swift` |
 | 同梱ナレッジベース（`get_app_help`） | `RoamSwitchKnowledgeBase.swift` |
@@ -37,8 +38,12 @@
 
 ## 提供ツール（`tools/list`）
 
-全 34 ツール（`MCPServer.swift` の `toolDefinitions` の要素数で、`tools/list` が返す数と同じ）。
-すべて読み取り専用です。`get_exposed_ports` と、既定で無効な `run_active_vuln_scan` は `127.0.0.1`
+全 35 ツール（`MCPServer.swift` の `toolDefinitions` の要素数で、`tools/list` が返す数と同じ）。
+読み取りだけのツールがほとんどで、次の 3 つはローカルに状態も書くため、MCP の `readOnlyHint` が
+`false` です。`run_active_vuln_scan`（スキャン履歴ファイルに 1 プローブ 1 行を追記）、
+`audit_security_logs`（ログパターンの基準を保存し、新しいパターンを通知履歴に記録）、
+`run_npm_audit_signatures`（npm が自身のキャッシュとログを書く）。この 3 つも、ユーザーのものを
+変更・削除しません。`get_exposed_ports` と、既定で無効な `run_active_vuln_scan` は `127.0.0.1`
 限定です。外部のホストへ通信するのは、Pro 限定・既定で無効の `run_npm_audit_signatures`
 （`npm audit signatures` が npm レジストリへ問い合わせる）だけです。診断系のツール
 （`get_security_report` / `verify_security_findings` / `get_exposed_ports` / `get_guard_status`）は、
@@ -47,7 +52,7 @@
 
 ### 状態診断・ネットワーク
 
-- `get_security_report` — macOS セキュリティ 18 項目の総合診断（FileVault、SIP、Gatekeeper、
+- `get_security_report` — macOS セキュリティ 21 項目の総合診断（FileVault、SIP、Gatekeeper、
   自動アップデート、XProtect、ファイアウォール、ステルスモード、Wi-Fi 暗号化強度、ARP
   スプーフィング、ゲートウェイ ARP 固定、SSH、sudo の `NOPASSWD` 監査、外部公開ポート、
   ダウンロード保護 / DNS 脅威保護 / リンク保護、USB・アクセサリ防御）をスコア化し、
@@ -98,10 +103,11 @@
 
 ### 脆弱性・CVE
 
-- `run_active_vuln_scan` — **確認用のプローブを送る唯一のツール**です。非破壊・読み取り
-  専用・`127.0.0.1` 限定・チェックごとに短いタイムアウトの 1 リクエストのみで、他ホストには
-  一切触れません。検出済みの無認証既定サービス（Redis / Memcached / MongoDB）へのプロトコル
-  準拠プローブ、検出済み開発サーバーへの CORS 設定ミス・パストラバーサル・オープンリダイレクト
+- `run_active_vuln_scan` — **確認用のプローブを送る唯一のツール**です。非破壊・
+  `127.0.0.1` 限定・チェックごとに短いタイムアウトの 1 リクエストのみで、他ホストには
+  一切触れません。プローブは相手サービス自身のログに接続の記録を残すことがあり、各プローブは
+  ローカルのスキャン履歴に追記されるため、このツールは読み取り専用とは表示していません。
+  検出済みの無認証既定サービス（Redis / Memcached / MongoDB）へのプロトコル準拠プローブ、検出済み開発サーバーへの CORS 設定ミス・パストラバーサル・オープンリダイレクト
   検査、および既知 CVE のバージョン範囲照合のみ（実際のエクスプロイト送信は一切なし）。
   **既定で無効**で、RoamSwitch 設定の「実証型脆弱性検証」を有効にするまで実行を拒否します。
 - `run_package_cve_scan` — インストール済み Homebrew formula を、NVD の実データから機械生成
@@ -116,6 +122,10 @@
 - `run_typosquat_scan` — `package.json` の依存名が著名な npm パッケージ（`expres`、`loadash` など）
   に編集距離 1〜2 で酷似していないかの参考判定。静的リストとの照合で、誤検知もあり得ます。
   ネットワーク通信なし。Pro。
+- `run_dependency_source_scan` — 依存関係の取得元の静的検査。pip の `extra-index-url` と、
+  `.npmrc` でそのスコープに固定していないレジストリから取得する npm スコープを指摘します
+  （依存関係の混乱攻撃が成り立つ設定）。レジストリに問い合わせて名前が取得できるかは確かめません。
+  ネットワーク通信なし・何も実行しません。Pro。
 - `run_npm_audit_signatures` — `npm audit signatures` でインストール済みパッケージの署名・来歴を
   検証し、npm の出力をそのまま返します。**npm レジストリへ通信します。** Pro 限定で、
   Package CVE Scan 画面のスイッチをオンにするまで既定で無効です。
@@ -241,7 +251,7 @@ RoamSwitch アプリのバンドル内で動く場合、このコードはアプ
 
 ## セキュリティ上の性質
 
-- **読み取り専用。** 状態を変更する API は存在しません。
+- **ユーザーのものを変更しない。** 設定やファイルを変更・削除する API は存在しません。ローカルに状態だけを書くツールが 3 つあります（スキャン履歴、ログの基準、npm 自身のキャッシュ）。そのため読み取り専用とは表示していません。
 - **ソケットを開かない。** stdin から 1 行読み、stdout へ 1 行書き、クライアントがパイプを
   閉じたら終了します。
 - **テレメトリなし・外部ホストへの通信なし。** 例外は Pro 限定・オプトインの

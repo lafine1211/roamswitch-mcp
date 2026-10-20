@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.9 (build 171).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.10 (build 172).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -56,12 +56,13 @@ extension AgentSetupAuditor {
         case "credential_access":
             return Tags(owaspLLM: ["LLM02"], attack: ["T1552.001"])
         case "credential_exfil_shape", "exfil_endpoint", "openclaw_mdns_full",
-             "openclaw_loose_permissions":
+             "openclaw_loose_permissions", "agent_settings_endpoint_override":
             return Tags(owaspLLM: ["LLM02"], attack: [])
         // What a skill or the agent may do without asking.
         case "persistence_instruction", "skill_broad_tool_grant", "openclaw_auth_disabled", "openclaw_wide_bind",
              "openclaw_weak_token", "openclaw_origin_wildcard", "openclaw_dangerous_flag",
-             "openclaw_broad_trusted_proxy", "openclaw_proxy_trust_loosened", "openclaw_audit_suppressed":
+             "openclaw_broad_trusted_proxy", "openclaw_proxy_trust_loosened", "openclaw_audit_suppressed",
+             "agent_settings_hook", "agent_settings_bypass", "agent_settings_broad_allow", "agent_settings_weakened":
             return Tags(owaspLLM: ["LLM06"], attack: [])
         case "openclaw_open_dm":
             return Tags(owaspLLM: ["LLM01", "LLM06"], attack: [])
@@ -112,6 +113,15 @@ extension AgentSetupAuditor {
         "openclaw_mdns_full": "OpenClaw advertises full details over mDNS",
         "openclaw_audit_suppressed": "OpenClaw self-audit findings are suppressed",
         "openclaw_loose_permissions": "OpenClaw config readable by other users",
+        "editor_auto_run_task": "Editor task runs when the folder is opened",
+        "workflow_pwn_request": "Workflow checks out pull-request code where secrets exist",
+        "workflow_expression_injection": "Workflow pastes untrusted text into a script",
+        "workflow_unpinned_action": "Workflow uses a third-party action that is not pinned to a commit",
+        "agent_settings_hook": "Claude Code settings run a hook command on agent events",
+        "agent_settings_bypass": "Claude Code settings skip every permission prompt",
+        "agent_settings_broad_allow": "Claude Code settings allow any shell command without asking",
+        "agent_settings_endpoint_override": "Claude Code settings send API traffic to another host",
+        "agent_settings_weakened": "Claude Code settings are looser than the accepted state",
     ]
 
     /// `artifactLocation.uri`: absolute paths as `file://`, every byte outside the unreserved set

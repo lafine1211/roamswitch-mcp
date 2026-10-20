@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.9 (build 171).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.10 (build 172).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -160,10 +160,12 @@ final class SecurityHealthChecker {
     /// 外部コマンドの実行(テストでは偽の出力を返すものを差し込む)と、sshd_config の読み取り元。
     private let runner: CommandRunner
     private let sshConfigSource: SSHDConfigSource
+    private let backupSource: BackupSource
 
-    init(runner: @escaping CommandRunner = SystemCommand.run, sshConfigSource: SSHDConfigSource = FileSSHDConfigSource()) {
+    init(runner: @escaping CommandRunner = SystemCommand.run, sshConfigSource: SSHDConfigSource = FileSSHDConfigSource(), backupSource: BackupSource = SystemBackupSource()) {
         self.runner = runner
         self.sshConfigSource = sshConfigSource
+        self.backupSource = backupSource
     }
 
     func checkHealth() -> SecurityHealthStatus {
@@ -311,6 +313,8 @@ final class SecurityHealthChecker {
             nistCsfCategories: ["DE.CM-09"]
         ))
 
+        items.append(backupRecencyItem(now: Date()))
+
         // MARK: - 2. Network Defense (ネットワーク防御)
         // A network explicitly set to "信頼 (オープン)" is *meant* to have
         // the firewall/stealth checks below fail — that's the whole point
@@ -326,7 +330,7 @@ final class SecurityHealthChecker {
             isPassed: isTrustedOpenNetwork ? true : isFirewallPassed,
             statusText: isTrustedOpenNetwork ? loc("対象外 (信頼ネットワークのため意図的に無効)") : (activeSecurityLevel.firewallBlockAll ? loc("全受信ブロック中 (強固)") : (isFirewallPassed ? loc("標準保護 (有効)") : loc("解除中 (オープン)"))),
             detail: loc("外部からの未承認な着信TCP/UDPパケットをカーネルのパケットフィルタ層で自動破棄します。") + (isTrustedOpenNetwork ? "\n" + Self.trustedOpenNotApplicableNote : ""),
-            recommendation: isTrustedOpenNetwork ? loc("信頼ネットワークのため意図的に保護を解除しています。公衆Wi-Fi等、信頼できない場所では別の保護レベルを選んでください。") : (activeSecurityLevel.firewallBlockAll ? loc("外部接続は完全に遮断されています。") : loc("外出先では最大ロックダウンまたは標準保護への設定を推奨します。")),
+            recommendation: isTrustedOpenNetwork ? loc("信頼ネットワークのため意図的に保護を解除しています。公衆Wi-Fi等、信頼できない場所では別の保護レベルを選んでください。") : (activeSecurityLevel.firewallBlockAll ? loc("外部接続は完全に遮断されています。") : loc("外出先では最大ロックダウンか標準保護に設定してください。")),
             settingsURL: "x-apple.systempreferences:com.apple.preference.security?Firewall",
             isApplicable: !isTrustedOpenNetwork,
             checkId: "host_firewall",
@@ -341,7 +345,7 @@ final class SecurityHealthChecker {
             isPassed: isTrustedOpenNetwork ? true : isStealthPassed,
             statusText: isTrustedOpenNetwork ? loc("対象外 (信頼ネットワークのため意図的に無効)") : (isStealthPassed ? loc("有効 (隠蔽中)") : loc("無効 (Ping応答許可)")),
             detail: loc("ネットワークスキャンやPing（ICMP）に対して無応答にすることで、外部からMacの存在自体を隠蔽します。") + (isTrustedOpenNetwork ? "\n" + Self.trustedOpenNotApplicableNote : ""),
-            recommendation: isTrustedOpenNetwork ? loc("信頼ネットワークのため意図的に保護を解除しています。") : (isStealthPassed ? loc("外部スキャンから保護されています。") : loc("公衆Wi-Fi接続時はステルスモードの有効化を推奨します。")),
+            recommendation: isTrustedOpenNetwork ? loc("信頼ネットワークのため意図的に保護を解除しています。") : (isStealthPassed ? loc("外部スキャンから保護されています。") : loc("公衆Wi-Fi接続時はステルスモードを有効にしてください。")),
             settingsURL: nil,
             isApplicable: !isTrustedOpenNetwork,
             checkId: "network_stealth_mode",
@@ -392,6 +396,8 @@ final class SecurityHealthChecker {
             nistCsfCategories: ["PR.IR-01"]
         ))
 
+        items.append(ProxyAutoDiscoveryCheck.item(ProxyAutoDiscoveryCheck.readExposure()))
+
         // MARK: - 2.5. Authentication & Access Control (認証・アクセス制御)
         let remoteLogin = checkRemoteLoginEnabled()           // nil = launchctl の結果を判別できない
         let isRemoteLoginEnabled = remoteLogin == true
@@ -441,6 +447,8 @@ final class SecurityHealthChecker {
             nistCsfCategories: ["PR.AA-05"],
             inconclusiveReason: sudoAudit == nil ? "helper_unavailable" : nil
         ))
+
+        items.append(AgentCredentialFileCheck.item(AgentCredentialFileCheck.scan()))
 
         // MARK: - 3. Services & Ports (サービス・ポート露出)
         // A port `DevServerIsolator`(またはその自動検知の`PortAnomalyGuard`)が
@@ -578,7 +586,7 @@ final class SecurityHealthChecker {
             isPassed: accessoryPolicy?.isPassed ?? false,
             statusText: accessoryPolicy?.statusText ?? loc("状態を確認できませんでした"),
             detail: loc("新しいUSB/Thunderboltアクセサリが接続された際、Macがロックされている場合はデータ通信をOSハードウェア層で未然に遮断します。"),
-            recommendation: loc("システム設定 > プライバシーとセキュリティ > アクセサリの接続を許可 が適切に設定されていることを推奨します。"),
+            recommendation: loc("システム設定 > プライバシーとセキュリティ > アクセサリの接続を許可 を適切に設定してください。"),
             settingsURL: "x-apple.systempreferences:com.apple.preference.security",
             isApplicable: accessoryPolicy != nil,
             checkId: "accessory_connection_protection",
@@ -617,6 +625,69 @@ final class SecurityHealthChecker {
     /// 保護レベルが信頼(open)の間、ファイアウォール/ステルスは「対象外」になる。macOS 側の設定が変わったわけではない。
     static var trustedOpenNotApplicableNote: String {
         loc("保護レベルが信頼(open)のため対象外です。macOSファイアウォール自体の状態は変更されていません。")
+    }
+
+    // MARK: - Backup recency
+
+    /// `backup_recency`: Time Machine's own record of its newest backup (see `BackupRecency`). Whether a
+    /// backup can be restored is not tested, and the item says so.
+    func backupRecencyItem(now: Date) -> SecurityAuditItem {
+        let snapshots = runner("/usr/bin/tmutil", ["listlocalsnapshotdates"]).flatMap(BackupRecency.localSnapshotCount)
+        let outcome = BackupRecency.evaluate(
+            preferences: backupSource.timeMachinePreferences(),
+            localSnapshotCount: snapshots,
+            installedApps: backupSource.installedBackupApps(),
+            now: now
+        )
+        var isPassed = false
+        var isApplicable = true
+        var inconclusiveReason: String?
+        let statusText: String
+        var detail = loc("Time Machineに記録された最終バックアップの日時を確認します。7日を超えると不合格です。バックアップから実際に復元できるかは確認しません(復元はファイルを書き込むため、自動では行いません)。")
+        switch outcome {
+        case .recent(let days):
+            isPassed = true
+            statusText = days == 0 ? loc("直近のバックアップあり (24時間以内)") : String(format: loc("直近のバックアップあり (%d日前)"), days)
+        case .stale(let days):
+            statusText = String(format: loc("⚠️ %d日間バックアップされていません"), days)
+        case .neverBackedUp:
+            statusText = loc("⚠️ バックアップ先はあるが、記録されたバックアップがありません")
+        case .notConfigured(let localSnapshots):
+            statusText = loc("⚠️ バックアップ先が未設定")
+            if localSnapshots {
+                detail += "\n" + loc("ローカルスナップショットは同じディスクの中にあります。ディスクの故障や紛失には役立たず、マルウェアに消されることもあるため、バックアップとは数えません。")
+            }
+        case .otherToolOnly(let names):
+            isApplicable = false
+            inconclusiveReason = "not_verifiable"
+            statusText = String(format: loc("Time Machineは未設定、別のバックアップアプリを検出: %@ (最終実行は確認できません)"), names.joined(separator: ", "))
+        case .unreadable:
+            isApplicable = false
+            inconclusiveReason = "not_verifiable"
+            statusText = loc("状態を確認できませんでした")
+        }
+        let recommendation: String
+        if isPassed {
+            recommendation = loc("設定は万全です。")
+        } else if case .otherToolOnly = outcome {
+            recommendation = loc("そのバックアップアプリで、最後に実行した日時を確認してください。")
+        } else {
+            recommendation = loc("システム設定 > 一般 > Time Machine でバックアップ先を確認し、バックアップを実行してください。")
+        }
+        return SecurityAuditItem(
+            category: loc("システム堅牢性"),
+            title: loc("バックアップ (Time Machine)"),
+            isPassed: isPassed,
+            statusText: statusText,
+            detail: detail,
+            recommendation: recommendation,
+            settingsURL: "x-apple.systempreferences:com.apple.Time-Machine-Settings.extension",
+            isApplicable: isApplicable,
+            checkId: "backup_recency",
+            cisControlID: "11.2",
+            nistCsfCategories: ["PR.DS-11"],
+            inconclusiveReason: inconclusiveReason
+        )
     }
 
     // MARK: - Sub-check Helpers
@@ -677,7 +748,7 @@ final class SecurityHealthChecker {
         let isPassed = profile != "Always Allow"
         let statusText = isPassed
             ? String(format: loc("有効 (%@)"), profile)
-            : String(format: loc("弱い設定 (%@)。システム設定で見直しを推奨"), profile)
+            : String(format: loc("弱い設定 (%@)。システム設定で見直してください"), profile)
         return (isPassed, statusText)
     }
 

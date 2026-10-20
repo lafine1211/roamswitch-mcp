@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.12.9 (build 171). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.12.10 (build 172). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -79,7 +79,9 @@ final class AgentSetupSarifTests: XCTestCase {
     func testEveryFindingIDHasKnownTagsAndARuleTitle() {
         for id in AgentSetupAuditor.findingIDs {
             let t = AgentSetupAuditor.tags(for: id)
-            XCTAssertFalse(t.owaspLLM.isEmpty, "\(id) has no OWASP LLM id")
+            // Editor tasks and CI workflows are not LLM-application risks: their tag lists are empty on purpose.
+            let projectIDs: Set<String> = ["editor_auto_run_task", "workflow_pwn_request", "workflow_expression_injection", "workflow_unpinned_action"]
+            if !projectIDs.contains(id) { XCTAssertFalse(t.owaspLLM.isEmpty, "\(id) has no OWASP LLM id") }
             for o in t.owaspLLM { XCTAssertNotNil(AgentSetupAuditor.owaspLLMNames[o], "\(id): unknown OWASP id \(o)") }
             for a in t.attack { XCTAssertNotNil(AgentSetupAuditor.attackNames[a], "\(id): unknown ATT&CK id \(a)") }
             XCTAssertNotNil(AgentSetupAuditor.sarifRuleTitles[id], "\(id) has no SARIF rule title")

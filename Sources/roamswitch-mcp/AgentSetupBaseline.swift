@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.9 (build 171).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.10 (build 172).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -39,8 +39,42 @@ enum AgentSetupBaseline {
         var files: [String: Entry] = [:]
         /// MCP config path -> server name -> digest.
         var servers: [String: [String: Entry]] = [:]
+        /// Claude Code settings path -> what the file allows, denies and runs. nil in a state accepted before
+        /// settings were recorded: such a state says nothing about them, so nothing is compared.
+        var settings: [String: SettingsEntry]?
 
-        var isEmpty: Bool { files.isEmpty && servers.isEmpty }
+        var isEmpty: Bool { files.isEmpty && servers.isEmpty && (settings ?? [:]).isEmpty }
+    }
+
+    /// What a Claude Code settings file lets happen without asking, as digests only. A rule is hashed, not
+    /// stored, so the baseline holds no command line and no path pattern. Which way a change goes matters
+    /// here: a deny rule that disappears weakens the setup, a deny rule that is added does not.
+    struct SettingsEntry: Codable, Equatable {
+        /// Hex SHA-256 of each `permissions.deny` rule.
+        var denyRules: [String] = []
+        /// Hex SHA-256 of each `permissions.allow` rule that lets any command run (see `AgentSetupAuditor.broadGrant`).
+        var broadAllow: [String] = []
+        /// Hex SHA-256 of event, matcher and command of each hook.
+        var hooks: [String] = []
+        /// `permissions.defaultMode` when it is one of the known modes.
+        var defaultMode: String?
+        /// `sandbox.enabled` is explicitly false.
+        var sandboxDisabled = false
+        /// `skipDangerousModePermissionPrompt` is true.
+        var dangerousPromptSkipped = false
+        /// The file exists but could not be read or parsed. It is not compared, so a file that cannot be read
+        /// is never mistaken for one whose rules are gone.
+        var unreadable = false
+    }
+
+    /// One way a settings file got weaker than the accepted state.
+    enum SettingsWeakening: Equatable {
+        case denyRemoved(Int)
+        case broadAllowAdded(Int)
+        case hookAdded(Int)
+        case modeRaised(from: String, to: String)
+        case sandboxDisabled
+        case dangerousPromptSkipped
     }
 
     struct Store: Codable, Equatable {
@@ -55,7 +89,11 @@ enum AgentSetupBaseline {
         case fileAdded(path: String)
         case serverChanged(path: String, name: String, fields: [String])
         case serverAdded(path: String, name: String)
+        case settingsWeakened(path: String, reasons: [SettingsWeakening])
     }
+
+    /// Permission modes from the most to the least careful. Only these are ranked; any other value is not compared.
+    static let modeRank: [String: Int] = ["plan": 0, "default": 1, "acceptEdits": 2, "bypassPermissions": 3]
 
     // MARK: - Digests
 
@@ -141,7 +179,53 @@ enum AgentSetupBaseline {
                 }
             }
         }
+        changes += settingsChanges(old: old, current: current)
         return changes
+    }
+
+    /// Only the direction that weakens is reported. A deleted settings file counts as a file with no rules, so
+    /// deleting one that held deny rules is a weakening; a file that is new counts only in a folder that was
+    /// already covered, as for the other kinds.
+    static func settingsChanges(old: Snapshot, current: Snapshot) -> [Change] {
+        guard let oldSettings = old.settings else { return [] }
+        let currentSettings = current.settings ?? [:]
+        var changes: [Change] = []
+        for path in Set(oldSettings.keys).union(currentSettings.keys).sorted() {
+            // A file of a folder that is no longer registered is not a deleted file. The home folder covers its own
+            // `.claude` settings only, not the projects that happen to lie under it.
+            if currentSettings[path] == nil, !isSettingsCandidate(path, scopes: current.scopes) { continue }
+            let now = currentSettings[path] ?? SettingsEntry()
+            if now.unreadable { continue }
+            let before: SettingsEntry
+            if let previous = oldSettings[path] {
+                if previous.unreadable { continue }
+                before = previous
+            } else if let scope = scope(of: path, in: current.scopes), old.scopes.contains(scope) {
+                before = SettingsEntry()
+            } else {
+                continue
+            }
+            var reasons: [SettingsWeakening] = []
+            let denyRemoved = Set(before.denyRules).subtracting(now.denyRules).count
+            if denyRemoved > 0 { reasons.append(.denyRemoved(denyRemoved)) }
+            let allowAdded = Set(now.broadAllow).subtracting(before.broadAllow).count
+            if allowAdded > 0 { reasons.append(.broadAllowAdded(allowAdded)) }
+            let hooksAdded = Set(now.hooks).subtracting(before.hooks).count
+            if hooksAdded > 0 { reasons.append(.hookAdded(hooksAdded)) }
+            let oldMode = before.defaultMode ?? "default"
+            let newMode = now.defaultMode ?? "default"
+            if let a = modeRank[oldMode], let b = modeRank[newMode], b > a { reasons.append(.modeRaised(from: oldMode, to: newMode)) }
+            if now.sandboxDisabled && !before.sandboxDisabled { reasons.append(.sandboxDisabled) }
+            if now.dangerousPromptSkipped && !before.dangerousPromptSkipped { reasons.append(.dangerousPromptSkipped) }
+            if !reasons.isEmpty { changes.append(.settingsWeakened(path: path, reasons: reasons)) }
+        }
+        return changes
+    }
+
+    /// A settings file this snapshot looked for: one of the home folder's own, or one inside a registered project folder.
+    private static func isSettingsCandidate(_ path: String, scopes: [String]) -> Bool {
+        if let home = scopes.first, path == home + "/.claude/settings.json" || path == home + "/.claude/settings.local.json" { return true }
+        return scopes.dropFirst().contains { path.hasPrefix($0.hasSuffix("/") ? $0 : $0 + "/") }
     }
 
     // MARK: - Storage
@@ -154,7 +238,7 @@ enum AgentSetupBaseline {
 
     static func load(from url: URL = defaultURL) -> Store? {
         guard let data = try? Data(contentsOf: url),
-              let store = try? JSONDecoder().decode(Store.self, from: data), store.version == 1 else { return nil }
+              let store = try? StrictJSON.decode(Store.self, from: data), store.version == 1 else { return nil }
         return store
     }
 

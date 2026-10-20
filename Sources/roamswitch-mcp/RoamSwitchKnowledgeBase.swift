@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.9 (build 171).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.10 (build 172).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -432,6 +432,8 @@ public struct RoamSwitchKnowledgeBase: Sendable {
             EntryMeta(id: "feat_clickfix_guard", topic: t, tags: ["clickfix", "social-engineering", "terminal", "shell-history", "clipboard", "airgap", "pro", "opt-in"]),
             EntryMeta(id: "feat_persistence_monitor_guard", topic: t, tags: ["persistence", "launchagent", "launchdaemon", "fsevents", "malware", "infostealer", "detection-only", "pro"]),
             EntryMeta(id: "feat_docker_event_guard", topic: t, tags: ["docker", "container", "privileged", "docker.sock", "container-escape", "pro", "notify-only"]),
+            EntryMeta(id: "feat_reverse_shell_watch", topic: t, tags: ["reverse-shell", "shell", "t1059.004", "libproc", "nc", "ncat", "socat", "bash", "dev-tcp", "mkfifo", "c2", "pro", "default-on-pro", "notify-only"]),
+            EntryMeta(id: "feat_network_settings_watch", topic: t, tags: ["dhcp", "rogue-dhcp", "wpad", "pac", "proxy", "dns", "router", "t1557.003", "mitm", "scdynamicstore", "pro", "default-on-pro", "notify-only"]),
             EntryMeta(id: "feat_critical_path_fim", topic: t, tags: ["fim", "integrity", "tampering", "sudoers", "sshd_config", "pam", "hosts", "sha256", "baseline", "pro", "default-on-pro"]),
             EntryMeta(id: "feat_security_log_audit", topic: t, tags: ["log", "audit", "unified-logging", "sudo", "ssh", "gatekeeper", "xprotect", "template-anomaly", "csv", "mcp", "free"]),
             EntryMeta(id: "feat_scheduled_log_audit", topic: t, tags: ["log", "audit", "scheduled", "template-anomaly", "z-score", "baseline", "learning", "pro", "default-on-pro"]),
@@ -448,7 +450,7 @@ public struct RoamSwitchKnowledgeBase: Sendable {
             EntryMeta(id: "feat_typosquat_guard", topic: t, tags: ["npm", "pnpm", "typosquatting", "package.json", "levenshtein", "supply-chain", "mcp", "pro"]),
             EntryMeta(id: "feat_sensor_pairing", topic: t, tags: ["sensor", "pairing-code", "tcp", "ed25519", "lan", "trust", "audit", "pro"]),
             EntryMeta(id: "feat_port_scan_guard", topic: t, tags: ["port-scan", "reconnaissance", "nmap", "masscan", "pf", "auto-block", "pro"]),
-            EntryMeta(id: "feat_security_health_checker", topic: t, tags: ["audit", "score", "filevault", "sip", "gatekeeper", "firewall", "xprotect", "ssh", "sudo", "accessory", "18-items", "free"]),
+            EntryMeta(id: "feat_security_health_checker", topic: t, tags: ["audit", "score", "filevault", "sip", "gatekeeper", "firewall", "xprotect", "ssh", "sudo", "accessory", "21-items", "free"]),
             EntryMeta(id: "feat_autonomous_sentinel", topic: t, tags: ["autonomous", "sentinel", "background", "freshclam", "clamav", "scheduled-scan", "pro"]),
             EntryMeta(id: "feat_simulation_self_test", topic: t, tags: ["simulation", "self-test", "test", "ransomware", "airgap", "docker", "eicar"]),
             EntryMeta(id: "feat_privileged_helper", topic: t, tags: ["helper", "xpc", "root", "pfctl", "privilege", "security", "smappservice", "launchdaemon"]),
@@ -480,6 +482,9 @@ public struct RoamSwitchKnowledgeBase: Sendable {
             EntryMeta(id: "alert_gatekeeper_block", topic: t, tags: ["alert", "gatekeeper", "unsigned", "notify-only"]),
             EntryMeta(id: "alert_clickfix_command", topic: t, tags: ["alert", "clickfix", "terminal", "clipboard", "airgap", "danger"]),
             EntryMeta(id: "alert_new_persistence_item", topic: t, tags: ["alert", "persistence", "launchagent", "launchdaemon", "malware"]),
+            EntryMeta(id: "alert_reverse_shell", topic: t, tags: ["alert", "reverse-shell", "shell", "bash", "nc", "ncat", "socat", "c2", "danger"]),
+            EntryMeta(id: "alert_network_settings_changed", topic: t, tags: ["alert", "dhcp", "rogue-dhcp", "wpad", "pac", "proxy", "dns", "router", "mitm"]),
+            EntryMeta(id: "alert_new_startup_script", topic: t, tags: ["alert", "persistence", "shell", "zshrc", "startup", "hook", "ssh rc", "periodic", "malware"]),
             EntryMeta(id: "alert_docker_risk", topic: t, tags: ["alert", "docker", "privileged", "docker.sock"]),
             EntryMeta(id: "alert_critical_file_tampering", topic: t, tags: ["alert", "fim", "tampering", "sudoers", "sshd_config", "hosts", "danger"]),
             EntryMeta(id: "alert_log_audit_anomaly", topic: t, tags: ["alert", "log", "audit", "template-anomaly", "z-score"]),

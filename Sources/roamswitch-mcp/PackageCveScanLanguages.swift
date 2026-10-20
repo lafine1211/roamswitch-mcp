@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.9 (build 171).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.10 (build 172).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -450,8 +450,10 @@ enum PackageCveScanLanguages {
         let cvssScore: Double
         let ranges: [CveRange]
         let summary: String
+        /// EPSS (0...1) from the signed feed, if it carried one. See `PackageCveEpss`.
+        let epss: Double?
 
-        enum CodingKeys: String, CodingKey { case cveId, package, cvssScore, ranges, summary }
+        enum CodingKeys: String, CodingKey { case cveId, package, cvssScore, ranges, summary, epss }
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             cveId = try c.decode(String.self, forKey: .cveId)
@@ -459,6 +461,7 @@ enum PackageCveScanLanguages {
             cvssScore = try c.decode(Double.self, forKey: .cvssScore)
             ranges = try c.decodeIfPresent([CveRange].self, forKey: .ranges) ?? []
             summary = try c.decodeIfPresent(String.self, forKey: .summary) ?? ""
+            epss = PackageCveEpss.validated(try? c.decodeIfPresent(Double.self, forKey: .epss))
         }
     }
 
@@ -466,18 +469,22 @@ enum PackageCveScanLanguages {
         let mapVersion: String
         let ecosystem: String
         let entries: [CveEntry]
+        /// The day (`YYYY-MM-DD`) the entries' EPSS values were taken, if the feed said.
+        let epssDate: String?
 
-        enum CodingKeys: String, CodingKey { case mapVersion, ecosystem, entries }
+        enum CodingKeys: String, CodingKey { case mapVersion, ecosystem, entries, epssDate }
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             mapVersion = try c.decodeIfPresent(String.self, forKey: .mapVersion) ?? ""
             ecosystem = try c.decodeIfPresent(String.self, forKey: .ecosystem) ?? ""
             entries = try c.decodeIfPresent([CveEntry].self, forKey: .entries) ?? []
+            epssDate = PackageCveEpss.validatedDate(try? c.decodeIfPresent(String.self, forKey: .epssDate))
         }
-        init(mapVersion: String, ecosystem: String, entries: [CveEntry]) {
+        init(mapVersion: String, ecosystem: String, entries: [CveEntry], epssDate: String? = nil) {
             self.mapVersion = mapVersion
             self.ecosystem = ecosystem
             self.entries = entries
+            self.epssDate = epssDate
         }
         static func empty(ecosystem: String) -> CveMap { CveMap(mapVersion: "", ecosystem: ecosystem, entries: []) }
     }
@@ -836,8 +843,16 @@ enum PackageCveScanLanguages {
         let summary: String
         /// Absolute path of the lockfile the package was found in.
         var lockfile: String = ""
+        /// EPSS (0...1) and the day it was taken, when the signed feed carried them; nil otherwise.
+        var epss: Double? = nil
+        var epssDate: String? = nil
 
         var id: String { "\(lockfile)|\(cveId)|\(ecosystem)|\(package)|\(installedVersion)" }
+
+        /// What an acceptance is matched on (see `VulnerabilityAcceptance`).
+        var acceptanceSubject: VulnerabilityAcceptance.Subject {
+            VulnerabilityAcceptance.Subject(ecosystem: ecosystem, package: package, cveId: cveId, version: installedVersion)
+        }
 
         /// The project folder (the lockfile's directory), with the home folder
         /// shortened to `~`.
@@ -855,8 +870,8 @@ enum PackageCveScanLanguages {
     /// discovered dependency against the matching ecosystem's local CVE
     /// map. Ecosystems whose map has no installed data (seed-only, updater
     /// hasn't run yet) are simply never matched — never fabricated.
-    static func runScan(watchedFolders: [String]) -> [Finding] {
-        let maps = loadAllCVEMaps()
+    static func runScan(watchedFolders: [String], maps suppliedMaps: [String: CveMap]? = nil) -> [Finding] {
+        let maps = suppliedMaps ?? loadAllCVEMaps()
         guard !maps.values.allSatisfy({ $0.entries.isEmpty }) else { return [] }
 
         var deps: [WatchedDependency] = []
@@ -876,14 +891,22 @@ enum PackageCveScanLanguages {
                     cvssScore: cve.cvssScore,
                     fixedVersion: tightestFixedVersion(ecosystem: dep.ecosystem, installedVersion: dep.version, entry: cve),
                     summary: cve.summary,
-                    lockfile: dep.lockfile
+                    lockfile: dep.lockfile,
+                    epss: cve.epss,
+                    epssDate: cve.epss == nil ? nil : map.epssDate
                 ))
             }
         }
-        // Grouped by project, so the findings of one repository sit together.
-        return findings.sorted {
+        return ordered(findings)
+    }
+
+    /// Grouped by project, so the findings of one repository sit together; inside a project by severity band,
+    /// then EPSS (higher first), then CVSS and CVE id. See `PackageCveEpss.precedes`.
+    static func ordered(_ findings: [Finding]) -> [Finding] {
+        findings.sorted {
             if $0.lockfile != $1.lockfile { return $0.lockfile < $1.lockfile }
-            return $0.cvssScore > $1.cvssScore
+            return PackageCveEpss.precedes(cvssA: $0.cvssScore, epssA: $0.epss, idA: $0.id,
+                                           cvssB: $1.cvssScore, epssB: $1.epss, idB: $1.id)
         }
     }
 }

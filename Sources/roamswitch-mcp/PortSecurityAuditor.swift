@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.9 (build 171).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.10 (build 172).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -56,7 +56,7 @@ final class PortSecurityAuditor {
                     findings.append(PortAuditFinding(
                         title: loc("0.0.0.0 バインド（全LAN公開設定）"),
                         riskLevel: .warning,
-                        description: loc("プロセスが0.0.0.0（全インターフェース）で待ち受けています。RoamSwitchのファイアウォールにより外部遮断中ですが、設定自体の見直しを推奨します。"),
+                        description: loc("プロセスが0.0.0.0（全インターフェース）で待ち受けています。RoamSwitchのファイアウォールにより外部遮断中ですが、設定自体を見直してください。"),
                         recommendation: loc("開発サーバーの起動オプションでホストを 127.0.0.1 (localhost) に限定してください（例: --host 127.0.0.1 または app.listen(port, '127.0.0.1')）。")
                     ))
                 } else {
@@ -244,7 +244,7 @@ final class PortSecurityAuditor {
             return PortAuditFinding(
                 title: loc("VNC / 画面共有ポートの露出"),
                 riskLevel: isGlobal ? .warning : .safe,
-                description: loc("画面共有サービスが待ち受けています。強固なパスワードまたはSSHトンネル経由での接続が推奨されます。"),
+                description: loc("画面共有サービスが待ち受けています。強固なパスワードを使うか、SSHトンネル経由で接続してください。"),
                 recommendation: loc("不要な場合はシステム設定から「画面共有」をオフにしてください。")
             )
         default:
@@ -384,7 +384,7 @@ final class PortSecurityAuditor {
                         title: loc("MIMEスニッフィング防止ヘッダー (X-Content-Type-Options) の欠落"),
                         riskLevel: .safe,
                         description: loc("X-Content-Type-Options: nosniff が設定されていません。"),
-                        recommendation: loc("レスポンスヘッダーに X-Content-Type-Options: nosniff を追加することを推奨します。")
+                        recommendation: loc("レスポンスヘッダーに X-Content-Type-Options: nosniff を追加してください。")
                     ))
                 }
             }

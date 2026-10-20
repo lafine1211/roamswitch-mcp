@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.9 (build 171).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.10 (build 172).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -25,12 +25,25 @@ final class QuarantineManager {
     /// Where ClamAV moves infected files to instead of leaving them in
     /// place. Kept under Application Support (not /tmp) so it survives
     /// reboots and isn't swept by any cleanup tooling.
-    var quarantineDirectory: String {
-        let dir = FileManager.default
+    var quarantineDirectory: String { quarantineDirectoryURL.path }
+
+    /// Tests point this at a throwaway folder; the app uses the default under Application Support.
+    private let directoryOverride: URL?
+
+    init(directory: URL? = nil) { directoryOverride = directory }
+
+    private var quarantineDirectoryURL: URL {
+        directoryOverride ?? FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
             .appendingPathComponent("RoamSwitch/Quarantine", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir.path
+    }
+
+    /// Reading the vault (MCP `get_quarantine_status`, the menu count) must not create it, so the folder is
+    /// made only where a file or the metadata is written.
+    @discardableResult
+    private func ensureQuarantineDirectory() -> String {
+        try? FileManager.default.createDirectory(at: quarantineDirectoryURL, withIntermediateDirectories: true)
+        return quarantineDirectory
     }
 
     /// Sidecar metadata file recording where each quarantined file came
@@ -85,7 +98,7 @@ final class QuarantineManager {
     func recordQuarantinedFiles(fromFoundLines lines: [String]) -> Set<String> {
         var entries = loadMetadata()
         let fileManager = FileManager.default
-        let qDir = quarantineDirectory
+        let qDir = ensureQuarantineDirectory()
         var quarantinedPaths: Set<String> = []
 
         for line in lines {
@@ -226,6 +239,7 @@ final class QuarantineManager {
 
     private func saveMetadata(_ entries: [MetadataEntry]) {
         guard let data = try? JSONEncoder().encode(entries) else { return }
+        ensureQuarantineDirectory()
         try? data.write(to: URL(fileURLWithPath: metadataPath), options: .atomic)
     }
 

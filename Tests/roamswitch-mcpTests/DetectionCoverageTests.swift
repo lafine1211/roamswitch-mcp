@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.12.9 (build 171). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.12.10 (build 172). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -157,5 +157,94 @@ final class DetectionCoverageTests: XCTestCase {
         XCTAssertEqual(decoded.platform, "macos")
         // Nothing in this result is outside data, so there is no untrusted-data notice.
         XCTAssertEqual((result["content"] as? [[String: Any]])?.count, 1)
+    }
+}
+
+/// The same table as an ATT&CK Navigator layer (layer format 4.5).
+final class DetectionCoverageNavigatorLayerTests: XCTestCase {
+
+    private func payload() -> DetectionCoverage.Payload { DetectionCoverage.payload(guards: []) }
+
+    private func layer() throws -> [String: Any] {
+        let json = DetectionCoverage.navigatorLayerJSON(payload())
+        return try XCTUnwrap(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
+    }
+
+    func testTheLayerCarriesTheKeysTheNavigatorRequires() throws {
+        let l = try layer()
+        for key in ["name", "versions", "domain", "techniques"] {
+            XCTAssertNotNil(l[key], key)
+        }
+        XCTAssertEqual(l["domain"] as? String, "enterprise-attack")
+        let versions = try XCTUnwrap(l["versions"] as? [String: String])
+        XCTAssertEqual(versions["layer"], "4.5")
+        XCTAssertEqual(versions["attack"], DetectionCoverage.navigatorAttackVersion)
+        XCTAssertFalse((versions["navigator"] ?? "").isEmpty)
+        XCTAssertFalse((l["name"] as? String ?? "").isEmpty)
+    }
+
+    func testEveryAssessedTechniqueIsListedOnceAndNothingElse() throws {
+        let techniques = try XCTUnwrap(try layer()["techniques"] as? [[String: Any]])
+        let ids = techniques.compactMap { $0["techniqueID"] as? String }
+        XCTAssertEqual(ids, DetectionCoverage.entries.map(\.technique))
+        XCTAssertEqual(Set(ids).count, ids.count)
+        for id in ids {
+            XCTAssertNotNil(id.range(of: #"^T\d{4}(\.\d{3})?$"#, options: .regularExpression), id)
+        }
+    }
+
+    func testColoursFollowTheCoverage() throws {
+        let techniques = try XCTUnwrap(try layer()["techniques"] as? [[String: Any]])
+        func color(_ id: String) -> String? { techniques.first { $0["techniqueID"] as? String == id }?["color"] as? String }
+        // T1543.001 detects, T1562.001 partial, T1055 none.
+        XCTAssertEqual(color("T1543.001"), "#3fb950")
+        XCTAssertEqual(color("T1562.001"), "#e3b341")
+        XCTAssertEqual(color("T1055"), "#f85149")
+        for t in techniques {
+            let coverage = DetectionCoverage.entries.first { $0.technique == t["techniqueID"] as? String }?.coverage
+            let expected: Int = coverage == .detects ? 2 : (coverage == .partial ? 1 : 0)
+            XCTAssertEqual(t["score"] as? Int, expected, t["techniqueID"] as? String ?? "")
+        }
+    }
+
+    func testEveryCommentCarriesTheBlindSpot() throws {
+        let techniques = try XCTUnwrap(try layer()["techniques"] as? [[String: Any]])
+        for entry in DetectionCoverage.entries {
+            let t = try XCTUnwrap(techniques.first { $0["techniqueID"] as? String == entry.technique })
+            XCTAssertTrue((t["comment"] as? String ?? "").contains(entry.blindSpot), entry.technique)
+        }
+    }
+
+    func testTheDescriptionSaysItIsASelfAssessment() throws {
+        let description = try XCTUnwrap(try layer()["description"] as? String)
+        XCTAssertTrue(description.contains("not a third-party test"))
+        XCTAssertTrue(description.contains("not assessed"))
+    }
+
+    func testTheOutputIsStable() {
+        XCTAssertEqual(DetectionCoverage.navigatorLayerJSON(payload()), DetectionCoverage.navigatorLayerJSON(payload()))
+    }
+
+    func testTheToolReturnsTheLayerOnlyWhenAsked() throws {
+        func call(_ arguments: [String: Any]) throws -> String {
+            let responses = MCPServer.handleMessage(["jsonrpc": "2.0", "id": 9, "method": "tools/call",
+                                                     "params": ["name": "get_detection_coverage", "arguments": arguments]])
+            let result = try XCTUnwrap(responses.first?["result"] as? [String: Any])
+            XCTAssertEqual(result["isError"] as? Bool, false)
+            return try XCTUnwrap(((result["content"] as? [[String: Any]])?.first?["text"]) as? String)
+        }
+        let layerText = try call(["format": "navigator"])
+        let layer = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(layerText.utf8)) as? [String: Any])
+        XCTAssertEqual(layer["domain"] as? String, "enterprise-attack")
+        // Default and unknown values keep the existing payload.
+        for arguments: [String: Any] in [[:], ["format": "json"], ["format": "xml"]] {
+            let decoded = try JSONDecoder().decode(DetectionCoverage.Payload.self, from: Data(try call(arguments).utf8))
+            XCTAssertEqual(decoded.platform, "macos")
+        }
+        let tools = MCPServer.toolDefinitionsForTesting()
+        let tool = try XCTUnwrap(tools.first { $0["name"] as? String == "get_detection_coverage" })
+        let schema = try XCTUnwrap(tool["inputSchema"] as? [String: Any])
+        let format = try XCTUnwrap((schema["properties"] as? [String: Any])?["format"] as? [String: Any])
+        XCTAssertEqual(format["enum"] as? [String], ["json", "navigator"])
     }
 }

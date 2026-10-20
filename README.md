@@ -5,7 +5,7 @@
 [![CI](https://github.com/lafine1211/roamswitch-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/lafine1211/roamswitch-mcp/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-The **read-only [MCP](https://modelcontextprotocol.io) server and the detection logic** behind
+The **[MCP](https://modelcontextprotocol.io) server and the detection logic** behind
 [RoamSwitch](https://roamswitch.com) — a macOS menu-bar app that automatically defends your Mac's
 network boundary — published so you can read exactly what it computes and what it exposes to an
 AI client.
@@ -24,11 +24,12 @@ block traffic, no license or payment code, no UI. Just the code that *observes* 
 | ARP spoofing detection | `ARPSpoofMonitor.swift` |
 | Listening-port enumeration & audit | `ListeningPortMonitor.swift`, `PortSecurityAuditor.swift`, `ServiceSignatures.swift` |
 | Wi-Fi encryption check | `WiFiSecurityMonitor.swift` |
-| 18-point macOS security posture | `SecurityHealthChecker.swift` |
+| 21-point macOS security posture | `SecurityHealthChecker.swift`, `BackupRecency.swift`, `ProxyAutoDiscoveryCheck.swift`, `AgentCredentialFileCheck.swift` |
 | Phishing / homograph / URL safety (offline) | `LinkSafetyAuditor.swift` |
 | Secret / API-key leak scanning (offline) | `SecretLeakScanning.swift` |
 | Unified-log security audit + log-template anomalies | `SecurityLogAuditor.swift`, `LogTemplateAnalyzer.swift` |
 | Active vulnerability verification (`127.0.0.1` only, opt-in) | `ActiveVulnScan.swift`, `ActiveVulnCveMapData.swift` |
+| Dependency source check, EPSS ranking, accepted-risk records | `DependencySourceScan.swift`, `PackageCveEpss.swift`, `VulnerabilityAcceptance.swift` |
 | Local, network-free CVE matching (Homebrew + lockfiles) | `PackageCveScan.swift`, `PackageCveMapData.swift`, `PackageCveScanLanguages.swift`, `PackageCveMapLanguagesData.swift` |
 | Guard state readers (quarantine, canary, port anomaly, runtime threat, notifications, containment timeline, network history) | `QuarantineManager.swift`, `CanaryStatusReader.swift`, `PortAnomalyStatusReader.swift`, `RuntimeThreatStatusReader.swift`, `NotificationHistory.swift`, `ContainmentIncidentTimeline.swift`, `NetworkHistoryGuard.swift` |
 | Bundled knowledge base (`get_app_help`) | `RoamSwitchKnowledgeBase.swift` |
@@ -37,8 +38,12 @@ block traffic, no license or payment code, no UI. Just the code that *observes* 
 
 ## Tools exposed (`tools/list`)
 
-34 tools (the length of `toolDefinitions` in `MCPServer.swift`, which is what `tools/list` returns).
-Every one is read-only. `get_exposed_ports` and the opt-in `run_active_vuln_scan` are pinned to
+35 tools (the length of `toolDefinitions` in `MCPServer.swift`, which is what `tools/list` returns).
+Every one only reads, except three that also write local state, so their MCP `readOnlyHint` is
+`false`: `run_active_vuln_scan` (appends one row per probe to its scan-history file),
+`audit_security_logs` (saves the log-template baseline and records new patterns in the notification
+history) and `run_npm_audit_signatures` (npm writes its own cache and log files). None of the three
+changes or deletes anything the user owns. `get_exposed_ports` and the opt-in `run_active_vuln_scan` are pinned to
 `127.0.0.1`; the one tool that contacts an external host is the opt-in, Pro-only
 `run_npm_audit_signatures`, which runs `npm audit signatures` against the npm registry. The
 diagnostic tools (`get_security_report`, `verify_security_findings`, `get_exposed_ports`,
@@ -47,7 +52,7 @@ address.
 
 ### Posture & network
 
-- `get_security_report` — the full 18-point macOS posture audit (FileVault, SIP, Gatekeeper,
+- `get_security_report` — the full 21-point macOS posture audit (FileVault, SIP, Gatekeeper,
   auto-update, XProtect, firewall, stealth mode, Wi-Fi encryption, ARP spoofing, gateway ARP
   pinning, SSH, sudo `NOPASSWD`, exposed ports, download/DNS/link protection, USB &
   accessory guards), scored with per-item advice. An item that could not be measured reliably
@@ -115,7 +120,9 @@ address.
 ### Vulnerability & CVE
 
 - `run_active_vuln_scan` — **the only tool that sends verification probes.** Non-destructive,
-  read-only, `127.0.0.1`-only, one short-timeout request per check, never another host:
+  `127.0.0.1`-only, one short-timeout request per check, never another host. A probe can leave a
+  trace in the probed service's own log, and every probe is appended to the local scan history, so
+  this tool is not marked read-only. It checks:
   unauthenticated-by-default services already detected here (Redis/Memcached/MongoDB) verified
   with a protocol-appropriate probe; CORS misconfiguration / path traversal / open redirect
   against detected dev-server ports; and version-range-only known-CVE matching (never an
@@ -133,6 +140,10 @@ address.
 - `run_typosquat_scan` — dependency names in `package.json` within edit distance 1-2 of a
   well-known npm package (`expres`, `loadash`, …). Reference-only heuristic against a static
   list; some hits are false positives. No network. Pro.
+- `run_dependency_source_scan` — static check of where dependencies come from: pip
+  `extra-index-url` lines and npm scopes fetched from a registry that no `.npmrc` pins to that scope
+  (the settings that make dependency confusion possible). It does not ask a registry whether a name
+  is free to claim. No network, executes nothing. Pro.
 - `run_npm_audit_signatures` — runs `npm audit signatures` to verify installed packages'
   registry signatures and provenance and returns npm's output verbatim. **Contacts the npm
   registry.** Pro, and off by default until the toggle in the Package CVE Scan window is on.
@@ -267,7 +278,8 @@ system state directly.
 
 ## Security properties
 
-- **Read-only.** No API mutates anything.
+- **Changes nothing you own.** No API changes or deletes settings or files. Three tools write local
+  state only (scan history, log baseline, npm's own cache), which is why they are not marked read-only.
 - **No socket.** Reads one line from stdin, writes one line to stdout, exits when the client
   closes the pipe.
 - **No telemetry, no outbound traffic to external hosts** — except the opt-in, Pro-only

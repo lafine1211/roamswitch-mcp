@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.9 (build 171).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.10 (build 172).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -100,11 +100,25 @@ enum DetectionCoverage {
         Entry(technique: "T1059.002", name: "Command and Scripting Interpreter: AppleScript", coverage: .partial,
               sources: [guardSource("execRecorder"), rule("exec.osascript_obfuscated")],
               blindSpot: "Only an inline osascript -e that combines shell execution with base64 or eval is flagged. Ordinary AppleScript is not."),
-        // T1059.004. Shared/ExecCorrelationRules.swift rules 1 and 3: a shell or interpreter started by a
-        // browser, Office or mail app; a download piped into a shell together with an aggravating fact.
+        // T1059.004. Shared/ExecCorrelationRules.swift rules 1, 3 and 14: a shell or interpreter started by a
+        // browser, Office or mail app; a download piped into a shell together with an aggravating fact; a
+        // reverse or bind shell command line (reverseShellShape). RoamSwitch/ReverseShellScan.swift and
+        // ReverseShellWatchGuard.swift: a live poll (libproc, every 4 seconds) of the user's own shells,
+        // interpreters and nc/ncat/socat for an outward public TCP connection that is their input and output.
         Entry(technique: "T1059.004", name: "Command and Scripting Interpreter: Unix Shell", coverage: .partial,
-              sources: [guardSource("execRecorder"), rule("exec.shell_from_app"), rule("exec.pipe_to_shell")],
-              blindSpot: "Flags a shell started by a browser, Office or mail app, and a download piped into a shell only together with an aggravating fact. A plain curl | sh typed in a terminal looks like an official installer and is not flagged on its own."),
+              sources: [guardSource("reverseShellWatch"), guardSource("execRecorder"), rule("exec.shell_from_app"), rule("exec.pipe_to_shell"), rule("exec.reverse_shell_argv")],
+              blindSpot: "Flags a shell started by a browser, Office or mail app, and a download piped into a shell only together with an aggravating fact. A plain curl | sh typed in a terminal looks like an official installer and is not flagged on its own. The exec recorder (opt-in) flags a reverse or bind shell only when it is spelled out on a sh -c command line or an nc, ncat or socat command line. The reverse-shell watch (Pro, on by default) sees a live one: a shell or interpreter, or nc, ncat or socat running a program, whose input and output are an established outward TCP connection to a public address, found on a poll every few seconds and notified once the second poll agrees. It reads the logged-in user's own processes only, so a root-owned shell is not seen. A peer on a private network (home LAN, Tailscale, containers) or loopback is not watched, and neither is a program that is not one of the listed shells, interpreters or relay tools. A shell written into a script file or compiled into a program is not seen until it connects."),
+        // T1557.003. RoamSwitch/NetworkSettingsWatch.swift and NetworkSettingsWatchGuard.swift (system configuration
+        // store: DNS servers, router, proxy auto-config compared with what the same network gave before) and
+        // ProxyAutoDiscoveryCheck.swift (audit check proxy_autodiscovery: Auto Proxy Discovery / PAC in force).
+        Entry(technique: "T1557.003", name: "Adversary-in-the-Middle: DHCP Spoofing", coverage: .partial,
+              sources: [guardSource("networkSettingsWatch"), check("proxy_autodiscovery")],
+              blindSpot: "A rogue DHCP server cannot be seen directly; only its result is. A new DNS server, or a new router together with one, on a network that RoamSwitch has seen before is notified, as is a new proxy auto-config (PAC) address or Auto Proxy Discovery (WPAD) switched on. The first time a network is seen it is only learned. A rogue server that hands out the same DNS and router as before, or a well-known public resolver, is not noticed, and neither is a change on a VPN or other tunnel. A DNS-over-HTTPS profile and addresses set by hand or by RoamSwitch's own secure DNS are not compared. The audit check reports Auto Proxy Discovery or a network-supplied PAC address being on, and does not read the PAC file."),
+        // T1557.001. mDNSResponder carries no LLMNR code (searched), so macOS has no LLMNR to poison. NetBIOS name
+        // service is another matter: /usr/sbin/netbiosd ships with macOS and runs as a LaunchDaemon.
+        Entry(technique: "T1557.001", name: "Adversary-in-the-Middle: LLMNR/NBT-NS Poisoning and SMB Relay", coverage: .none,
+              sources: [],
+              blindSpot: "Not looked for. macOS has no LLMNR client or responder to poison. The NetBIOS name service is present (netbiosd, a system LaunchDaemon) and RoamSwitch does not watch NBNS replies or the SMB name lookups that use them, so poisoning of NetBIOS name resolution is not detected. mDNS (Bonjour) is on by design and is not treated as a finding."),
         // T1543.001 / T1543.004. RoamSwitch/PersistenceMonitorGuard.swift (FSEvents on LaunchAgent and
         // LaunchDaemon plists; flags a bare interpreter or an unsigned program) and Shared/ExecCorrelationRules.swift
         // rule 6 (an unsigned or ad-hoc binary started by launchd from a just-written plist).
@@ -114,9 +128,14 @@ enum DetectionCoverage {
         Entry(technique: "T1543.004", name: "Create or Modify System Process: Launch Daemon", coverage: .detects,
               sources: [guardSource("persistenceMonitor"), guardSource("execRecorder"), rule("exec.launchd_untrusted_binary")],
               blindSpot: "A new plist is noticed within seconds, but it cannot be blocked (there is no EndpointSecurity authorization hook), and a validly signed program passes the signature check."),
+        // T1546.004. RoamSwitch/StartupScriptWatch.swift (polled every 5 seconds, run by the persistence monitor):
+        // zsh, bash and fish start-up files in the home folder and /etc.
+        Entry(technique: "T1546.004", name: "Event Triggered Execution: Unix Shell Configuration Modification", coverage: .partial,
+              sources: [guardSource("persistenceMonitor")],
+              blindSpot: "Only a new line shaped like a reverse shell, decode-and-run, download-and-run or a program run from a temporary folder is notified. A suspicious line that was already in the file when the watch started is not reported again, and the start-up files of other shells such as csh and tcsh are not watched."),
         Entry(technique: "T1547.015", name: "Boot or Logon Autostart Execution: Login Items", coverage: .none,
               sources: [],
-              blindSpot: "Login items are not monitored; the persistence monitor watches LaunchAgent and LaunchDaemon plists only."),
+              blindSpot: "Login items are not monitored; the persistence monitor watches LaunchAgent and LaunchDaemon plists and a few text files (shell start-up files, periodic scripts, hooks), not the Login Items list."),
         // T1555.001. Shared/ExecCorrelationRules.swift rule 7: the security command reading a secret, run by a
         // non-Apple ancestor that is not a trusted reader.
         Entry(technique: "T1555.001", name: "Credentials from Password Stores: Keychain", coverage: .partial,
@@ -128,20 +147,21 @@ enum DetectionCoverage {
               sources: [guardSource("browserCredentialWatchGuard")],
               blindSpot: "Opt-in and notify-only. macOS gives no reliable view of which process opened the file, so the reader is identified on a best-effort basis and the guard can be noisy or miss a short access."),
         // T1552.001. RoamSwitch/CredentialHoneytokenGuard.swift and Shared/ExecCorrelationRules.swift
-        // honeytokenPath: decoy credential files only.
+        // honeytokenPath: decoy credential files only. RoamSwitch/AgentCredentialFileCheck.swift (audit check
+        // agent_credential_files): permissions and location of the AI coding tools' sign-in files, metadata only.
         Entry(technique: "T1552.001", name: "Unsecured Credentials: Credentials In Files", coverage: .partial,
-              sources: [guardSource("credentialHoneytokenGuard"), guardSource("execRecorder"), rule("exec.honeytoken_path")],
-              blindSpot: "Only RoamSwitch's own decoy files are watched. Reading a real credential file is not detected."),
+              sources: [guardSource("credentialHoneytokenGuard"), guardSource("execRecorder"), rule("exec.honeytoken_path"), check("agent_credential_files")],
+              blindSpot: "Only RoamSwitch's own decoy files are watched. Reading a real credential file is not detected: without Endpoint Security a Mac cannot see which process opened a file, and no decoy is placed at the paths real tools read on every start (it would fire constantly). The audit check looks at the permissions and location (a cloud-synced folder, a git work tree) of the sign-in files of Claude Code, Codex, Gemini CLI, GitHub Copilot and opencode, by metadata only, in their default locations. Claude Code keeps its sign-in in the Keychain on a Mac, so its file is checked only when it exists."),
         // T1490. Shared/ExecCorrelationRules.swift ransomwareRecoveryTampering: tmutil deletelocalsnapshots or
         // thinlocalsnapshots run by anything other than RoamSwitch or the OS.
         Entry(technique: "T1490", name: "Inhibit System Recovery", coverage: .partial,
               sources: [guardSource("execRecorder"), rule("exec.ransomware_recovery_tampering")],
               blindSpot: "Covers tmutil deleting or thinning local snapshots. Other ways to destroy recovery points are not watched."),
         // T1548.003. SecurityHealthChecker.swift sudo_hygiene (NOPASSWD audit); RoamSwitchHelper/HelperTool.swift
-        // criticalPathFimTargets (/etc/sudoers, /etc/sudoers.d, /etc/pam.d/sudo hashed).
+        // criticalPathFimTargets and CriticalPathFimTargets.expand (/etc/sudoers, every file in /etc/sudoers.d and /etc/pam.d hashed).
         Entry(technique: "T1548.003", name: "Abuse Elevation Control Mechanism: Sudo and Sudo Caching", coverage: .partial,
               sources: [check("sudo_hygiene"), guardSource("criticalPathFim")],
-              blindSpot: "Detects NOPASSWD entries and changes to the sudoers and sudo PAM files. Abuse of an already open sudo session is not seen."),
+              blindSpot: "Detects NOPASSWD entries, and changes, additions and deletions of /etc/sudoers, the files under /etc/sudoers.d, and the PAM files under /etc/pam.d. Abuse of an already open sudo session is not seen."),
         // T1098.004. RoamSwitchHelper/HelperTool.swift criticalPathFimTargets: root's authorized_keys and
         // sshd_config (plus sshd_config.d) are hashed.
         Entry(technique: "T1098.004", name: "Account Manipulation: SSH Authorized Keys", coverage: .partial,
@@ -236,5 +256,73 @@ enum DetectionCoverage {
                 loc("liveState は、設定のトグルに、入力を読む仕組みの状態(読めていない、直近24時間の取りこぼし)を加えて判定します。Pro版の有効化、ヘルパーの接続、権限の許可そのものは確認していません。"),
             ]
         )
+    }
+
+    // MARK: ATT&CK Navigator layer
+    //
+    // The same table as an ATT&CK Navigator layer (layer format 4.5), for people who look at coverage in the
+    // Navigator. Only techniques RoamSwitch assessed are listed; a technique that is not listed was not
+    // assessed, and the Navigator shows it uncoloured. The colours say what RoamSwitch wrote about itself.
+
+    /// The ATT&CK version written to the layer's `versions.attack`. The upstream skill catalog this work was
+    /// compared with says v19.1; that was not checked against MITRE's release notes. The technique ids used here
+    /// have existed since well before v19, so a different version in the Navigator does not move them.
+    static let navigatorAttackVersion = "19"
+    static let navigatorVersion = "5.1.0"
+    static let navigatorLayerVersion = "4.5"
+
+    /// Green = detects, yellow = partial, red = none. Fixed so two exports can be compared.
+    private static let layerColors: [String: String] = ["detects": "#3fb950", "partial": "#e3b341", "none": "#f85149"]
+    private static let layerScores: [String: Int] = ["detects": 2, "partial": 1, "none": 0]
+
+    /// The layer as a JSON-ready dictionary (`JSONSerialization` with sorted keys makes it stable).
+    static func navigatorLayer(_ payload: Payload) -> [String: Any] {
+        let techniques: [[String: Any]] = payload.techniques.map { t in
+            let by = t.coveredBy.isEmpty ? "nothing" : t.coveredBy.joined(separator: ", ")
+            return [
+                "techniqueID": t.id,
+                "color": layerColors[t.coverage] ?? layerColors["none"]!,
+                "score": layerScores[t.coverage] ?? 0,
+                "comment": "\(t.coverage). Blind spot: \(t.blindSpot) Covered by: \(by). Live state: \(t.liveState).",
+                "enabled": true,
+                "showSubtechniques": false,
+                "metadata": [] as [[String: String]],
+                "links": [] as [[String: String]],
+            ]
+        }
+        return [
+            "name": "RoamSwitch detection coverage (\(payload.platform))",
+            "versions": ["attack": navigatorAttackVersion, "navigator": navigatorVersion, "layer": navigatorLayerVersion],
+            "domain": "enterprise-attack",
+            "description": "What RoamSwitch can and cannot see, for the techniques it assessed. This is RoamSwitch's own assessment, checked against its code, not a third-party test. Red (none) means no detection exists, not that no attack happened; green (detects) means a rule exists for the technique's main form, not every variant. A technique that is not listed was not assessed.",
+            "filters": ["platforms": ["macOS"]],
+            "sorting": 0,
+            "layout": ["layout": "side", "aggregateFunction": "average", "showID": true, "showName": true,
+                       "showAggregateScores": false, "countUnscored": false, "expandedSubtechniques": "all"],
+            "hideDisabled": false,
+            "techniques": techniques,
+            "gradient": ["colors": [layerColors["none"]!, layerColors["partial"]!, layerColors["detects"]!], "minValue": 0, "maxValue": 2],
+            "legendItems": [
+                ["label": "detects: a rule exists for the main form", "color": layerColors["detects"]!],
+                ["label": "partial: a named part is covered", "color": layerColors["partial"]!],
+                ["label": "none: nothing looks for it", "color": layerColors["none"]!],
+            ],
+            "metadata": [
+                ["name": "generator", "value": "RoamSwitch get_detection_coverage"],
+                ["name": "platform", "value": payload.platform],
+                ["name": "summary", "value": "detects \(payload.summary.detects), partial \(payload.summary.partial), none \(payload.summary.none) of \(payload.summary.total)"],
+            ],
+            "links": [] as [[String: String]],
+            "showTacticRowBackground": false,
+            "tacticRowBackground": "#dddddd",
+            "selectTechniquesAcrossTactics": true,
+            "selectSubtechniquesWithParent": false,
+            "selectVisibleTechniques": false,
+        ]
+    }
+
+    static func navigatorLayerJSON(_ payload: Payload) -> String {
+        let data = (try? JSONSerialization.data(withJSONObject: navigatorLayer(payload), options: [.sortedKeys, .prettyPrinted])) ?? Data("{}".utf8)
+        return String(decoding: data, as: UTF8.self)
     }
 }

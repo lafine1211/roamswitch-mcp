@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.9 (build 171).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.10 (build 172).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -32,6 +32,12 @@ import Foundation
 /// detection: once a person accepts the current state (`AgentSetupBaseline`), later runs report
 /// files and MCP server definitions whose content changed, and ones that are new.
 ///
+/// Three more kinds of input are read besides the instruction files. Agent memory (the notes an agent
+/// keeps between sessions) goes through the same text rules, but is not part of change detection, since
+/// an agent rewrites it all the time. `.vscode/tasks.json` of a registered project is checked for a task
+/// that runs when the folder is opened. `.github/workflows/*.yml` of a registered project is checked for
+/// three well-known mistakes (see `auditWorkflowFile`).
+///
 /// Every rule here is deterministic; none of it decides that something is malicious. A match
 /// means "a human should look at this line", and the messages say so. The rules were written from
 /// the public OpenClaw documentation (docs.openclaw.ai, gateway security pages) and from how these
@@ -43,7 +49,8 @@ enum AgentSetupAuditor {
         let id: String
         /// `high` or `medium`.
         let severity: String
-        /// `instructions`, `openclaw` or `mcp` (an MCP server definition that changed).
+        /// `instructions`, `openclaw`, `mcp` (an MCP server definition that changed) or `project`
+        /// (an editor task or a CI workflow of a registered project).
         let area: String
         let file: String
         /// Short technical fact (rule, line number, URL host, key path), never a secret.
@@ -77,6 +84,23 @@ enum AgentSetupAuditor {
         var inSkill = false
         /// Hex SHA-256 of the whole file (nil for the pure `audit`, which has only the bytes it was given).
         var sha256: String?
+        /// Which rules read the file. Only `instruction` files are part of change detection.
+        var role: Role = .instruction
+        /// The file belongs to a registered project folder (and so can arrive with a repository), not to the home folder.
+        var inProject = false
+
+        enum Role: Equatable {
+            /// An instruction, command, agent, rule or skill file: text rules and change detection.
+            case instruction
+            /// A file of an agent's memory: the text rules, no change detection.
+            case memory
+            /// `.vscode/tasks.json`
+            case tasks
+            /// `.github/workflows/*.yml`
+            case workflow
+            /// Claude Code `settings.json` / `settings.local.json`: permissions, hooks, sandbox.
+            case settings
+        }
     }
 
     static let findingIDs = [
@@ -88,6 +112,9 @@ enum AgentSetupAuditor {
         "openclaw_auth_disabled", "openclaw_wide_bind", "openclaw_weak_token", "openclaw_origin_wildcard",
         "openclaw_dangerous_flag", "openclaw_broad_trusted_proxy", "openclaw_proxy_trust_loosened",
         "openclaw_open_dm", "openclaw_mdns_full", "openclaw_audit_suppressed", "openclaw_loose_permissions",
+        "editor_auto_run_task", "workflow_pwn_request", "workflow_expression_injection", "workflow_unpinned_action",
+        "agent_settings_hook", "agent_settings_bypass", "agent_settings_broad_allow", "agent_settings_endpoint_override",
+        "agent_settings_weakened",
     ]
 
     static let maxTextBytes = 512 * 1024
@@ -138,6 +165,44 @@ enum AgentSetupAuditor {
         [".claude/skills", ".agents/skills", "skills"].map { "\(folder)/\($0)" }
     }
 
+    /// Folders of an agent's own notes: Claude Code's per-project memory (`~/.claude/projects/<project>/memory`)
+    /// and subagent memory, Codex, Windsurf and OpenClaw memory.
+    static func homeMemoryFolders(home: String) -> [String] {
+        var folders = ["\(home)/.claude/agent-memory", "\(home)/.codex/memories", "\(home)/.codeium/windsurf/memories",
+                       "\(home)/.openclaw/workspace/memory"]
+        let projects = "\(home)/.claude/projects"
+        if let names = try? FileManager.default.contentsOfDirectory(atPath: projects) {
+            folders += names.sorted().filter { !$0.hasPrefix(".") }.map { "\(projects)/\($0)/memory" }
+        }
+        return folders
+    }
+
+    static func homeMemoryFiles(home: String) -> [String] {
+        ["\(home)/.openclaw/workspace/MEMORY.md"]
+    }
+
+    static func projectMemoryFolders(folder: String) -> [String] {
+        [".claude/agent-memory", ".claude/agent-memory-local"].map { "\(folder)/\($0)" }
+    }
+
+    static func projectTasksFile(folder: String) -> String { "\(folder)/.vscode/tasks.json" }
+
+    /// Claude Code settings: the user's own, and the ones a repository can carry.
+    static func homeSettingsFiles(home: String) -> [String] {
+        ["\(home)/.claude/settings.json", "\(home)/.claude/settings.local.json"]
+    }
+
+    static func projectSettingsFiles(folder: String) -> [String] {
+        [".claude/settings.json", ".claude/settings.local.json"].map { "\(folder)/\($0)" }
+    }
+
+    static func projectWorkflowFolder(folder: String) -> String { "\(folder)/.github/workflows" }
+
+    static func isWorkflowFile(_ path: String) -> Bool {
+        let ext = (path as NSString).pathExtension.lowercased()
+        return (ext == "yml" || ext == "yaml") && !(path as NSString).lastPathComponent.hasPrefix(".")
+    }
+
     static func openClawConfigPath(home: String, environment: [String: String] = ProcessInfo.processInfo.environment) -> String {
         if let custom = environment["OPENCLAW_CONFIG_PATH"], custom.hasPrefix("/") { return custom }
         return "\(home)/.openclaw/openclaw.json"
@@ -151,9 +216,10 @@ enum AgentSetupAuditor {
         var inputs: [FileInput] = []
         var unreadable: [String] = []
         var skillCount = 0
+        var seenPaths = Set<String>()
 
-        func read(_ path: String, inSkill: Bool) {
-            guard inputs.count < maxFiles else { return }
+        func read(_ path: String, inSkill: Bool, role: FileInput.Role = .instruction, inProject: Bool = false) {
+            guard inputs.count < maxFiles, seenPaths.insert(path).inserted else { return }
             guard let attrs = try? fm.attributesOfItem(atPath: path) else { return }
             let type = attrs[.type] as? FileAttributeType
             guard type == .typeRegular || type == .typeSymbolicLink else { return }
@@ -166,7 +232,7 @@ enum AgentSetupAuditor {
             if size > maxTextBytes, !inSkill { unreadable.append(path); return }
             // The digest covers the whole file, also when only its first bytes were read above.
             let digest = size > maxTextBytes ? AgentSetupBaseline.sha256Hex(ofFileAt: path) : AgentSetupBaseline.sha256Hex(data)
-            inputs.append(FileInput(path: path, data: data, mode: mode, inSkill: inSkill, sha256: digest))
+            inputs.append(FileInput(path: path, data: data, mode: mode, inSkill: inSkill, sha256: digest, role: role, inProject: inProject))
         }
 
         func files(in folder: String, maxDepth: Int) -> [String] {
@@ -208,6 +274,26 @@ enum AgentSetupAuditor {
             }
         }
 
+        // Agent memory (text rules, no change detection), then the editor tasks and CI workflows of the projects.
+        var memoryFolders = homeMemoryFolders(home: home)
+        for folder in folders { memoryFolders += projectMemoryFolders(folder: folder) }
+        for path in homeMemoryFiles(home: home) { read(path, inSkill: false, role: .memory) }
+        for folder in memoryFolders {
+            for path in files(in: folder, maxDepth: 4) where isInstructionText(path) { read(path, inSkill: false, role: .memory) }
+        }
+        for folder in folders {
+            read(projectTasksFile(folder: folder), inSkill: false, role: .tasks)
+            let workflows = projectWorkflowFolder(folder: folder)
+            for name in ((try? fm.contentsOfDirectory(atPath: workflows)) ?? []).sorted() where isWorkflowFile(name) {
+                read("\(workflows)/\(name)", inSkill: false, role: .workflow)
+            }
+        }
+
+        // Claude Code settings: permissions, hooks and the sandbox switch.
+        let settingsCandidates = homeSettingsFiles(home: home) + folders.flatMap { projectSettingsFiles(folder: $0) }
+        for path in homeSettingsFiles(home: home) { read(path, inSkill: false, role: .settings) }
+        for folder in folders { for path in projectSettingsFiles(folder: folder) { read(path, inSkill: false, role: .settings, inProject: true) } }
+
         // OpenClaw configuration and state directory.
         var openClaw: FileInput?
         let configPath = openClawConfigPath(home: home)
@@ -234,10 +320,19 @@ enum AgentSetupAuditor {
         // Change detection: what is there now, and how it differs from the state a person accepted.
         var snapshot = AgentSetupBaseline.Snapshot()
         snapshot.scopes = [home] + folders
-        for input in inputs + (openClaw.map { [$0] } ?? []) {
+        for input in inputs.filter({ $0.role == .instruction }) + (openClaw.map { [$0] } ?? []) {
             if let digest = input.sha256 { snapshot.files[input.path] = AgentSetupBaseline.Entry(sha256: digest, fields: nil) }
         }
         snapshot.servers = MCPConfigAuditor.serverSnapshot(home: home, projectFolders: folders)
+        var settingsSnapshot: [String: AgentSetupBaseline.SettingsEntry] = [:]
+        for path in settingsCandidates {
+            if let input = inputs.first(where: { $0.path == path && $0.role == .settings }) {
+                settingsSnapshot[path] = settingsFacts(input.data).map(settingsEntry) ?? AgentSetupBaseline.SettingsEntry(unreadable: true)
+            } else if fm.fileExists(atPath: path) {
+                settingsSnapshot[path] = AgentSetupBaseline.SettingsEntry(unreadable: true)
+            }
+        }
+        snapshot.settings = settingsSnapshot
         result.snapshot = snapshot
         if let store = AgentSetupBaseline.load(from: baselineURL) {
             result.baselineAcceptedAt = store.acceptedAt
@@ -282,6 +377,17 @@ enum AgentSetupAuditor {
                 out.append(Finding(id: "mcp_server_added", severity: "medium", area: "mcp", file: path,
                                    detail: "server \"\(sanitized(name, limit: 40))\" was not configured when the state was accepted on \(day)",
                                    message: message("mcp_server_added")))
+            case .settingsWeakened(let path, let reasons):
+                // A hook, a higher permission mode or a switched-off sandbox changes what runs without asking: high.
+                // Fewer deny rules or a wider allow rule is medium.
+                let severe = reasons.contains { reason in
+                    switch reason {
+                    case .hookAdded, .modeRaised, .sandboxDisabled, .dangerousPromptSkipped: return true
+                    case .denyRemoved, .broadAllowAdded: return false
+                    }
+                }
+                out.append(Finding(id: "agent_settings_weakened", severity: severe ? "high" : "medium", area: "settings", file: path,
+                                   detail: reasons.map(describe).joined(separator: "; ") + " since \(day)", message: message("agent_settings_weakened")))
             }
         }
         return out
@@ -301,7 +407,17 @@ enum AgentSetupAuditor {
         var result = Result()
         for file in files {
             result.scannedFiles.append(file.path)
-            result.findings += auditInstructionFile(file)
+            switch file.role {
+            case .instruction, .memory:
+                result.findings += auditInstructionFile(file)
+            case .tasks:
+                // A tasks file that cannot be parsed was not audited.
+                if let found = auditTasksFile(file) { result.findings += found } else { result.unreadableFiles.append(file.path) }
+            case .workflow:
+                result.findings += auditWorkflowFile(file)
+            case .settings:
+                if let found = auditSettingsFile(file) { result.findings += found } else { result.unreadableFiles.append(file.path) }
+            }
         }
         if let config = openClawConfig {
             if let found = auditOpenClawConfig(config) {
@@ -459,6 +575,309 @@ enum AgentSetupAuditor {
         for id in order {
             guard let (hit, count) = seen[id] else { continue }
             add(id, hit.severity, hit.detail + (count > 1 ? " (+\(count - 1) more)" : ""))
+        }
+        return findings
+    }
+
+    // MARK: - Editor tasks and CI workflows of a project
+
+    /// `.vscode/tasks.json` (JSON with comments and trailing commas). A task whose `runOptions.runOn` is
+    /// `folderOpen` starts by itself when the folder is opened in VS Code or a compatible editor, so an
+    /// untrusted project runs its command without a click. Medium; high when the command downloads and runs
+    /// a script or decodes text and runs it. The command is never copied into the result. nil: not parseable.
+    static func auditTasksFile(_ file: FileInput) -> [Finding]? {
+        guard let root = (try? JSONSerialization.jsonObject(with: file.data, options: [.json5Allowed])) as? [String: Any] else { return nil }
+        guard let tasks = root["tasks"] as? [Any] else { return [] }
+        var hits: [(severity: String, detail: String)] = []
+        for case let task as [String: Any] in tasks {
+            let runOptions = task["runOptions"] as? [String: Any]
+            guard (runOptions?["runOn"] as? String)?.lowercased() == "folderopen" else { continue }
+            // The command may also be given per platform (`osx`, `linux`, `windows`).
+            var commandText: [String] = []
+            for scope in [task] + ["osx", "linux", "windows"].compactMap({ task[$0] as? [String: Any] }) {
+                if let command = scope["command"] as? String { commandText.append(command) }
+                if let args = scope["args"] as? [Any] {
+                    commandText += args.map { ($0 as? String) ?? (($0 as? [String: Any])?["value"] as? String) ?? "" }
+                }
+            }
+            let lower = commandText.joined(separator: " ").lowercased()
+            let rule: String?
+            if matches(remoteExecPatterns, lower) { rule = "the command downloads and runs a script" }
+            else if matches(encodedExecPatterns, lower) { rule = "the command decodes text and runs it" }
+            else { rule = nil }
+            let label = sanitized((task["label"] as? String) ?? "unnamed", limit: 40)
+            hits.append((rule == nil ? "medium" : "high", "task \"\(label)\" runs when the folder is opened" + (rule.map { ", \($0)" } ?? "")))
+        }
+        guard let strongest = hits.first(where: { $0.severity == "high" }) ?? hits.first else { return [] }
+        return [Finding(id: "editor_auto_run_task", severity: strongest.severity, area: "project", file: file.path,
+                        detail: strongest.detail + (hits.count > 1 ? " (+\(hits.count - 1) more)" : ""), message: message("editor_auto_run_task"))]
+    }
+
+    // MARK: - Claude Code settings
+
+    /// What the audit reads out of a Claude Code settings file. Rule and command text stays here; only digests
+    /// (`settingsEntry`) and a few key names reach a result.
+    struct SettingsFacts {
+        var hooks: [(event: String, matcher: String, command: String)] = []
+        var allow: [String] = []
+        var deny: [String] = []
+        var defaultMode: String?
+        var dangerousPromptSkipped = false
+        var sandboxEnabled: Bool?
+        var baseURL: String?
+    }
+
+    /// nil when the file is not a JSON object. An empty file has no settings.
+    static func settingsFacts(_ data: Data) -> SettingsFacts? {
+        if data.allSatisfy({ $0 == 0x20 || $0 == 0x0A || $0 == 0x0D || $0 == 0x09 }) { return SettingsFacts() }
+        guard let root = (try? JSONSerialization.jsonObject(with: data, options: [.json5Allowed])) as? [String: Any] else { return nil }
+        var facts = SettingsFacts()
+        if let events = root["hooks"] as? [String: Any] {
+            for (event, value) in events.sorted(by: { $0.key < $1.key }) {
+                for case let group as [String: Any] in (value as? [Any]) ?? [] {
+                    let matcher = (group["matcher"] as? String) ?? ""
+                    // `{"matcher": …, "hooks": [{"type": "command", "command": …}]}`, or the command directly in the group.
+                    for case let hook as [String: Any] in (group["hooks"] as? [Any]) ?? [group] {
+                        if let command = hook["command"] as? String, !command.isEmpty { facts.hooks.append((event, matcher, command)) }
+                    }
+                }
+            }
+        }
+        if let permissions = root["permissions"] as? [String: Any] {
+            facts.allow = ((permissions["allow"] as? [Any]) ?? []).compactMap { $0 as? String }
+            facts.deny = ((permissions["deny"] as? [Any]) ?? []).compactMap { $0 as? String }
+            if let mode = permissions["defaultMode"] as? String { facts.defaultMode = mode }
+        }
+        if (root["skipDangerousModePermissionPrompt"] as? Bool) == true { facts.dangerousPromptSkipped = true }
+        if let sandbox = root["sandbox"] as? [String: Any] { facts.sandboxEnabled = sandbox["enabled"] as? Bool }
+        if let env = root["env"] as? [String: Any], let base = env["ANTHROPIC_BASE_URL"] as? String { facts.baseURL = base }
+        return facts
+    }
+
+    /// The digests the baseline keeps for a settings file.
+    static func settingsEntry(_ facts: SettingsFacts) -> AgentSetupBaseline.SettingsEntry {
+        func digest(_ text: String) -> String { AgentSetupBaseline.sha256Hex(Data(text.utf8)) }
+        var entry = AgentSetupBaseline.SettingsEntry()
+        entry.denyRules = Array(Set(facts.deny.map(digest))).sorted()
+        entry.broadAllow = Array(Set(facts.allow.filter { broadGrant($0) != nil }.map(digest))).sorted()
+        entry.hooks = Array(Set(facts.hooks.map { digest("\($0.event)\u{0}\($0.matcher)\u{0}\($0.command)") })).sorted()
+        if let mode = facts.defaultMode, AgentSetupBaseline.modeRank[mode] != nil { entry.defaultMode = mode }
+        entry.sandboxDisabled = facts.sandboxEnabled == false
+        entry.dangerousPromptSkipped = facts.dangerousPromptSkipped
+        return entry
+    }
+
+    static func describe(_ reason: AgentSetupBaseline.SettingsWeakening) -> String {
+        switch reason {
+        case .denyRemoved(let n): return "\(n) deny rule\(n == 1 ? "" : "s") removed"
+        case .broadAllowAdded(let n): return "\(n) allow rule\(n == 1 ? "" : "s") that let any command run added"
+        case .hookAdded(let n): return "\(n) hook command\(n == 1 ? "" : "s") added or changed"
+        case .modeRaised(let from, let to): return "permission mode \(from) -> \(to)"
+        case .sandboxDisabled: return "sandbox switched off"
+        case .dangerousPromptSkipped: return "the warning before bypassPermissions switched off"
+        }
+    }
+
+    /// `~/.claude/settings.json` and a project's `.claude/settings.json`. What it steers is what runs without asking:
+    /// a permission mode that skips every prompt (`agent_settings_bypass`), an allow rule that lets any command run
+    /// (`agent_settings_broad_allow`), hook commands that run on every tool call or session start
+    /// (`agent_settings_hook`: high when the command downloads and runs a script or decodes text and runs it, and
+    /// medium for any hook in a project file, since a repository can carry it) and an API endpoint set to another host
+    /// (`agent_settings_endpoint_override`; high in a project file, which can point the agent's key at a stranger).
+    /// A hook in the user's own file is not flagged by itself: the baseline reports it when it appears.
+    /// Rule and command text is never copied into the result. nil: not parseable.
+    static func auditSettingsFile(_ file: FileInput) -> [Finding]? {
+        guard let facts = settingsFacts(file.data) else { return nil }
+        var findings: [Finding] = []
+        func add(_ id: String, _ severity: String, _ detail: String) {
+            findings.append(Finding(id: id, severity: severity, area: "settings", file: file.path, detail: detail, message: message(id)))
+        }
+        if facts.defaultMode == "bypassPermissions" {
+            add("agent_settings_bypass", "high", "permissions.defaultMode is bypassPermissions")
+        } else if facts.dangerousPromptSkipped {
+            add("agent_settings_bypass", "high", "skipDangerousModePermissionPrompt is true")
+        }
+        let broad = facts.allow.compactMap(broadGrant)
+        if !broad.isEmpty {
+            let shown = broad.prefix(3).map { sanitized($0, limit: 40) }.joined(separator: ", ")
+            add("agent_settings_broad_allow", "medium", "permissions.allow lets any command run: \(shown)" + (broad.count > 3 ? " (+\(broad.count - 3) more)" : ""))
+        }
+        if !facts.hooks.isEmpty {
+            var risky: (event: String, rule: String)?
+            for hook in facts.hooks {
+                let lower = hook.command.lowercased()
+                if matches(remoteExecPatterns, lower) { risky = (hook.event, "downloads and runs a script"); break }
+                if matches(encodedExecPatterns, lower) { risky = (hook.event, "decodes text and runs it"); break }
+            }
+            if let risky {
+                add("agent_settings_hook", "high", "\(sanitized(risky.event, limit: 30)) hook \(risky.rule)" + (facts.hooks.count > 1 ? " (\(facts.hooks.count) hook commands in the file)" : ""))
+            } else if file.inProject {
+                add("agent_settings_hook", "medium", "\(facts.hooks.count) hook command\(facts.hooks.count == 1 ? "" : "s") in a project file, run on Claude Code events")
+            }
+        }
+        if let base = facts.baseURL, let host = URL(string: base)?.host?.lowercased(), host != "api.anthropic.com" {
+            add("agent_settings_endpoint_override", file.inProject ? "high" : "medium", "env.ANTHROPIC_BASE_URL points to \(sanitized(host, limit: 60))")
+        }
+        return findings
+    }
+
+    /// Workflow triggers that run with the repository's secrets or write access on input a stranger wrote.
+    static let privilegedWorkflowTriggers: Set<String> = [
+        "pull_request_target", "issue_comment", "issues", "workflow_run", "discussion", "discussion_comment",
+        "pull_request_review", "pull_request_review_comment",
+    ]
+
+    private static let onKeyPattern = regex(#"^["']?(on|true)["']?\s*:\s*(.*)$"#)
+    private static let scriptKeyPattern = regex(#"^(\s*)(-\s+)?(run|script)\s*:\s*(.*)$"#)
+    private static let refKeyPattern = regex(#"^\s*(?:-\s+)?ref\s*:\s*(.+)$"#)
+    private static let usesKeyPattern = regex(#"^\s*(?:-\s+)?uses\s*:\s*["']?([^\s"'#]+)"#)
+    private static let commitSHAPattern = regex(#"^[0-9a-f]{40}$"#)
+
+    /// Text a stranger can write (an issue or pull-request title or body, a comment, a branch name, a commit
+    /// message, an author name or e-mail), as GitHub's own security guidance lists it.
+    private static let untrustedExpressionPattern = regex(
+        #"\$\{\{[^}]*?\b(github\.event\.(?:issue\.(?:title|body)|pull_request\.(?:title|body|head\.ref|head\.label|head\.repo\.default_branch)"#
+        + #"|comment\.body|review\.body|review_comment\.body|discussion\.(?:title|body)|head_commit\.(?:message|author\.(?:name|email))"#
+        + #"|commits\[[^\]]*\]\.(?:message|author\.(?:name|email))|pages\[[^\]]*\]\.page_name"#
+        + #"|workflow_run\.(?:head_branch|head_commit\.(?:message|author\.(?:name|email))))|github\.head_ref)"#)
+
+    /// Names of what the pull request or the run that started the workflow brought along.
+    private static let headCodeMarkers = [
+        "github.event.pull_request.head", "github.head_ref", "github.event.workflow_run.head_",
+    ]
+
+    private static func indent(of line: String) -> Int { line.prefix { $0 == " " }.count }
+
+    private static func isBlankOrComment(_ line: String) -> Bool {
+        let t = line.trimmingCharacters(in: .whitespaces)
+        return t.isEmpty || t.hasPrefix("#")
+    }
+
+    /// The trigger names of the top-level `on:` key, in lower case. A small line-based reader, not a YAML parser.
+    static func workflowTriggers(_ lines: [String]) -> Set<String> {
+        var out = Set<String>()
+        for (i, line) in lines.enumerated() {
+            let range = NSRange(line.startIndex..., in: line)
+            guard let m = onKeyPattern.firstMatch(in: line, options: [], range: range), let restRange = Range(m.range(at: 2), in: line) else { continue }
+            var rest = String(line[restRange])
+            if let hash = rest.range(of: " #") { rest = String(rest[..<hash.lowerBound]) }
+            rest = rest.trimmingCharacters(in: .whitespaces)
+            if !rest.isEmpty {
+                // `on: pull_request_target`, `on: [push, issues]`, `on: { issues: ... }`
+                for token in rest.lowercased().split(whereSeparator: { !($0.isLetter || $0 == "_") }) { out.insert(String(token)) }
+                continue
+            }
+            var block: [String] = []
+            var j = i + 1
+            while j < lines.count, isBlankOrComment(lines[j]) || indent(of: lines[j]) > 0 {
+                if !isBlankOrComment(lines[j]) { block.append(lines[j]) }
+                j += 1
+            }
+            guard let childIndent = block.map(indent(of:)).min() else { continue }
+            for entry in block where indent(of: entry) == childIndent {
+                var text = entry.trimmingCharacters(in: .whitespaces)
+                if text.hasPrefix("- ") { text = String(text.dropFirst(2)) }
+                let key = text.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? text
+                out.insert(key.trimmingCharacters(in: CharacterSet(charactersIn: " \"'")).lowercased())
+            }
+        }
+        return out
+    }
+
+    /// The text of every `run:` and `script:` value, with its line number. Handles a block scalar (`|`, `>`)
+    /// by indentation. `run:` as a mapping key (`defaults.run`) has no text of its own and yields nothing.
+    static func workflowScripts(_ lines: [String]) -> [(line: Int, text: String)] {
+        var out: [(Int, String)] = []
+        var i = 0
+        while i < lines.count {
+            let line = lines[i]
+            let range = NSRange(line.startIndex..., in: line)
+            guard let m = scriptKeyPattern.firstMatch(in: line, options: [], range: range),
+                  let leadRange = Range(m.range(at: 1), in: line), let restRange = Range(m.range(at: 4), in: line) else { i += 1; continue }
+            let dash = Range(m.range(at: 2), in: line).map { line[$0].count } ?? 0
+            let keyColumn = line[leadRange].count + dash
+            let rest = String(line[restRange]).trimmingCharacters(in: .whitespaces)
+            if rest.hasPrefix("|") || rest.hasPrefix(">") {
+                var j = i + 1
+                while j < lines.count {
+                    let next = lines[j]
+                    if next.trimmingCharacters(in: .whitespaces).isEmpty { j += 1; continue }
+                    guard indent(of: next) > keyColumn else { break }
+                    out.append((j + 1, next))
+                    j += 1
+                }
+                i = j
+                continue
+            }
+            if !rest.isEmpty, !rest.hasPrefix("#") { out.append((i + 1, rest)) }
+            i += 1
+        }
+        return out
+    }
+
+    /// Three mistakes that turn a workflow into a way in, in a registered project's `.github/workflows`:
+    /// pull-request code checked out where secrets exist (`workflow_pwn_request`, high), text a stranger wrote
+    /// pasted into a script with `${{ }}` (`workflow_expression_injection`, high under a trigger that has secrets
+    /// or write access, otherwise medium), and a third-party action that is not pinned to a commit
+    /// (`workflow_unpinned_action`, medium; `actions/*` and `github/*`, local `./` and `docker://` are skipped).
+    /// Nothing from the file except an expression name and an `owner/repo@ref` is copied into the result.
+    static func auditWorkflowFile(_ file: FileInput) -> [Finding] {
+        guard let text = String(data: file.data, encoding: .utf8) else { return [] }
+        let lines = text.components(separatedBy: "\n").map { $0.hasSuffix("\r") ? String($0.dropLast()) : $0 }
+        let triggers = workflowTriggers(lines)
+        let privileged = triggers.intersection(privilegedWorkflowTriggers).sorted()
+        var findings: [Finding] = []
+        func add(_ id: String, _ severity: String, _ detail: String) {
+            findings.append(Finding(id: id, severity: severity, area: "project", file: file.path, detail: detail, message: message(id)))
+        }
+
+        // Pull-request code where the secrets are.
+        if let trigger = ["pull_request_target", "workflow_run"].first(where: { triggers.contains($0) }) {
+            var hits: [Int] = []
+            for (index, line) in lines.enumerated() {
+                let range = NSRange(line.startIndex..., in: line)
+                guard let m = refKeyPattern.firstMatch(in: line, options: [], range: range), let value = Range(m.range(at: 1), in: line) else { continue }
+                let lower = line[value].lowercased()
+                if headCodeMarkers.contains(where: { lower.contains($0) }) { hits.append(index + 1) }
+            }
+            if let first = hits.first {
+                add("workflow_pwn_request", "high",
+                    "line \(first): trigger \(trigger) and a checkout of the pull request's code" + (hits.count > 1 ? " (+\(hits.count - 1) more)" : ""))
+            }
+        }
+
+        // Text a stranger wrote, pasted into a script.
+        var injections: [(line: Int, name: String)] = []
+        for script in workflowScripts(lines) {
+            let range = NSRange(script.text.startIndex..., in: script.text)
+            for m in untrustedExpressionPattern.matches(in: script.text, options: [], range: range) {
+                let group = m.range(at: 1).location != NSNotFound ? m.range(at: 1) : m.range
+                if let r = Range(group, in: script.text) { injections.append((script.line, sanitized(String(script.text[r]), limit: 60))) }
+            }
+        }
+        if let first = injections.first {
+            let context = privileged.isEmpty ? "" : ", trigger \(privileged[0])"
+            add("workflow_expression_injection", privileged.isEmpty ? "medium" : "high",
+                "line \(first.line): \(first.name) is placed in a script\(context)" + (injections.count > 1 ? " (+\(injections.count - 1) more)" : ""))
+        }
+
+        // Third-party actions that can be moved by their owner.
+        var unpinned: [(line: Int, ref: String)] = []
+        for (index, line) in lines.enumerated() {
+            let range = NSRange(line.startIndex..., in: line)
+            guard let m = usesKeyPattern.firstMatch(in: line, options: [], range: range), let r = Range(m.range(at: 1), in: line) else { continue }
+            let value = String(line[r])
+            if value.hasPrefix("./") || value.lowercased().hasPrefix("docker://") { continue }
+            guard let at = value.lastIndex(of: "@") else { continue }
+            let owner = value.split(separator: "/").first.map { $0.lowercased() } ?? ""
+            if owner == "actions" || owner == "github" || owner.isEmpty { continue }
+            let ref = String(value[value.index(after: at)...])
+            if commitSHAPattern.firstMatch(in: ref, options: [], range: NSRange(ref.startIndex..., in: ref)) != nil { continue }
+            unpinned.append((index + 1, sanitized(value, limit: 60)))
+        }
+        if let first = unpinned.first {
+            add("workflow_unpinned_action", "medium",
+                "line \(first.line): \(first.ref) is not pinned to a commit SHA" + (unpinned.count > 1 ? " (+\(unpinned.count - 1) more)" : ""))
         }
         return findings
     }
@@ -1048,6 +1467,15 @@ enum AgentSetupAuditor {
         case "openclaw_mdns_full": return loc("OpenClaw が詳しい情報をネットワークに広告しています")
         case "openclaw_audit_suppressed": return loc("OpenClaw の自己診断の指摘が非表示になっています")
         case "openclaw_loose_permissions": return loc("OpenClaw の設定が他のユーザーに読める権限です")
+        case "editor_auto_run_task": return loc("フォルダを開くと自動で実行されるタスクがあります")
+        case "workflow_pwn_request": return loc("ワークフローが、プルリクエストのコードをシークレットのある環境で実行します")
+        case "workflow_expression_injection": return loc("ワークフローが、他人の書いた文字列をそのままスクリプトに入れています")
+        case "workflow_unpinned_action": return loc("ワークフローが、コミットで固定していないアクションを使っています")
+        case "agent_settings_hook": return loc("Claude Code の設定に、イベントのたびに実行されるフックがあります")
+        case "agent_settings_bypass": return loc("Claude Code の設定が、確認なしですべてを実行する状態です")
+        case "agent_settings_broad_allow": return loc("Claude Code の設定が、どんなコマンドも確認なしで許可しています")
+        case "agent_settings_endpoint_override": return loc("Claude Code の設定が、API の接続先を別のホストに変えています")
+        case "agent_settings_weakened": return loc("確認済みにした後で、Claude Code の設定が緩くなっています")
         default: return id
         }
     }
@@ -1115,6 +1543,24 @@ enum AgentSetupAuditor {
             return loc("OpenClaw の自己診断の指摘を非表示にする設定（security.audit.suppressions）があります。隠した指摘が見直されなくなるため、今も隠す必要があるか確認してください。")
         case "openclaw_loose_permissions":
             return loc("OpenClaw の設定フォルダまたは設定ファイルが、所有者以外にも読める権限になっています。トークンや認証情報が他のユーザーに読まれる恐れがあります。フォルダは 700、ファイルは 600 にしてください。")
+        case "editor_auto_run_task":
+            return loc("このプロジェクトの .vscode/tasks.json に、VS Code やその互換エディタでフォルダを開いたとき自動で実行されるタスクがあります。出どころの分からないプロジェクトでは、クリックなしでそのコマンドが動きます。タスクの内容を読み、覚えがなければ削除して、そのフォルダを信頼しないでください。")
+        case "workflow_pwn_request":
+            return loc("pull_request_target または workflow_run で始まるワークフローが、プルリクエストのコードをチェックアウトしています。そのコードは書き込み権限とシークレットのある環境で動きます。ベースのコードだけをチェックアウトするか、信頼できないコードにシークレットを渡さないようにジョブを分けてください。")
+        case "workflow_expression_injection":
+            return loc("Issue のタイトル、ブランチ名、コミットメッセージなど、他人が書ける文字列が ${{ }} でスクリプトの中に直接入っています。書き方次第で、その人のコマンドを実行させられます。環境変数に渡して、スクリプトからは環境変数として読むようにしてください。")
+        case "workflow_unpinned_action":
+            return loc("外部の作者のアクションを、作者が付け替えられるタグやブランチで指定しています。後から中身を差し替えられても気づけません。40桁のコミット SHA で固定してください。")
+        case "agent_settings_hook":
+            return loc("Claude Code の設定に、ツールの実行前後やセッションの開始などのたびに自動で実行されるコマンド（フック）があります。プロジェクトの設定に入っていると、そのリポジトリを開いて信頼しただけで動きます。コマンドの中身を読み、覚えがなければ削除してください。")
+        case "agent_settings_bypass":
+            return loc("Claude Code の権限モードが bypassPermissions（または、その警告を出さない設定）になっています。すべての操作が確認なしで実行されるため、悪意のある指示が紛れ込んでも止められません。意図して設定したものでなければ、defaultMode を default に戻してください。")
+        case "agent_settings_broad_allow":
+            return loc("permissions.allow に、どんなシェルコマンドでも実行できる許可（Bash 全体や *）、または任意のコードを実行できるコマンドの許可（sh・python・curl など）があります。使うコマンドだけに絞った書き方（例: Bash(git status:*)）に変えてください。")
+        case "agent_settings_endpoint_override":
+            return loc("env の ANTHROPIC_BASE_URL が、Anthropic の公式の接続先とは別のホストを指しています。やり取りの内容と API キーがそのホストに送られます。社内のゲートウェイなど、自分で用意した接続先でなければ削除してください。プロジェクトの設定にある場合は特に注意してください。")
+        case "agent_settings_weakened":
+            return loc("確認済みにした時点と比べて、Claude Code の設定で確認なしに実行できる範囲が広がっています（禁止ルールの削除、広い許可の追加、フックの追加、権限モードの引き上げ、サンドボックスの無効化のいずれか）。自分で変更した覚えがなければ、設定ファイルを開いて確認してください。確認できたら、確認済みにし直してください。")
         default:
             return id
         }

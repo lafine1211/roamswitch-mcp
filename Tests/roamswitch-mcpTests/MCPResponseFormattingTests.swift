@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.12.9 (build 171). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.12.10 (build 172). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -109,10 +109,10 @@ final class MCPResponseFormattingTests: XCTestCase {
         let payload = MCPResponseFormatting.makeGuardStatusPayload(gatewayMAC: nil, defaults: defaults)
 
         // `webRulesFolderScan` is not a setting: it follows the Pro cache (the daily scan has no switch), so it is
-        // counted apart from the 29 toggles.
+        // counted apart from the 31 toggles.
         let toggles = payload.guards.filter { $0.key != "webRulesFolderScan" }
-        XCTAssertEqual(toggles.count, 29)
-        XCTAssertEqual(Set(payload.guards.map(\.key)).count, 30, "guard keys must be unique")
+        XCTAssertEqual(toggles.count, 31)
+        XCTAssertEqual(Set(payload.guards.map(\.key)).count, 32, "guard keys must be unique")
         XCTAssertTrue(toggles.allSatisfy { !$0.enabledInSettings })
         XCTAssertEqual(payload.guards.first { $0.key == "webRulesFolderScan" }?.enabledInSettings, false, "not Pro in this test's defaults")
         XCTAssertFalse(payload.caveats.isEmpty)
@@ -679,7 +679,8 @@ final class VerifyFindingDisciplineTests: XCTestCase {
         "luks_encryption", "lsm_active", "gatekeeper_app_verification", "auto_security_updates", "os_builtin_malware_detection",
         "host_firewall", "network_stealth_mode", "wifi_encryption_strength", "arp_spoof_monitor", "gateway_arp_lock",
         "ssh_hardening", "sudo_hygiene", "exposed_ports", "malware_scanning", "dns_threat_guard",
-        "browser_phishing_protection", "usb_zero_trust", "accessory_connection_protection",
+        "browser_phishing_protection", "usb_zero_trust", "accessory_connection_protection", "backup_recency",
+        "proxy_autodiscovery", "agent_credential_files",
     ]
     private let allReasons = [
         "failing", "passing", "not_applicable", "helper_unavailable", "gateway_unknown", "no_baseline",

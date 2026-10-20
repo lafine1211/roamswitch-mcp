@@ -61,7 +61,7 @@ final class StdioSmokeTests: XCTestCase {
                         "audit_url_safety", "get_app_help", "run_active_vuln_scan",
                         "run_package_cve_scan", "run_package_cve_scan_languages",
                         "run_package_lifecycle_script_scan", "run_npm_audit_signatures",
-                        "run_typosquat_scan", "get_detection_coverage",
+                        "run_typosquat_scan", "run_dependency_source_scan", "get_detection_coverage",
                         "audit_secrets", "audit_security_logs", "get_quarantine_status",
                         "get_canary_status", "get_ransomware_recovery_snapshots", "get_port_anomaly_incidents",
                         "get_runtime_threat_status", "get_notification_history",
@@ -72,6 +72,14 @@ final class StdioSmokeTests: XCTestCase {
                         "get_browser_credential_watch_status", "get_forensic_evidence_bundles",
                         "get_vulnerability_scan_history", "verify_security_findings",
                         "audit_mcp_configs", "audit_agent_setup", "get_ssh_guard_incidents"])
+        // The only tools that write local state say so on the wire: readOnlyHint is false for exactly these three.
+        let notReadOnly = ((out[1]["result"] as? [String: Any])?["tools"] as? [[String: Any]] ?? []).compactMap { tool -> String? in
+            (tool["annotations"] as? [String: Any])?["readOnlyHint"] as? Bool == false ? tool["name"] as? String : nil
+        }
+        XCTAssertEqual(Set(notReadOnly), ["run_active_vuln_scan", "audit_security_logs", "run_npm_audit_signatures"])
+        let instructions = (out[0]["result"] as? [String: Any])?["instructions"] as? String ?? ""
+        XCTAssertFalse(instructions.hasPrefix("Read-only access"))
+        XCTAssertTrue(instructions.contains("'run_active_vuln_scan'") && instructions.contains("'audit_security_logs'"))
     }
 
     func testAuditURLSafety_flagsPhishing_offline() throws {

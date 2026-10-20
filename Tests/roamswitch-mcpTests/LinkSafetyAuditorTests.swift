@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.12.9 (build 171). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.12.10 (build 172). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -31,6 +31,33 @@ final class LinkSafetyAuditorTests: XCTestCase {
 
         XCTAssertEqual(report.riskLevel, .dangerous)
         XCTAssertTrue(report.riskFactors.contains { $0.title.contains("IPアドレス直打ち") })
+    }
+
+    // MARK: - Defanged indicators
+
+    func testRefangRestoresCommonDefangedSpellings() {
+        let cases: [(String, String)] = [
+            ("hxxps://evil[.]example/login", "https://evil.example/login"),
+            ("hxxp://evil(.)example", "http://evil.example"),
+            ("HXXPS[:]//evil[dot]example", "https://evil.example"),
+            ("hxxps[://]evil{.}example/a", "https://evil.example/a"),
+            ("  evil[.]example  ", "evil.example"),
+            ("user[at]evil[.]example", "user@evil.example"),
+            ("https://www.apple.com/a(b)", "https://www.apple.com/a(b)"),
+            ("http://192.168.1.100/admin", "http://192.168.1.100/admin"),
+        ]
+        for (input, expected) in cases {
+            XCTAssertEqual(LinkSafetyAuditor.refang(input), expected, input)
+        }
+    }
+
+    func testDefangedURLIsAnalysedAsTheAddressItStandsFor() {
+        let auditor = LinkSafetyAuditor.shared
+        let report = auditor.analyzeURL("hxxp://192[.]168[.]1[.]100/admin")
+        XCTAssertEqual(report.finalURLString, "http://192.168.1.100/admin")
+        XCTAssertEqual(report.riskLevel, .dangerous)
+        XCTAssertTrue(report.riskFactors.contains { $0.kind == .ipAddressHost })
+        XCTAssertFalse(report.riskFactors.contains { $0.kind == .invalidURL })
     }
 
     // MARK: - Numeric hosts and credentials in the authority

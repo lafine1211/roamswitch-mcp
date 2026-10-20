@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.9 (build 171).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.10 (build 172).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -157,8 +157,28 @@ public final class LinkSafetyAuditor {
 
     // MARK: - Synchronous Analysis (Offline / Fast)
 
+    /// Restores an indicator that a threat report wrote in defanged form (`hxxps://evil[.]example/x`,
+    /// `evil(dot)example`, `hxxp[:]//evil[.]example`) so it is analysed as the address it stands for.
+    /// Only the common bracket / word spellings are undone; nothing else in the string is touched.
+    /// The Linux `LinkSafetyAuditor::refang` does the same with the same cases.
+    public static func refang(_ input: String) -> String {
+        var s = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        let rules: [(pattern: String, template: String)] = [
+            (#"[\[\(\{]\s*(?:\.|dot)\s*[\]\)\}]"#, "."),
+            (#"[\[\(\{]\s*(?:@|at)\s*[\]\)\}]"#, "@"),
+            (#"[\[\(\{]\s*://\s*[\]\)\}]"#, "://"),
+            (#"[\[\(\{]\s*:\s*[\]\)\}]"#, ":"),
+            (#"^h(?:xx|x)ps://"#, "https://"),
+            (#"^h(?:xx|x)p://"#, "http://"),
+        ]
+        for rule in rules {
+            s = s.replacingOccurrences(of: rule.pattern, with: rule.template, options: [.regularExpression, .caseInsensitive])
+        }
+        return s
+    }
+
     public func analyzeURL(_ urlString: String) -> LinkAuditReport {
-        let trimmed = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = Self.refang(urlString)
         let normalized = trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://") ? trimmed : "https://" + trimmed
 
         guard let url = URL(string: normalized), let host = url.host?.lowercased() else {

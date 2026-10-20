@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.9 (build 171).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.10 (build 172).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -300,16 +300,35 @@ enum RoamSwitchMCPSkillsContent {
        which lockfile/project), and the CVE identifier if present in the
        finding's fields, so the user can act without re-deriving the
        ranking themselves.
+    6. If a finding carries `epss` (0 to 1) and `epssDate`, it is the
+       chance of exploitation estimated by FIRST on that day. Use it only to
+       order findings inside the same CVSS band, and quote it with its date
+       (for example "EPSS 12%, 2026-10-18"). It is an estimate, not proof
+       that anyone is exploiting the CVE, and it changes from day to day. A
+       finding with no `epss` has no value in the feed: say "no EPSS data",
+       never read it as low risk, and never fill one in.
+    7. The result's `acceptance` block gives counts only: `accepted`,
+       `expiringWithin14Days`, `expired` and `needsAttention`. A person
+       accepted those findings with a reason and an end date in the app;
+       no tool can accept one and the reason is not returned. The accepted
+       findings are still listed, and the tool does not say which ones they
+       are. Report `needsAttention` as the number that still needs action,
+       mention `accepted` and any `expiringWithin14Days` or `expired`, and
+       point the user to the package CVE screen for which findings those
+       are. Do not drop findings from your ranking on your own guess that
+       they are accepted.
 
     ## Verification
 
     Before answering, confirm you have: (a) used the real `cvssScore`
     field rather than a text-based guess, (b) explicitly flagged
     `confidence: "gray"` findings as needing manual confirmation rather
-    than presenting them with the same certainty as confirmed ones, and (c)
+    than presenting them with the same certainty as confirmed ones, (c)
     not silently merged this ranking with an unrelated
     `run_active_vuln_scan` ranking that uses a different (heuristic-only)
-    method.
+    method, and (d) used `epss` only as a tiebreak inside a CVSS band, with
+    its date, and reported the `acceptance` counts without guessing which
+    findings they cover.
     """
 
     // MARK: - Skill 4

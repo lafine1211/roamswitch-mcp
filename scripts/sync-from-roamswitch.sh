@@ -47,7 +47,8 @@ CORE=(AppLanguage TrustedNetwork GatewayFingerprint WiFiSecurityMonitor \
       PortAnomalyStatusReader RuntimeThreatStatusReader NotificationHistory \
       ContainmentIncidentTimeline NetworkHistoryGuard MCPSensorAuditStatusReader \
       RansomwareSnapshotStatusReader MCPExecRecorderTools AgentSetupAuditor AgentSetupBaseline SSHGuardStatusReader PromptInjectionSignals AgentSetupSarif DetectionCoverage \
-      BackupRecency PackageCveEpss VulnerabilityAcceptance DependencySourceScan)
+      BackupRecency PackageCveEpss VulnerabilityAcceptance DependencySourceScan \
+      ProxyAutoDiscoveryCheck AgentCredentialFileCheck)
 
 # Sources that live in the app's Shared/ folder (also compiled into the helper).
 SHARED=(RansomwareSnapshotLogic ExecEventModel ExecLogStore ExecProcessTree ExecReadAPI \
@@ -61,7 +62,9 @@ SHARED=(RansomwareSnapshotLogic ExecEventModel ExecLogStore ExecProcessTree Exec
 TESTS=(LinkSafetyAuditorTests CryptoSecretDetectionTests MCPKnowledgeBaseTests MCPProtocolTests \
        MCPResponseFormattingTests ARPSpoofMonitorTests MCPServerRobustnessTests ParserRobustnessTests \
        TyposquatGuardTests RansomwareRecoveryMCPTests RoamSwitchMCPSkillsContentTests \
-       ActiveVulnScanTests MCPConfigAuditorTests AgentSetupAuditorTests KnownAttackServersTests PromptInjectionSignalsTests AgentSetupSarifTests DetectionCoverageTests LocalAIRuntimeTests GuardReaderHealthTests StrictJSONTests)
+       ActiveVulnScanTests MCPConfigAuditorTests AgentSetupAuditorTests KnownAttackServersTests PromptInjectionSignalsTests AgentSetupSarifTests DetectionCoverageTests LocalAIRuntimeTests GuardReaderHealthTests StrictJSONTests \
+       AgentCredentialFileCheckTests BackupRecencyTests DependencySourceScanTests PackageCveEpssTests \
+       ProbeCatalogTests MCPToolAnnotationsTests)
 
 TDST="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/Tests/roamswitch-mcpTests"
 

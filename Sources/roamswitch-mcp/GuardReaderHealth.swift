@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.9 (build 171).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.10 (build 172).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -277,9 +277,14 @@ public enum GuardReaderHealthStore {
         "lockfileTamperGuard": GuardSources(sources: ["lockfileTamperScan"], auxiliary: ["lockfileTamperFSEvents"], idleIsHealthy: false),
         // FSEvents is the only input of these: a watch that cannot start means the guard sees nothing.
         "ransomwareEntropyGuard": GuardSources(sources: ["ransomwareEntropyFSEvents"], auxiliary: [], idleIsHealthy: false),
-        "persistenceMonitor": GuardSources(sources: ["persistenceMonitorFSEvents"], auxiliary: [], idleIsHealthy: false),
+        // The plist watch is FSEvents; the start-up script poll (shell rc, periodic, hooks) is a narrower input.
+        "persistenceMonitor": GuardSources(sources: ["persistenceMonitorFSEvents"], auxiliary: ["startupScriptPoll"], idleIsHealthy: false),
         "webMailDownloadGuard": GuardSources(sources: ["webMailDownloadFSEvents"], auxiliary: [], idleIsHealthy: false),
         "browserCredentialWatchGuard": GuardSources(sources: ["browserCredentialWatchFSEvents"], auxiliary: [], idleIsHealthy: false),
+        // A poll of the process table (libproc) every few seconds; if the table cannot be read the guard sees nothing.
+        "reverseShellWatch": GuardSources(sources: ["reverseShellScan"], auxiliary: [], idleIsHealthy: false),
+        // A subscription to the system configuration store; if it cannot be set up the guard sees nothing.
+        "networkSettingsWatch": GuardSources(sources: ["networkSettingsStore"], auxiliary: [], idleIsHealthy: false),
         "ransomwareCanaryGuard": GuardSources(sources: ["ransomwareCanaryFiles"], auxiliary: [], idleIsHealthy: false),
         // A batch scan (daily and on demand), so being idle between runs is healthy; what it can report is what the last
         // scan could not examine.

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.9 (build 171).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.10 (build 172).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -23,6 +23,62 @@ import Foundation
 /// well-documented, version-stable "insecure unless explicitly configured
 /// otherwise" default — not a specific CVE, which would require per-version
 /// tracking this scanner does not attempt.
+/// What a probe leaves behind on the machine it probes, beyond the one ordinary connection or request that every
+/// probe makes (a service may log that in its normal access log; that is not declared here).
+/// Declared per probe in `ProbeCatalog`, from what the code actually sends.
+enum ProbeSideEffect: String, Codable, CaseIterable, Equatable {
+    /// The request carries content shaped like an attack or a marker of this scan (a `../` path to `/etc/passwd`,
+    /// a foreign `Origin`, a redirect target, a URL for the server to fetch). The target's log, or a WAF or
+    /// intrusion-detection log, may record it as an indicator.
+    case iocInLogs = "ioc_in_logs"
+    /// A throw-away listener is opened on 127.0.0.1 for the duration of the probe and closed afterwards.
+    case temporaryListener = "temporary_listener"
+    /// More than five requests to one port in a single run.
+    case manyRequests = "many_requests"
+}
+
+/// How strong the evidence behind a finding is.
+enum EvidenceKind: String, Codable, CaseIterable, Equatable {
+    /// RoamSwitch sent a request and the answer showed the weakness (for example `PING` answered without `AUTH`).
+    case confirmed
+    /// Only the reported version lies inside a range that a known CVE affects. Nothing was exploited or tested.
+    case versionRangeMatch = "version_range_match"
+    /// Only that a matching service is listening was seen (by process name or port). Nothing was sent to it.
+    case portOpenOnly = "port_open_only"
+    /// The finding is another tool's own output (nmap NSE). RoamSwitch did not verify it.
+    case externalToolReport = "external_tool_report"
+}
+
+/// The declared side effects and evidence kind of every probe `ActiveVulnScan` can run, keyed by the id
+/// recorded in the probe log (`ProbeRunRecord.probeName`).
+enum ProbeCatalog {
+    struct Declaration: Equatable {
+        let sideEffects: [ProbeSideEffect]
+        /// What a positive result from this probe is.
+        let evidenceKind: EvidenceKind
+    }
+
+    /// The generic web checks (`ActiveVulnScan` Phase 3) and the nmap layer (Phase 4). Request counts are the
+    /// most a run sends to one port: CORS 1, traversal 3, open redirect 8, SSRF 12 (eight parameter names at `/`
+    /// plus `url` at four paths).
+    static let webChecks: [String: Declaration] = [
+        "webvuln-cors": Declaration(sideEffects: [.iocInLogs], evidenceKind: .confirmed),
+        "webvuln-traversal": Declaration(sideEffects: [.iocInLogs], evidenceKind: .confirmed),
+        "webvuln-redirect": Declaration(sideEffects: [.iocInLogs, .manyRequests], evidenceKind: .confirmed),
+        "webvuln-ssrf": Declaration(sideEffects: [.iocInLogs, .temporaryListener, .manyRequests], evidenceKind: .confirmed),
+        nmapNSEProbeName: Declaration(sideEffects: [.manyRequests], evidenceKind: .externalToolReport),
+    ]
+
+    /// nmap's `safe` NSE scripts run once over every port of a scan. Not written to the probe log.
+    static let nmapNSEProbeName = "nmap-nse"
+
+    static func declaration(forProbeName name: String) -> Declaration? {
+        if let web = webChecks[name] { return web }
+        guard let signature = ServiceSignatures.signatures.first(where: { $0.id == name }) else { return nil }
+        return Declaration(sideEffects: signature.sideEffects, evidenceKind: .confirmed)
+    }
+}
+
 enum ServiceSignatures {
 
     struct Signature {
@@ -42,6 +98,10 @@ enum ServiceSignatures {
         /// a local inspector): it is only worth reporting once it is reachable from the
         /// network, so the passive audit skips it while it is bound to loopback.
         var requiresNetworkExposure: Bool = false
+        /// What the active probe for this signature leaves on the target (see `ProbeCatalog`). Every signature
+        /// probe sends one ordinary read request or protocol handshake and nothing attack-shaped, so none declares
+        /// an effect. A positive result sends one more request to read the version.
+        var sideEffects: [ProbeSideEffect] = []
     }
 
     static let signatures: [Signature] = [

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.9 (build 171).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.10 (build 172).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -39,6 +39,10 @@ public enum ActiveVulnScan {
         let title: String
         let description: String
         let recommendation: String
+        /// The probe (a `ProbeCatalog` id) that produced this finding, and how strong the evidence is.
+        /// A known-CVE finding added after a confirmed one is `versionRangeMatch`; nmap's is `externalToolReport`.
+        var probeName: String? = nil
+        var evidenceKind: EvidenceKind = .confirmed
     }
 
     /// One probe that did NOT produce a `Finding` — either the target was
@@ -62,6 +66,8 @@ public enum ActiveVulnScan {
         var findings: [Finding] = []
         var confirmedSafe: [CheckOutcome] = []
         var inconclusive: [CheckOutcome] = []
+        /// Ids of the probes this run actually executed (`ProbeCatalog` keys), each once, in the order first run.
+        var probesRun: [String] = []
     }
 
     // MARK: - Lightweight per-run persistence (heartbeat log)
@@ -184,6 +190,10 @@ public enum ActiveVulnScan {
         /// within the last 24h). `nil` only if `lastFinishedAt` fails to
         /// parse (should not happen for a row this file wrote itself).
         public let passAgeDays: Int?
+        /// From `ProbeCatalog`: the side effects this probe declares and what a positive result means
+        /// (`ProbeSideEffect` / `EvidenceKind` raw values). `nil` for a probe name this version does not know.
+        public var sideEffects: [String]? = nil
+        public var evidenceKind: String? = nil
     }
 
     /// Groups every persisted row by `(probeName, port)` and keeps the most
@@ -206,7 +216,9 @@ public enum ActiveVulnScan {
             } else {
                 passAgeDays = nil
             }
-            return ProbeStatus(probeName: r.probeName, port: r.port, lastOutcome: r.outcome, lastFinishedAt: r.lastFinishedAt, passAgeDays: passAgeDays)
+            let declared = ProbeCatalog.declaration(forProbeName: r.probeName)
+            return ProbeStatus(probeName: r.probeName, port: r.port, lastOutcome: r.outcome, lastFinishedAt: r.lastFinishedAt, passAgeDays: passAgeDays,
+                               sideEffects: declared?.sideEffects.map(\.rawValue), evidenceKind: declared?.evidenceKind.rawValue)
         }
         // Most-stale first, matching the Linux edition's sort order. Sorting on `passAgeDays` alone
         // (floored to whole days) ties every probe checked the same calendar day, and `latest` is a
@@ -1091,6 +1103,19 @@ public enum ActiveVulnScan {
         return hasSignatureProbe || PortSecurityAuditor.isKnownDevServerPort(port.port)
     }
 
+    /// The side effects a run against this one port declares (`ProbeCatalog`): its signature probes plus, for a
+    /// known dev-server port, the web checks. Shown before the first run so the person can see what will be sent.
+    /// The nmap layer is left out: it runs only when nmap is installed and covers every port at once.
+    static func plannedSideEffects(for port: ListeningPortInfo) -> [ProbeSideEffect] {
+        var names = ServiceSignatures.match(processName: port.processName, executablePath: port.executablePath)
+            .map(\.id).filter { probeableSignatureIDs.contains($0) }
+        if PortSecurityAuditor.isKnownDevServerPort(port.port) {
+            names += ["webvuln-cors", "webvuln-traversal", "webvuln-redirect", "webvuln-ssrf"]
+        }
+        let effects = Set(names.flatMap { ProbeCatalog.declaration(forProbeName: $0)?.sideEffects ?? [] })
+        return ProbeSideEffect.allCases.filter(effects.contains)
+    }
+
     /// Runs Phase 2 (known-service reachability) and Phase 3 (generic CORS/traversal
     /// checks, only for ports flagged as dev servers) against the given ports.
     /// Sequential — no concurrency, matching the Linux implementation's safety
@@ -1135,6 +1160,7 @@ public enum ActiveVulnScan {
                 default: confirmed = nil
                 }
                 let finishedAt = Date()
+                if !result.probesRun.contains(signature.id) { result.probesRun.append(signature.id) }
                 logEntries.append(ProbeRunRecord(
                     probeName: signature.id,
                     port: port.port,
@@ -1150,7 +1176,9 @@ public enum ActiveVulnScan {
                         processName: port.processName,
                         title: signature.title,
                         description: signature.description,
-                        recommendation: signature.recommendation
+                        recommendation: signature.recommendation,
+                        probeName: signature.id,
+                        evidenceKind: .confirmed
                     ))
                     // Known-CVE version matching piggybacks on the same confirmed-reachable
                     // target — a bonus lookup on an already-reported finding, not a separate
@@ -1163,7 +1191,9 @@ public enum ActiveVulnScan {
                                 processName: port.processName,
                                 title: resolveLang(cve.title),
                                 description: resolveLang(cve.description),
-                                recommendation: resolveLang(cve.recommendation)
+                                recommendation: resolveLang(cve.recommendation),
+                                probeName: signature.id,
+                                evidenceKind: .versionRangeMatch
                             ))
                         }
                     }
@@ -1187,6 +1217,7 @@ public enum ActiveVulnScan {
             let startedAt = Date()
             let confirmed = probe()
             let finishedAt = Date()
+            if !result.probesRun.contains(probeName) { result.probesRun.append(probeName) }
             logEntries.append(ProbeRunRecord(
                 probeName: probeName,
                 port: outcome.port,
@@ -1195,7 +1226,10 @@ public enum ActiveVulnScan {
                 outcome: confirmed == true ? "vulnerable" : (confirmed == false ? "safe" : "inconclusive")
             ))
             switch confirmed {
-            case true: result.findings.append(makeFinding())
+            case true:
+                var finding = makeFinding()
+                finding.probeName = probeName
+                result.findings.append(finding)
             case false: result.confirmedSafe.append(outcome)
             case nil: result.inconclusive.append(outcome)
             }
@@ -1297,6 +1331,7 @@ public enum ActiveVulnScan {
             // port list still can't block the audit indefinitely.
             let nseTimeout = min(300, 30 + 15 * Double(allPorts.count))
             let nseFindings = NmapNSE.runNSESafeScripts(host: "127.0.0.1", ports: allPorts, timeoutSeconds: nseTimeout)
+            if NmapNSE.nmapAvailable() { result.probesRun.append(ProbeCatalog.nmapNSEProbeName) }
             for finding in nseFindings {
                 let processName = ports.first { $0.port == finding.port }?.processName ?? ""
                 result.findings.append(Finding(
@@ -1304,7 +1339,9 @@ public enum ActiveVulnScan {
                     processName: processName,
                     title: "\(loc("nmap NSE所見")): \(finding.script)",
                     description: finding.output,
-                    recommendation: loc("これはnmap自身の検知結果です（RoamSwitch独自の検証は行っていません）。内容を確認し、該当する場合は対応してください。")
+                    recommendation: loc("これはnmap自身の検知結果です（RoamSwitch独自の検証は行っていません）。内容を確認し、該当する場合は対応してください。"),
+                    probeName: ProbeCatalog.nmapNSEProbeName,
+                    evidenceKind: .externalToolReport
                 ))
             }
         }

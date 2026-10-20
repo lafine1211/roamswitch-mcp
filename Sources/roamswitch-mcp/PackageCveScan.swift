@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.9 (build 171).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.12.10 (build 172).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -299,9 +299,11 @@ enum PackageCveScan {
         /// default to `"gray"` — the safer direction if a future map version
         /// ever ships a value this build doesn't know about.
         let confidence: String
+        /// EPSS (0...1) from the signed feed, if it carried one. See `PackageCveEpss`.
+        let epss: Double?
 
         enum CodingKeys: String, CodingKey {
-            case cveId, package, cvssScore, ranges, summary, confidence
+            case cveId, package, cvssScore, ranges, summary, confidence, epss
         }
 
         init(from decoder: Decoder) throws {
@@ -313,6 +315,7 @@ enum PackageCveScan {
             summary = try c.decodeIfPresent(String.self, forKey: .summary) ?? ""
             let raw = try c.decodeIfPresent(String.self, forKey: .confidence) ?? "gray"
             confidence = raw == "confirmed" ? "confirmed" : "gray"
+            epss = PackageCveEpss.validated(try? c.decodeIfPresent(Double.self, forKey: .epss))
         }
     }
 
@@ -320,8 +323,25 @@ enum PackageCveScan {
         let mapVersion: String
         let ecosystem: String
         let entries: [CveEntry]
+        /// The day (`YYYY-MM-DD`) the entries' EPSS values were taken, if the feed said.
+        var epssDate: String? = nil
 
         static let empty = CveMap(mapVersion: "", ecosystem: "Homebrew", entries: [])
+
+        enum CodingKeys: String, CodingKey { case mapVersion, ecosystem, entries, epssDate }
+        init(mapVersion: String, ecosystem: String, entries: [CveEntry], epssDate: String? = nil) {
+            self.mapVersion = mapVersion
+            self.ecosystem = ecosystem
+            self.entries = entries
+            self.epssDate = epssDate
+        }
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            mapVersion = try c.decode(String.self, forKey: .mapVersion)
+            ecosystem = try c.decode(String.self, forKey: .ecosystem)
+            entries = try c.decode([CveEntry].self, forKey: .entries)
+            epssDate = PackageCveEpss.validatedDate(try? c.decodeIfPresent(String.self, forKey: .epssDate))
+        }
     }
 
     /// Where `PackageCveMapUpdater` installs a fresher signed copy (desktop client
@@ -434,8 +454,16 @@ enum PackageCveScan {
         let fixedVersion: String
         let summary: String
         let confidence: String
+        /// EPSS (0...1) and the day it was taken, when the signed feed carried them; nil otherwise.
+        var epss: Double? = nil
+        var epssDate: String? = nil
 
         var id: String { "\(cveId)|\(package)|\(installedVersion)" }
+
+        /// What an acceptance is matched on (see `VulnerabilityAcceptance`).
+        var acceptanceSubject: VulnerabilityAcceptance.Subject {
+            VulnerabilityAcceptance.Subject(ecosystem: "Homebrew", package: package, cveId: cveId, version: installedVersion)
+        }
     }
 
     /// Enumerates installed Homebrew packages and checks each against the local
@@ -444,7 +472,11 @@ enum PackageCveScan {
     static func runScan() -> [Finding] {
         let map = loadCVEMap()
         guard !map.entries.isEmpty else { return [] }
-        let installed = enumerateHomebrewPackages()
+        return scan(installed: enumerateHomebrewPackages(), map: map)
+    }
+
+    /// The matching step of `runScan`, on a given inventory and map (so a test can supply both).
+    static func scan(installed: [InstalledPackage], map: CveMap) -> [Finding] {
         var findings: [Finding] = []
         for pkg in installed {
             for cve in findKnownCVEs(map: map, package: pkg.name, installedVersion: pkg.version) {
@@ -455,10 +487,20 @@ enum PackageCveScan {
                     cvssScore: cve.cvssScore,
                     fixedVersion: tightestFixedVersion(installedVersion: pkg.version, entry: cve),
                     summary: cve.summary,
-                    confidence: cve.confidence
+                    confidence: cve.confidence,
+                    epss: cve.epss,
+                    epssDate: cve.epss == nil ? nil : map.epssDate
                 ))
             }
         }
-        return findings
+        return ordered(findings)
+    }
+
+    /// Severity band first, then EPSS (higher first), then CVSS and CVE id. See `PackageCveEpss.precedes`.
+    static func ordered(_ findings: [Finding]) -> [Finding] {
+        findings.sorted {
+            PackageCveEpss.precedes(cvssA: $0.cvssScore, epssA: $0.epss, idA: $0.id,
+                                    cvssB: $1.cvssScore, epssB: $1.epss, idB: $1.id)
+        }
     }
 }

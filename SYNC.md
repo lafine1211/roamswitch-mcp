@@ -68,6 +68,8 @@ All files live in `Sources/roamswitch-mcp/`.
 | `PackageCveEpss.swift` | `RoamSwitch/PackageCveEpss.swift` |
 | `VulnerabilityAcceptance.swift` | `RoamSwitch/VulnerabilityAcceptance.swift` |
 | `DependencySourceScan.swift` | `RoamSwitch/DependencySourceScan.swift` |
+| `ProxyAutoDiscoveryCheck.swift` | `RoamSwitch/ProxyAutoDiscoveryCheck.swift` |
+| `AgentCredentialFileCheck.swift` | `RoamSwitch/AgentCredentialFileCheck.swift` |
 | `SecretLeakScanning.swift` | `RoamSwitch/SecretLeakScanning.swift` |
 | `CryptoSecretDetection.swift` | `Shared/CryptoSecretDetection.swift` (from `Shared/`) |
 | `SecurityLogAuditor.swift` | `RoamSwitch/SecurityLogAuditor.swift` |
@@ -93,11 +95,11 @@ All files live in `Sources/roamswitch-mcp/`.
 | `KnownAttackServers.swift` | `Shared/KnownAttackServers.swift` (from `Shared/`) |
 | `SSHGuardCore.swift` | `Shared/SSHGuardCore.swift` (from `Shared/`) |
 | `GuardReaderHealth.swift` | `Shared/GuardReaderHealth.swift` (from `Shared/`) |
+| `StrictJSON.swift` | `Shared/StrictJSON.swift` (from `Shared/`) |
 | `SSHGuardStatusReader.swift` | `RoamSwitch/SSHGuardStatusReader.swift` |
 
 This is exactly the source set the app compiles into its `RoamSwitchMCPServer` target
 (see `project.yml` in the app repo). Thirteen of the files come from the app's `Shared/` folder
-| `StrictJSON.swift` | `Shared/StrictJSON.swift` (from `Shared/`) |
 (compiled into the app and the privileged helper too); the sync script keeps them in its `SHARED`
 list, and everything else in its `CORE` list. `Localizable.xcstrings` is also in that target but is
 not mirrored (this package does not use it).
@@ -136,11 +138,21 @@ via `@testable import RoamSwitch`. Only `main.swift` (the stdin→stdout pump) i
 | `DetectionCoverageTests.swift` | `RoamSwitchTests/DetectionCoverageTests.swift` |
 | `LocalAIRuntimeTests.swift` | `RoamSwitchTests/LocalAIRuntimeTests.swift` |
 | `GuardReaderHealthTests.swift` | `RoamSwitchTests/GuardReaderHealthTests.swift` |
+| `StrictJSONTests.swift` | `RoamSwitchTests/StrictJSONTests.swift` |
+| `AgentSetupAuditorTests.swift` | `RoamSwitchTests/AgentSetupAuditorTests.swift` |
+| `KnownAttackServersTests.swift` | `RoamSwitchTests/KnownAttackServersTests.swift` |
+| `AgentCredentialFileCheckTests.swift` | `RoamSwitchTests/AgentCredentialFileCheckTests.swift` |
+| `BackupRecencyTests.swift` | `RoamSwitchTests/BackupRecencyTests.swift` |
+| `DependencySourceScanTests.swift` | `RoamSwitchTests/DependencySourceScanTests.swift` |
+| `PackageCveEpssTests.swift` | `RoamSwitchTests/PackageCveEpssTests.swift` |
+| `ProbeCatalogTests.swift` | `RoamSwitchTests/ProbeCatalogTests.swift` |
+| `MCPToolAnnotationsTests.swift` | `RoamSwitchTests/MCPToolAnnotationsTests.swift` |
 | `StdioSmokeTests.swift` | **not mirrored** — specific to this repo (drives the built binary over stdio) |
 | `MutationFuzzTests.swift` | **not mirrored** — specific to this repo |
 
 `GuardReaderHealthAppTests.swift` and `DetectionCoverageAppTests.swift` are **not mirrored**: it needs `ExecRuleID` (compiled into the app only) and the app's `Localizable.xcstrings`.
-| `StrictJSONTests.swift` | `RoamSwitchTests/StrictJSONTests.swift` |
+
+`VulnerabilityAcceptanceTests.swift` (needs `VulnerabilityAcceptanceWatcher`, `SecurityActivityLogCategory` and `VulnerabilityAcceptanceText`, app-only) and `DetectionMetadataLintTests.swift` (needs `ExecRuleID` and `ExecRecorderManager`, app-only) are **not mirrored**.
 
 App tests for guards that are not in this repo (`PortAnomalyGuardTests`, `RansomwareCanaryGuardTests`,
 `WebMailDownloadGuardTests`, `DNSThreatGuardTests`, `DangerousPortExposureTests`) are not mirrored.
