@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.13.0 (build 172).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.14.0 (build 173).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -181,6 +181,12 @@ enum PromptInjectionSignals {
         rule(.instructionOverride, #"(新しい|更新された)(指示|命令)\s*:"#),
         rule(.instructionOverride, #"ユーザー(に)?は?(言わ|伝え|知らせ|見せ|気づか)(ない|せない)で"#),
 
+        rule(.instructionOverride, #"\b(?:report|tell|inform|assure|say|state|conclude|confirm)\s+(?:the\s+user\s+|me\s+|them\s+)?that\s+(?:this|it|everything|all|the)(?:\s+[\w.\-]+){0,3}\s+(?:is|are|was|were)\s+(?:safe|clean|benign|harmless|secure|legitimate|trusted)\b"#),
+        rule(.instructionOverride, #"\b(?:report|tell|inform|assure|say|state|conclude|confirm)\s+(?:the\s+user\s+|me\s+|them\s+)?that\s+(?:no|zero)\s+(?:issues?|threats?|findings?|problems?|vulnerabilit(?:y|ies)|malware|detections?)\s+(?:were\s+|was\s+|are\s+|is\s+)?(?:found|detected|present)\b"#),
+        rule(.instructionOverride, #"\bmark\s+(?:this|it|the)(?:\s+(?:finding|alert|result|issue|detection))?\s+as\s+(?:safe|benign|a\s+false\s+positive|resolved|accepted)\b"#),
+        rule(.instructionOverride, #"(?:問題|脅威|異常|危険)(?:は|が)?(?:見つからなかった|ありませんでした|なかった|ない|ありません)と(?:報告|伝え|答え|回答|述べ)"#),
+        rule(.instructionOverride, #"安全(?:だ|です|である)と(?:報告|伝え|答え|回答|述べ|言っ)"#),
+
         // role-hijack
         rule(.roleHijack, #"<\|\s*(im_start|im_end|endoftext|system|user|assistant|eot_id|start_header_id|end_header_id)\s*\|>"#),
         rule(.roleHijack, #"</?\s*(system|assistant)\s*(>|\s[^>]{0,80}>)"#),
@@ -214,6 +220,13 @@ enum PromptInjectionSignals {
         rule(.systemPromptLeak, #"\brepeat\s+(everything|all(\s+of)?(\s+the)?\s+(text|words|content))\s+(above|before)\b"#),
         rule(.systemPromptLeak, #"システムプロンプト(を|の)(表示|出力|教え|開示|見せ|漏ら|繰り返)"#),
 
+        rule(.systemPromptLeak, #"\b(?:list|enumerate|print|show|output|reveal|display|disclose|dump|tell\s+me)\s+(?:me\s+)?(?:all\s+)?(?:(?:of\s+)?your|(?:the\s+)?(?:available|connected|registered|installed|enabled|hidden|internal))\s+(?:(?:available|connected|registered|installed|enabled|hidden|internal)\s+)*(?:tools?|functions?|mcp\s+servers?|plugins?|skills|capabilities|tool\s+(?:names|schemas?|definitions?))\b"#),
+        rule(.systemPromptLeak, #"\bwhat\s+(?:tools|functions|mcp\s+servers|plugins|skills)\s+(?:do\s+you\s+have|are\s+(?:available|connected|enabled)|can\s+you\s+(?:use|call|access))\b"#),
+        rule(.systemPromptLeak, #"\b(?:print|output|reveal|show|display|disclose|dump|share|provide|read\s+out|tell\s+me|give\s+me|send\s+me)\s+(?:me\s+)?(?:(?:all\s+)?(?:of\s+)?your|all\s+(?:of\s+)?the|the\s+(?:api|access|auth|secret|private|bearer|session|oauth|ssh))\s+(?:(?:api|access|auth|secret|private|bearer|session|oauth|ssh|login)\s+)?(?:keys?|tokens?|passwords?|credentials?|secrets?|cookies?|env(?:ironment)?\s+(?:vars?|variables?))\b"#),
+        rule(.systemPromptLeak, #"\bwhat\s+(?:is|are)\s+your\s+(?:(?:api|access|auth|secret|private|bearer|session|oauth)\s+)?(?:keys?|tokens?|passwords?|credentials?|secrets?)\b"#),
+        rule(.systemPromptLeak, #"(?:利用可能な|使える|あなたの|登録された|接続された)(?:ツール|関数|プラグイン|スキル|mcpサーバー?)(?:の一覧)?を?(?:一覧|列挙|表示|出力|教え|開示)"#),
+        rule(.systemPromptLeak, #"あなた(?:の|自身の)[^。]{0,10}?(?:apiキー|アクセストークン|トークン|パスワード|認証情報|資格情報|秘密鍵|環境変数)を?(?:表示|出力|教え|開示|見せ|共有|提示)"#),
+
         // authority-claim
         rule(.authorityClaim, #"\bthis is (an?\s+)?(secret|confidential|internal|hidden|private|urgent)\s+(message|instruction|directive|update|command|order)s?\b"#),
         rule(.authorityClaim, #"\b(message|instruction|notice|order)s?\s+(from|by)\s+(the\s+)?(system administrator|your (creator|developer|operator|administrator)|the developers?|anthropic|openai)\b"#),
@@ -225,6 +238,10 @@ enum PromptInjectionSignals {
         rule(.authorityClaim, #"(これは|以下は)(秘密|機密|内部|隠し|緊急)の?(指示|命令|メッセージ)"#),
         rule(.authorityClaim, #"(ai|llm|アシスタント|エージェント)(への|向けの|宛ての)(指示|命令|メッセージ)"#),
         rule(.authorityClaim, #"(セキュリティ|安全)(チェック|制限|フィルタ|ガード)を?(無効|解除|オフ)"#),
+        rule(.authorityClaim, #"\b(?:confirm|attest|certify|declare|acknowledge|state|verify)\s+(?:that\s+)?you\s+(?:are|have|were)\s+(?:been\s+)?(?:authori[sz]ed|permitted|allowed|approved|cleared|verified|granted)\b"#),
+        rule(.authorityClaim, #"\b(?:reply|respond|answer|say|type|write)\s+(?:with\s+)?["']?(?:i\s+am\s+authori[sz]ed|i\s+have\s+(?:permission|authori[sz]ation|consent|been\s+authori[sz]ed)|i\s+(?:confirm|attest|certify)\s+that)\b"#),
+        rule(.authorityClaim, #"(?:権限|許可|承認)(?:が|を)?(?:ある|あります|得ている|得ています)と(?:確認|宣言|証明|回答|答え|述べ|言っ|認め)"#),
+        rule(.authorityClaim, #"(?:承認|認可|許可)(?:済み|されている|されています)と(?:回答|答え|宣言|確認|述べ|言っ)"#),
     ]
 
     // MARK: Result text

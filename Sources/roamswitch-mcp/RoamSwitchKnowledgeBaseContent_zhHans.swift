@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.13.0 (build 172).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.14.0 (build 173).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -154,6 +154,7 @@ extension RoamSwitchKnowledgeBase {
                 • 无认证确认：向 Redis（PING）、Memcached（stats）、MongoDB（listDatabases）发送单次、短超时的非破坏性探测。
                 • 通用开发服务器诊断：检查 CORS 配置错误（Origin 反射＋允许凭据）、路径遍历、开放重定向和 SSRF（会请求所收到 URL 的服务器，即使该 URL 指向本机上自建的监听端口）。
                 • 已知 CVE 版本比对：通过非破坏性查询获取可无认证访问的 Redis / Memcached 版本，并与已知 CVE 的受影响版本范围进行比对。不会发送攻击载荷。
+                • 对开发服务器的端口（127.0.0.1），还会检查无需登录就能应答的管理页面或 API（探测 webvuln-unauth-admin）。不带 Cookie 和任何凭据，对固定的 7 个路径（/admin、/api/admin、/api/users、/api/v1/users、/api/v1/user、/actuator/env、/swagger-ui/index.html）各发送 1 次 GET，只有在应答为 200 且包含数据（非空的 JSON 数组、不是错误信息的 JSON 对象、带用户表格的 HTML、Swagger UI）时才报告。登录页面、重定向、SPA 外壳以及 {"error":"unauthorized"} 都不会报告。它不会尝试登录，不会猜测，也不会模糊测试。声明的副作用是目标日志中的痕迹和较多的请求。它用于发现只在浏览器端隐藏菜单、却没有在服务器端检查授权的应用。
                 • 也可通过 MCP 工具 `run_active_vuln_scan` 执行（其探测仅发往本地主机）。
                 """,
                 recommendation: "仅在您想确认自己 Mac 上运行的 Redis、Docker、本地 LLM 等是否确实处于无认证即可访问的状态时启用。"
@@ -411,6 +412,7 @@ extension RoamSwitchKnowledgeBase {
                 • 通知：一条通知（Pro）加上事件时间线中的一条记录（来源 execRecorder，处置“仅通知”）。通知本身绝不会触发 Air-Gap 等隔离。
                 • 存储：分段的 JSON Lines，位于 /Library/Application Support/RoamSwitch/exec_log（仅 root 可读：0700/0600，因为命令行可能包含机密；应用、查看器和 MCP 服务器只能通过特权 Helper 读取），默认 200 MB·14 天（可更改），崩溃安全的轮转。各分段以哈希链相连，可发现被删除、编辑或截断的分段（“验证哈希链”）；这是篡改检测，而非篡改防护。不会记录环境变量，但命令行参数中可能包含敏感信息。
                 • 负载控制：有界队列，过载时丢弃最旧的行（计数并显示），指数退避重启，关闭后 eslogger 会被完全停止。
+                • exec.offensive_tool_inventory 与 exec.offensive_tool_burst 的攻击工具名单新增了 chisel、ligolo、ligolo-ng、suo5、stowaway、iox、venom、mimikatz、certipy、rubeus、kerbrute、bloodhound、sharphound、sliver、havoc、godzilla、behinder、antsword、weevely、fscan、gogo、ehole、oneforall、ksubdomain、dnsx、subzy、tlsx、cdncheck 以及 impacket 系列工具。frp、nps、ngrok、ssh 日常也会使用，因此未加入。 exec.offensive_tool_burst 现在也覆盖可执行文件位于 /Users、/tmp、/private/tmp、/var/folders 等位置的程序（用 Go 或 Rust 编写、自己运行这些工具的智能体）。终端、ssh、login 下的链条仍不在范围内。
                 • 查看与导出：菜单 → 恶意软件防护 →“进程执行记录…”（搜索、进程树、导出为 JSON Lines）。MCP 工具 `search_exec_events` 和 `get_process_tree`（Pro，只读）。 输出安全：进程路径、参数和签名ID可被攻击者任意构造，因此这些工具会去除控制字符、将每个字符串限制在300个字符以内、把已知的密钥格式和带密钥名称的参数值屏蔽为 ****，并在JSON之后追加第二个文本块，标明其为不可信的外部数据。搜索词（`query`）同样只与已屏蔽的命令行进行匹配（被屏蔽的值无法通过搜索找到），长度至少为3个字符，且带搜索词的查询按会话限制频率，因此无法借助搜索逐字符探测密钥。应用自带的查看窗口则会对您自己的日志进行全文搜索。
                 """,
                 recommendation: "如果需要用于事件排查的执行历史，可以启用，并请先在“完全磁盘访问权限”中允许 RoamSwitch。请把通知当作需要在日志中核实的线索，而不是入侵的证据。"
@@ -428,6 +430,18 @@ extension RoamSwitchKnowledgeBase {
                 • 默认值：Pro 版默认开启。可在菜单「恶意软件防护」→「监控新增自动启动注册(LaunchAgent/Daemon) (Pro)」中切换。
                 """,
                 recommendation: "收到陌生的自动启动注册通知时，请检查通知中显示的 plist 内容，若无印象请删除。如果是刚安装正规应用，则无需担心。如果是启动文件等的通知，请查看通知中显示的那一行，没有印象就删除它。"
+            ),
+            LocalizedEntry(
+                id: "feat_web_worker_crash_guard",
+                title: "监视 Web 服务器工作进程的异常终止(Pro)",
+                summary: "当 nginx 或 Apache 的工作进程在短时间内反复崩溃时发出通知。主进程会重新创建工作进程,所以其他监视看不到。",
+                details: """
+                • 监视对象:nginx 和 Apache(Homebrew 和 macOS 自带)的错误日志,以及 nginx 配置中的 `error_log`。每 5 秒只读取新增的行。
+                • 判断:5 分钟内 3 次因崩溃信号(SIGSEGV、SIGABRT、SIGBUS、SIGILL、SIGFPE)而终止。SIGKILL 等不计入。
+                • 仅通知:每台服务器每小时最多一次,不会停止或封锁任何内容。
+                • 默认:Pro 下开启。
+                """,
+                recommendation: "请用 `grep signal` 查看错误日志,并在访问日志中查找同一时间、每次崩溃之前的请求。同时请确认 nginx、Apache 是否有尚未应用的安全修复。"
             ),
             LocalizedEntry(
                 id: "feat_docker_event_guard",
@@ -540,6 +554,19 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "发生自动阻断后，请结合此历史与通知历史进行确认，以帮助查明原因并防止再次发生。"
             ),
             LocalizedEntry(
+                id: "feat_forensic_evidence_bundles",
+                title: "事件证据包与篡改检测",
+                summary: "对勒索软件或运行时威胁被封堵时自动保存的证据包，事后用保存在证据包之外的链记录检查它们是否被改动。这是篡改检测，不是篡改防止。",
+                details: """
+                • 保存：封堵勒索软件或运行时威胁的同时，把进程列表、网络连接、监视文件夹中最近修改的文件，以及（如果能识别）可疑进程打开的文件，保存为 `~/Library/Application Support/RoamSwitch/incident-evidence/` 下的证据包。manifest.json 中包含每个文件的 SHA-256。不包含数据包捕获和进程内存。
+                • 链：把证据包 manifest 的 SHA-256 连同上一行的哈希，逐行写入证据包之外的 `chain.log`（位于同一个 incident-evidence 文件夹，0600）。写入在刷到磁盘（F_FULLFSYNC）之后才确定。
+                • 检查：只读的 MCP 工具 `get_forensic_evidence_bundles` 会为每个证据包返回 `integrity`。取值为 `verified`、`manifest_altered`、`artifact_altered:<名称>`、`artifact_missing:<名称>`、`not_anchored`（链建立之前的证据包，或其行被删除）。还会返回整条链的 `chainOk`、`chainBrokenAt`，以及链中记录但已消失的证据包 `missingBundles`。
+                • 已损坏的链不会再追加行（以免掩盖是在哪里损坏的）。
+                • 限制：这是篡改的“检测”，不是“防止”。能同时改写文件夹和日志的人，可以编造出前后一致的历史。
+                """,
+                recommendation: "对 `integrity` 不是 `verified` 的证据包，在将其作为证据使用之前，请先检查文件夹是否被改动。链建立之前的证据包也会显示 `not_anchored`。"
+            ),
+            LocalizedEntry(
                 id: "feat_security_activity_log",
                 title: "安全活动日志(搜索·筛选·时间线图表横向查看所有事件)",
                 summary: "将遏制事件历史与已确认的邮件附件恶意软件检测结果统一到一个画面中,可通过关键字搜索、分类/严重程度筛选,并通过时间序列图表下钻查看。",
@@ -549,7 +576,7 @@ extension RoamSwitchKnowledgeBase {
                 • 筛选条件:分类(ARP欺骗、勒索软件诱饵文件、XProtect联动Air-Gap、端口异常、ClickFix、执行记录、勒索软件熵值检测、蜜罐凭据、浏览器凭据访问监视、反向Shell检测、网络设置变化监控、危险下载)、严重程度(全部/info/warning/critical)、时间范围(过去24小时/过去3天/过去7天/所有时间)、自由文本搜索(对概要、详情、分类名称进行不区分大小写的子串匹配)。
                 • 时间序列图表:以柱状图显示所选时间范围内的检测件数——时间跨度在72小时以内时按小时分组,超过则按天分组,自动切换。点击某根柱子可将列表缩小到该时间段,再次点击可取消。
                 • 显示上限:最多显示最新500条(超出时会显示提示信息并建议缩小筛选范围)。
-                • 导出:CSV导出(Pro)。
+                • 导出:CSV导出(Pro)。 在 CSV 导出（通知历史、日志审计、活动日志、CVE 扫描等）中，以 =、+、-、@、制表符或回车符开头的单元格前会加上 '，避免表格软件把它当作公式执行（npm 的 @scope/pkg 前也会加 '）。
                 • 与相似画面的区别:「Mac安全日志审计」针对的是另一个数据来源——macOS自身的统一日志(sudo、SSH、Gatekeeper、XProtect)。「通知历史」是RoamSwitch发送过的所有通知横幅的7天记录。本画面是唯一可以横向搜索RoamSwitch自身遏制判断的地方。
                 """,
                 recommendation: "在发生自动阻断后用它回顾发生了什么,或按分类、时间范围比较检测趋势。"
@@ -588,6 +615,7 @@ extension RoamSwitchKnowledgeBase {
                 • 检测方式：基于正则表达式和香农熵的评分。检测到的值会打码显示。
                 • 文件夹扫描：自动排除 `.git`、`node_modules`、`target`、`vendor`、`dist`、`build`、`__pycache__`、`venv`。超过 2MB 的文件和二进制文件会被跳过。
                 • 权限说明：选择桌面、下载等受保护文件夹时，会在 macOS 权限对话框出现之前（仅首次）显示说明，解释需要访问的原因以及 Zero Telemetry 设计。
+                • `audit_secrets` 在指定目录时有可选的布尔参数 `include_build_output`。文件夹的递归扫描为避免重复报告生成物而不检查 dist 和 build，因此网站公开的文件之前没有被检查。把 `include_build_output` 设为 true 后，还会读取项目的 dist、build、out、.next/static, .output/public, .svelte-kit/output、public、static（都没有时读取该文件夹本身），查找内嵌的 API 密钥、私钥和加密资产密钥、JWT，以及不应出现在生产环境中的 source map（.map 文件），并在结果中加入 `buildOutput`。发现的值只显示前 4 个字符和长度。上限为单个文件 5 MB、总计 200 MB、20,000 个文件。符号链接只有在指向文件夹内部时才会跟随。
                 • 处理在独立线程中进行，不会阻塞界面。不会向外部发送任何内容。
                 """,
                 recommendation: "可在公开代码仓库之前，或将代码粘贴到 AI 聊天之前，用于批量检查。"
@@ -726,8 +754,8 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",
-                title: "Mac 安全综合诊断（21 个项目·评分 & 改进步骤）",
-                summary: "检查系统健壮性、网络防御、身份验证与访问控制、端口暴露、恶意软件防护、物理设备防御 6 个领域共 21 个项目，并显示 100 分制的评分、等级和改进步骤。免费版即可使用。",
+                title: "Mac 安全综合诊断（22 个项目·评分 & 改进步骤）",
+                summary: "检查系统健壮性、网络防御、身份验证与访问控制、端口暴露、恶意软件防护、物理设备防御 6 个领域共 22 个项目，并显示 100 分制的评分、等级和改进步骤。免费版即可使用。",
                 details: """
                 • 系统健壮性：1. FileVault，2. SIP（系统完整性保护），3. Gatekeeper，4. 自动安全更新，5. Apple XProtect，6. 备份（Time Machine 最近一次备份在 7 天内；不检查能否还原）。
                 • 网络防御：7. macOS 防火墙，8. 隐身模式，9. Wi-Fi 加密强度，10. ARP 欺骗监视，11. 网关 ARP 固定，12. 代理自动发现 (WPAD / PAC)。
@@ -736,6 +764,7 @@ extension RoamSwitchKnowledgeBase {
                 • 恶意软件与下载保护：17. 网页与邮件保护，18. DNS 威胁防护，19. 钓鱼与恶意链接防护（Safari 的欺诈网站警告）。
                 • 物理端口与设备防御：20. 非法 USB / BadUSB 物理端口防护，21. macOS 配件连接保护。
                 • 不适用项的处理：受信任网络上的防火墙和隐身模式、远程登录禁用时的 SSH、辅助程序未连接时的 Sudo 审计将标记为 N/A，并从评分计算中排除。
+                • 22. 新增的受信任证书（证书颁发机构）（`trust_anchors`，网络防御）：针对用户域和管理员域读取 `security dump-trust-settings`。只有当人、管理员或描述文件设置过时，证书才会带有信任设置，所以列出的证书都是有人添加的；Apple 自带的根证书不计入，信任结果为“deny”（不信任）的证书也不计入。如果新增证书的名称看起来像拦截工具（mitm、proxy、charles、fiddler、burp、portswigger、zscaler、netskope、squid、inspection、sslsplit），该项不合格并列出名称（最多 3 个）。其他新增证书（公司根证书、mkcert 等）作为信息显示，该项合格（如果是你自己设置的就没有问题）。无法读取该命令时，该项为“无法确认”。原因：读取加密通信（包括密码和 API 密钥）的代理，需要 Mac 信任它的证书颁发机构。看不到的内容：应用自带的证书，以及证书是何时添加的；新增的证书出现时也不会通知。检测覆盖：T1553.004（部分）。不会更改任何内容，也不会发送任何内容。
                 • 等级：100 分 = S，85～99 分 = A，70～84 分 = B，低于 70 分 = C。也可通过 MCP 工具 `get_security_report` 获取。
                 """,
                 recommendation: "请定期打开「综合诊断报告」，按照改进步骤处理带 ⚠️ 的项目，保持 A 级以上。"
@@ -790,7 +819,9 @@ extension RoamSwitchKnowledgeBase {
                 • 资源：`roamswitch://docs/features`、`roamswitch://docs/alerts-and-messages`、`roamswitch://docs/settings-guide`、`roamswitch://docs/troubleshooting`。
                 • 语言：回答遵循应用的语言设置。`get_app_help` 可通过 `language` 参数（ja / en / zh-Hans / zh-Hant / ko / de / fr / es / it / pt-PT）指定语言。
                 • 会写入本地状态的工具：`run_active_vuln_scan`（把结果追加到本地扫描历史）、`audit_security_logs`（更新日志模式基准和通知历史）、`run_npm_audit_signatures`（npm 会写入自己的缓存和日志）会写入本地状态，因此它们的 MCP 只读提示为否。它们都不会更改设置或保护级别。
+                • audit_mcp_configs: MCP 服务器的 env 中如果有让通信经由代理的设置（HTTP_PROXY, HTTPS_PROXY, ALL_PROXY）、让其信任额外证书颁发机构的设置（NODE_EXTRA_CA_CERTS, SSL_CERT_FILE, SSL_CERT_DIR, REQUESTS_CA_BUNDLE, CURL_CA_BUNDLE, GIT_SSL_CAINFO）或关闭证书校验的设置（NODE_TLS_REJECT_UNAUTHORIZED=0），也会指出（traffic_interception_env，严重度 medium）。不会显示值，代理只显示 host。这也可能是正确的公司代理设置，提示文字中也会这样说明。
                 • 安全设计：由于没有任何工具能更改设置或保护级别，即使 AI 因提示注入而被滥用，也无法更改保护级别或隔离端口等。
+                • 对形似指令的文字的检测，现在还覆盖要求列出工具、或泄露 API 密钥、令牌、环境变量的请求（system-prompt-leak），要求确认或回答“你有权限”的自我证明请求（authority-claim），以及要求报告“安全”“没有威胁”“已解决”的指令（instruction-override）。类别的种类没有增加。
                 """,
                 recommendation: "配置步骤请参见 faq_mcp_setup。可以用自然语言提问，例如「这台 Mac 现在安全吗？」「这个通知是什么意思？」。"
             ),
@@ -1396,11 +1427,11 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "faq_free_vs_pro",
                 title: "免费版与 Pro 永久版的区别",
-                summary: "免费版也可以无限期使用根据网络自动切换保护、21 个项目的综合诊断等基础防御功能以及各类手动诊断工具。Pro 版将解锁自动隔离、实时防御、自主巡查警告等功能。",
+                summary: "免费版也可以无限期使用根据网络自动切换保护、22 个项目的综合诊断等基础防御功能以及各类手动诊断工具。Pro 版将解锁自动隔离、实时防御、自主巡查警告等功能。",
                 details: """
                 【免费版】
                 • 根据 Wi-Fi 和网络自动切换三级 pf 数据包过滤，自动停止与恢复共享服务和 AirDrop
-                • Mac 安全综合诊断（21 个项目）、XProtect 运行状态确认与文件/应用安全性诊断
+                • Mac 安全综合诊断（22 个项目）、XProtect 运行状态确认与文件/应用安全性诊断
                 • 外部公开端口和 USB 设备列表显示
                 • 链接安全性诊断、机密信息与 API 密钥泄露手动审计、剪贴板保护
                 • 软件包 CVE 照合、实证型漏洞验证、Mac 安全日志审计、通知历史

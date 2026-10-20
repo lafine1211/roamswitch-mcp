@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.13.0 (build 172). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.14.0 (build 173). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -252,6 +252,27 @@ final class GuardReaderHealthTests: XCTestCase {
             var scanDown = healthy(); scanDown.markUnreadable(reason: "helper_unreachable", now: now)
             XCTAssertEqual(GuardReaderHealthStore.guardLiveState(guardKey: key, enabledInSettings: true, records: [main: scanDown, aux: healthy()], now: now), "off", key)
         }
+    }
+
+    func testTheDownloadGuardIsPartialWhileTheLastStaticScanSkippedSomethingAndOnAgainWhenItDidNot() {
+        let now = 9_000.0
+        var skipped = GuardReaderHealth()
+        skipped.setScanResult(filesUnreadable: 2, foldersUnreadable: 0, filesTruncated: 0, now: now - 5)
+        var truncated = GuardReaderHealth()
+        truncated.setScanResult(filesUnreadable: 0, foldersUnreadable: 0, filesTruncated: 1, now: now - 5)
+        var clean = GuardReaderHealth()
+        clean.setScanResult(filesUnreadable: 0, foldersUnreadable: 0, filesTruncated: 0, now: now - 5)
+        let key = "webMailDownloadGuard"
+        XCTAssertTrue(GuardReaderHealthStore.sourceIDs(forGuard: key).contains("staticSignatureScan"))
+        for (name, record, expected) in [("skipped", skipped, "partial"), ("truncated", truncated, "partial"), ("clean", clean, "on")] {
+            XCTAssertEqual(GuardReaderHealthStore.guardLiveState(guardKey: key, enabledInSettings: true,
+                                                                 records: ["webMailDownloadFSEvents": healthy(), "staticSignatureScan": record], now: now), expected, name)
+        }
+        // No batch yet: not held against the guard.
+        XCTAssertEqual(GuardReaderHealthStore.guardLiveState(guardKey: key, enabledInSettings: true, records: ["webMailDownloadFSEvents": healthy()], now: now), "on")
+        // The watch itself failing still wins.
+        var failed = healthy(); failed.markUnreadable(reason: "watch_failed", now: now - 1)
+        XCTAssertEqual(GuardReaderHealthStore.guardLiveState(guardKey: key, enabledInSettings: true, records: ["webMailDownloadFSEvents": failed, "staticSignatureScan": clean], now: now), "off")
     }
 
     func testFilesUnreadableIsTheLastScansCountWithTheTimeSomethingWasLastSkipped() {

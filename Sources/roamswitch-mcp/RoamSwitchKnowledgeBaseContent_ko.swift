@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.13.0 (build 172).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.14.0 (build 173).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -154,6 +154,7 @@ extension RoamSwitchKnowledgeBase {
                 • 비인증 접근: Redis(PING), Memcached(stats), MongoDB(listDatabases)에 단발성, 짧은 타임아웃의 비파괴적 프로브를 보냅니다.
                 • 일반 개발 서버: CORS 설정 오류(자격 증명 포함 Origin 반사), 경로 순회, 오픈 리다이렉트, SSRF(전달받은 URL을 가져오는 서버. 이 머신의 자체 대기 포트를 가리키는 URL 포함)를 확인합니다.
                 • 알려진 CVE 버전 대조: 인증 없이 도달 가능한 Redis/Memcached의 버전을 비파괴적 쿼리로 읽어 알려진 CVE 버전 범위와 대조합니다. 공격용 페이로드는 전송하지 않습니다.
+                • 개발 서버 포트(127.0.0.1)에 대해서는 로그인 없이 응답하는 관리 화면이나 API도 확인합니다(프로브 webvuln-unauth-admin). 쿠키도 인증 정보도 붙이지 않고 고정된 7개 경로(/admin, /api/admin, /api/users, /api/v1/users, /api/v1/user, /actuator/env, /swagger-ui/index.html)에 한 번씩 GET을 보내며, 응답이 200이고 데이터(비어 있지 않은 JSON 배열, 오류가 아닌 JSON 객체, 사용자 표가 있는 HTML, Swagger UI)일 때만 지적합니다. 로그인 화면, 리다이렉트, SPA 틀, {"error":"unauthorized"}는 지적하지 않습니다. 로그인을 시도하지 않고, 추측도 퍼징도 하지 않습니다. 선언된 부작용은 로그에 남는 흔적과 다수의 요청입니다. 브라우저 쪽 메뉴만 숨기고 서버에서는 권한을 확인하지 않는 앱을 찾기 위한 것입니다.
                 • MCP 도구 `run_active_vuln_scan`으로도 사용할 수 있습니다(프로브는 localhost로만 전송합니다).
                 """,
                 recommendation: "본인 Mac에서 실행 중인 Redis, Docker, 로컬 LLM 등이 정말로 인증 없이 도달 가능한지 확인하고 싶을 때만 켜세요."
@@ -411,6 +412,7 @@ extension RoamSwitchKnowledgeBase {
                 • 알림: 알림(Pro)과 인시던트 타임라인 기록(출처 execRecorder, 조치 「알림 전용」). 알림 하나만으로 Air-Gap 등의 격리가 발동되는 일은 없습니다.
                 • 저장: /Library/Application Support/RoamSwitch/exec_log 아래의 세그먼트 분할 JSON Lines(root 전용 0700/0600. 명령줄에 비밀 정보가 포함될 수 있어, 앱·뷰어·MCP 서버는 권한 있는 헬퍼를 통해서만 읽습니다), 기본 200MB·14일(변경 가능), 충돌에도 안전한 로테이션. 세그먼트를 해시 체인으로 연결해 삭제·수정·잘림을 탐지합니다(「체인 검증」). 변조 탐지일 뿐 변조 방지는 아닙니다. 환경 변수는 기록하지 않지만 명령줄 인수에는 민감한 정보가 포함될 수 있습니다.
                 • 부하 대책: 과부하 시 오래된 줄부터 버리는 제한 큐(건수 표시), 지수 백오프 재시작, 끄면 eslogger가 완전히 중지됩니다.
+                • exec.offensive_tool_inventory와 exec.offensive_tool_burst의 공격 도구 이름에 chisel, ligolo, ligolo-ng, suo5, stowaway, iox, venom, mimikatz, certipy, rubeus, kerbrute, bloodhound, sharphound, sliver, havoc, godzilla, behinder, antsword, weevely, fscan, gogo, ehole, oneforall, ksubdomain, dnsx, subzy, tlsx, cdncheck와 impacket 계열 도구를 추가했습니다. frp, nps, ngrok, ssh는 일상적으로 쓰이므로 넣지 않았습니다. exec.offensive_tool_burst은 이제 실행 파일이 /Users, /tmp, /private/tmp, /var/folders 등에 있는 프로그램(Go나 Rust로 만들어 도구를 직접 실행하는 에이전트)도 대상으로 합니다. 터미널, ssh, login 아래의 연쇄는 이전처럼 제외됩니다.
                 • 보기와 내보내기: 메뉴 → 악성코드 방어 → 「프로세스 실행 기록…」(검색, 프로세스 트리, JSON Lines 내보내기). MCP 도구 `search_exec_events`, `get_process_tree`(Pro, 읽기 전용). 출력 안전: 프로세스 경로·인수·서명 ID는 공격자가 임의로 만들 수 있으므로, 제어 문자를 제거하고 문자열당 300자로 제한하며 알려진 비밀 정보 형식과 비밀 이름 플래그의 값을 ****로 가리고, JSON 뒤에 신뢰할 수 없는 외부 데이터임을 알리는 두 번째 텍스트 블록을 덧붙입니다. 검색어(`query`)도 이미 마스킹된 명령줄에 대해서만 대조되며(마스킹된 값은 검색으로 찾을 수 없습니다), 3자 이상이어야 하고, 검색어가 있는 검색은 세션마다 횟수가 제한되므로 검색으로 비밀 정보를 한 글자씩 알아낼 수 없습니다. 앱 자체의 보기 화면은 본인의 로그를 전체 텍스트로 검색합니다.
                 """,
                 recommendation: "인시던트 조사용 실행 이력이 필요할 때 켜세요. 먼저 전체 디스크 접근 권한에서 RoamSwitch를 허용합니다. 알림은 침해의 증거가 아니라 로그에서 확인할 단서로 다뤄 주세요."
@@ -428,6 +430,18 @@ extension RoamSwitchKnowledgeBase {
                 • 기본값: Pro에서 기본으로 켜져 있습니다. 악성코드 보호 → "신규 자동 실행 등록(LaunchAgent/Daemon) 감시 (Pro)"에서 전환할 수 있습니다.
                 """,
                 recommendation: "낯선 등록 경고를 받으면 알림에 표시된 plist를 확인하고 알아볼 수 없다면 삭제하세요. 정당한 앱을 막 설치한 직후라면 대개 문제없습니다. 시작 파일 등에 대한 알림이라면 알림에 표시된 줄을 확인하고, 짐작 가는 것이 없으면 그 줄을 삭제하세요."
+            ),
+            LocalizedEntry(
+                id: "feat_web_worker_crash_guard",
+                title: "웹 서버 워커의 비정상 종료 감시(Pro)",
+                summary: "nginx와 Apache의 워커가 짧은 시간에 반복해서 크래시할 때 알립니다. 워커는 부모 프로세스가 다시 만들기 때문에 다른 감시에는 나타나지 않습니다.",
+                details: """
+                • 보는 것: nginx와 Apache(Homebrew와 macOS 기본)의 오류 로그와 nginx 설정에 있는 `error_log`. 5초마다 새로 추가된 줄만 읽습니다.
+                • 판정: 5분 안에 3회, 크래시 시그널(SIGSEGV·SIGABRT·SIGBUS·SIGILL·SIGFPE)로 종료되었을 때. SIGKILL 등은 세지 않습니다.
+                • 알림만: 같은 서버당 1시간에 1회이며, 멈추거나 차단하지 않습니다.
+                • 기본값: Pro에서 켜져 있습니다.
+                """,
+                recommendation: "`grep signal`로 오류 로그를 확인하고, 같은 시각의 접근 로그에서 크래시 직전의 요청을 찾아보세요. nginx·Apache에 적용하지 않은 보안 수정이 없는지도 확인하세요."
             ),
             LocalizedEntry(
                 id: "feat_docker_event_guard",
@@ -540,6 +554,19 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "자동 차단이 발생한 후에는 이 타임라인을 알림 기록과 함께 검토하여 원인을 찾고 재발을 방지하세요."
             ),
             LocalizedEntry(
+                id: "feat_forensic_evidence_bundles",
+                title: "인시던트 증거 번들과 변조 탐지",
+                summary: "랜섬웨어나 실행 중 위협을 봉쇄할 때 자동으로 저장되는 증거 번들이 나중에 바뀌지 않았는지를, 번들 밖에 있는 체인 기록으로 확인합니다. 변조 탐지이며 변조 방지가 아닙니다.",
+                details: """
+                • 저장: 랜섬웨어나 실행 중 위협을 봉쇄할 때 프로세스 목록, 네트워크 연결, 감시 폴더에서 최근 변경된 파일, (식별되면) 의심스러운 프로세스가 열고 있는 파일을 `~/Library/Application Support/RoamSwitch/incident-evidence/` 아래의 번들로 저장합니다. manifest.json에 파일별 SHA-256이 들어갑니다. 패킷 캡처와 프로세스 메모리는 포함하지 않습니다.
+                • 체인: 번들 manifest의 SHA-256을 번들 밖의 `chain.log`(같은 incident-evidence 폴더, 0600)에 한 줄씩, 이전 줄의 해시와 함께 기록합니다. 기록은 디스크에 쓴 뒤(F_FULLFSYNC)에 확정합니다.
+                • 확인: 읽기 전용 MCP 도구 `get_forensic_evidence_bundles`가 번들마다 `integrity`를 반환합니다. 값은 `verified`, `manifest_altered`, `artifact_altered:<이름>`, `artifact_missing:<이름>`, `not_anchored`(체인이 생기기 전의 번들, 또는 줄이 지워진 경우)입니다. 전체 체인의 `chainOk`와 `chainBrokenAt`, 체인에는 있지만 사라진 번들의 `missingBundles`도 반환합니다.
+                • 깨진 체인에는 줄을 추가하지 않습니다(어디서 깨졌는지 숨기지 않기 위해서입니다).
+                • 한계: 변조의 “탐지”이지 “방지”가 아닙니다. 폴더와 로그를 둘 다 고쳐 쓸 수 있는 사람은 앞뒤가 맞는 이력을 만들 수 있습니다.
+                """,
+                recommendation: "`integrity`가 `verified`가 아닌 번들은 증거로 쓰기 전에 폴더가 바뀌지 않았는지 확인하세요. `not_anchored`는 체인이 생기기 전의 번들에서도 나타납니다."
+            ),
+            LocalizedEntry(
                 id: "feat_security_activity_log",
                 title: "보안 활동 로그 (검색·필터·시계열 그래프로 모든 사고를 한눈에)",
                 summary: "봉쇄 사고 타임라인과 확정된 이메일 첨부파일 악성코드 탐지 결과를 하나의 화면에 통합하여 키워드 검색, 카테고리/심각도 필터, 시계열 그래프 드릴다운으로 확인할 수 있습니다.",
@@ -549,7 +576,7 @@ extension RoamSwitchKnowledgeBase {
                 • 필터: 카테고리(ARP 스푸핑, 랜섬웨어 미끼 파일, XProtect 연동 Air-Gap, 포트 이상, ClickFix, 실행 기록, 랜섬웨어 엔트로피 탐지, 허니토큰, 브라우저 자격 증명 감시, 리버스 셸 탐지, 네트워크 설정 변경 감시, 위험한 다운로드), 심각도(전체/info/warning/critical), 기간(과거 24시간/과거 3일간/과거 7일간/전체 기간), 자유 텍스트 검색(요약·상세·카테고리 이름을 대상으로 대소문자를 구분하지 않는 부분 일치).
                 • 시계열 그래프: 선택한 기간의 탐지 건수를 막대 그래프로 표시합니다. 기간이 72시간 이하면 1시간 단위, 초과하면 1일 단위로 자동 전환됩니다. 막대를 클릭하면 해당 시간대로만 좁혀볼 수 있고, 다시 클릭하면 해제됩니다.
                 • 표시 개수: 최신 500건까지 표시합니다(초과 시 더 있다는 안내와 함께 필터를 좁히도록 안내).
-                • 내보내기: CSV 내보내기(Pro).
+                • 내보내기: CSV 내보내기(Pro). CSV 내보내기(알림 이력, 로그 감사, 활동 로그, CVE 스캔 등)에서는 =, +, -, @, 탭, 캐리지 리턴으로 시작하는 셀 앞에 '를 붙여 스프레드시트가 수식으로 실행하지 않게 합니다(npm의 @scope/pkg 앞에도 '가 붙습니다).
                 • 다른 화면과의 차이: "Mac 보안 로그 감사"는 macOS 자체의 통합 로그(sudo, SSH, Gatekeeper, XProtect)를 다루는 별도의 데이터 출처입니다. "알림 기록"은 RoamSwitch가 보낸 모든 알림 배너의 7일치 기록입니다. 이 화면은 RoamSwitch 자신이 내린 봉쇄 판단만을 가로질러 검색할 수 있는 유일한 곳입니다.
                 """,
                 recommendation: "자동 차단이 발생한 후 무슨 일이 있었는지 되짚어 보거나, 카테고리·기간별 탐지 경향을 비교할 때 사용하세요."
@@ -588,6 +615,7 @@ extension RoamSwitchKnowledgeBase {
                 • 방식: 정규 표현식과 섀넌 엔트로피 점수를 함께 사용합니다. 탐지된 값은 마스킹되어 표시됩니다.
                 • 폴더 검사: `.git`, `node_modules`, `target`, `vendor`, `dist`, `build`, `__pycache__`, `venv`는 자동으로 건너뛰며, 2MB를 넘는 파일과 바이너리 파일도 마찬가지입니다.
                 • 권한 안내: 데스크탑이나 다운로드 같은 보호 폴더를 선택하면 macOS의 권한 요청 전에 왜 접근이 필요한지, 이 검사가 Zero Telemetry임을 일회성으로 설명합니다.
+                • `audit_secrets`에는 디렉터리를 지정할 때 쓰는 선택 인수 `include_build_output`(불리언)이 있습니다. 폴더의 재귀 스캔은 생성물을 이중으로 보고하지 않으려고 dist와 build를 읽지 않으므로, 웹사이트가 공개하는 파일은 점검되지 않았습니다. `include_build_output`을 true로 하면 프로젝트의 dist, build, out, .next/static, .output/public, .svelte-kit/output, public, static도 읽어(어느 것도 없으면 폴더 자체) 포함된 API 키, 개인 키, 암호 자산 키, JWT, 운영 환경에 두면 안 되는 소스맵(.map 파일)을 찾고, 결과에 `buildOutput`을 추가합니다. 찾은 값은 앞 4글자와 길이만 표시합니다. 상한은 파일당 5 MB, 전체 200 MB, 20,000개 파일입니다. 심볼릭 링크는 폴더 안에 머물 때만 따라갑니다.
                 • 백그라운드 스레드에서 실행되어 화면이 멈추지 않습니다. 어디로도 전송되지 않습니다.
                 """,
                 recommendation: "저장소를 공개하기 전이나 코드를 AI 채팅에 붙여넣기 전에 사용하세요."
@@ -726,8 +754,8 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",
-                title: "Mac 보안 진단 (21개 항목, 점수와 개선 단계)",
-                summary: "시스템 강화, 네트워크 방어, 인증 및 접근 제어, 포트 노출, 악성코드 보호, 물리적 기기 방어 등 6개 영역 21개 항목을 검사하여 0~100점의 점수, 등급, 실패 항목별 개선 단계를 보여줍니다. 무료 버전에서도 사용할 수 있습니다.",
+                title: "Mac 보안 진단 (22개 항목, 점수와 개선 단계)",
+                summary: "시스템 강화, 네트워크 방어, 인증 및 접근 제어, 포트 노출, 악성코드 보호, 물리적 기기 방어 등 6개 영역 22개 항목을 검사하여 0~100점의 점수, 등급, 실패 항목별 개선 단계를 보여줍니다. 무료 버전에서도 사용할 수 있습니다.",
                 details: """
                 • 시스템 강화: 1. FileVault, 2. SIP(시스템 무결성 보호), 3. Gatekeeper, 4. 자동 보안 업데이트, 5. Apple XProtect, 6. 백업(Time Machine의 가장 최근 백업이 7일 이내인지, 복원 가능 여부는 확인하지 않음).
                 • 네트워크 방어: 7. macOS 방화벽, 8. 스텔스 모드, 9. Wi-Fi 암호화 강도, 10. ARP 스푸핑 모니터, 11. 게이트웨이 ARP 고정, 12. 프록시 자동 검색 (WPAD / PAC).
@@ -736,6 +764,7 @@ extension RoamSwitchKnowledgeBase {
                 • 악성코드 및 다운로드 보호: 17. 웹 및 이메일 보호, 18. DNS 위협 보호, 19. 피싱 및 악성 링크 보호(Safari 사기 웹사이트 경고).
                 • 물리적 포트 및 기기: 20. 무단 USB / BadUSB 물리 포트 가드, 21. macOS 액세서리 연결 보호.
                 • 해당 없음 처리: 신뢰 네트워크에서의 방화벽과 스텔스 모드, 원격 로그인이 꺼져 있을 때의 SSH, 헬퍼 연결 전의 sudo 감사는 점수 계산에서 제외됩니다.
+                • 22. 추가된 신뢰 인증서(인증 기관)(`trust_anchors`, 네트워크 방어): 사용자 도메인과 관리자 도메인에 대해 `security dump-trust-settings`를 읽습니다. 신뢰 설정은 사람, 관리자 또는 프로파일이 설정한 경우에만 붙으므로, 목록에 나오는 인증서는 누군가 추가한 것입니다. Apple 자체의 루트 인증서는 세지 않으며, 신뢰 결과가 'deny'(신뢰하지 않음)인 인증서도 세지 않습니다. 추가된 인증서의 이름이 가로채기 도구처럼 보이면(mitm, proxy, charles, fiddler, burp, portswigger, zscaler, netskope, squid, inspection, sslsplit) 불합격으로 처리하고 그 이름을 표시합니다(최대 3개). 그 밖의 추가된 인증서(회사 루트 인증서, mkcert 등)는 정보로 표시하고 합격으로 처리합니다(직접 설정한 것이라면 문제없습니다). 명령을 읽을 수 없으면 '확인할 수 없음'으로 처리합니다. 이유: 암호화된 통신(비밀번호와 API 키 포함)을 읽는 프록시는 Mac이 그 인증 기관을 신뢰해야 하기 때문입니다. 볼 수 없는 것: 앱이 자체적으로 가진 인증서, 인증서를 언제 추가했는지. 새로 들어와도 그 시점에 알리지 않습니다. 탐지 범위: T1553.004(일부). 아무것도 변경하지 않고 아무것도 보내지 않습니다.
                 • 등급: 100점은 S, 85~99점은 A, 70~84점은 B, 70점 미만은 C입니다. MCP 도구 `get_security_report`로도 확인할 수 있습니다.
                 """,
                 recommendation: "정기적으로 진단 보고서를 열어 ⚠️로 표시된 항목을 제시된 개선 단계에 따라 처리하고 A 등급 이상을 유지하세요."
@@ -790,7 +819,9 @@ extension RoamSwitchKnowledgeBase {
                 • 리소스: `roamswitch://docs/features`, `roamswitch://docs/alerts-and-messages`, `roamswitch://docs/settings-guide`, `roamswitch://docs/troubleshooting`.
                 • 언어: 응답은 앱의 언어 설정을 따릅니다. `get_app_help`는 `language` 인자(ja / en / zh-Hans / zh-Hant / ko / de / fr / es / it / pt-PT)를 받습니다.
                 • 로컬 상태를 쓰는 도구: `run_active_vuln_scan`(결과를 로컬 스캔 기록에 추가), `audit_security_logs`(로그 패턴 기준과 알림 기록을 갱신), `run_npm_audit_signatures`(npm이 자체 캐시와 로그를 기록)는 로컬 상태를 쓰므로 MCP 읽기 전용 힌트가 거짓입니다. 설정이나 보호 수준을 바꾸는 도구는 없습니다.
+                • audit_mcp_configs: MCP 서버의 env에 통신을 프록시로 보내는 설정(HTTP_PROXY, HTTPS_PROXY, ALL_PROXY), 추가 인증 기관을 신뢰하게 하는 설정(NODE_EXTRA_CA_CERTS, SSL_CERT_FILE, SSL_CERT_DIR, REQUESTS_CA_BUNDLE, CURL_CA_BUNDLE, GIT_SSL_CAINFO), 인증서 검증을 끄는 설정(NODE_TLS_REJECT_UNAUTHORIZED=0)이 있을 때도 지적합니다(traffic_interception_env, 중요도 medium). 값은 표시하지 않고, 프록시는 host만 표시합니다. 사내 프록시의 올바른 설정일 수도 있으므로, 안내 문구에도 그렇게 적습니다.
                 • 안전성: 설정이나 보호 수준을 바꾸는 도구가 없으므로 프롬프트 주입에 조작된 AI라도 보호 수준을 바꾸거나 포트를 격리할 수 없습니다.
+                • 지시처럼 보이는 문구의 탐지에 이제 도구 목록이나 API 키, 토큰, 환경 변수를 내놓으라는 요청(system-prompt-leak), “권한이 있다고 확인·응답하라”는 자기 증명 요청(authority-claim), “안전하다고 보고하라”, “위협 없음으로 보고하라”, “해결된 것으로 처리하라”는 지시(instruction-override)의 형태도 포함됩니다. 범주의 종류는 늘지 않았습니다.
                 """,
                 recommendation: "설정 방법은 faq_mcp_setup을 참고하세요. \u{201C}지금 내 Mac이 안전한가요?\u{201D}나 \u{201C}이 알림은 무슨 뜻인가요?\u{201D}처럼 자연스러운 말로 물어볼 수 있습니다."
             ),
@@ -1396,11 +1427,11 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "faq_free_vs_pro",
                 title: "무료 버전과 Pro 평생 버전의 차이",
-                summary: "무료 버전에는 네트워크 기반 자동 보호 전환, 21개 항목 보안 진단, 다양한 수동 검사 도구가 시간 제한 없이 포함되어 있습니다. Pro는 자동 봉쇄, 실시간 방어, 순찰 경고를 추가로 제공합니다.",
+                summary: "무료 버전에는 네트워크 기반 자동 보호 전환, 22개 항목 보안 진단, 다양한 수동 검사 도구가 시간 제한 없이 포함되어 있습니다. Pro는 자동 봉쇄, 실시간 방어, 순찰 경고를 추가로 제공합니다.",
                 details: """
                 【무료 버전】
                 • 네트워크별 3단계 PF 패킷 필터 자동 전환, 공유 서비스와 AirDrop 자동 정지 및 복원
-                • Mac 보안 진단(21개 항목), XProtect 상태, 파일/앱 안전성 진단
+                • Mac 보안 진단(22개 항목), XProtect 상태, 파일/앱 안전성 진단
                 • 노출된 포트와 USB 기기 목록
                 • 링크 안전성 진단, 수동 기밀/API 키 유출 감사, 클립보드 보호
                 • 패키지 CVE 검사, 실증형 취약점 검증, Mac 보안 로그 감사, 알림 기록

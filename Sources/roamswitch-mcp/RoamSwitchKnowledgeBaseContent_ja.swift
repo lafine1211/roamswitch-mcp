@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.13.0 (build 172).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.14.0 (build 173).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -153,6 +153,7 @@ extension RoamSwitchKnowledgeBase {
                 • 無認証確認: Redis（PING）、Memcached（stats）、MongoDB（listDatabases）に、単発・短タイムアウトの非破壊プローブを送信。
                 • 汎用開発サーバー診断: CORS誤設定（Origin反射＋資格情報許可）、パストラバーサル、オープンリダイレクト、SSRF（渡されたURLを取りに行くサーバー。このマシン上の自前の待ち受けを指すURLでも）を確認。
                 • 既知CVEのバージョン照合: 無認証で到達できたRedis / Memcachedのバージョンを非破壊クエリで取得し、既知CVEのバージョン範囲と照合。攻撃ペイロードは送信しません。
+                • 開発サーバーのポート(127.0.0.1)に対しては、無認証の管理画面や API も確認します(プローブ webvuln-unauth-admin)。Cookie も認証もつけずに、固定の 7 つのパス(/admin・/api/admin・/api/users・/api/v1/users・/api/v1/user・/actuator/env・/swagger-ui/index.html)を 1 回ずつ GET し、応答が 200 で、データ(空でない JSON の配列、エラー用ではない JSON のオブジェクト、ユーザーの表のある HTML、Swagger UI)のときだけ指摘にします。ログイン画面・リダイレクト・SPA の枠・{"error":"unauthorized"} は指摘にしません。ログインは試さず、推測もファズもしません。副作用は、ログへの痕跡と多数のリクエストです。ブラウザ側のメニューを隠すだけで、サーバー側で認可を確認していないアプリを見つけるためのものです。
                 • MCPツール `run_active_vuln_scan` からも実行できます（プローブの宛先は127.0.0.1（ローカルホスト）だけです）。
                 """,
                 recommendation: "自分のMacで動かしているRedis・Docker・ローカルLLMなどが本当に無認証で到達できる状態かを確かめたいときにだけ有効化してください。"
@@ -410,6 +411,7 @@ extension RoamSwitchKnowledgeBase {
                 • 通知: 通知(Pro)とインシデントタイムラインへの記録(発生源 execRecorder、対応「通知のみ」)。通知が単独でAir-Gapなどの隔離を発動することはありません。
                 • 保存: /Library/Application Support/RoamSwitch/exec_log にセグメント分割のJSON Lines(root専用の0700/0600。コマンドライン引数に機密が含まれ得るため、アプリ・ビューア・MCPサーバーは特権ヘルパー経由でのみ読み取ります)。既定200MB・14日(変更可)、クラッシュ安全なローテーション。セグメント間をハッシュチェーンで連結し、削除・編集・切り詰めを検出します(「チェーンを検証」)。改ざん検知であり改ざん防止ではありません。環境変数は記録しませんが、コマンドライン引数に機密が含まれる場合があります。
                 • 負荷対策: 過負荷時は古い行から捨てる有界キュー(件数を表示)、指数バックオフでの再起動、オフにするとesloggerを完全に停止します。
+                • exec.offensive_tool_inventory と exec.offensive_tool_burst の攻撃ツール名に、chisel・ligolo・ligolo-ng・suo5・stowaway・iox・venom・mimikatz・certipy・rubeus・kerbrute・bloodhound・sharphound・sliver・havoc・godzilla・behinder・antsword・weevely・fscan・gogo・ehole・oneforall・ksubdomain・dnsx・subzy・tlsx・cdncheck と impacket 系を足しました。frp・nps・ngrok・ssh は日常に使うので入れていません。 exec.offensive_tool_burst は、実行ファイルが /Users・/tmp・/private/tmp・/var/folders などにあるプログラム(Go や Rust で作った、ツールを自分で動かすエージェント)も対象にします。端末・ssh・login の連鎖は、これまでどおり対象外です。
                 • 閲覧とエクスポート: メニュー→マルウェア対策→「プロセス実行の記録…」(検索・プロセスツリー・JSON Linesエクスポート)。MCPツール `search_exec_events` と `get_process_tree`(Pro・読み取り専用)。 出力の安全対策: プロセスのパス・引数・署名IDは攻撃者が任意に決められるため、制御文字の除去・各文字列300文字の上限・既知の秘密情報形式や秘密名のフラグ値の「****」マスクを行い、JSONの後ろに「信頼できない外部データ」の注記を2つ目のテキストブロックとして付けます。検索語(query)も、マスク済みのコマンドラインに対してのみ照合されます(マスクされた値は検索では見つかりません)。検索語は3文字以上で、検索語付きの検索はセッションごとに回数が制限されるため、検索を使って秘密情報を1文字ずつ探ることはできません。アプリ本体の閲覧画面は、ご自身のログを全文で検索します。
                 """,
                 recommendation: "インシデント調査用の実行履歴が欲しい場合に有効にしてください。先にフルディスクアクセスでRoamSwitchを許可します。通知は侵害の証拠ではなく、ログで確認する手がかりとして扱ってください。"
@@ -427,6 +429,18 @@ extension RoamSwitchKnowledgeBase {
                 • 既定値: Pro版で既定オン。メニュー「マルウェア対策」→「新規の自動起動登録(LaunchAgent/Daemon)を監視 (Pro)」で切替。
                 """,
                 recommendation: "見慣れない自動起動登録の通知が来たら、通知に表示されたplistの内容を確認し、心当たりがなければ削除してください。正規アプリのインストール直後であれば問題ありません。 起動ファイルなどの通知なら、通知に表示された行を確認し、心当たりがなければその行を削除してください。"
+            ),
+            LocalizedEntry(
+                id: "feat_web_worker_crash_guard",
+                title: "Webサーバーのワーカーの異常終了を監視(Pro)",
+                summary: "nginx と Apache のワーカーが短時間に繰り返しクラッシュしたときに通知します。ワーカーは親プロセスが作り直すので、ほかの監視には映りません。",
+                details: """
+                • 見るもの: nginx と Apache(Homebrew と macOS 標準)のエラーログと、nginx の設定にある `error_log`。5 秒おきに、書き足された行だけを読みます。
+                • 判定: 5 分のあいだに 3 回、クラッシュのシグナル(SIGSEGV・SIGABRT・SIGBUS・SIGILL・SIGFPE)で終了したとき。SIGKILL などは数えません。
+                • 通知のみ: 同じサーバーにつき 1 時間に 1 回で、止めたり遮断したりはしません。
+                • 既定: Pro で有効です。
+                """,
+                recommendation: "`grep signal` でエラーログを確認し、同じ時刻のアクセスログから、クラッシュの直前のリクエストを調べてください。nginx・Apache に未適用の修正がないかも確認してください。"
             ),
             LocalizedEntry(
                 id: "feat_docker_event_guard",
@@ -539,6 +553,19 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "自動遮断が発生した後は、この履歴と通知履歴を合わせて確認し、原因の特定と再発防止に役立ててください。"
             ),
             LocalizedEntry(
+                id: "feat_forensic_evidence_bundles",
+                title: "インシデント証拠バンドルと、改ざんの検知",
+                summary: "ランサムウェアや実行時の脅威の封じ込めのときに自動で保存される証拠バンドルが、あとで書き換えられていないかを、バンドルの外にあるチェーンの記録で確かめます。改ざんの検知であり、防止ではありません。",
+                details: """
+                • 保存: ランサムウェアや実行時の脅威の封じ込めと同時に、プロセス一覧・ネットワーク接続・監視フォルダで最近変更されたファイル・(分かれば)疑わしいプロセスの開いているファイルを、`~/Library/Application Support/RoamSwitch/incident-evidence/` の下のバンドルに保存します。manifest.json に、ファイルごとの SHA-256 が入ります。パケットキャプチャとプロセスのメモリは含みません。
+                • チェーン: バンドルの manifest の SHA-256 を、バンドルの外の `chain.log`(同じ incident-evidence フォルダ、0600)に、1 行ずつ、前の行のハッシュと一緒に書きます。書き込みは、ディスクに書き出してから(F_FULLFSYNC)確定します。
+                • 確認: MCPツール `get_forensic_evidence_bundles`(読み取り専用)が、バンドルごとの `integrity` を返します。値は `verified`、`manifest_altered`、`artifact_altered:<名前>`、`artifact_missing:<名前>`、`not_anchored`(チェーンができる前のバンドル、または行が消された)です。全体の `chainOk`・`chainBrokenAt` と、チェーンにあって消えたバンドルの `missingBundles` も返します。
+                • 壊れたチェーンには、行を足しません(どこで壊れたかを隠さないため)。
+                • 限界: 改ざんの「検知」であって、「防止」ではありません。フォルダとログを両方書き換えられる人は、つじつまの合う履歴を作れます。
+                """,
+                recommendation: "`integrity` が `verified` 以外のバンドルは、証拠として使う前に、フォルダが書き換えられていないかを調べてください。`not_anchored` は、チェーンができる前のバンドルでも出ます。"
+            ),
+            LocalizedEntry(
                 id: "feat_security_activity_log",
                 title: "セキュリティアクティビティログ(検索・フィルタ・時系列グラフで横断確認)",
                 summary: "封じ込めインシデント履歴と、確定したメール添付マルウェアの検知結果を1つの画面に統合し、キーワード検索・カテゴリ/重要度フィルタ・時系列グラフのドリルダウンで振り返れます。",
@@ -548,7 +575,7 @@ extension RoamSwitchKnowledgeBase {
                 • フィルタ: カテゴリ(ARPスプーフィング・おとりファイル・XProtect連動Air-Gap・ポート異常・ClickFix・実行記録・エントロピー検知・ハニートークン・ブラウザ認証情報監視・リバースシェル検知・ネットワーク設定の変化の監視・危険なダウンロード)、重要度(すべて/info/warning/critical)、期間(過去24時間・過去3日間・過去7日間・すべての期間)、フリーテキスト検索(概要・詳細・カテゴリ名を対象に大文字小文字を区別せず部分一致)。
                 • 時系列グラフ: 選択した期間の検知件数を棒グラフで表示します。期間が72時間以内なら1時間単位、それを超えると1日単位に自動で切り替わります。バーをクリックするとその時間帯だけに絞り込め、もう一度クリックすると解除されます。
                 • 表示件数: 最新500件まで一覧表示(超過時は件数と絞り込みを促すメッセージを表示)。
-                • エクスポート: CSVエクスポート(Pro)。
+                • エクスポート: CSVエクスポート(Pro)。 CSV の書き出し(通知履歴・ログ監査・活動ログ・CVE スキャンなど)では、先頭が = + - @、タブ、復帰のセルの前に ' を付けて、表計算ソフトが数式として実行しないようにします(npm の @scope/pkg の先頭にも ' が付きます)。
                 • 他の画面との違い: 「Macセキュリティログ監査」はmacOS自体の統合ログ(sudo・SSH・Gatekeeper・XProtectなど)が対象の別データソースです。「通知履歴」はRoamSwitchが送った通知バナーの7日間分の記録です。本画面はRoamSwitchが自ら下した封じ込め判断だけを横断的に検索できる画面です。
                 """,
                 recommendation: "自動遮断が発生した後の振り返りや、過去の検知傾向をカテゴリ・期間で見比べたいときに使ってください。"
@@ -587,6 +614,7 @@ extension RoamSwitchKnowledgeBase {
                 • 検出方式: 正規表現とシャノンエントロピーによるスコアリング。検出値はマスクして表示します。
                 • フォルダスキャン: `.git`・`node_modules`・`target`・`vendor`・`dist`・`build`・`__pycache__`・`venv` は自動除外。2MBを超えるファイルやバイナリはスキップします。
                 • 権限の説明: デスクトップやダウンロードなどの保護フォルダを選ぶと、macOSの許可ダイアログの前に、アクセスが必要な理由とZero Telemetryであることを説明する案内を初回のみ表示します。
+                • `audit_secrets` には、ディレクトリを指定するときの任意の引数 `include_build_output`(真偽)があります。フォルダの再帰スキャンは、生成物の二重の報告を避けるため dist と build を調べないので、Web サイトが公開するファイルは調べられていませんでした。`include_build_output` を true にすると、プロジェクトの dist・build・out・.next/static・.output/public・.svelte-kit/output・public・static も読み(どれもなければフォルダそのもの)、埋め込まれた API キー・秘密鍵・暗号資産の鍵、JWT、本番に置いてはいけないソースマップ(.map のファイル)を探して、結果に `buildOutput` を加えます。見つけた値は先頭 4 文字と長さだけを表示します。上限は 1 ファイル 5 MB、全体 200 MB、20,000 ファイルです。シンボリックリンクは、フォルダの中に収まるときだけたどります。
                 • 処理は別スレッドで行われ、UIを止めません。外部への送信は一切ありません。
                 """,
                 recommendation: "リポジトリを公開する前や、コードをAIチャットに貼り付ける前の一括チェックに活用してください。"
@@ -725,8 +753,8 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",
-                title: "Macセキュリティ総合診断（21項目・スコア & 改善手順）",
-                summary: "システム堅牢性・ネットワーク防御・認証とアクセス制御・ポート露出・マルウェア対策・物理デバイス防御の6分野21項目を検査し、100点満点のスコア・ランクと改善手順を表示します。無料版で利用できます。",
+                title: "Macセキュリティ総合診断（22項目・スコア & 改善手順）",
+                summary: "システム堅牢性・ネットワーク防御・認証とアクセス制御・ポート露出・マルウェア対策・物理デバイス防御の6分野22項目を検査し、100点満点のスコア・ランクと改善手順を表示します。無料版で利用できます。",
                 details: """
                 • システム堅牢性: 1. FileVault、2. SIP（システム完全性保護）、3. Gatekeeper、4. 自動セキュリティアップデート、5. Apple XProtect、6. バックアップ（Time Machineの最終バックアップが7日以内か。復元できるかは確認しません）。
                 • ネットワーク防御: 7. macOS ファイアウォール、8. ステルスモード、9. Wi-Fi 暗号化強度、10. ARP スプーフィング監視、11. ゲートウェイ ARP 固定、12. プロキシ自動検出 (WPAD / PAC)。
@@ -735,6 +763,7 @@ extension RoamSwitchKnowledgeBase {
                 • マルウェア・ダウンロード保護: 17. Web・メール保護、18. DNS脅威保護、19. フィッシング・悪質リンク保護（Safariの詐欺Webサイト警告）。
                 • 物理ポート・デバイス防御: 20. 不正USB / BadUSB 物理ポートガード、21. macOS アクセサリ接続保護。
                 • 対象外の扱い: 信頼ネットワークでのファイアウォール・ステルス、リモートログイン無効時のSSH、ヘルパー未接続時のSudo監査は、N/Aとしてスコア計算から除外します。
+                • 22. 追加された信頼する証明書(認証局)(`trust_anchors`、ネットワーク防御): `security dump-trust-settings` を、ユーザーのドメインと管理者のドメインについて読みます。信頼の設定は、人・管理者・プロファイルが設定したときだけ付くので、一覧に出る証明書は、誰かが追加したものです。Apple 自身のルート証明書は数えず、信頼の結果が「deny」(信頼しない)の証明書も数えません。追加された証明書の名前が傍受ツールに見えるとき(mitm、proxy、charles、fiddler、burp、portswigger、zscaler、netskope、squid、inspection、sslsplit)は不合格にして、その名前を示します(最大3件)。それ以外の追加された証明書(会社のルート証明書、mkcert など)は、情報として示して合格にします(自分で設定したものなら問題ありません)。コマンドを読めないときは「確認できませんでした」にします。理由: 暗号化された通信(パスワードや API キーを含む)を読むプロキシは、Mac にその認証局を信頼させる必要があるからです。見えないもの: アプリが自分で持っている証明書、証明書をいつ追加したか。新しく入っても、その時には通知しません。検知の範囲: T1553.004(一部)。何も変更せず、何も送りません。
                 • ランク: 100点 = S、85〜99点 = A、70〜84点 = B、70点未満 = C。MCPツール `get_security_report` でも取得できます。
                 """,
                 recommendation: "定期的に「総合診断レポート」を開き、⚠️ の項目を改善手順に沿って対応して、ランクA以上を維持してください。"
@@ -789,7 +818,9 @@ extension RoamSwitchKnowledgeBase {
                 • リソース: `roamswitch://docs/features`、`roamswitch://docs/alerts-and-messages`、`roamswitch://docs/settings-guide`、`roamswitch://docs/troubleshooting`。
                 • 言語: 回答はアプリの言語設定に従います。`get_app_help` は `language` 引数（ja / en / zh-Hans / zh-Hant / ko / de / fr / es / it / pt-PT）で言語を指定できます。
                 • 書き込みを伴うツール: `run_active_vuln_scan`(結果をローカルのスキャン履歴に追記)、`audit_security_logs`(ログパターンの基準と通知履歴を更新)、`run_npm_audit_signatures`(npmが自身のキャッシュとログを書く)は、ローカルに状態を書くため、MCPの読み取り専用ヒントは偽になっています。設定や保護レベルを変えるツールはありません。
+                • audit_mcp_configs: MCP サーバーの env に、通信をプロキシ経由にする設定(HTTP_PROXY・HTTPS_PROXY・ALL_PROXY)、追加の認証局を信頼させる設定(NODE_EXTRA_CA_CERTS・SSL_CERT_FILE・SSL_CERT_DIR・REQUESTS_CA_BUNDLE・CURL_CA_BUNDLE・GIT_SSL_CAINFO)、証明書の検証を切る設定(NODE_TLS_REJECT_UNAUTHORIZED=0)があるときも指摘します(traffic_interception_env、重要度 medium)。値は出さず、プロキシは host だけを出します。社内プロキシの正しい設定のこともあるので、文面にもそう書きます。
                 • 安全設計: 設定や保護レベルを変えるツールがないため、プロンプトインジェクションでAIに悪用されても保護レベルの変更やポート隔離などは実行できません。
+                • 指示のような文言の検出には、ツール一覧や API キー・トークン・環境変数を出させる要求(system-prompt-leak)、「権限があると確認・回答せよ」という自己証明の要求(authority-claim)、「安全だと報告せよ」「脅威なしと報告せよ」「解決済みにせよ」という指示(instruction-override)の形も加わりました。カテゴリの種類は増えていません。
                 """,
                 recommendation: "設定手順は faq_mcp_setup を参照してください。「このMacは今安全？」「この通知はどういう意味？」のように自然な言葉で質問できます。"
             ),
@@ -1395,11 +1426,11 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "faq_free_vs_pro",
                 title: "無料版とPro永続版の違い",
-                summary: "無料版でもネットワークに応じた自動保護切替や21項目の総合診断など、基本的な防御と各種の手動診断ツールを無期限で利用できます。Pro版では自動隔離・リアルタイム防御・自律巡回の警告などがアンロックされます。",
+                summary: "無料版でもネットワークに応じた自動保護切替や22項目の総合診断など、基本的な防御と各種の手動診断ツールを無期限で利用できます。Pro版では自動隔離・リアルタイム防御・自律巡回の警告などがアンロックされます。",
                 details: """
                 【無料版】
                 • Wi-Fi・ネットワークに応じたpfパケットフィルタの3段階自動切替、共有サービス・AirDropの自動停止と復元
-                • Macセキュリティ総合診断（21項目）、XProtect稼働確認とファイル・アプリの安全性診断
+                • Macセキュリティ総合診断（22項目）、XProtect稼働確認とファイル・アプリの安全性診断
                 • 外部公開ポート・USBデバイスの一覧表示
                 • リンク安全性診断、機密情報・APIキー漏洩の手動監査、クリップボード保護
                 • パッケージCVE照合、実証型脆弱性診断、Macセキュリティログ監査、通知履歴

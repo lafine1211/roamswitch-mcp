@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.13.0 (build 172). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.14.0 (build 173). Do not edit here; see SYNC.md.
 
 import XCTest
 import Network
@@ -155,6 +155,40 @@ final class ActiveVulnScanTests: XCTestCase {
         // domain) is normal application behavior, not an open redirect.
         let port = spawnHTTPStub(response: "HTTP/1.1 302 Found\r\nLocation: /dashboard\r\nContent-Length: 0\r\n\r\n")
         XCTAssertEqual(ActiveVulnScan.probeOpenRedirect(port: port), false)
+    }
+
+    // MARK: - Unauthenticated admin surface
+
+    func testAnOpenAdminAnswerIsDataAndNothingElseIs() {
+        func open(_ path: String, _ status: Int, _ body: String) -> Bool { ActiveVulnScan.isOpenAdminResponse(path: path, status: status, body: body) }
+        XCTAssertTrue(open("/api/users", 200, #"[{"id":1,"email":"a@example.com"}]"#))
+        XCTAssertTrue(open("/actuator/env", 200, #"{"activeProfiles":[],"propertySources":[{"name":"x"}]}"#))
+        XCTAssertTrue(open("/admin", 200, "<html><table><tr><td>user</td><td>alice@example.com</td></tr></table></html>"))
+        XCTAssertTrue(open("/swagger-ui/index.html", 200, "<title>Swagger UI</title><div id=\"swagger-ui\"></div>"))
+        let notData: [(Int, String)] = [
+            (401, #"[{"id":1}]"#), (302, ""), (404, "<html>not found</html>"), (200, "[]"), (200, "{}"),
+            (200, #"{"error":"unauthorized"}"#), (200, #"{"message":"Forbidden","status":403}"#),
+            (200, "<html><body><div id=\"app\"></div><script src=\"/app.js\"></script></body></html>"),
+            (200, "<div id=\"root\"></div>"), (200, "<form><input type=\"password\"><table><tr><td>user</td></tr></table></form>"),
+            (200, "plain text"), (200, "not json {"),
+        ]
+        for (status, body) in notData { XCTAssertFalse(open("/api/users", status, body), "\(status) \(body)") }
+        XCTAssertFalse(open("/swagger-ui/index.html", 200, "<html>hello</html>"))
+    }
+
+    func testTheAdminProbeNamesTheFirstOpenPathAndStaysQuietForAProtectedApp() {
+        let open = spawnHTTPStub(response: "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 35\r\nConnection: close\r\n\r\n[{\"id\":1,\"email\":\"a@example.com\"}]")
+        let found = ActiveVulnScan.unauthAdminPath(port: open)
+        XCTAssertEqual(found.path, "/admin")
+        XCTAssertTrue(found.answered)
+        let protected = spawnHTTPStub(response: "HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+        let quiet = ActiveVulnScan.unauthAdminPath(port: protected)
+        XCTAssertNil(quiet.path)
+        XCTAssertTrue(quiet.answered)
+        // Nothing listening: inconclusive, not "safe".
+        let dead = ActiveVulnScan.unauthAdminPath(port: 1, timeout: 0.3)
+        XCTAssertNil(dead.path)
+        XCTAssertFalse(dead.answered)
     }
 
     // MARK: - SSRF

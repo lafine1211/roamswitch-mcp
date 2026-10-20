@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.13.0 (build 172). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.14.0 (build 173). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -14,6 +14,7 @@ final class ProbeCatalogTests: XCTestCase {
         // The SSRF check opens two loopback listeners (ActiveVulnScan.HopListener) and sends up to 12 requests.
         XCTAssertEqual(ProbeCatalog.declaration(forProbeName: "webvuln-ssrf")?.sideEffects, [.iocInLogs, .temporaryListener, .manyRequests])
         XCTAssertEqual(ProbeCatalog.declaration(forProbeName: "webvuln-ssrf")?.evidenceKind, .confirmed)
+        XCTAssertEqual(ProbeCatalog.declaration(forProbeName: "webvuln-unauth-admin")?.sideEffects, [.iocInLogs, .manyRequests])
         XCTAssertEqual(ProbeCatalog.declaration(forProbeName: ProbeCatalog.nmapNSEProbeName)?.evidenceKind, .externalToolReport)
     }
 

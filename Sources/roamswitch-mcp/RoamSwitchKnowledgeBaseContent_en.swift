@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.13.0 (build 172).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.14.0 (build 173).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -153,6 +153,7 @@ extension RoamSwitchKnowledgeBase {
                 • Unauthenticated access: single, short-timeout, non-destructive probes to Redis (PING), Memcached (stats), and MongoDB (listDatabases).
                 • Generic dev servers: checks for CORS misconfiguration (reflected Origin with credentials), path traversal, open redirects, and SSRF (a server that fetches a URL it is given, even one pointing at a listener of our own on this machine).
                 • Known-CVE version match: for Redis / Memcached reachable without auth, reads the version with a non-destructive query and compares it with known CVE version ranges. No exploit payloads are sent.
+                • For the development-server ports (127.0.0.1) it also checks for an admin page or API that answers without a login (probe webvuln-unauth-admin). With no cookie and no credentials it sends one GET to each of 7 fixed paths (/admin, /api/admin, /api/users, /api/v1/users, /api/v1/user, /actuator/env, /swagger-ui/index.html), and reports only when the answer is 200 and contains data (a non-empty JSON array, a JSON object that is not an error, an HTML page with a user table, or Swagger UI). A login page, a redirect, an SPA shell and {"error":"unauthorized"} are not reported. It never tries to log in, never guesses and never fuzzes. Its declared side effects are traces in the target's logs and a number of requests. It is meant to find apps that only hide a menu in the browser and never check authorization on the server.
                 • Also available as the MCP tool `run_active_vuln_scan` (its probes go to localhost only).
                 """,
                 recommendation: "Enable it only when you want to confirm whether Redis, Docker, a local LLM, or similar running on your own Mac is really reachable without authentication."
@@ -410,6 +411,7 @@ extension RoamSwitchKnowledgeBase {
                 • Alerts: a notification (Pro) plus an entry in the incident timeline (source execRecorder, action “notify only”). An alert never triggers the air-gap or any other isolation by itself.
                 • Storage: segmented JSON Lines under /Library/Application Support/RoamSwitch/exec_log (root-only: 0700/0600, because command lines can contain secrets; the app, viewer and MCP server read only through the privileged helper), 200 MB / 14 days by default (changeable), crash-safe rotation. Segments are hash-chained so deleted, edited or truncated segments are detected (“Verify chain”); this is tamper-evident, not tamper-proof. Environment variables are never recorded, but command-line arguments can contain secrets.
                 • Load control: a bounded queue that drops the oldest lines when overloaded (counted and shown), exponential-backoff restarts, and turning it off stops eslogger completely.
+                • The attack-tool names of exec.offensive_tool_inventory and exec.offensive_tool_burst now include chisel, ligolo, ligolo-ng, suo5, stowaway, iox, venom, mimikatz, certipy, rubeus, kerbrute, bloodhound, sharphound, sliver, havoc, godzilla, behinder, antsword, weevely, fscan, gogo, ehole, oneforall, ksubdomain, dnsx, subzy, tlsx, cdncheck and the impacket tools. frp, nps, ngrok and ssh are left out because people use them every day. exec.offensive_tool_burst now also covers programs whose executable sits under /Users, /tmp, /private/tmp, /var/folders and similar places (agents written in Go or Rust that run the tools themselves). A chain under a terminal, ssh or login is still left out.
                 • Viewer and export: menu → Malware Protection → “Process Execution Log…” (search, process tree, export to JSON Lines). MCP tools `search_exec_events` and `get_process_tree` (Pro, read-only). Output safety: process paths, arguments and signing IDs are attacker-controlled, so the tools strip control characters, cap each string at 300 characters, mask well-known secret formats and secret-named flag values as ****, and append a second text block (after the JSON) marking them as untrusted external data. The `query` text is matched against the already-masked command line only (a masked value can never be found by searching), must be at least 3 characters, and text queries are rate-limited per session, so the search cannot be used to probe for a secret character by character. The app's own viewer searches your own log in full.
                 """,
                 recommendation: "Turn it on if you want an execution history for incident triage, and allow RoamSwitch in Full Disk Access first. Treat alerts as leads to check in the log, not as proof of compromise."
@@ -427,6 +429,18 @@ extension RoamSwitchKnowledgeBase {
                 • Default: on by default with Pro. Toggle under Malware Protection → "Watch for New Auto-Launch Registrations (LaunchAgent/Daemon) (Pro)".
                 """,
                 recommendation: "If you get an unfamiliar registration alert, inspect the plist shown in the notification and delete it if you don't recognize it. Right after installing a legitimate app, it's usually fine. For an alert about a start-up file or similar, check the line shown in the notification and delete it if you don't recognize it."
+            ),
+            LocalizedEntry(
+                id: "feat_web_worker_crash_guard",
+                title: "Watch for Web Server Workers Crashing (Pro)",
+                summary: "Notifies you when nginx or Apache workers crash repeatedly in a short time. The master process replaces each worker, so no other check sees it.",
+                details: """
+                • Watched: the error logs of nginx and Apache (Homebrew and the macOS built-in one) and any `error_log` named in the nginx configuration. Every 5 seconds only the lines added since the last read are read.
+                • Judgment: three exits in five minutes by a crash signal (SIGSEGV, SIGABRT, SIGBUS, SIGILL, SIGFPE). SIGKILL and the like are not counted.
+                • Notification only: once per server per hour; nothing is stopped or blocked.
+                • Default: on with Pro.
+                """,
+                recommendation: "Check the error log with `grep signal`, then look in the access log at the same times for the requests just before each crash. Also check whether nginx or Apache is missing a security fix."
             ),
             LocalizedEntry(
                 id: "feat_docker_event_guard",
@@ -539,6 +553,19 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: "After an automatic cutoff, review this timeline together with the notification history to find the cause and prevent a recurrence."
             ),
             LocalizedEntry(
+                id: "feat_forensic_evidence_bundles",
+                title: "Incident evidence bundles and tamper detection",
+                summary: "Evidence bundles that are saved automatically when ransomware or a runtime threat is contained are checked later, against a chain record kept outside the bundles, to see whether they were altered. It detects tampering; it does not prevent it.",
+                details: """
+                • Saving: when ransomware or a runtime threat is contained, the process list, the network connections, recently modified files in the watched folders and (if one is identified) the suspected process's open files are saved as a bundle under `~/Library/Application Support/RoamSwitch/incident-evidence/`. manifest.json holds the SHA-256 of each file. A packet capture and process memory are not included.
+                • Chain: the SHA-256 of the bundle's manifest is written, one line at a time and together with the hash of the previous line, to `chain.log` outside the bundle (in the same incident-evidence folder, 0600). A write is committed only after it has been flushed to disk (F_FULLFSYNC).
+                • Checking: the read-only MCP tool `get_forensic_evidence_bundles` returns an `integrity` value for each bundle: `verified`, `manifest_altered`, `artifact_altered:<name>`, `artifact_missing:<name>` or `not_anchored` (a bundle captured before the chain existed, or whose line was removed). It also returns `chainOk` and `chainBrokenAt` for the whole chain, and `missingBundles` for bundles the chain lists that are gone.
+                • No line is added to a broken chain, so the place where it broke is not hidden.
+                • Limit: this is tamper detection, not tamper prevention. Someone who can rewrite both the folder and the log can build a history that is consistent.
+                """,
+                recommendation: "Before you rely on a bundle whose `integrity` is not `verified`, check whether the folder was modified. `not_anchored` also appears for bundles captured before the chain existed."
+            ),
+            LocalizedEntry(
                 id: "feat_security_activity_log",
                 title: "Security Activity Log (Search, Filter, and a Time-Series Chart Across Every Incident)",
                 summary: "Unifies the containment incident timeline and confirmed email-attachment malware detections into one screen you can search by keyword, filter by category/severity, and drill into via a time-series chart.",
@@ -548,7 +575,7 @@ extension RoamSwitchKnowledgeBase {
                 • Filters: category (ARP spoofing, ransomware bait file, XProtect-linked Air-Gap, port anomaly, ClickFix, exec recorder, ransomware entropy detection, honeytoken, browser credential watch, reverse shell watch, network settings watch, dangerous download), severity (all/info/warning/critical), time range (past 24 hours / past 3 days / past 7 days / all time), and free-text search (case-insensitive substring match across the summary, detail, and category name).
                 • Time-series chart: a bar chart of detection counts across the selected range — hourly bars for a 72-hour window or less, daily bars beyond that, switched automatically. Click a bar to narrow the list to just that time window; click it again to clear the drill-down.
                 • Display limit: shows up to the latest 500 entries (a message tells you when more exist and to narrow the filters).
-                • Export: CSV export (Pro).
+                • Export: CSV export (Pro). In CSV exports (notification history, log audit, activity log, CVE scans and similar), a cell that starts with =, +, -, @, a tab or a carriage return gets a ' in front so that a spreadsheet does not run it as a formula (an npm @scope/pkg also gets the ').
                 • How it differs from similar screens: "Security Log Audit" covers a different data source — macOS's own Unified Logging (sudo, SSH, Gatekeeper, XProtect). "Notification History" is the 7-day record of every notification banner RoamSwitch sent. This screen is the one place to search across RoamSwitch's own containment decisions.
                 """,
                 recommendation: "Use it to review what happened after an automatic cutoff, or to compare detection trends by category and time range."
@@ -587,6 +614,7 @@ extension RoamSwitchKnowledgeBase {
                 • Method: regular expressions plus Shannon entropy scoring. Detected values are shown masked.
                 • Folder scan: `.git`, `node_modules`, `target`, `vendor`, `dist`, `build`, `__pycache__`, and `venv` are skipped automatically, as are files over 2 MB and binaries.
                 • Permission notice: choosing a protected folder such as Desktop or Downloads first shows a one-time explanation of why access is needed and that the scan is Zero Telemetry, before macOS's prompt.
+                • `audit_secrets` has an optional boolean argument `include_build_output` for a directory path. The recursive folder scan does not read dist and build, so that generated code is not reported twice, which left the files a website publishes unchecked. With `include_build_output` set to true it also reads the project's dist, build, out, .next/static, .output/public, .svelte-kit/output, public and static folders (or the folder itself when it has none of them) and looks for embedded API keys, private keys and cryptocurrency keys, JWTs, and source maps (.map files) that should not sit in production, and adds `buildOutput` to the result. A found value is shown as its first 4 characters and its length only. The limits are 5 MB per file, 200 MB in all and 20,000 files. A symbolic link is followed only when it stays inside the folder.
                 • Runs on a background thread without freezing the UI. Nothing is sent anywhere.
                 """,
                 recommendation: "Use it before publishing a repository or pasting code into an AI chat."
@@ -725,8 +753,8 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",
-                title: "Mac Security Audit (21 Items, Score & Fix Steps)",
-                summary: "Checks 21 items across six areas (system hardening, network defense, authentication and access control, port exposure, malware protection, and physical device defense) and shows a 0-100 score, a grade, and steps to fix each failing item. Available in the free edition.",
+                title: "Mac Security Audit (22 Items, Score & Fix Steps)",
+                summary: "Checks 22 items across six areas (system hardening, network defense, authentication and access control, port exposure, malware protection, and physical device defense) and shows a 0-100 score, a grade, and steps to fix each failing item. Available in the free edition.",
                 details: """
                 • System hardening: 1. FileVault, 2. SIP (System Integrity Protection), 3. Gatekeeper, 4. automatic security updates, 5. Apple XProtect, 6. backup (Time Machine's newest backup is within 7 days; restorability is not tested).
                 • Network defense: 7. macOS firewall, 8. stealth mode, 9. Wi-Fi encryption strength, 10. ARP spoofing monitor, 11. gateway ARP lock, 12. proxy auto-discovery (WPAD / PAC).
@@ -735,6 +763,7 @@ extension RoamSwitchKnowledgeBase {
                 • Malware & download protection: 17. Web & Mail Protection, 18. DNS Threat Protection, 19. phishing & malicious link protection (Safari fraudulent website warning).
                 • Physical ports & devices: 20. Unauthorized USB / BadUSB physical port guard, 21. macOS accessory connection protection.
                 • Not applicable: firewall and stealth on a trusted network, SSH when remote login is off, and the sudo audit before the helper connects are excluded from the score.
+                • 22. Added trusted certificates (certificate authorities) (`trust_anchors`, network defense): reads `security dump-trust-settings` for the user domain and the administrator domain. A certificate has trust settings there only when a person, an administrator or a profile set one, so the listed certificates are the ones somebody added; Apple's own roots are not counted, and a certificate whose trust result is "deny" (a distrust) is not counted. If an added certificate's name looks like an interception tool (mitm, proxy, charles, fiddler, burp, portswigger, zscaler, netskope, squid, inspection, sslsplit), the check fails and names it (at most 3 names). Any other added certificate (a company root, mkcert) is shown as information and the check passes (fine if you set them up yourself). If the command cannot be read, the check is "could not be verified". Why: a proxy that reads encrypted traffic, passwords and API keys included, needs the Mac to trust its certificate authority. It cannot see a certificate an application carries for itself or when a certificate was added, and a new one is not notified as it appears. Detection coverage: T1553.004 (partial). It changes nothing and sends nothing.
                 • Grades: 100 = S, 85-99 = A, 70-84 = B, below 70 = C. Also available via the MCP tool `get_security_report`.
                 """,
                 recommendation: "Open the audit report regularly, work through the ⚠️ items using the fix steps, and keep grade A or better."
@@ -789,7 +818,9 @@ extension RoamSwitchKnowledgeBase {
                 • Resources: `roamswitch://docs/features`, `roamswitch://docs/alerts-and-messages`, `roamswitch://docs/settings-guide`, `roamswitch://docs/troubleshooting`.
                 • Language: answers follow the app's language setting. `get_app_help` accepts a `language` argument (ja / en / zh-Hans / zh-Hant / ko / de / fr / es / it / pt-PT).
                 • Tools that write local state: `run_active_vuln_scan` (appends its results to the local scan history), `audit_security_logs` (updates the log-pattern baseline and the notification history) and `run_npm_audit_signatures` (npm writes its own cache and logs) write local state, so their MCP read-only hint is false. None of them changes a setting or the protection level.
+                • audit_mcp_configs: It also flags environment variables in an MCP server's env that send its traffic through a proxy (HTTP_PROXY, HTTPS_PROXY, ALL_PROXY), make it trust an extra certificate authority (NODE_EXTRA_CA_CERTS, SSL_CERT_FILE, SSL_CERT_DIR, REQUESTS_CA_BUNDLE, CURL_CA_BUNDLE, GIT_SSL_CAINFO) or turn certificate checking off (NODE_TLS_REJECT_UNAUTHORIZED=0) (traffic_interception_env, severity medium). The values are never shown, and for a proxy only the host is. This can be a correct company-proxy setting, and the message says so.
                 • Safety: no tool changes a setting or the protection level, so even an AI manipulated by prompt injection can't change the protection level or isolate ports.
+                • The detection of wording shaped like an instruction now also covers requests to list the tools or to reveal API keys, tokens or environment variables (system-prompt-leak), requests to confirm or answer that you have authority (authority-claim), and orders to report that something is safe, that there is no threat, or that it is resolved (instruction-override). The number of kinds is unchanged.
                 """,
                 recommendation: "See faq_mcp_setup for setup. You can ask in plain language, like “Is my Mac secure right now?” or “What does this notification mean?”"
             ),
@@ -1395,11 +1426,11 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "faq_free_vs_pro",
                 title: "Free vs. Pro Lifetime",
-                summary: "The free edition includes automatic network-based protection switching, the 21-item security audit, and a range of manual inspection tools, with no time limit. Pro unlocks automatic containment, real-time defenses, and patrol warnings.",
+                summary: "The free edition includes automatic network-based protection switching, the 22-item security audit, and a range of manual inspection tools, with no time limit. Pro unlocks automatic containment, real-time defenses, and patrol warnings.",
                 details: """
                 [Free]
                 • Automatic 3-level PF packet filter switching per network, with sharing services and AirDrop stopped and restored automatically
-                • Mac Security Audit (21 items), XProtect status, and file/app safety inspection
+                • Mac Security Audit (22 items), XProtect status, and file/app safety inspection
                 • Lists of exposed ports and USB devices
                 • Link Safety Audit, manual secret / API key leak audit, clipboard protection
                 • Package CVE scan, active vulnerability verification, Mac Security Log Audit, notification history

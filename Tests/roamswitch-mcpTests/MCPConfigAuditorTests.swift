@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.13.0 (build 172). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.14.0 (build 173). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -198,6 +198,30 @@ final class MCPConfigAuditorTests: XCTestCase {
                     #"{"NODE_OPTIONS":"--max-old-space-size=4096 --import ./hook.mjs"}"#] {
             let r = audit(#"{"mcpServers":{"a":{"command":"x","env":"# + env + "}}}")
             XCTAssertEqual(ids(r), ["code_loading_env"], env)
+        }
+    }
+
+    func testProxyAndExtraCAEnvIsFlaggedWithTheProxyHostOnly() {
+        let r = audit(#"{"mcpServers":{"a":{"command":"node","env":{"HTTPS_PROXY":"http://user:hunter2@proxy.example.com:3128/path","NODE_EXTRA_CA_CERTS":"/tmp/ca.pem","NO_PROXY":"localhost"}}}}"#)
+        XCTAssertEqual(ids(r), ["traffic_interception_env"])
+        XCTAssertEqual(r.findings.first?.severity, "medium")
+        XCTAssertEqual(r.findings.first?.detail, "env sets HTTPS_PROXY (host proxy.example.com), NODE_EXTRA_CA_CERTS")
+        let all = r.findings.map { $0.detail + $0.message }.joined()
+        XCTAssertFalse(all.contains("hunter2"))
+        XCTAssertFalse(all.contains("/tmp/ca.pem"))
+        for env in [#"{"https_proxy":"proxy.example.com:3128"}"#, #"{"ALL_PROXY":"socks5://127.0.0.1:1080"}"#,
+                    #"{"SSL_CERT_FILE":"/etc/ssl/mitm.pem"}"#, #"{"REQUESTS_CA_BUNDLE":"/x.pem"}"#,
+                    #"{"NODE_TLS_REJECT_UNAUTHORIZED":"0"}"#] {
+            let r = audit(#"{"mcpServers":{"a":{"command":"x","env":"# + env + "}}}")
+            XCTAssertEqual(ids(r), ["traffic_interception_env"], env)
+        }
+    }
+
+    func testOrdinaryNetworkSettingsAreNotTrafficInterception() {
+        for env in [#"{"NO_PROXY":"localhost,127.0.0.1"}"#, #"{"HTTPS_PROXY":""}"#, #"{"NODE_TLS_REJECT_UNAUTHORIZED":"1"}"#,
+                    #"{"API_URL":"https://api.example.com"}"#, #"{"HTTP_PROXY_NOTE":"x"}"#] {
+            let r = audit(#"{"mcpServers":{"a":{"command":"x","env":"# + env + "}}}")
+            XCTAssertTrue(ids(r).isEmpty, env)
         }
     }
 

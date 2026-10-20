@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.13.0 (build 172).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.14.0 (build 173).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -823,6 +823,50 @@ public enum ActiveVulnScan {
         return reflectsOrWildcard && credentialsAllowed
     }
 
+    // MARK: - Unauthenticated admin surface
+
+    /// The paths asked for, with no cookie and no `Authorization` header. A fixed, short list: nothing is guessed,
+    /// nothing is fuzzed and no login is tried. Same list as the Linux build.
+    static let unauthAdminPaths = ["/admin", "/api/admin", "/api/users", "/api/v1/users", "/api/v1/user", "/actuator/env", "/swagger-ui/index.html"]
+
+    /// What an answer must look like to count: 200, and either structured data (a JSON object or array that is more
+    /// than an error message), a table of users, or the Swagger UI. A login page, a redirect, a single-page-app shell
+    /// and `{"error":"unauthorized"}` do not count.
+    static func isOpenAdminResponse(path: String, status: Int, body: String) -> Bool {
+        guard status == 200 else { return false }
+        let trimmed = body.drop(while: { $0.isWhitespace })
+        let lower = trimmed.lowercased()
+        let shells = ["<div id=\"app\"", "<div id=\"root\"", "<div id=\"__next\"", "<app-root", "<div id=app", "<noscript>you need to enable javascript"]
+        if shells.contains(where: { lower.contains($0) }) { return false }
+        if path.hasSuffix("swagger-ui/index.html") { return lower.contains("swagger-ui") }
+        if lower.hasPrefix("{") || lower.hasPrefix("[") {
+            guard let data = String(trimmed).data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: data) else { return false }
+            if let array = json as? [Any] { return !array.isEmpty }
+            if let object = json as? [String: Any] {
+                // A short object of status words is an error or a notice, not data.
+                let notice: Set<String> = ["error", "message", "status", "detail", "code", "success", "msg"]
+                return !(object.isEmpty || (object.count <= 3 && object.keys.allSatisfy { notice.contains($0.lowercased()) }))
+            }
+            return false
+        }
+        return lower.contains("<table") && (lower.contains("user") || lower.contains("e-mail") || lower.contains("email")) && !lower.contains("type=\"password\"")
+    }
+
+    /// Asks each of `unauthAdminPaths` once. `path` is the first one that answered like an open admin surface;
+    /// `answered` is false when no request got any answer (the check is then inconclusive, not "safe").
+    static func unauthAdminPath(port: Int, timeout: TimeInterval = 2.0) -> (path: String?, answered: Bool) {
+        var answered = false
+        for path in unauthAdminPaths {
+            guard let response = httpGet(port: port, path: path, timeout: timeout) else { continue }
+            answered = true
+            if let status = response.status, isOpenAdminResponse(path: path, status: status, body: response.body) {
+                return (path, true)
+            }
+        }
+        return (nil, answered)
+    }
+
     /// A handful of common path-traversal encodings against the root path, targeting
     /// `/etc/passwd` — world-readable on macOS, so this stays a pure reachability proof
     /// and never needs to touch anything sensitive.
@@ -1110,7 +1154,7 @@ public enum ActiveVulnScan {
         var names = ServiceSignatures.match(processName: port.processName, executablePath: port.executablePath)
             .map(\.id).filter { probeableSignatureIDs.contains($0) }
         if PortSecurityAuditor.isKnownDevServerPort(port.port) {
-            names += ["webvuln-cors", "webvuln-traversal", "webvuln-redirect", "webvuln-ssrf"]
+            names += ["webvuln-cors", "webvuln-traversal", "webvuln-redirect", "webvuln-ssrf", "webvuln-unauth-admin"]
         }
         let effects = Set(names.flatMap { ProbeCatalog.declaration(forProbeName: $0)?.sideEffects ?? [] })
         return ProbeSideEffect.allCases.filter(effects.contains)
@@ -1294,6 +1338,23 @@ public enum ActiveVulnScan {
                     )
                 },
                 outcome: CheckOutcome(port: port.port, processName: port.processName, check: loc("SSRF（サーバーが指定されたURLを取りに行く）"))
+            )
+
+            // No login, no guessing: a short fixed list of paths asked without any credential.
+            let open = unauthAdminPath(port: port.port)
+            runOne(
+                probeName: "webvuln-unauth-admin",
+                probe: { open.answered ? (open.path != nil) : nil },
+                makeFinding: {
+                    Finding(
+                        port: port.port,
+                        processName: port.processName,
+                        title: loc("認証なしで、管理用らしいパスがデータを返す"),
+                        description: String(format: loc("ログインの情報を一切付けずに %@ へ GET したところ、エラーや画面の枠ではなく、データ(JSON の一覧や設定、ユーザーの表、API の文書)が返りました。表示の側で隠しているだけで、サーバー側で認可を確認していない可能性があります。ログインはしておらず、ほかのパスも試していません。"), open.path ?? ""),
+                        recommendation: loc("サーバー側(アプリケーション)で、すべての管理用・API のルートに認証と、利用者ごとの認可の確認を入れてください。画面のメニューを隠すだけでは足りません。/actuator や /swagger-ui のような運用用の画面は、本番では閉じるか、内部ネットワークだけに限ってください。")
+                    )
+                },
+                outcome: CheckOutcome(port: port.port, processName: port.processName, check: loc("認証なしで、管理用らしいパスがデータを返す"))
             )
         }
 

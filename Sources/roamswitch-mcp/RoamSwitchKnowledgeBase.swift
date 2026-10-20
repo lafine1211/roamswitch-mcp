@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.13.0 (build 172).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.14.0 (build 173).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -431,6 +431,7 @@ public struct RoamSwitchKnowledgeBase: Sendable {
             EntryMeta(id: "feat_runtime_threat_containment", topic: t, tags: ["xprotect", "runtime-threat", "airgap", "malware", "log-stream", "gatekeeper", "wifi", "pro", "default-on-pro"]),
             EntryMeta(id: "feat_clickfix_guard", topic: t, tags: ["clickfix", "social-engineering", "terminal", "shell-history", "clipboard", "airgap", "pro", "opt-in"]),
             EntryMeta(id: "feat_persistence_monitor_guard", topic: t, tags: ["persistence", "launchagent", "launchdaemon", "fsevents", "malware", "infostealer", "detection-only", "pro"]),
+            EntryMeta(id: "feat_web_worker_crash_guard", topic: t, tags: ["nginx", "apache", "web-server", "worker", "crash", "sigsegv", "error-log", "exploit", "pro", "notify-only"]),
             EntryMeta(id: "feat_docker_event_guard", topic: t, tags: ["docker", "container", "privileged", "docker.sock", "container-escape", "pro", "notify-only"]),
             EntryMeta(id: "feat_reverse_shell_watch", topic: t, tags: ["reverse-shell", "shell", "t1059.004", "libproc", "nc", "ncat", "socat", "bash", "dev-tcp", "mkfifo", "c2", "pro", "default-on-pro", "notify-only"]),
             EntryMeta(id: "feat_network_settings_watch", topic: t, tags: ["dhcp", "rogue-dhcp", "wpad", "pac", "proxy", "dns", "router", "t1557.003", "mitm", "scdynamicstore", "pro", "default-on-pro", "notify-only"]),
@@ -438,6 +439,7 @@ public struct RoamSwitchKnowledgeBase: Sendable {
             EntryMeta(id: "feat_security_log_audit", topic: t, tags: ["log", "audit", "unified-logging", "sudo", "ssh", "gatekeeper", "xprotect", "template-anomaly", "csv", "mcp", "free"]),
             EntryMeta(id: "feat_scheduled_log_audit", topic: t, tags: ["log", "audit", "scheduled", "template-anomaly", "z-score", "baseline", "learning", "pro", "default-on-pro"]),
             EntryMeta(id: "feat_containment_incident_timeline", topic: t, tags: ["incident", "timeline", "forensics", "mitre", "att&ck", "airgap", "canary", "port-anomaly", "arp", "runtime-threat"]),
+            EntryMeta(id: "feat_forensic_evidence_bundles", topic: t, tags: ["forensics", "evidence", "incident", "integrity", "chain", "sha256", "tamper", "manifest", "mcp", "airgap", "ransomware"]),
             EntryMeta(id: "feat_security_activity_log", topic: t, tags: ["log", "search", "filter", "timeline", "chart", "drilldown", "history", "audit", "incident", "csv", "free"]),
             EntryMeta(id: "feat_notification_history", topic: t, tags: ["notification", "history", "7-days", "eicar", "mcp", "free"]),
             EntryMeta(id: "feat_secret_leak_auditor", topic: t, tags: ["secret", "apikey", "clipboard", "openai", "anthropic", "github", "aws", "stripe", "clickfix", "zerotelemetry", "free"]),

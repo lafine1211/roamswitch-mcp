@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.13.0 (build 172).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.14.0 (build 173).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -305,8 +305,26 @@ public struct MCPSecretFindingPayload: Codable, Equatable {
     public let filePath: String?
 }
 
+public struct MCPFrontendFindingPayload: Codable, Equatable {
+    public let kind: String
+    public let file: String
+    public let line: Int
+    public let detail: String
+    public let masked: String
+}
+
+/// What the `include_build_output` option of `audit_secrets` adds: the build output a web front end publishes.
+public struct MCPFrontendScanPayload: Codable, Equatable {
+    public let scannedDirs: [String]
+    public let scannedFiles: Int
+    public let truncated: Bool
+    public let findings: [MCPFrontendFindingPayload]
+}
+
 public struct MCPAuditSecretsResultPayload: Codable, Equatable {
     public let findings: [MCPSecretFindingPayload]
+    /// Present only when the caller asked for the build output as well.
+    public var buildOutput: MCPFrontendScanPayload? = nil
 }
 
 public struct MCPSecurityLogEventPayload: Codable, Equatable {
@@ -325,6 +343,33 @@ public struct MCPTemplateAnomalyPayload: Codable, Equatable {
     public let isNew: Bool
 }
 
+/// What the log read could not deliver (see `SecurityLogReadStatus`). `unreadable` means the audit says nothing.
+public struct MCPLogReadStatusPayload: Codable, Equatable {
+    public let hoursRequested: Int
+    public let hoursQueried: Int
+    public let unreadable: Bool
+    public let limited: Bool
+    public let timedOut: Bool
+    public let outputTruncated: Bool
+    public let failureReason: String?
+    public let exitStatus: Int32?
+    public let linesLossy: Int
+    public let linesUnparsable: Int
+
+    public init(_ s: SecurityLogReadStatus) {
+        hoursRequested = s.hoursRequested
+        hoursQueried = s.hoursQueried
+        unreadable = s.unreadable
+        limited = s.limited
+        timedOut = s.timedOut
+        outputTruncated = s.outputTruncated
+        failureReason = s.failureReason
+        exitStatus = s.exitStatus
+        linesLossy = s.linesLossy
+        linesUnparsable = s.linesUnparsable
+    }
+}
+
 public struct MCPSecurityLogAuditPayload: Codable, Equatable {
     public let timeWindowHours: Int
     public let totalEvents: Int
@@ -332,7 +377,11 @@ public struct MCPSecurityLogAuditPayload: Codable, Equatable {
     public let sshAttempts: Int
     public let gatekeeperBlocks: Int
     public let xprotectDetections: Int
+    /// False when the log could not be read: nothing found is then not the same as clean.
     public let isClean: Bool
+    /// Present only when part of the log was not examined, or none could be read.
+    public let coverageNote: String?
+    public let readStatus: MCPLogReadStatusPayload
     public let events: [MCPSecurityLogEventPayload]
     public let templateAnomalies: [MCPTemplateAnomalyPayload]
 }
@@ -396,6 +445,11 @@ public struct MCPRansomwareEntropyAlertPayload: Codable, Equatable {
 /// the `get_forensic_evidence_bundles` MCP tool.
 public struct MCPForensicEvidenceBundlesPayload: Codable, Equatable {
     public let bundles: [ForensicBundleSummary]
+    /// False when `chain.log` was edited or truncated: `chainBrokenAt` names the first bundle that no longer follows.
+    public var chainOk: Bool = true
+    public var chainBrokenAt: String? = nil
+    /// Bundles the chain names that are no longer on disk.
+    public var missingBundles: [String] = []
 }
 
 /// Wraps `ActiveVulnScan.ProbeStatus` for the
@@ -827,7 +881,7 @@ public enum MCPResponseFormatting {
 
     // MARK: verify_security_findings
 
-    /// 1回に指定できる checkId の上限(超過分は無視して注意書きを付ける)。全21項目より十分大きく、
+    /// 1回に指定できる checkId の上限(超過分は無視して注意書きを付ける)。全22項目より十分大きく、
     /// 巨大な引数でレスポンスが膨らまないための歯止め。
     public static let maxVerifyCheckIds = 50
     /// 未知の checkId をそのまま返すときの最大文字数(入力はエージェント由来で信頼できない)。
@@ -1381,6 +1435,7 @@ enum VerifyFindingDiscipline {
         case "accessory_connection_protection": return loc("この設定が扱うのは、Macがロックされている間の新しいアクセサリの接続だけです。使用中の接続は対象外です。")
         case "backup_recency": return loc("Time Machine以外の方法(別のバックアップアプリなど)でバックアップしている場合、この判定は実態と違います。RoamSwitchが読めるのはTime Machineの記録だけです。")
         case "proxy_autodiscovery": return loc("会社や学校が管理するMacで、プロキシ自動検出を管理者が意図して設定している場合は、この状態は設定どおりです。")
+        case "trust_anchors": return loc("会社が配布した証明書や、開発用の証明書(mkcert など)を意図して信頼している場合は、この状態は設定どおりです。")
         case "agent_credential_files": return loc("同期フォルダやgit管理下に見えても、そのファイルを同期や追跡の対象から外している場合は、実際には外に出ていません。RoamSwitchは、その除外設定までは確認しません。")
         default: return nil
         }
@@ -1408,6 +1463,7 @@ enum VerifyFindingDiscipline {
         case "accessory_connection_protection": return loc("席を離れたMacに他人が触れられる場所で使うなら、上がります。")
         case "backup_recency": return loc("ランサムウェアに暗号化されたら取り戻せない大事なファイルがあるなら、重大になります。大事なデータがすべて別の場所に世代管理つきで保存されているなら、下がります。")
         case "proxy_autodiscovery": return loc("カフェやホテルなど、他人が管理するネットワークをよく使うなら、重大になります。自宅や職場の管理されたネットワークだけなら、下がります。")
+        case "trust_anchors": return loc("ログインやAPIキーを含む通信を、カフェなど他人が管理するネットワークで行うなら、重大になります。信頼している証明書をすべて把握しているなら、下がります。")
         case "agent_credential_files": return loc("ファイルが他のユーザーに読める権限や、公開されうる同期・git管理下にあるなら、重大になります。所有者だけが読める権限で、手元のディスクにだけあるなら、解消します。")
         default: return nil
         }

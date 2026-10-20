@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.13.0 (build 172). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.14.0 (build 173). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -124,6 +124,27 @@ final class MCPKnowledgeBaseTests: XCTestCase {
             XCTAssertTrue(rules.details.contains("web_rules.schema.json"), "\(code): the schema line is missing")
             let fwd = try XCTUnwrap(items.first { $0.id == "feat_event_forwarding" })
             XCTAssertTrue(fwd.details.contains("HMAC-SHA256"), code)
+        }
+    }
+
+    /// 2026-10-20 additions: each is stated in every language, by the name a reader would search for.
+    func testRecentAdditionsAreDocumentedInEveryLanguage() throws {
+        let checks: [(id: String, needles: [String])] = [
+            ("feat_exec_recorder", ["chisel", "mimikatz", "exec.offensive_tool_burst"]),
+            ("feat_mcp_server", ["traffic_interception_env"]),
+            ("feat_secret_leak_audit_tool", ["include_build_output", "buildOutput"]),
+            ("feat_active_vuln_scan", ["webvuln-unauth-admin", "/actuator/env"]),
+            ("feat_forensic_evidence_bundles", ["chain.log", "chainOk", "not_anchored", "F_FULLFSYNC"]),
+            ("feat_security_health_checker", ["trust_anchors", "T1553.004"]),
+        ]
+        for code in RoamSwitchKnowledgeBase.supportedLanguageCodes {
+            let entries = RoamSwitchKnowledgeBase.localizedEntries(for: code)
+            for check in checks {
+                let entry = try XCTUnwrap(entries.first { $0.id == check.id }, "\(check.id) missing for \(code)")
+                for needle in check.needles {
+                    XCTAssertTrue(entry.details.contains(needle), "\(code): \(check.id) does not mention \(needle)")
+                }
+            }
         }
     }
 }

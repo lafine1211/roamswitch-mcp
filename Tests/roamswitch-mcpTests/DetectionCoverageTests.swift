@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.13.0 (build 172). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.14.0 (build 173). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -22,6 +22,50 @@ final class DetectionCoverageTests: XCTestCase {
                 XCTAssertTrue(known.contains(source.id), "\(entry.technique): guard \(source.id) is not in get_guard_status")
             }
         }
+    }
+
+    /// The other direction: a guard that `get_guard_status` lists must either back some technique or be on the exempt list
+    /// with a reason, so a new guard cannot be added without deciding what it covers.
+    func testEveryGuardInTheVocabularyIsCoveredOrExempt() {
+        let vocabulary = Set(guardVocabulary().map(\.key))
+        let covered = Set(DetectionCoverage.entries.flatMap { $0.sources.filter { $0.kind == "guard" }.map(\.id) })
+        let exempt = Set(DetectionCoverage.exemptGuards.keys)
+        let missing = vocabulary.subtracting(covered).subtracting(exempt)
+        XCTAssertTrue(missing.isEmpty, "guards in get_guard_status that no technique relies on and that are not exempt: \(missing.sorted())")
+        XCTAssertTrue(exempt.isSubset(of: vocabulary), "exempt guards that are not in get_guard_status: \(exempt.subtracting(vocabulary).sorted())")
+        XCTAssertTrue(exempt.isDisjoint(with: covered), "listed as both covering a technique and exempt: \(exempt.intersection(covered).sorted())")
+        for (key, reason) in DetectionCoverage.exemptGuards {
+            XCTAssertFalse(reason.isEmpty, key)
+            XCTAssertFalse(reason.contains("\n"), "\(key): one line")
+        }
+    }
+
+    /// Every reader-health record has to belong to a guard (so `get_guard_status` shows it), and every guard that reads
+    /// something is covered or exempt.
+    func testEveryReaderHealthSourceBelongsToAGuardThatIsCoveredOrExempt() throws {
+        let linked = Set(GuardReaderHealthStore.guardSources.values.flatMap { $0.sources + $0.auxiliary })
+        let covered = Set(DetectionCoverage.entries.flatMap { $0.sources.filter { $0.kind == "guard" }.map(\.id) })
+        let exempt = Set(DetectionCoverage.exemptGuards.keys)
+        for guardKey in GuardReaderHealthStore.guardSources.keys {
+            XCTAssertTrue(covered.contains(guardKey) || exempt.contains(guardKey), "\(guardKey) reads input but is neither covered nor exempt")
+        }
+        // Sources named in the code: forApp(source: "x") and friends. The app's sources are not in the mirror.
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        try XCTSkipUnless(FileManager.default.fileExists(atPath: root.appendingPathComponent("RoamSwitch").path), "app sources not present")
+        let regex = try NSRegularExpression(pattern: #"(?:forApp\(source:|GuardReaderHealthRecorder\(source:|writeApp\(source:|writeHelper\(source:)\s*"([A-Za-z]+)""#)
+        var used: Set<String> = []
+        for dir in ["RoamSwitch", "RoamSwitchHelper", "Shared"] {
+            let files = (try? FileManager.default.contentsOfDirectory(atPath: root.appendingPathComponent(dir).path)) ?? []
+            for name in files where name.hasSuffix(".swift") {
+                let text = (try? String(contentsOf: root.appendingPathComponent(dir).appendingPathComponent(name), encoding: .utf8)) ?? ""
+                let range = NSRange(text.startIndex..., in: text)
+                for m in regex.matches(in: text, range: range) {
+                    if let r = Range(m.range(at: 1), in: text) { used.insert(String(text[r])) }
+                }
+            }
+        }
+        XCTAssertFalse(used.isEmpty, "the scan found no reader-health sources: the pattern is stale")
+        XCTAssertTrue(used.subtracting(linked).isEmpty, "reader-health sources no guard shows: \(used.subtracting(linked).sorted())")
     }
 
     func testEveryAuditCheckAndFeatureSourceExists() {
@@ -60,7 +104,10 @@ final class DetectionCoverageTests: XCTestCase {
         XCTAssertEqual(ids.count, Set(ids).count, "no technique is listed twice")
         // The names the task asked to be covered are all present, none rounded up to more than the code supports.
         for required in ["T1562.001", "T1562.004", "T1562.006", "T1070.002", "T1070.003", "T1553.001", "T1574.004", "T1574.006",
-                         "T1036", "T1059.002", "T1055", "T1027.010", "T1543.001", "T1543.004", "T1547.015", "T1555.001", "T1548.003"] {
+                         "T1036", "T1059.002", "T1055", "T1027.010", "T1543.001", "T1543.004", "T1547.015", "T1555.001", "T1548.003",
+                         // the guards that had no technique until the vocabulary check was added
+                         "T1110.001", "T1046", "T1486", "T1557.002", "T1200", "T1091", "T1204.002", "T1204.004", "T1195.001",
+                         "T1505.003", "T1566.002", "T1610"] {
             XCTAssertTrue(ids.contains(required), required)
         }
     }

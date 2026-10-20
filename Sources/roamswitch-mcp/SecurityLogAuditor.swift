@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.13.0 (build 172).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.14.0 (build 173).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -89,6 +89,85 @@ public struct SecurityLogEvent: Identifiable, Equatable, Codable {
     }
 }
 
+/// What one `log show` run could not deliver. A full, clean read leaves every field at its default.
+public struct SecurityLogReadStatus: Equatable {
+    /// Hours the caller asked for and hours actually queried (held to 1...168). 0 = not recorded (hand-built reports).
+    public var hoursRequested = 0
+    public var hoursQueried = 0
+    /// `launch_failed`: `log` could not be started. `exit_error`: it exited with an error (`exitStatus`) or the
+    /// output could not be read to the end.
+    public var failureReason: String?
+    public var exitStatus: Int32?
+    /// The wall-clock ceiling stopped the query; what had been read until then was used.
+    public var timedOut = false
+    /// The output went past the byte cap: the newest part was kept and the oldest part was dropped.
+    public var outputTruncated = false
+    /// Lines with bytes that are not valid UTF-8 (examined with the bytes replaced), and lines that looked like
+    /// JSON but could not be parsed (not examined).
+    public var linesLossy = 0
+    public var linesUnparsable = 0
+    /// Events parsed from the output.
+    public var eventsRead = 0
+
+    public init() {}
+
+    /// Nothing could be read: the audit says nothing about the log.
+    public var unreadable: Bool { eventsRead == 0 && (failureReason != nil || timedOut) }
+    public var windowClamped: Bool { hoursRequested != 0 && hoursRequested != hoursQueried }
+    /// Part of the log was not examined.
+    public var limited: Bool { !unreadable && (failureReason != nil || timedOut || outputTruncated) }
+    public var skippedAnything: Bool { unreadable || limited || windowClamped || linesLossy > 0 || linesUnparsable > 0 }
+
+    /// The reason code kept in `GuardReaderHealth` when the log could not be read.
+    public var healthReason: String {
+        if failureReason == "launch_failed" { return "launch_failed" }
+        return timedOut ? "log_timeout" : "log_exit_error"
+    }
+
+    /// One plain sentence per thing that was skipped; empty for a clean full read.
+    public var notes: [String] {
+        var out: [String] = []
+        let seconds = Int(SecurityLogAuditor.logQueryTimeoutSeconds)
+        if unreadable {
+            if failureReason == "launch_failed" {
+                out.append(loc("ログを読めませんでした(log コマンドを起動できませんでした)。「問題なし」という意味ではありません。"))
+            } else if timedOut {
+                out.append(String(format: loc("ログを読めませんでした(%d 秒以内に読み終えられませんでした)。「問題なし」という意味ではありません。"), seconds))
+            } else {
+                out.append(loc("ログを読めませんでした(log コマンドがエラーで終了しました)。「問題なし」という意味ではありません。"))
+            }
+        } else {
+            if timedOut {
+                out.append(String(format: loc("ログの取得が %d 秒の制限で止まったため、途中までを調べました。"), seconds))
+            } else if failureReason != nil {
+                out.append(loc("ログの取得が途中でエラーになったため、途中までを調べました。"))
+            }
+            if outputTruncated {
+                out.append(String(format: loc("ログが大きいため、新しい側の約 %d MB だけを調べました(古いログは含まれません)。"),
+                                  SecurityLogAuditor.maxLogOutputBytes / (1024 * 1024)))
+            }
+        }
+        if windowClamped {
+            out.append(String(format: loc("指定の %d 時間は範囲外のため、直近 %d 時間を調べました。"), hoursRequested, hoursQueried))
+        }
+        if linesLossy > 0 {
+            out.append(String(format: loc("読めない文字を含む行が %d 件ありました(文字を置き換えて調べました)。"), linesLossy))
+        }
+        if linesUnparsable > 0 {
+            out.append(String(format: loc("解析できなかった行が %d 件ありました。"), linesUnparsable))
+        }
+        return out
+    }
+
+    /// `notes` as one text, with what "no findings" then means; nil for a clean full read.
+    public var coverageNote: String? {
+        let n = notes
+        guard !n.isEmpty else { return nil }
+        if unreadable { return n.joined(separator: " ") }
+        return (n + [loc("「問題なし」は、調べられた範囲に見つからなかったという意味です。")]).joined(separator: " ")
+    }
+}
+
 public struct SecurityLogAuditReport: Equatable {
     public let auditDate: Date
     public let timeWindowHours: Int
@@ -105,18 +184,23 @@ public struct SecurityLogAuditReport: Equatable {
     /// history; the rest stay visible in the audit view but never page
     /// (alert-fatigue fix, 2026-09-30).
     public var notifiableTemplateAnomalies: [LogTemplateAnomaly] = []
+    /// What the log read could not deliver (see `SecurityLogReadStatus`).
+    public var readStatus = SecurityLogReadStatus()
 
+    /// Nothing found in the log. A log that could not be read is never clean: it says nothing.
     public var isClean: Bool {
-        sudoFailures == 0 && gatekeeperBlocks == 0 && xprotectDetections == 0
+        sudoFailures == 0 && gatekeeperBlocks == 0 && xprotectDetections == 0 && !readStatus.unreadable
     }
 }
 
 final class SecurityLogAuditor {
     static let shared = SecurityLogAuditor()
 
+    /// App-side asynchronous audit: records what the read could not deliver in the reader health.
     func performAudit(timeWindowHours: Int = 24, completion: @escaping (SecurityLogAuditReport) -> Void) {
         DispatchQueue.global(qos: .userInitiated).async {
             let report = self.buildReport(timeWindowHours: timeWindowHours)
+            Self.recordReadHealth(report.readStatus)
             DispatchQueue.main.async {
                 completion(report)
             }
@@ -128,12 +212,45 @@ final class SecurityLogAuditor {
     /// `while readLine()` main loop never pumps `RunLoop.main` — routing
     /// through `performAudit`'s `DispatchQueue.main.async` completion there
     /// would deadlock since nothing ever drains the main queue).
-    func performAuditSync(timeWindowHours: Int = 24) -> SecurityLogAuditReport {
-        buildReport(timeWindowHours: timeWindowHours)
+    /// `recordHealth` is for the app's own callers; the MCP server process has no reader-health store of its own.
+    func performAuditSync(timeWindowHours: Int = 24, recordHealth: Bool = false) -> SecurityLogAuditReport {
+        let report = buildReport(timeWindowHours: timeWindowHours)
+        if recordHealth { Self.recordReadHealth(report.readStatus) }
+        return report
+    }
+
+    /// The reader-health source of the scheduled and manual log audit (`get_guard_status`: `scheduledLogAudit`).
+    static let readHealthSource = "scheduledLogAudit"
+    private static let readHealthRecorder = GuardReaderHealthRecorder.forApp(source: readHealthSource)
+
+    /// Keeps what the last run could not read: unreadable log -> the guard is `off`; part of it skipped -> `partial`
+    /// until the next full read. A cap that was reached does not notify by itself.
+    static func recordReadHealth(_ status: SecurityLogReadStatus, recorder: GuardReaderHealthRecorder? = nil) {
+        (recorder ?? readHealthRecorder).update(force: true) { h, now in
+            h.enableDropCounters()
+            if status.unreadable {
+                h.markUnreadable(reason: status.healthReason, now: now)
+            } else {
+                h.markStarted(now: now)
+                h.setScanResult(filesUnreadable: 0, foldersUnreadable: 0, filesTruncated: status.limited ? 1 : 0, now: now)
+            }
+            h.addDropped(status.linesUnparsable, now: now)
+        }
     }
 
     private func buildReport(timeWindowHours: Int) -> SecurityLogAuditReport {
-        let events = fetchSecurityLogs(hours: timeWindowHours)
+        let (events, readStatus) = fetchSecurityLogs(hours: timeWindowHours)
+
+        // A log that could not be read at all must not move the template baseline: an empty window would count as
+        // "zero occurrences" for every known pattern and blunt the next frequency check.
+        if readStatus.unreadable {
+            var report = SecurityLogAuditReport(
+                auditDate: Date(), timeWindowHours: readStatus.hoursQueried, totalEvents: 0, sudoFailures: 0, sshAttempts: 0,
+                gatekeeperBlocks: 0, xprotectDetections: 0, events: [], templateAnomalies: []
+            )
+            report.readStatus = readStatus
+            return report
+        }
 
         let sudoFails = events.filter { $0.category == .sudo && $0.severity != .info }.count
         let sshCount = events.filter { $0.category == .ssh }.count
@@ -227,9 +344,9 @@ final class SecurityLogAuditor {
             )
         }
 
-        return SecurityLogAuditReport(
+        var report = SecurityLogAuditReport(
             auditDate: Date(),
-            timeWindowHours: timeWindowHours,
+            timeWindowHours: readStatus.hoursQueried,
             totalEvents: events.count,
             sudoFailures: sudoFails,
             sshAttempts: sshCount,
@@ -239,12 +356,14 @@ final class SecurityLogAuditor {
             templateAnomalies: anomalies,
             notifiableTemplateAnomalies: notifiable
         )
+        report.readStatus = readStatus
+        return report
     }
 
     /// Wall-clock ceiling for one `log show` query.
-    private static let logQueryTimeoutSeconds: TimeInterval = 60
+    static let logQueryTimeoutSeconds: TimeInterval = 60
     /// Output kept from one query (excess is drained and dropped).
-    private static let maxLogOutputBytes = 64 * 1024 * 1024
+    static let maxLogOutputBytes = 64 * 1024 * 1024
 
     /// Predicate targeting critical security subsystems and processes. macOS 26 (OpenSSH 10) writes the login lines
     /// from `sshd-session` instead of `sshd`, so both are listed (exact names: a prefix match would also pull in
@@ -259,13 +378,24 @@ final class SecurityLogAuditor {
     process == "XProtectRemediator"
     """
 
-    private func fetchSecurityLogs(hours: Int) -> [SecurityLogEvent] {
+    /// A flag set from the watchdog's queue and read after the child has exited.
+    private final class Flag {
+        private let lock = NSLock()
+        private var value = false
+        func set() { lock.lock(); value = true; lock.unlock() }
+        var isSet: Bool { lock.lock(); defer { lock.unlock() }; return value }
+    }
+
+    private func fetchSecurityLogs(hours requested: Int) -> (events: [SecurityLogEvent], status: SecurityLogReadStatus) {
+        var status = SecurityLogReadStatus()
         var results: [SecurityLogEvent] = []
 
         let predicate = Self.securityLogPredicate
 
         // Defence in depth: never query more than 7 days, whatever the caller passed.
-        let hours = min(max(hours, 1), 168)
+        let hours = min(max(requested, 1), 168)
+        status.hoursRequested = requested
+        status.hoursQueried = hours
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/log")
@@ -281,6 +411,7 @@ final class SecurityLogAuditor {
         process.standardOutput = pipe
         process.standardError = Pipe()
 
+        let timedOut = Flag()
         do {
             try process.run()
 
@@ -289,6 +420,7 @@ final class SecurityLogAuditor {
             // the read loop below ends.
             let pid = process.processIdentifier
             let watchdog = DispatchWorkItem {
+                timedOut.set()
                 process.terminate()
                 DispatchQueue.global().asyncAfter(deadline: .now() + 3) {
                     if process.isRunning { kill(pid, SIGKILL) }
@@ -296,27 +428,41 @@ final class SecurityLogAuditor {
             }
             DispatchQueue.global().asyncAfter(deadline: .now() + Self.logQueryTimeoutSeconds, execute: watchdog)
 
-            // Bounded read: keep at most `maxLogOutputBytes`, keep draining so the child never
-            // blocks on a full pipe.
+            // Bounded read: keep the newest `maxLogOutputBytes` (`log show` prints oldest first, so the oldest
+            // chunks are dropped), keep draining so the child never blocks on a full pipe.
             let fileHandle = pipe.fileHandleForReading
-            var data = Data()
-            while let chunk = try? fileHandle.read(upToCount: 64 * 1024), !chunk.isEmpty {
-                if data.count < Self.maxLogOutputBytes {
-                    data.append(chunk.prefix(Self.maxLogOutputBytes - data.count))
+            var chunks: [Data] = []
+            var kept = 0
+            var readFailed = false
+            while true {
+                let chunk: Data?
+                do { chunk = try fileHandle.read(upToCount: 64 * 1024) } catch { readFailed = true; break }
+                guard let chunk, !chunk.isEmpty else { break }
+                chunks.append(chunk)
+                kept += chunk.count
+                while kept > Self.maxLogOutputBytes, let first = chunks.first {
+                    chunks.removeFirst()
+                    kept -= first.count
+                    status.outputTruncated = true
                 }
             }
             process.waitUntilExit()
             watchdog.cancel()
 
-            if let output = String(data: data, encoding: .utf8) {
-                let lines = output.components(separatedBy: .newlines)
-                for line in lines where !line.isEmpty {
-                    if let event = parseNdjsonLine(line) {
-                        results.append(event)
-                    }
-                }
+            status.timedOut = timedOut.isSet
+            if !status.timedOut && (readFailed || process.terminationStatus != 0) {
+                status.failureReason = "exit_error"
+                status.exitStatus = process.terminationStatus
             }
+
+            var data = Data(capacity: kept)
+            for chunk in chunks { data.append(chunk) }
+            let decoded = decodeLogOutput(data, startsMidLine: status.outputTruncated)
+            results = decoded.events
+            status.linesLossy = decoded.linesLossy
+            status.linesUnparsable = decoded.linesUnparsable
         } catch {
+            status.failureReason = "launch_failed"
             // stderr, never stdout: in `RoamSwitchMCPServer` stdout IS the JSON-RPC channel,
             // so a stray print would corrupt the protocol stream.
             FileHandle.standardError.write(Data("[SecurityLogAuditor] Log query failed: \(error)\n".utf8))
@@ -324,7 +470,39 @@ final class SecurityLogAuditor {
 
         // Sort descending by timestamp
         results.sort { $0.timestamp > $1.timestamp }
-        return results
+        status.eventsRead = results.count
+        return (results, status)
+    }
+
+    /// Turns `log show --style ndjson` output into events, counting what it could not use. A line with bytes that
+    /// are not valid UTF-8 is read with the bytes replaced; a line that looks like JSON but does not parse is
+    /// counted and skipped (non-JSON header lines and events without a message are routine, not losses).
+    /// `startsMidLine`: the data was cut at a byte cap, so its first fragment is not a whole line.
+    func decodeLogOutput(_ data: Data, startsMidLine: Bool = false) -> (events: [SecurityLogEvent], linesLossy: Int, linesUnparsable: Int) {
+        var events: [SecurityLogEvent] = []
+        var lossy = 0
+        var unparsable = 0
+        var lines = data.split(separator: 0x0A, omittingEmptySubsequences: true)
+        if startsMidLine, !lines.isEmpty { lines.removeFirst() }
+        for raw in lines {
+            let line = Data(raw)
+            let text: String
+            if let decoded = String(data: line, encoding: .utf8) {
+                text = decoded
+            } else {
+                text = String(decoding: line, as: UTF8.self)
+                lossy += 1
+            }
+            if let event = parseNdjsonLine(text) {
+                events.append(event)
+                continue
+            }
+            if let first = line.first(where: { $0 != 0x20 && $0 != 0x09 && $0 != 0x0D }), first == UInt8(ascii: "{"),
+               (try? JSONSerialization.jsonObject(with: line)) as? [String: Any] == nil {
+                unparsable += 1
+            }
+        }
+        return (events, lossy, unparsable)
     }
 
     /// Known-benign noise, excluded from `LogTemplateAnalyzer`'s

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.13.0 (build 172).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.14.0 (build 173).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -109,7 +109,14 @@ enum ForensicCaptureManager {
             artifacts: artifacts
         )
         if let data = try? JSONEncoder().encode(manifest) {
-            try? data.write(to: bundleDir.appendingPathComponent("manifest.json"), options: .atomic)
+            let manifestURL = bundleDir.appendingPathComponent("manifest.json")
+            try? data.write(to: manifestURL, options: .atomic)
+            ForensicChain.flush(manifestURL)
+            ForensicChain.flush(bundleDir)
+            // Anchor the manifest outside the bundle, so rewriting it after the fact is detectable.
+            if !ForensicChain.record(root: root, bundleName: bundleDir.lastPathComponent, capturedAt: manifest.capturedAt, manifestData: data) {
+                forensicCaptureLog.error("evidence anchor could not be written")
+            }
         }
 
         forensicCaptureLog.log("evidence bundle captured at \(bundleDir.path, privacy: .public)")
@@ -127,6 +134,7 @@ enum ForensicCaptureManager {
         guard (try? content.write(to: fileURL, atomically: true, encoding: .utf8)) != nil else {
             return ForensicArtifactRecord(name: name, status: "skipped", detail: skippedNote, relativePath: nil, sha256: nil)
         }
+        ForensicChain.flush(fileURL)
         let hash = sha256Hex(Data(content.utf8))
         return ForensicArtifactRecord(name: name, status: "captured", detail: capturedNote, relativePath: relativePath, sha256: hash)
     }
@@ -137,10 +145,17 @@ enum ForensicCaptureManager {
     /// Safe to call from `RoamSwitchMCPServer` — reads only local disk
     /// state, no dependency on `LicenseManager`/AppKit.
     static func listBundles(limit: Int = 20) -> [ForensicBundleSummary] {
-        guard let root = evidenceRoot(),
-              let entries = try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: [.contentModificationDateKey]) else {
+        guard let root = evidenceRoot() else { return [] }
+        return listBundles(root: root, limit: limit)
+    }
+
+    /// The same listing for an explicit evidence folder (what the tests use). Each bundle carries the result of
+    /// checking it against the anchor chain and its own artifact hashes (`ForensicChain.integrity`).
+    static func listBundles(root: URL, limit: Int = 20) -> [ForensicBundleSummary] {
+        guard let entries = try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: [.contentModificationDateKey]) else {
             return []
         }
+        let chain = ForensicChain.load(root: root)
         let sorted = entries
             .filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true }
             .sorted { lhsURL, rhsURL in
@@ -156,10 +171,25 @@ enum ForensicCaptureManager {
                 reason: manifest.reason,
                 suspectedPID: manifest.suspectedPID,
                 capturedArtifactCount: manifest.artifacts.filter { $0.status == "captured" }.count,
-                skippedArtifactCount: manifest.artifacts.filter { $0.status == "skipped" }.count
+                skippedArtifactCount: manifest.artifacts.filter { $0.status == "skipped" }.count,
+                integrity: ForensicChain.integrity(bundleDir: dir, manifestData: data, manifest: manifest, chain: chain)
             ))
         }
         return out
+    }
+
+    /// What `get_forensic_evidence_bundles` returns: the listing plus the state of the chain as a whole.
+    static func bundlesPayload() -> MCPForensicEvidenceBundlesPayload {
+        guard let root = evidenceRoot() else { return MCPForensicEvidenceBundlesPayload(bundles: []) }
+        return bundlesPayload(root: root)
+    }
+
+    static func bundlesPayload(root: URL, limit: Int = 20) -> MCPForensicEvidenceBundlesPayload {
+        let chain = ForensicChain.load(root: root)
+        return MCPForensicEvidenceBundlesPayload(
+            bundles: listBundles(root: root, limit: limit), chainOk: chain.chainOK, chainBrokenAt: chain.brokenAt,
+            missingBundles: ForensicChain.missingBundles(root: root, chain: chain)
+        )
     }
 
     // MARK: - Capture primitives (unprivileged subprocess snapshots)
@@ -258,4 +288,105 @@ public struct ForensicBundleSummary: Codable, Equatable {
     public let suspectedPID: Int32?
     public let capturedArtifactCount: Int
     public let skippedArtifactCount: Int
+    /// `verified`, `manifest_altered`, `artifact_altered:<name>`, `artifact_missing:<name>` or `not_anchored`
+    /// (a bundle with no entry in the chain: captured before the chain existed, or its entry was removed).
+    public var integrity: String = "not_anchored"
+}
+
+/// The evidence bundles as a chain. Every bundle's manifest hash is written to `chain.log` beside the bundles, each
+/// line carrying the hash of the line before it, so a manifest rewritten after the fact, a line removed or edited,
+/// or a whole bundle deleted shows up when the chain is read. It is tamper-EVIDENT, not tamper-proof: someone who
+/// can rewrite the folder and the log together can still forge a consistent history.
+enum ForensicChain {
+    static let fileName = "chain.log"
+    static let genesis = "GENESIS"
+
+    struct Entry: Equatable {
+        let time: String
+        let bundle: String
+        let manifestSHA: String
+        let prev: String
+        let chain: String
+    }
+
+    struct Loaded: Equatable {
+        var entries: [Entry] = []
+        /// The first bundle whose line does not follow from the one before it (or does not parse).
+        var brokenAt: String? = nil
+        var chainOK: Bool { brokenAt == nil }
+        func anchored(_ bundle: String) -> Entry? { entries.last { $0.bundle == bundle } }
+    }
+
+    static func sha256Hex(_ data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
+    static func chainHash(time: String, bundle: String, manifestSHA: String, prev: String) -> String {
+        sha256Hex(Data("\(time) \(bundle) \(manifestSHA) \(prev)".utf8))
+    }
+
+    /// Flushes a file or directory to disk (best effort).
+    static func flush(_ url: URL) {
+        let fd = open(url.path, O_RDONLY)
+        guard fd >= 0 else { return }
+        _ = fcntl(fd, F_FULLFSYNC)
+        close(fd)
+    }
+
+    static func load(root: URL) -> Loaded {
+        var loaded = Loaded()
+        guard let text = try? String(contentsOf: root.appendingPathComponent(fileName), encoding: .utf8) else { return loaded }
+        var prev = genesis
+        for line in text.split(separator: "\n") {
+            let f = line.split(separator: " ").map(String.init)
+            guard f.count == 5, f[3] == prev, chainHash(time: f[0], bundle: f[1], manifestSHA: f[2], prev: f[3]) == f[4] else {
+                loaded.brokenAt = f.count >= 2 ? f[1] : String(line.prefix(40))
+                return loaded
+            }
+            loaded.entries.append(Entry(time: f[0], bundle: f[1], manifestSHA: f[2], prev: f[3], chain: f[4]))
+            prev = f[4]
+        }
+        return loaded
+    }
+
+    /// Appends the anchor of one bundle. Returns false when the log could not be written.
+    @discardableResult
+    static func record(root: URL, bundleName: String, capturedAt: String, manifestData: Data) -> Bool {
+        let loaded = load(root: root)
+        // A broken chain is not extended silently: the new line would hide where it broke.
+        guard loaded.chainOK else { return false }
+        let prev = loaded.entries.last?.chain ?? genesis
+        let manifestSHA = sha256Hex(manifestData)
+        let chain = chainHash(time: capturedAt, bundle: bundleName, manifestSHA: manifestSHA, prev: prev)
+        let line = "\(capturedAt) \(bundleName) \(manifestSHA) \(prev) \(chain)\n"
+        let url = root.appendingPathComponent(fileName)
+        if !FileManager.default.fileExists(atPath: url.path) {
+            guard FileManager.default.createFile(atPath: url.path, contents: nil, attributes: [.posixPermissions: 0o600]) else { return false }
+        }
+        guard let handle = try? FileHandle(forWritingTo: url) else { return false }
+        defer { try? handle.close() }
+        do {
+            try handle.seekToEnd()
+            try handle.write(contentsOf: Data(line.utf8))
+            try handle.synchronize()
+        } catch { return false }
+        return true
+    }
+
+    /// One bundle against the chain and its own artifact hashes.
+    static func integrity(bundleDir: URL, manifestData: Data, manifest: ForensicManifest, chain: Loaded) -> String {
+        guard let entry = chain.anchored(bundleDir.lastPathComponent) else { return "not_anchored" }
+        if entry.manifestSHA != sha256Hex(manifestData) { return "manifest_altered" }
+        for a in manifest.artifacts where a.status == "captured" {
+            guard let rel = a.relativePath, let expected = a.sha256 else { continue }
+            guard let data = try? Data(contentsOf: bundleDir.appendingPathComponent(rel)) else { return "artifact_missing:\(a.name)" }
+            if sha256Hex(data) != expected { return "artifact_altered:\(a.name)" }
+        }
+        return "verified"
+    }
+
+    /// Bundles the chain names that are no longer in the folder (deleted after the fact).
+    static func missingBundles(root: URL, chain: Loaded) -> [String] {
+        chain.entries.map(\.bundle).filter { !FileManager.default.fileExists(atPath: root.appendingPathComponent($0).path) }
+    }
 }

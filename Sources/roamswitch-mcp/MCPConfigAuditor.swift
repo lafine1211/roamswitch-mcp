@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.13.0 (build 172).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.14.0 (build 173).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -30,7 +30,7 @@ enum MCPConfigAuditor {
     struct Finding: Codable, Equatable {
         /// Stable id: `auto_approve`, `remote_plain_http`, `shell_wrapper`, `hexstrike`,
         /// `world_writable_config`, `auto_trust_project_servers`, `unpinned_package_launcher`,
-        /// `container_host_access`, `code_loading_env`, `injection_exposure`.
+        /// `container_host_access`, `code_loading_env`, `traffic_interception_env`, `injection_exposure`.
         let id: String
         /// `high` or `medium`.
         let severity: String
@@ -309,6 +309,19 @@ enum MCPConfigAuditor {
             }
         }
 
+        // `env` that sends the server's traffic through a proxy, trusts an extra certificate authority, or turns
+        // certificate checking off: whoever runs the proxy or holds the CA can read what the server sends.
+        if let env = config["env"] as? [String: Any] {
+            let items = trafficInterceptionEnv(env)
+            if !items.isEmpty {
+                findings.append(Finding(
+                    id: "traffic_interception_env", severity: "medium", file: file, server: name,
+                    detail: "env sets " + items.joined(separator: ", "),
+                    message: loc("この MCP サーバーの環境変数に、通信をプロキシ経由にする設定(HTTP_PROXY・HTTPS_PROXY・ALL_PROXY)、追加の認証局を信頼させる設定(NODE_EXTRA_CA_CERTS・SSL_CERT_FILE・REQUESTS_CA_BUNDLE など)、または証明書の検証を切る設定(NODE_TLS_REJECT_UNAUTHORIZED=0)があります。社内のプロキシを使うための正しい設定のこともありますが、心当たりがなければ、このサーバーの通信(API キーやトークンを含みます)をプロキシの運営者や認証局を持つ人に読まれるおそれがあります。この項目を確認し、設定ファイルを書き換えられる人がほかにいないか確かめてください。")
+                ))
+            }
+        }
+
         // HexStrike AI.
         let haystack = ([rawName, command, urlString] + args).joined(separator: " ").lowercased()
         if haystack.contains("hexstrike") {
@@ -401,6 +414,46 @@ enum MCPConfigAuditor {
                 }
             }
             if hit { found.append(sanitized(key)) }
+        }
+        return found.sorted()
+    }
+
+    private static let proxyEnv: Set<String> = ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"]
+    private static let caEnv: Set<String> = ["NODE_EXTRA_CA_CERTS", "SSL_CERT_FILE", "SSL_CERT_DIR", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE", "GIT_SSL_CAINFO"]
+
+    /// The host of a proxy URL, without a scheme, a user name or password, a port or a path. A value that is not a
+    /// URL at all (`proxy.example.com:3128`) is read the same way.
+    static func proxyHost(_ value: String) -> String {
+        var v = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let r = v.range(of: "://") { v = String(v[r.upperBound...]) }
+        let authority = v.split(whereSeparator: { "/?#".contains($0) }).first.map(String.init) ?? ""
+        let hostPort = authority.split(separator: "@", omittingEmptySubsequences: false).last.map(String.init) ?? authority
+        let host: String
+        if hostPort.hasPrefix("[") {
+            host = String(hostPort.dropFirst().prefix(while: { $0 != "]" }))
+        } else {
+            host = hostPort.split(separator: ":", omittingEmptySubsequences: false).first.map(String.init) ?? ""
+        }
+        return sanitized(host)
+    }
+
+    /// The `env` entries that route traffic through a proxy (shown with the proxy's host only), name an extra
+    /// certificate authority file, or switch certificate checking off (`NODE_TLS_REJECT_UNAUTHORIZED=0`). Names are
+    /// matched without regard to case, as for `codeLoadingEnvKeys`. Paths, credentials and every other value are
+    /// read to decide and never copied out; `NO_PROXY` is ignored (it only narrows a proxy).
+    static func trafficInterceptionEnv(_ env: [String: Any]) -> [String] {
+        var found: [String] = []
+        for (key, value) in env {
+            guard let text = value as? String, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+            let upper = key.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+            if proxyEnv.contains(upper) {
+                let host = proxyHost(text)
+                found.append(host.isEmpty ? sanitized(key) : "\(sanitized(key)) (host \(host))")
+            } else if upper == "NODE_TLS_REJECT_UNAUTHORIZED" {
+                if text.trimmingCharacters(in: .whitespacesAndNewlines) == "0" { found.append("\(sanitized(key))=0") }
+            } else if caEnv.contains(upper) {
+                found.append(sanitized(key))
+            }
         }
         return found.sorted()
     }

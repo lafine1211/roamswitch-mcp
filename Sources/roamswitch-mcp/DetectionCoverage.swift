@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.13.0 (build 172).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.14.0 (build 173).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -16,7 +16,8 @@ import Foundation
 ///
 /// Every `detects` and `partial` entry is backed by code that was read when the entry was written, and the
 /// file it lives in is named in the comment above the entry. The tests check the machine-checkable half: each
-/// guard id exists in the guard-status vocabulary (`get_guard_status`), each audit check id exists in the
+/// guard id exists in the guard-status vocabulary (`get_guard_status`), every guard in that vocabulary either backs a
+/// technique or is on `exemptGuards` with a reason, each audit check id exists in the
 /// security audit, and (app tests) each exec rule id exists in `ExecRuleID` with the technique the rule
 /// itself reports. An entry that cannot be backed is `none` with the limit stated, never rounded up.
 ///
@@ -114,6 +115,11 @@ enum DetectionCoverage {
         Entry(technique: "T1557.003", name: "Adversary-in-the-Middle: DHCP Spoofing", coverage: .partial,
               sources: [guardSource("networkSettingsWatch"), check("proxy_autodiscovery")],
               blindSpot: "A rogue DHCP server cannot be seen directly; only its result is. A new DNS server, or a new router together with one, on a network that RoamSwitch has seen before is notified, as is a new proxy auto-config (PAC) address or Auto Proxy Discovery (WPAD) switched on. The first time a network is seen it is only learned. A rogue server that hands out the same DNS and router as before, or a well-known public resolver, is not noticed, and neither is a change on a VPN or other tunnel. A DNS-over-HTTPS profile and addresses set by hand or by RoamSwitch's own secure DNS are not compared. The audit check reports Auto Proxy Discovery or a network-supplied PAC address being on, and does not read the PAC file."),
+        // T1553.004. RoamSwitch/TrustAnchorCheck.swift (audit check trust_anchors: the certificates the user or an
+        // administrator set to "trust", read with `security dump-trust-settings`).
+        Entry(technique: "T1553.004", name: "Subvert Trust Controls: Install Root Certificate", coverage: .partial,
+              sources: [check("trust_anchors")],
+              blindSpot: "Only the certificates that have a trust setting in the user and administrator domains are listed, which is every certificate somebody added to what the Mac trusts. When one was added is not known, a new one is not notified as it appears, and a certificate an application carries for itself never touches the system trust and is not seen. Added certificates whose names do not look like an interception tool are reported as information, because a company or a developer tool adds its own on purpose."),
         // T1557.001. mDNSResponder carries no LLMNR code (searched), so macOS has no LLMNR to poison. NetBIOS name
         // service is another matter: /usr/sbin/netbiosd ships with macOS and runs as a LaunchDaemon.
         Entry(technique: "T1557.001", name: "Adversary-in-the-Middle: LLMNR/NBT-NS Poisoning and SMB Relay", coverage: .none,
@@ -167,6 +173,89 @@ enum DetectionCoverage {
         Entry(technique: "T1098.004", name: "Account Manipulation: SSH Authorized Keys", coverage: .partial,
               sources: [guardSource("criticalPathFim")],
               blindSpot: "Only root's authorized_keys and the sshd configuration are hashed. Users' own ~/.ssh/authorized_keys files are not."),
+        // T1110.001. RoamSwitch/SSHGuard.swift and Shared/SSHGuardCore.swift (run by RoamSwitchHelper/SSHGuardDetector.swift):
+        // failed sshd logins are read from the unified log and counted per source in a sliding window (default 6 failures
+        // in 600 s); the source is then banned through pf for new connections to the SSH ports only.
+        Entry(technique: "T1110.001", name: "Brute Force: Password Guessing", coverage: .detects,
+              sources: [guardSource("sshGuard")],
+              blindSpot: "SSH only, and only while Remote Login is on. Guessing against other services (Screen Sharing, File Sharing, a local web login) is not looked at, a source that stays under the failure limit is not banned, and a ban never cuts a session that is already open."),
+        // T1046. RoamSwitch/PortScanGuard.swift; the logic runs in RoamSwitchHelper/PortScanDetector.swift on the packet
+        // filter's log (pflog0) with Shared/PortScanTracker.swift: a source that reaches many distinct ports in a short
+        // window, plus a slower window for slow scans; the source is blocked for a bounded time when auto-block is on.
+        Entry(technique: "T1046", name: "Network Service Discovery", coverage: .partial,
+              sources: [guardSource("portScanGuard")],
+              blindSpot: "Scans against this Mac only, seen through the packet filter's log. A scan that stays under the distinct-port limits is not flagged, and a scan run from this Mac is not looked at. Needs the helper and Pro."),
+        // T1486. RoamSwitch/RansomwareCanaryGuard.swift (bait files in Application Support and four user folders, compared
+        // with their recorded SHA-256) and RoamSwitch/RansomwareEntropyGuard.swift (new writes in the same folders whose
+        // content looks like ciphertext: entropy of the whole file, and 4 KiB windows for partial encryption).
+        Entry(technique: "T1486", name: "Data Encrypted for Impact", coverage: .partial,
+              sources: [guardSource("ransomwareCanaryGuard"), guardSource("ransomwareEntropyGuard")],
+              blindSpot: "Bait files and new writes inside the watched folders only. macOS gives no writing-process id, so encryption elsewhere, or slow encryption that stays under the entropy limit, is not seen, and the cause of a hit is attributed on a best-effort basis."),
+        // T1557.002. RoamSwitch/ARPSpoofContainmentManager.swift (the gateway's MAC address changing while its IP stays put
+        // air-gaps the network) and RoamSwitch/GatewayARPLockManager.swift (pins the default gateway, the IPv6 router and
+        // on-link DNS resolvers into the ARP / NDP cache).
+        Entry(technique: "T1557.002", name: "Adversary-in-the-Middle: ARP Cache Poisoning", coverage: .partial,
+              sources: [guardSource("arpSpoofAutoContainment"), guardSource("gatewayARPLock")],
+              blindSpot: "Covers the default gateway and the on-link hosts that are pinned. Spoofing of other neighbours is not looked at, and the containment needs the helper and Pro."),
+        // T1200. RoamSwitch/USBKeyboardGuard.swift: IOHIDManager notices a keyboard that is not on the approved list and its
+        // keystrokes are held back until it is approved; opt-in, needs the Accessibility permission.
+        Entry(technique: "T1200", name: "Hardware Additions", coverage: .partial,
+              sources: [guardSource("usbKeyboardGuard")],
+              blindSpot: "Looks at devices that present themselves as keyboards. A device that copies the identity of an approved keyboard, or injects through another HID class, is not caught. Opt-in; USB storage is handled by the storage guard."),
+        // T1091. RoamSwitch/USBStorageGuard.swift: an unknown external USB volume is mounted read-only until approved and
+        // every insertion passes a ClamAV scan before it is released to read-write.
+        Entry(technique: "T1091", name: "Replication Through Removable Media", coverage: .partial,
+              sources: [guardSource("usbStorageGuard")],
+              blindSpot: "External USB volumes only, and the scan is signature-based: a payload with no signature passes, and a volume the user approves read-write after a clean scan is trusted. HID devices are not covered here (see T1200)."),
+        // T1204.002. RoamSwitch/WebMailDownloadGuard.swift: files that arrive with the quarantine attribute in Downloads,
+        // Desktop, Documents and Mail Downloads are scanned by ClamAV and, through StaticSignatureScanner, by byte-pattern
+        // rules; threats are quarantined.
+        Entry(technique: "T1204.002", name: "User Execution: Malicious File", coverage: .partial,
+              sources: [guardSource("webMailDownloadGuard")],
+              blindSpot: "Only files in the watched folders that arrive with the quarantine attribute (outside Downloads) are checked, and detection is signature and pattern based: a new variant with no signature, or an archive the engines cannot open, passes."),
+        // T1204.004. RoamSwitch/ClickFixGuard.swift (shell history lines) and RoamSwitch/SecretLeakAuditor.swift (the
+        // pasteboard, at copy time) match known ClickFix command shapes; the history check runs after the command has run.
+        Entry(technique: "T1204.004", name: "User Execution: Malicious Copy and Paste", coverage: .partial,
+              sources: [guardSource("clickFixGuard"), guardSource("secretLeakClipboardAuditor")],
+              blindSpot: "Only the shapes RoamSwitch knows are flagged: reverse-shell one-liners and a base64 decode piped into a shell or osascript. A plain curl | bash is deliberately not flagged, and the history check is after the fact."),
+        // T1195.001. RoamSwitch/LockfileTamperGuard.swift: package-lock.json, yarn.lock, pnpm-lock.yaml and
+        // npm-shrinkwrap.json in the registered project folders are hashed; a change is re-flagged until a person
+        // re-trusts it.
+        Entry(technique: "T1195.001", name: "Supply Chain Compromise: Compromise Software Dependencies and Development Tools", coverage: .partial,
+              sources: [guardSource("lockfileTamperGuard")],
+              blindSpot: "Notices that a lockfile changed, not whether the dependency it now pins is malicious. Only the npm-family lockfiles of registered project folders are hashed."),
+        // T1505.003. RoamSwitch/WebRuleFolderScanner.swift (local web roots and project folders, once a day and on demand)
+        // and RoamSwitch/WebMailDownloadGuard.swift (the same web rules on the download folders, live), through
+        // StaticSignatureScanner.
+        Entry(technique: "T1505.003", name: "Server Software Component: Web Shell", coverage: .partial,
+              sources: [guardSource("webRulesFolderScan"), guardSource("webMailDownloadGuard")],
+              blindSpot: "Local web roots, project folders and the download folders only. A web shell written anywhere else is not examined, there is no view of a remote server, and a file larger than the read limit is checked at its start only."),
+        // T1566.002. RoamSwitch/LinkGuardManager.swift: outbound connections to hosts in the phishing and scam feed are
+        // blocked or paused for an answer (hosts sinkhole, plus the content-filter extension when it is active).
+        Entry(technique: "T1566.002", name: "Phishing: Spearphishing Link", coverage: .partial,
+              sources: [guardSource("linkGuard")],
+              blindSpot: "Hosts in the feed only. A new or unlisted link passes, and a connection the filter cannot see (no extension, and not in the hosts file) is not stopped."),
+        // T1610. RoamSwitch/DockerEventGuard.swift: polls docker ps / inspect every 20 seconds and notifies (no
+        // containment) for a new container that runs privileged or with /var/run/docker.sock mounted.
+        Entry(technique: "T1610", name: "Deploy Container", coverage: .partial,
+              sources: [guardSource("dockerEventGuard")],
+              blindSpot: "Only a new privileged container, or one with the Docker socket mounted, is flagged. Other new containers, and one that starts and stops between two polls, are not."),
+    ]
+
+    /// Guards of `get_guard_status` that detect nothing a single ATT&CK technique names, each with the reason. Together with
+    /// the guards some entry above relies on, this covers the whole guard-status vocabulary; the tests fail for a guard that
+    /// is in neither place.
+    static let exemptGuards: [String: String] = [
+        "portAnomalyGuard": "Exposure control: blocks outside access to a newly listening executable; no ATT&CK technique matches a new listener.",
+        "runtimeThreatContainment": "Contains what XProtect convicted; XProtect's detections are not tied to one technique.",
+        "dnsThreatGuard": "Switches to a filtering DNS resolver away from home; prevention, not the detection of a technique.",
+        "bluetoothGuard": "Turns Bluetooth off on an untrusted network; exposure reduction, no detection.",
+        "airGapAutoWiFiKill": "A response (cuts the network when a threat is confirmed), not a detection.",
+        "wireGuardVPN": "Network protection (the VPN tunnel); no detection.",
+        "tailscaleKillSwitch": "Network protection (the Tailscale kill switch); no detection.",
+        "linkGuardFeedUpdates": "Keeps the link guard's feed current; covers nothing by itself (see T1566.002).",
+        "activeVulnScan": "Probes this Mac's own listening services for weaknesses; an assessment, not the detection of an attack.",
+        "scheduledLogAudit": "Looks for new or surging log patterns in general; not tied to one technique.",
     ]
 
     // MARK: Payload

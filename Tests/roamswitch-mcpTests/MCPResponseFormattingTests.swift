@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.13.0 (build 172). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.14.0 (build 173). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -680,7 +680,7 @@ final class VerifyFindingDisciplineTests: XCTestCase {
         "host_firewall", "network_stealth_mode", "wifi_encryption_strength", "arp_spoof_monitor", "gateway_arp_lock",
         "ssh_hardening", "sudo_hygiene", "exposed_ports", "malware_scanning", "dns_threat_guard",
         "browser_phishing_protection", "usb_zero_trust", "accessory_connection_protection", "backup_recency",
-        "proxy_autodiscovery", "agent_credential_files",
+        "proxy_autodiscovery", "trust_anchors", "agent_credential_files",
     ]
     private let allReasons = [
         "failing", "passing", "not_applicable", "helper_unavailable", "gateway_unknown", "no_baseline",
