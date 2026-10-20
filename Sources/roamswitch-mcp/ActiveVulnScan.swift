@@ -1169,8 +1169,7 @@ public enum ActiveVulnScan {
                     outcome: confirmed == true ? "vulnerable" : (confirmed == false ? "safe" : "inconclusive")
                 ))
                 let outcome = CheckOutcome(port: port.port, processName: port.processName, check: signature.title)
-                switch confirmed {
-                case true:
+                if confirmed == true {
                     result.findings.append(Finding(
                         port: port.port,
                         processName: port.processName,
@@ -1197,9 +1196,9 @@ public enum ActiveVulnScan {
                             ))
                         }
                     }
-                case false:
+                } else if confirmed == false {
                     result.confirmedSafe.append(outcome)
-                case nil:
+                } else {
                     result.inconclusive.append(outcome)
                 }
             }
@@ -1225,13 +1224,14 @@ public enum ActiveVulnScan {
                 lastFinishedAt: probeLogFormatter.string(from: finishedAt),
                 outcome: confirmed == true ? "vulnerable" : (confirmed == false ? "safe" : "inconclusive")
             ))
-            switch confirmed {
-            case true:
+            if confirmed == true {
                 var finding = makeFinding()
                 finding.probeName = probeName
                 result.findings.append(finding)
-            case false: result.confirmedSafe.append(outcome)
-            case nil: result.inconclusive.append(outcome)
+            } else if confirmed == false {
+                result.confirmedSafe.append(outcome)
+            } else {
+                result.inconclusive.append(outcome)
             }
         }
 
