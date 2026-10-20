@@ -24,7 +24,7 @@ block traffic, no license or payment code, no UI. Just the code that *observes* 
 | ARP spoofing detection | `ARPSpoofMonitor.swift` |
 | Listening-port enumeration & audit | `ListeningPortMonitor.swift`, `PortSecurityAuditor.swift`, `ServiceSignatures.swift` |
 | Wi-Fi encryption check | `WiFiSecurityMonitor.swift` |
-| 21-point macOS security posture | `SecurityHealthChecker.swift`, `BackupRecency.swift`, `ProxyAutoDiscoveryCheck.swift`, `AgentCredentialFileCheck.swift` |
+| 22-point macOS security posture | `SecurityHealthChecker.swift`, `BackupRecency.swift`, `ProxyAutoDiscoveryCheck.swift`, `TrustAnchorCheck.swift`, `AgentCredentialFileCheck.swift` |
 | Phishing / homograph / URL safety (offline) | `LinkSafetyAuditor.swift` |
 | Secret / API-key leak scanning (offline) | `SecretLeakScanning.swift` |
 | Unified-log security audit + log-template anomalies | `SecurityLogAuditor.swift`, `LogTemplateAnalyzer.swift` |
@@ -52,7 +52,7 @@ address.
 
 ### Posture & network
 
-- `get_security_report` — the full 21-point macOS posture audit (FileVault, SIP, Gatekeeper,
+- `get_security_report` — the full 22-point macOS posture audit (FileVault, SIP, Gatekeeper,
   auto-update, XProtect, firewall, stealth mode, Wi-Fi encryption, ARP spoofing, gateway ARP
   pinning, SSH, sudo `NOPASSWD`, exposed ports, download/DNS/link protection, USB &
   accessory guards), scored with per-item advice. An item that could not be measured reliably

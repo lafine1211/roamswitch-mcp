@@ -71,6 +71,8 @@ All files live in `Sources/roamswitch-mcp/`.
 | `ProxyAutoDiscoveryCheck.swift` | `RoamSwitch/ProxyAutoDiscoveryCheck.swift` |
 | `AgentCredentialFileCheck.swift` | `RoamSwitch/AgentCredentialFileCheck.swift` |
 | `SecretLeakScanning.swift` | `RoamSwitch/SecretLeakScanning.swift` |
+| `FrontendBundleScan.swift` | `RoamSwitch/FrontendBundleScan.swift` |
+| `TrustAnchorCheck.swift` | `RoamSwitch/TrustAnchorCheck.swift` |
 | `CryptoSecretDetection.swift` | `Shared/CryptoSecretDetection.swift` (from `Shared/`) |
 | `SecurityLogAuditor.swift` | `RoamSwitch/SecurityLogAuditor.swift` |
 | `LogTemplateAnalyzer.swift` | `RoamSwitch/LogTemplateAnalyzer.swift` |
@@ -147,6 +149,9 @@ via `@testable import RoamSwitch`. Only `main.swift` (the stdin→stdout pump) i
 | `PackageCveEpssTests.swift` | `RoamSwitchTests/PackageCveEpssTests.swift` |
 | `ProbeCatalogTests.swift` | `RoamSwitchTests/ProbeCatalogTests.swift` |
 | `MCPToolAnnotationsTests.swift` | `RoamSwitchTests/MCPToolAnnotationsTests.swift` |
+| `FrontendBundleScanTests.swift` | `RoamSwitchTests/FrontendBundleScanTests.swift` |
+| `ForensicChainTests.swift` | `RoamSwitchTests/ForensicChainTests.swift` |
+| `TrustAnchorCheckTests.swift` | `RoamSwitchTests/TrustAnchorCheckTests.swift` |
 | `StdioSmokeTests.swift` | **not mirrored** — specific to this repo (drives the built binary over stdio) |
 | `MutationFuzzTests.swift` | **not mirrored** — specific to this repo |
 

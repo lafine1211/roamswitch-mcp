@@ -24,7 +24,7 @@
 | ARP スプーフィング検知 | `ARPSpoofMonitor.swift` |
 | リスニングポート列挙・監査 | `ListeningPortMonitor.swift`, `PortSecurityAuditor.swift`, `ServiceSignatures.swift` |
 | Wi-Fi 暗号化強度の判定 | `WiFiSecurityMonitor.swift` |
-| macOS セキュリティ 21 項目診断 | `SecurityHealthChecker.swift`, `BackupRecency.swift`, `ProxyAutoDiscoveryCheck.swift`, `AgentCredentialFileCheck.swift` |
+| macOS セキュリティ 22 項目診断 | `SecurityHealthChecker.swift`, `BackupRecency.swift`, `ProxyAutoDiscoveryCheck.swift`, `TrustAnchorCheck.swift`, `AgentCredentialFileCheck.swift` |
 | フィッシング / ホモグラフ / URL 安全性（完全オフライン） | `LinkSafetyAuditor.swift` |
 | APIキー・シークレット漏洩検査（完全オフライン） | `SecretLeakScanning.swift` |
 | 統合ログのセキュリティ監査＋ログテンプレート異常検知 | `SecurityLogAuditor.swift`, `LogTemplateAnalyzer.swift` |
@@ -52,7 +52,7 @@
 
 ### 状態診断・ネットワーク
 
-- `get_security_report` — macOS セキュリティ 21 項目の総合診断（FileVault、SIP、Gatekeeper、
+- `get_security_report` — macOS セキュリティ 22 項目の総合診断（FileVault、SIP、Gatekeeper、
   自動アップデート、XProtect、ファイアウォール、ステルスモード、Wi-Fi 暗号化強度、ARP
   スプーフィング、ゲートウェイ ARP 固定、SSH、sudo の `NOPASSWD` 監査、外部公開ポート、
   ダウンロード保護 / DNS 脅威保護 / リンク保護、USB・アクセサリ防御）をスコア化し、
