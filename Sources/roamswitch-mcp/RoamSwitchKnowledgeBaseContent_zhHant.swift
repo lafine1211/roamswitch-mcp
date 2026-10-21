@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.15.1 (build 175).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.16.0 (build 176).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -435,9 +435,9 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "feat_web_worker_crash_guard",
                 title: "監視 Web 伺服器工作處理程序的異常終止(Pro)",
-                summary: "當 nginx 或 Apache 的工作處理程序在短時間內反覆當機時發出通知。主處理程序會重新建立工作處理程序,所以其他監視看不到。",
+                summary: "當 nginx、Apache 或 PHP-FPM 的工作處理程序在短時間內反覆當機時發出通知。主處理程序會重新建立工作處理程序,所以其他監視看不到。",
                 details: """
-                • 監視對象:nginx 與 Apache(Homebrew 與 macOS 內建)的錯誤記錄,以及 nginx 設定中的 `error_log`。每 5 秒只讀取新增的行。
+                • 監視對象:nginx、Apache 與 PHP-FPM(Homebrew 與 macOS 內建)的錯誤記錄,以及 nginx 與 PHP-FPM 設定中的 `error_log`。每 5 秒只讀取新增的行。
                 • 判斷:5 分鐘內 3 次因當機訊號(SIGSEGV、SIGABRT、SIGBUS、SIGILL、SIGFPE)而終止。SIGKILL 等不計入。
                 • 僅通知:每台伺服器每小時最多一次,不會停止或封鎖任何內容。
                 • 預設:Pro 下開啟。

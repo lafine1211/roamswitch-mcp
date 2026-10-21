@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.15.1 (build 175).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.16.0 (build 176).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -435,9 +435,9 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "feat_web_worker_crash_guard",
                 title: "Monitorare i crash dei worker del server web (Pro)",
-                summary: "Ti avvisa quando i worker di nginx o Apache vanno in crash ripetutamente in poco tempo. Il processo master sostituisce ogni worker, quindi nessun altro controllo se ne accorge.",
+                summary: "Ti avvisa quando i worker di nginx, Apache o PHP-FPM vanno in crash ripetutamente in poco tempo. Il processo master sostituisce ogni worker, quindi nessun altro controllo se ne accorge.",
                 details: """
-                • Cosa viene controllato: i log degli errori di nginx e Apache (Homebrew e quello integrato in macOS) e ogni `error_log` indicato nella configurazione di nginx. Ogni 5 secondi vengono lette solo le righe aggiunte dall'ultima lettura.
+                • Cosa viene controllato: i log degli errori di nginx, Apache e PHP-FPM (Homebrew e quello integrato in macOS) e ogni `error_log` indicato nella configurazione di nginx o PHP-FPM. Ogni 5 secondi vengono lette solo le righe aggiunte dall'ultima lettura.
                 • Criterio: tre terminazioni in cinque minuti per un segnale di crash (SIGSEGV, SIGABRT, SIGBUS, SIGILL, SIGFPE). SIGKILL e simili non contano.
                 • Solo notifica: una volta per server all'ora; nulla viene fermato o bloccato.
                 • Predefinito: attivo con Pro.

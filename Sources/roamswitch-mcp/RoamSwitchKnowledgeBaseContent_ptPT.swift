@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.15.1 (build 175).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.16.0 (build 176).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -435,9 +435,9 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "feat_web_worker_crash_guard",
                 title: "Vigiar as falhas dos workers do servidor web (Pro)",
-                summary: "Avisa-o quando os workers do nginx ou do Apache falham repetidamente em pouco tempo. O processo mestre substitui cada worker, por isso nenhuma outra vigilância o vê.",
+                summary: "Avisa-o quando os workers do nginx, do Apache ou do PHP-FPM falham repetidamente em pouco tempo. O processo mestre substitui cada worker, por isso nenhuma outra vigilância o vê.",
                 details: """
-                • Vigiado: os registos de erros do nginx e do Apache (Homebrew e o integrado no macOS) e qualquer `error_log` indicado na configuração do nginx. A cada 5 segundos só se leem as linhas acrescentadas desde a última leitura.
+                • Vigiado: os registos de erros do nginx, do Apache e do PHP-FPM (Homebrew e o integrado no macOS) e qualquer `error_log` indicado na configuração do nginx ou do PHP-FPM. A cada 5 segundos só se leem as linhas acrescentadas desde a última leitura.
                 • Critério: três terminações em cinco minutos por um sinal de falha (SIGSEGV, SIGABRT, SIGBUS, SIGILL, SIGFPE). SIGKILL e semelhantes não contam.
                 • Apenas notificação: uma vez por servidor por hora; nada é parado nem bloqueado.
                 • Por omissão: ativo com Pro.

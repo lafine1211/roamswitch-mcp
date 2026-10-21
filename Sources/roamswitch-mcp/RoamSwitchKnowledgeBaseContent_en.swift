@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.15.1 (build 175).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.16.0 (build 176).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -434,9 +434,9 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "feat_web_worker_crash_guard",
                 title: "Watch for Web Server Workers Crashing (Pro)",
-                summary: "Notifies you when nginx or Apache workers crash repeatedly in a short time. The master process replaces each worker, so no other check sees it.",
+                summary: "Notifies you when nginx, Apache or PHP-FPM workers crash repeatedly in a short time. The master process replaces each worker, so no other check sees it.",
                 details: """
-                • Watched: the error logs of nginx and Apache (Homebrew and the macOS built-in one) and any `error_log` named in the nginx configuration. Every 5 seconds only the lines added since the last read are read.
+                • Watched: the error logs of nginx, Apache and PHP-FPM (Homebrew and the macOS built-in one) and any `error_log` named in the nginx or PHP-FPM configuration. Every 5 seconds only the lines added since the last read are read.
                 • Judgment: three exits in five minutes by a crash signal (SIGSEGV, SIGABRT, SIGBUS, SIGILL, SIGFPE). SIGKILL and the like are not counted.
                 • Notification only: once per server per hour; nothing is stopped or blocked.
                 • Default: on with Pro.

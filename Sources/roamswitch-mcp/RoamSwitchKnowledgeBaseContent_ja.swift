@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.15.1 (build 175).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.16.0 (build 176).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -434,9 +434,9 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "feat_web_worker_crash_guard",
                 title: "Webサーバーのワーカーの異常終了を監視(Pro)",
-                summary: "nginx と Apache のワーカーが短時間に繰り返しクラッシュしたときに通知します。ワーカーは親プロセスが作り直すので、ほかの監視には映りません。",
+                summary: "nginx・Apache・PHP-FPM のワーカーが短時間に繰り返しクラッシュしたときに通知します。ワーカーは親プロセスが作り直すので、ほかの監視には映りません。",
                 details: """
-                • 見るもの: nginx と Apache(Homebrew と macOS 標準)のエラーログと、nginx の設定にある `error_log`。5 秒おきに、書き足された行だけを読みます。
+                • 見るもの: nginx・Apache・PHP-FPM(Homebrew と macOS 標準)のエラーログと、nginx と PHP-FPM の設定にある `error_log`。5 秒おきに、書き足された行だけを読みます。
                 • 判定: 5 分のあいだに 3 回、クラッシュのシグナル(SIGSEGV・SIGABRT・SIGBUS・SIGILL・SIGFPE)で終了したとき。SIGKILL などは数えません。
                 • 通知のみ: 同じサーバーにつき 1 時間に 1 回で、止めたり遮断したりはしません。
                 • 既定: Pro で有効です。

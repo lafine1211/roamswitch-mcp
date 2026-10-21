@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.15.1 (build 175).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.16.0 (build 176).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -435,9 +435,9 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "feat_web_worker_crash_guard",
                 title: "Surveiller les plantages des workers du serveur web (Pro)",
-                summary: "Vous notifie lorsque des workers nginx ou Apache plantent de façon répétée en peu de temps. Le processus maître recrée chaque worker : aucune autre surveillance ne le voit.",
+                summary: "Vous notifie lorsque des workers nginx, Apache ou PHP-FPM plantent de façon répétée en peu de temps. Le processus maître recrée chaque worker : aucune autre surveillance ne le voit.",
                 details: """
-                • Surveillé : les journaux d'erreurs de nginx et d'Apache (Homebrew et celui intégré à macOS) et tout `error_log` nommé dans la configuration de nginx. Toutes les 5 secondes, seules les lignes ajoutées depuis la dernière lecture sont lues.
+                • Surveillé : les journaux d'erreurs de nginx, d'Apache et de PHP-FPM (Homebrew et celui intégré à macOS) et tout `error_log` nommé dans la configuration de nginx ou de PHP-FPM. Toutes les 5 secondes, seules les lignes ajoutées depuis la dernière lecture sont lues.
                 • Jugement : trois arrêts en cinq minutes sur un signal de plantage (SIGSEGV, SIGABRT, SIGBUS, SIGILL, SIGFPE). SIGKILL et assimilés ne comptent pas.
                 • Notification seule : une fois par serveur et par heure ; rien n'est arrêté ni bloqué.
                 • Par défaut : activé avec Pro.

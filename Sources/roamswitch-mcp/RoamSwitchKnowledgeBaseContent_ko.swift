@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.15.1 (build 175).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.16.0 (build 176).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -435,9 +435,9 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "feat_web_worker_crash_guard",
                 title: "웹 서버 워커의 비정상 종료 감시(Pro)",
-                summary: "nginx와 Apache의 워커가 짧은 시간에 반복해서 크래시할 때 알립니다. 워커는 부모 프로세스가 다시 만들기 때문에 다른 감시에는 나타나지 않습니다.",
+                summary: "nginx·Apache·PHP-FPM의 워커가 짧은 시간에 반복해서 크래시할 때 알립니다. 워커는 부모 프로세스가 다시 만들기 때문에 다른 감시에는 나타나지 않습니다.",
                 details: """
-                • 보는 것: nginx와 Apache(Homebrew와 macOS 기본)의 오류 로그와 nginx 설정에 있는 `error_log`. 5초마다 새로 추가된 줄만 읽습니다.
+                • 보는 것: nginx·Apache·PHP-FPM(Homebrew와 macOS 기본)의 오류 로그와 nginx와 PHP-FPM 설정에 있는 `error_log`. 5초마다 새로 추가된 줄만 읽습니다.
                 • 판정: 5분 안에 3회, 크래시 시그널(SIGSEGV·SIGABRT·SIGBUS·SIGILL·SIGFPE)로 종료되었을 때. SIGKILL 등은 세지 않습니다.
                 • 알림만: 같은 서버당 1시간에 1회이며, 멈추거나 차단하지 않습니다.
                 • 기본값: Pro에서 켜져 있습니다.

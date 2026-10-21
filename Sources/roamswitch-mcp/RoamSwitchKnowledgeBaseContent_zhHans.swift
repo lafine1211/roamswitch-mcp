@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.15.1 (build 175).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.16.0 (build 176).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -435,9 +435,9 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "feat_web_worker_crash_guard",
                 title: "监视 Web 服务器工作进程的异常终止(Pro)",
-                summary: "当 nginx 或 Apache 的工作进程在短时间内反复崩溃时发出通知。主进程会重新创建工作进程,所以其他监视看不到。",
+                summary: "当 nginx、Apache 或 PHP-FPM 的工作进程在短时间内反复崩溃时发出通知。主进程会重新创建工作进程,所以其他监视看不到。",
                 details: """
-                • 监视对象:nginx 和 Apache(Homebrew 和 macOS 自带)的错误日志,以及 nginx 配置中的 `error_log`。每 5 秒只读取新增的行。
+                • 监视对象:nginx、Apache 和 PHP-FPM(Homebrew 和 macOS 自带)的错误日志,以及 nginx 和 PHP-FPM 配置中的 `error_log`。每 5 秒只读取新增的行。
                 • 判断:5 分钟内 3 次因崩溃信号(SIGSEGV、SIGABRT、SIGBUS、SIGILL、SIGFPE)而终止。SIGKILL 等不计入。
                 • 仅通知:每台服务器每小时最多一次,不会停止或封锁任何内容。
                 • 默认:Pro 下开启。

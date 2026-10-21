@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.15.1 (build 175).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.16.0 (build 176).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -435,9 +435,9 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "feat_web_worker_crash_guard",
                 title: "Abstürze von Webserver-Workern überwachen (Pro)",
-                summary: "Benachrichtigt Sie, wenn nginx- oder Apache-Worker in kurzer Zeit wiederholt abstürzen. Der Master-Prozess ersetzt jeden Worker, daher sieht keine andere Prüfung das.",
+                summary: "Benachrichtigt Sie, wenn nginx-, Apache- oder PHP-FPM-Worker in kurzer Zeit wiederholt abstürzen. Der Master-Prozess ersetzt jeden Worker, daher sieht keine andere Prüfung das.",
                 details: """
-                • Beobachtet: die Fehlerprotokolle von nginx und Apache (Homebrew und das in macOS eingebaute) und jedes in der nginx-Konfiguration genannte `error_log`. Alle 5 Sekunden werden nur die seit dem letzten Lesen hinzugekommenen Zeilen gelesen.
+                • Beobachtet: die Fehlerprotokolle von nginx, Apache und PHP-FPM (Homebrew und das in macOS eingebaute) und jedes in der nginx- oder PHP-FPM-Konfiguration genannte `error_log`. Alle 5 Sekunden werden nur die seit dem letzten Lesen hinzugekommenen Zeilen gelesen.
                 • Beurteilung: drei Beendigungen innerhalb von fünf Minuten durch ein Absturzsignal (SIGSEGV, SIGABRT, SIGBUS, SIGILL, SIGFPE). SIGKILL und Ähnliches zählt nicht.
                 • Nur Benachrichtigung: einmal pro Server und Stunde; nichts wird gestoppt oder gesperrt.
                 • Standard: mit Pro aktiv.
