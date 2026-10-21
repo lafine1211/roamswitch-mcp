@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.14.0 (build 173).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.15.0 (build 174).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -268,7 +268,8 @@ enum DetectionCoverage {
     /// `on` (every covering guard is on and can see its input), `off` (none is: switched off, or its reader cannot read
     /// its source), `partial` (some are, or input was lost recently), `unknown` (a covering feature has no setting to
     /// read, or a guard has not reported) or `not_applicable` (nothing covers the technique). A guard's reader
-    /// health is included; Pro activation, helper connection and granted permissions beyond that are not checked.
+    /// health, Pro (needed and not active: `off`) and the helper link (needed and not connected: `off`; needed for
+    /// a response only: `partial`) are included; granted permissions are not checked.
     enum LiveState: String, Codable, Equatable { case on, off, partial, unknown, notApplicable = "not_applicable" }
 
     struct TechniquePayload: Codable, Equatable {
@@ -286,6 +287,9 @@ enum DetectionCoverage {
         /// The guard's `liveState` from `get_guard_status`: `on`, `off`, `partial` or `unknown` (also when the guard is
         /// not in the guard-status vocabulary).
         let state: String
+        /// Present when the state is not just the toggle and the readers: `pro_not_active`, `helper_not_connected` or
+        /// `helper_status_unknown`.
+        var reason: String? = nil
     }
 
     struct Summary: Codable, Equatable {
@@ -320,6 +324,7 @@ enum DetectionCoverage {
         // The guard's `liveState` (reader down -> off, input lost recently -> partial, not reported -> unknown) when
         // `get_guard_status` has one; the bare toggle otherwise.
         let states = Dictionary(guards.map { ($0.key, $0.liveState ?? ($0.enabledInSettings ? "on" : "off")) }, uniquingKeysWith: { first, _ in first })
+        let reasons = Dictionary(guards.compactMap { g in g.liveStateReason.map { (g.key, $0) } }, uniquingKeysWith: { first, _ in first })
         var used: [String] = []
         var summary = (detects: 0, partial: 0, none: 0, off: 0)
         let techniques = entries.map { entry -> TechniquePayload in
@@ -338,11 +343,11 @@ enum DetectionCoverage {
             platform: "macos",
             summary: Summary(total: techniques.count, detects: summary.detects, partial: summary.partial, none: summary.none, coveredButOff: summary.off),
             techniques: techniques,
-            guards: used.map { GuardStatePayload(id: $0, state: states[$0] ?? "unknown") },
+            guards: used.map { GuardStatePayload(id: $0, state: states[$0] ?? "unknown", reason: reasons[$0]) },
             caveats: [
                 loc("この一覧は、RoamSwitch自身が実装を確認して付けた評価で、第三者の検証結果ではありません。「none」は検知する仕組みがないという意味で、攻撃が起きていないという意味ではありません。"),
                 loc("「detects」は、その手口の主な形を検知するルールがあるという意味で、すべての変種を検知できるという意味ではありません。限界は blindSpot に書いてあります。"),
-                loc("liveState は、設定のトグルに、入力を読む仕組みの状態(読めていない、直近24時間の取りこぼし)を加えて判定します。Pro版の有効化、ヘルパーの接続、権限の許可そのものは確認していません。"),
+                loc("liveState は、設定のトグルに、次を加えて判定します。Pro版が有効か、ヘルパーに接続できているか、入力を読めているか(読めていない、直近24時間の取りこぼし)。Pro版が必要なのに有効でない検知は off、ヘルパーが必要なのに接続できていない検知は off(一部の機能だけ要する検知は partial)です。理由は guards の reason にあります。Pro版の有効とヘルパーの接続は、アプリが保存した記録を読みます。アプリが動いていないか記録が古いとき、ヘルパーが必要な検知は unknown です。権限(フルディスクアクセスなど)の許可そのものは確認していません。"),
             ]
         )
     }

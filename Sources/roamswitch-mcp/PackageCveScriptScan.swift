@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.14.0 (build 173).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.15.0 (build 174).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -382,6 +382,12 @@ extension PackageCveScriptScan {
             }
         }
         return out.sorted { ($0.severity == "high" ? 0 : 1, $0.id) < ($1.severity == "high" ? 0 : 1, $1.id) }
+    }
+
+    /// The `node_modules` folders seen now that the accepted state does not cover. `drift` skips them, so an empty
+    /// `drift` says nothing about them: the caller must say they were not compared.
+    static func uncoveredFolders(baseline: InstallBaseline, observation: Observation) -> [String] {
+        observation.keys.filter { baseline.folders[$0] == nil }.sorted()
     }
 
     // MARK: Storage

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.14.0 (build 173).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.15.0 (build 174).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -114,7 +114,7 @@ enum AgentSetupAuditor {
         "openclaw_open_dm", "openclaw_mdns_full", "openclaw_audit_suppressed", "openclaw_loose_permissions",
         "editor_auto_run_task", "workflow_pwn_request", "workflow_expression_injection", "workflow_unpinned_action",
         "agent_settings_hook", "agent_settings_bypass", "agent_settings_broad_allow", "agent_settings_endpoint_override",
-        "agent_settings_weakened",
+        "agent_settings_weakened", "agent_settings_writable",
     ]
 
     static let maxTextBytes = 512 * 1024
@@ -586,6 +586,19 @@ enum AgentSetupAuditor {
     /// untrusted project runs its command without a click. Medium; high when the command downloads and runs
     /// a script or decodes text and runs it. The command is never copied into the result. nil: not parseable.
     static func auditTasksFile(_ file: FileInput) -> [Finding]? {
+        guard let found = auditTasksFileContent(file) else { return nil }
+        return writableByEveryUser(file, area: "project") + found
+    }
+
+    /// Every user can write this file: a settings, tasks or workflow file that steers what runs. Only the "others"
+    /// write bit counts. A group-writable mode (0664) is the default for some setups, so flagging it would be noise.
+    static func writableByEveryUser(_ file: FileInput, area: String) -> [Finding] {
+        guard let mode = file.mode, mode & 0o002 != 0 else { return [] }
+        return [Finding(id: "agent_settings_writable", severity: "high", area: area, file: file.path,
+                        detail: "mode \(String(mode & 0o7777, radix: 8)) is writable by every user", message: message("agent_settings_writable"))]
+    }
+
+    private static func auditTasksFileContent(_ file: FileInput) -> [Finding]? {
         guard let root = (try? JSONSerialization.jsonObject(with: file.data, options: [.json5Allowed])) as? [String: Any] else { return nil }
         guard let tasks = root["tasks"] as? [Any] else { return [] }
         var hits: [(severity: String, detail: String)] = []
@@ -692,6 +705,7 @@ enum AgentSetupAuditor {
         func add(_ id: String, _ severity: String, _ detail: String) {
             findings.append(Finding(id: id, severity: severity, area: "settings", file: file.path, detail: detail, message: message(id)))
         }
+        findings += writableByEveryUser(file, area: "settings")
         if facts.defaultMode == "bypassPermissions" {
             add("agent_settings_bypass", "high", "permissions.defaultMode is bypassPermissions")
         } else if facts.dangerousPromptSkipped {
@@ -822,6 +836,10 @@ enum AgentSetupAuditor {
     /// (`workflow_unpinned_action`, medium; `actions/*` and `github/*`, local `./` and `docker://` are skipped).
     /// Nothing from the file except an expression name and an `owner/repo@ref` is copied into the result.
     static func auditWorkflowFile(_ file: FileInput) -> [Finding] {
+        writableByEveryUser(file, area: "project") + auditWorkflowFileContent(file)
+    }
+
+    private static func auditWorkflowFileContent(_ file: FileInput) -> [Finding] {
         guard let text = String(data: file.data, encoding: .utf8) else { return [] }
         let lines = text.components(separatedBy: "\n").map { $0.hasSuffix("\r") ? String($0.dropLast()) : $0 }
         let triggers = workflowTriggers(lines)
@@ -1476,6 +1494,7 @@ enum AgentSetupAuditor {
         case "agent_settings_broad_allow": return loc("Claude Code の設定が、どんなコマンドも確認なしで許可しています")
         case "agent_settings_endpoint_override": return loc("Claude Code の設定が、API の接続先を別のホストに変えています")
         case "agent_settings_weakened": return loc("確認済みにした後で、Claude Code の設定が緩くなっています")
+        case "agent_settings_writable": return loc("設定ファイルを、すべてのユーザーが書き換えられます")
         default: return id
         }
     }
@@ -1559,6 +1578,8 @@ enum AgentSetupAuditor {
             return loc("permissions.allow に、どんなシェルコマンドでも実行できる許可（Bash 全体や *）、または任意のコードを実行できるコマンドの許可（sh・python・curl など）があります。使うコマンドだけに絞った書き方（例: Bash(git status:*)）に変えてください。")
         case "agent_settings_endpoint_override":
             return loc("env の ANTHROPIC_BASE_URL が、Anthropic の公式の接続先とは別のホストを指しています。やり取りの内容と API キーがそのホストに送られます。社内のゲートウェイなど、自分で用意した接続先でなければ削除してください。プロジェクトの設定にある場合は特に注意してください。")
+        case "agent_settings_writable":
+            return loc("この設定ファイル(Claude Code の設定、VS Code のタスク、GitHub Actions のワークフロー)は、すべてのユーザーが書き込める権限になっています。他のユーザーやプロセスが、確認なしにコマンドを許可する設定や、自動で動くコマンドを書き足せます。chmod o-w で書き込み権限を外し、内容も確認してください。")
         case "agent_settings_weakened":
             return loc("確認済みにした時点と比べて、Claude Code の設定で確認なしに実行できる範囲が広がっています（禁止ルールの削除、広い許可の追加、フックの追加、権限モードの引き上げ、サンドボックスの無効化のいずれか）。自分で変更した覚えがなければ、設定ファイルを開いて確認してください。確認できたら、確認済みにし直してください。")
         default:

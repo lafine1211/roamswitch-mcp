@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.14.0 (build 173).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.15.0 (build 174).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -204,6 +204,11 @@ public struct MCPPackageCveScanLanguagesResultPayload: Codable, Equatable {
     public let scannedFolderCount: Int
     public let findings: [MCPPackageCveLanguageFindingPayload]
     public let acceptance: MCPVulnerabilityAcceptancePayload
+    /// Pinned dependencies read from the lockfiles, by ecosystem.
+    public let dependencyCountByEcosystem: [String: Int]
+    /// Ecosystems that have dependencies but no CVE map on this Mac. Those dependencies were not checked, so an
+    /// empty `findings` says nothing about them.
+    public let ecosystemsWithoutMap: [String]
 }
 
 public struct MCPPackageLifecycleScriptFindingPayload: Codable, Equatable {
@@ -240,6 +245,9 @@ public struct MCPPackageLifecycleScriptScanResultPayload: Codable, Equatable {
     /// in which case `drift` is empty. This tool never accepts one, so an agent cannot accept its own change.
     public let baselineAcceptedAt: String?
     public let drift: [MCPPackageInstallDriftPayload]
+    /// `node_modules` folders found now that the accepted state does not cover. `drift` skips them, so an empty
+    /// `drift` says nothing about them. Empty when no state was ever accepted.
+    public let uncoveredFolders: [String]
 }
 
 public struct MCPTyposquatFindingPayload: Codable, Equatable {
@@ -631,6 +639,11 @@ public struct MCPGuardEntryPayload: Codable, Equatable {
     /// see its input: a guard whose reader cannot read its source is `off`, one that lost input within the last day
     /// is `partial`, one that has not reported is `unknown`. Absent from older builds.
     public var liveState: String? = nil
+    /// Why `liveState` is not the state of the readers: `pro_not_active` (the guard needs Pro and Pro is not active),
+    /// `helper_not_connected` (it needs the helper, or part of it does, and the app says the helper is not connected) or
+    /// `helper_status_unknown` (it needs the helper and the app has not reported lately, so it may not be running).
+    /// Absent when `liveState` is just the toggle and the readers.
+    public var liveStateReason: String? = nil
     /// For a guard that reads a stream or a file: what its reader(s) have lost. Absent for the others.
     public var readers: [MCPReaderHealthPayload]? = nil
 }
@@ -1063,7 +1076,8 @@ public enum MCPResponseFormatting {
         gatewayMAC: String?,
         defaults: UserDefaults = .standard,
         readerHealth: [String: GuardReaderHealth]? = nil,
-        now: Date = Date()
+        now: Date = Date(),
+        environment: GuardEnvironment = .unchecked
     ) -> MCPGuardStatusPayload {
         let level = resolveActiveSecurityLevel(gatewayMAC: gatewayMAC, defaults: defaults)
         let health = readerHealth ?? GuardReaderHealthStore.all(defaults: defaults)
@@ -1134,6 +1148,16 @@ public enum MCPResponseFormatting {
             liveState: GuardReaderHealthStore.guardLiveState(guardKey: "webRulesFolderScan", enabledInSettings: scanOn, records: health, now: now.timeIntervalSince1970),
             readers: readers(for: "webRulesFolderScan")))
 
+        // Pro and the helper: a guard that needs either and does not have it is not working, whatever its toggle says.
+        guards = guards.map { g in
+            let folded = GuardReaderHealthStore.applyingEnvironment(guardKey: g.key, enabledInSettings: g.enabledInSettings,
+                                                                    state: g.liveState ?? (g.enabledInSettings ? "on" : "off"), environment: environment)
+            var out = g
+            out.liveState = folded.state
+            out.liveStateReason = folded.reason
+            return out
+        }
+
         // Mirrors `VPNBackend.fromStored` (TailscaleVPNManager.swift, AppKit-only).
         let storedBackend = (defaults.string(forKey: vpnBackendKey) ?? "").lowercased()
         let vpnBackend = (storedBackend == "tailscale" || storedBackend == "ts") ? "tailscale" : "wireguard"
@@ -1155,9 +1179,9 @@ public enum MCPResponseFormatting {
         }
 
         var caveats: [String] = []
-        caveats.append(loc("各ガードの実際の有効性はRoamSwitch Pro版のライセンス状態にも依存しますが、このツールは別プロセスのためライセンス状態を正確に確認できません。上記はSettingsのトグル状態のみを示しています。"))
+        caveats.append(loc("enabledInSettings は、Settingsのトグルだけを示します。liveState には、アプリが保存したPro版の有効の記録と、ヘルパーの接続の記録も使います。このツールは別プロセスなので、ライセンスの署名は検証しません。"))
         caveats.append(loc("usingDefault が true の項目は、ユーザーが一度も切り替えていない既定値です。ポート異常ガード・着信ポートスキャン検知・ARPスプーフィング自動封じ込め・ランタイム脅威封じ込め・ランサムウェア検知（カナリア・エントロピー）・認証情報ハニートークン・重要パスの改ざん監視・依存関係ロックファイルの改ざん監視・定期ログ監査は、Pro版を有効化した時点で一度だけ自動的にオンになります。USBキーボード／ストレージ・Bluetooth・ClickFix・Docker・ゲートウェイARP固定・プロセス実行記録・ブラウザ認証情報の監視・VPNは、Proでも既定ではオフです。"))
-        caveats.append(loc("liveState が off のとき、そのガードは入力を読めていません(readers に理由があります)。partial は、直近24時間に入力を取りこぼしたことを示します。gaps は、読み取りが止まってから再開するまでの間に起きたことを見られなかった回数で、再開しても遡って読むことはありません。unknown は、まだ状態の報告がないことを示します。ヘルパーが止まっていると記録は更新されません。"))
+        caveats.append(loc("liveState が off のとき、そのガードは入力を読めていないか、必要なPro版やヘルパーがありません(入力は readers に、Pro版とヘルパーは liveStateReason に理由があります)。partial は、直近24時間に入力を取りこぼしたことを示します。gaps は、読み取りが止まってから再開するまでの間に起きたことを見られなかった回数で、再開しても遡って読むことはありません。unknown は、まだ状態の報告がないことを示します。ヘルパーが止まっていると記録は更新されません。"))
         caveats.append(loc("VPNトンネルの実際の接続状態とキルスイッチの適用状態は特権ヘルパーが管理しているため、このツールからは確認できません。VPN関連の項目は設定値のみを示しています。"))
 
         return MCPGuardStatusPayload(

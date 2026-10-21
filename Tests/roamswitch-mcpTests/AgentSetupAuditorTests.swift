@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.14.0 (build 173). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.15.0 (build 174). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -907,12 +907,38 @@ final class AgentSetupAuditorTests: XCTestCase {
     }
 
     func testTheSettingsIDsHaveTagsTitlesAndMessages() {
-        for id in ["agent_settings_hook", "agent_settings_bypass", "agent_settings_broad_allow", "agent_settings_endpoint_override", "agent_settings_weakened"] {
+        for id in ["agent_settings_hook", "agent_settings_bypass", "agent_settings_broad_allow", "agent_settings_endpoint_override", "agent_settings_weakened", "agent_settings_writable"] {
             XCTAssertTrue(AgentSetupAuditor.findingIDs.contains(id))
             XCTAssertNotEqual(AgentSetupAuditor.message(id), id)
             XCTAssertNotEqual(AgentSetupAuditor.title(id), id)
             XCTAssertFalse(AgentSetupAuditor.tags(for: id).owaspLLM.isEmpty)
         }
+    }
+
+    func testASettingsTasksOrWorkflowFileThatEveryUserCanWriteIsHigh() {
+        func settings(_ mode: UInt16) -> [AgentSetupAuditor.Finding] {
+            AgentSetupAuditor.auditSettingsFile(.init(path: "/Users/u/.claude/settings.json", data: Data("{}".utf8), mode: mode, role: .settings)) ?? []
+        }
+        let found = settings(0o666)
+        XCTAssertEqual(found.map(\.id), ["agent_settings_writable"])
+        XCTAssertEqual(found.first?.severity, "high")
+        XCTAssertTrue(found.first?.detail.contains("666") ?? false, "\(found)")
+        XCTAssertEqual(settings(0o606).map(\.id), ["agent_settings_writable"])
+        XCTAssertEqual(settings(0o664), [], "664 は、ユーザーごとのグループでは既定の権限なので指摘しない")
+        XCTAssertEqual(settings(0o644), [])
+        XCTAssertEqual(settings(0o600), [])
+        XCTAssertEqual(AgentSetupAuditor.auditSettingsFile(.init(path: "/Users/u/.claude/settings.json", data: Data("{}".utf8), mode: nil, role: .settings)) ?? [], [])
+
+        let tasks = AgentSetupAuditor.auditTasksFile(.init(path: "/p/.vscode/tasks.json", data: Data(#"{"tasks":[]}"#.utf8), mode: 0o666, role: .tasks)) ?? []
+        XCTAssertEqual(tasks.map(\.id), ["agent_settings_writable"])
+        XCTAssertEqual(AgentSetupAuditor.auditTasksFile(.init(path: "/p/.vscode/tasks.json", data: Data(#"{"tasks":[]}"#.utf8), mode: 0o644, role: .tasks)) ?? [], [])
+        // 読めない tasks.json は、権限だけで「問題あり」とも「問題なし」とも言わない(読めなかったファイルとして扱う)。
+        XCTAssertNil(AgentSetupAuditor.auditTasksFile(.init(path: "/p/.vscode/tasks.json", data: Data("not json".utf8), mode: 0o666, role: .tasks)))
+
+        let workflow = AgentSetupAuditor.auditWorkflowFile(.init(path: "/p/.github/workflows/ci.yml", data: Data("on: push\njobs: {}\n".utf8), mode: 0o666, role: .workflow))
+        XCTAssertEqual(workflow.map(\.id), ["agent_settings_writable"])
+        XCTAssertEqual(AgentSetupAuditor.auditWorkflowFile(.init(path: "/p/.github/workflows/ci.yml", data: Data("on: push\njobs: {}\n".utf8), mode: 0o755, role: .workflow)), [])
+        XCTAssertNotEqual(AgentSetupAuditor.message("agent_settings_writable"), "agent_settings_writable")
     }
 
     // MARK: - Messages

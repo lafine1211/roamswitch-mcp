@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.14.0 (build 173).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.15.0 (build 174).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -152,7 +152,7 @@ extension RoamSwitchKnowledgeBase {
                 • 啟用方式：「連接埠與裝置監控」→「實證型漏洞驗證（主動可達性確認）」。這只會解鎖連接埠稽核畫面中的「執行實證驗證」按鈕，本身不會傳送任何內容，每次執行前都會先詢問「是否傳送驗證請求？」。
                 • 僅限 127.0.0.1：絕不會傳送至其他主機。
                 • 無驗證存取：對 Redis（PING）、Memcached（stats）、MongoDB（listDatabases）進行單次、短逾時、非破壞性的探測。
-                • 通用開發伺服器：檢查 CORS 設定錯誤（反射 Origin 並允許憑證）、路徑穿越、開放重新導向與 SSRF（會請求所收到 URL 的伺服器，即使該 URL 指向本機上自建的監聽連接埠）。
+                • 通用開發伺服器：檢查 CORS 設定錯誤（反射 Origin 並允許憑證）、路徑穿越、開放重新導向、反射型 XSS（以 GET 送出不含指令碼的無害標記，確認其是否未經跳脫就輸出至頁面）與 SSRF（會請求所收到 URL 的伺服器，即使該 URL 指向本機上自建的監聽連接埠）。
                 • 已知 CVE 版本比對：對於無需驗證即可存取的 Redis / Memcached，會以非破壞性查詢讀取版本，並與已知 CVE 版本範圍比對。不會傳送任何攻擊酬載。
                 • 對開發伺服器的連接埠（127.0.0.1），還會檢查不需登入就能回應的管理頁面或 API（探測 webvuln-unauth-admin）。不帶 Cookie 與任何憑證，對固定的 7 個路徑（/admin、/api/admin、/api/users、/api/v1/users、/api/v1/user、/actuator/env、/swagger-ui/index.html）各發送 1 次 GET，只有在回應為 200 且包含資料（非空的 JSON 陣列、不是錯誤訊息的 JSON 物件、帶使用者表格的 HTML、Swagger UI）時才回報。登入頁面、重新導向、SPA 外殼以及 {"error":"unauthorized"} 都不會回報。它不會嘗試登入，不會猜測，也不會模糊測試。宣告的副作用是目標日誌中的痕跡與較多的請求。它用於找出只在瀏覽器端隱藏選單、卻沒有在伺服器端檢查授權的應用程式。
                 • 也可透過 MCP 工具 `run_active_vuln_scan` 使用（其探測僅傳送至本機）。
@@ -180,7 +180,7 @@ extension RoamSwitchKnowledgeBase {
                 • 封鎖方式：未核准的裝置會被獨佔佔用（IOHIDDevice seize），因此只有該裝置的按鍵輸入無法送達系統；其他鍵盤仍可正常使用。只有在無法佔用裝置時，才會退回使用需要輔助使用權限的 CGEventTap 封鎖。
                 • 核准方式：最前端的視窗會提供「信任並允許」或「拒絕並保持攔截」。已允許的鍵盤會加入允許清單。
                 • 按鍵節奏分析：封鎖期間仍會測量該裝置的按鍵間隔。累積至少 5 次間隔後，若平均值為 12 毫秒以下，或平均值為 45 毫秒以下且非常均勻（變異係數 0.35 以下），就會發出「呈現腳本輸入跡象」的警告。這捕捉的是人類無法做到的機械式速度與規律性，僅作為輔助證據，不會改變封鎖的判斷。
-                • 預設關閉。可從「連接埠與裝置監控」→「非法 USB / BadUSB 實體連接埠防護 (Pro)」啟用；在「USB / BadUSB 防護設定…」中管理允許清單。
+                • 預設關閉。可從「連接埠與裝置監控」→「非法 USB / BadUSB 實體連接埠防護 (Pro)」啟用；在「USB / BadUSB 防護設定…」中管理允許清單。啟用時，macOS 會要求「輸入監控」權限。未允許就無法偵測新連接的鍵盤。
                 """,
                 recommendation: "若使用外接鍵盤，請只以「信任並允許」核准您自己接上的裝置。任何觸發腳本輸入警告的裝置，都應一律拒絕並拔除。"
             ),

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.14.0 (build 173).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.15.0 (build 174).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -391,5 +391,129 @@ public final class GuardReaderHealthRecorder {
         lastWriteAt = max(lastWriteAt, health.updatedAt)
         lock.unlock()
         persist(source, snap)
+    }
+}
+
+// MARK: - What a guard needs besides its toggle: Pro and the helper
+
+/// What `get_guard_status` and `get_detection_coverage` know about the environment of the guards. The tool runs in
+/// its own process, so it cannot ask the licence or the helper. It reads what the app saved: the Pro mirror
+/// (`RoamSwitch.IsProCache`) and the helper-link record (`HelperLinkSnapshot`).
+public struct GuardEnvironment: Equatable {
+    public var isPro: Bool
+    /// Whether the app has a working connection to the helper. `nil`: not known (the app has not written the record
+    /// lately, so it may not be running).
+    public var helperConnected: Bool?
+
+    public init(isPro: Bool, helperConnected: Bool?) {
+        self.isPro = isPro
+        self.helperConnected = helperConnected
+    }
+
+    /// Nothing is checked: Pro and the helper are taken as present. For callers that only want the reader state.
+    public static let unchecked = GuardEnvironment(isPro: true, helperConnected: true)
+
+    public static let proCacheKey = "RoamSwitch.IsProCache"
+
+    public static func read(defaults: UserDefaults, now: Date = Date()) -> GuardEnvironment {
+        GuardEnvironment(isPro: defaults.bool(forKey: proCacheKey),
+                         helperConnected: HelperLinkSnapshot.read(defaults: defaults, now: now.timeIntervalSince1970))
+    }
+}
+
+/// Whether the app can reach the helper, written by the app (every minute and when its status changes) and read by
+/// the MCP tool. A record that is older than `freshSecs` is not trusted: the app is probably not running.
+public enum HelperLinkSnapshot {
+    public static let defaultsKey = "RoamSwitch.HelperLinkV1"
+    public static let freshSecs: Double = 180
+
+    public static func write(connected: Bool?, now: Double, defaults: UserDefaults = .standard) {
+        var record: [String: Any] = ["at": now]
+        if let connected { record["connected"] = connected }
+        defaults.set(record, forKey: defaultsKey)
+    }
+
+    /// `true` or `false` as the app last wrote it; `nil` when there is no record, it is stale, or the app did not know.
+    public static func read(defaults: UserDefaults, now: Double) -> Bool? {
+        guard let record = defaults.dictionary(forKey: defaultsKey),
+              let at = record["at"] as? Double, now - at <= freshSecs, at - now <= freshSecs else { return nil }
+        return record["connected"] as? Bool
+    }
+}
+
+extension GuardReaderHealthStore {
+
+    public enum HelperNeed: Equatable {
+        /// Works without the helper.
+        case none
+        /// Works without the helper, but with less (a response such as the Air-Gap, or the listeners of other users).
+        case partial
+        /// Sees nothing without the helper (the helper reads its input, or the guard is a setting the helper applies).
+        case required
+    }
+
+    public struct Requirements: Equatable {
+        public let pro: Bool
+        public let helper: HelperNeed
+    }
+
+    /// What each guard of `get_guard_status` needs, read from the code of the guard (a `LicenseManager.shared.isPro` gate
+    /// where it starts or runs; a call to the helper for its input or for its response). A guard that is not listed
+    /// needs neither: `secretLeakClipboardAuditor`, `airGapAutoWiFiKill` (a setting, no gate of its own) and `activeVulnScan`.
+    public static let guardRequirements: [String: Requirements] = [
+        "portAnomalyGuard": Requirements(pro: true, helper: .partial),               // the listeners of other users come from the helper
+        "portScanGuard": Requirements(pro: true, helper: .required),                 // pflog is captured by the helper
+        "sshGuard": Requirements(pro: true, helper: .required),                      // the helper reads sshd's log
+        "arpSpoofAutoContainment": Requirements(pro: true, helper: .partial),        // detection in the app; the Air-Gap is the helper's
+        "usbKeyboardGuard": Requirements(pro: true, helper: .none),
+        "usbStorageGuard": Requirements(pro: true, helper: .none),
+        "bluetoothGuard": Requirements(pro: true, helper: .none),
+        "webMailDownloadGuard": Requirements(pro: true, helper: .none),
+        "dnsThreatGuard": Requirements(pro: true, helper: .required),                // the helper sets the DNS servers
+        "runtimeThreatContainment": Requirements(pro: true, helper: .partial),       // the log is read in the app; the Air-Gap is the helper's
+        "ransomwareCanaryGuard": Requirements(pro: true, helper: .partial),          // detection in the app; stopping the process and the Air-Gap are the helper's
+        "ransomwareEntropyGuard": Requirements(pro: true, helper: .partial),
+        "credentialHoneytokenGuard": Requirements(pro: true, helper: .none),
+        "browserCredentialWatchGuard": Requirements(pro: true, helper: .none),
+        "reverseShellWatch": Requirements(pro: true, helper: .none),
+        "networkSettingsWatch": Requirements(pro: true, helper: .none),
+        "clickFixGuard": Requirements(pro: true, helper: .partial),
+        "execRecorder": Requirements(pro: true, helper: .required),                  // the helper runs eslogger
+        "dockerEventGuard": Requirements(pro: true, helper: .none),
+        "criticalPathFim": Requirements(pro: true, helper: .required),               // the helper computes the hashes
+        "lockfileTamperGuard": Requirements(pro: true, helper: .none),
+        "persistenceMonitor": Requirements(pro: true, helper: .none),
+        "gatewayARPLock": Requirements(pro: true, helper: .required),                // the helper sets the static entry
+        "scheduledLogAudit": Requirements(pro: true, helper: .none),
+        "wireGuardVPN": Requirements(pro: true, helper: .required),                  // the helper brings the tunnel up
+        "tailscaleKillSwitch": Requirements(pro: true, helper: .required),           // the helper applies the kill switch
+        "linkGuard": Requirements(pro: true, helper: .none),
+        "linkGuardFeedUpdates": Requirements(pro: true, helper: .none),
+        "webRulesFolderScan": Requirements(pro: true, helper: .none),
+    ]
+
+    /// Folds Pro and the helper into the state the reader records gave (`guardLiveState`), and says why.
+    /// - the toggle is off: `off`, no reason;
+    /// - Pro is needed and the Pro mirror is not set: `off`, `pro_not_active` (whatever the readers say);
+    /// - the helper is needed (`required`) and the app says it is not connected: `off`, `helper_not_connected`; when the
+    ///   app has not said (no fresh record): `unknown`, `helper_status_unknown`;
+    /// - the helper is needed for a part (`partial`) and the app says it is not connected: `on` becomes `partial`,
+    ///   `helper_not_connected`. An unknown helper does not change a guard that only needs it for a response;
+    /// - otherwise the state of the readers.
+    public static func applyingEnvironment(guardKey: String, enabledInSettings: Bool, state: String,
+                                           environment: GuardEnvironment) -> (state: String, reason: String?) {
+        guard enabledInSettings, let need = guardRequirements[guardKey] else { return (state, nil) }
+        if need.pro && !environment.isPro { return ("off", "pro_not_active") }
+        switch need.helper {
+        case .none:
+            return (state, nil)
+        case .required:
+            if environment.helperConnected == false { return ("off", "helper_not_connected") }
+            if environment.helperConnected == nil { return state == "off" ? (state, nil) : ("unknown", "helper_status_unknown") }
+            return (state, nil)
+        case .partial:
+            if environment.helperConnected == false && state == "on" { return ("partial", "helper_not_connected") }
+            return (state, nil)
+        }
     }
 }

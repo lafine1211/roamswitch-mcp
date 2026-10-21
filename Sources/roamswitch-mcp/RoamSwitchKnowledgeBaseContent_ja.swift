@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.14.0 (build 173).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.15.0 (build 174).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -151,7 +151,7 @@ extension RoamSwitchKnowledgeBase {
                 • 有効化: メニュー「ポート・デバイス監視」→「実証型脆弱性診断（能動的到達確認）」。これはポート診断画面の「実証確認を実行」ボタンを解禁するだけで、単独では何も送信しません。実行時も毎回「実証確認を送信しますか？」と確認します。
                 • 対象は127.0.0.1のみ: 他のホストへは一切送信しません。
                 • 無認証確認: Redis（PING）、Memcached（stats）、MongoDB（listDatabases）に、単発・短タイムアウトの非破壊プローブを送信。
-                • 汎用開発サーバー診断: CORS誤設定（Origin反射＋資格情報許可）、パストラバーサル、オープンリダイレクト、SSRF（渡されたURLを取りに行くサーバー。このマシン上の自前の待ち受けを指すURLでも）を確認。
+                • 汎用開発サーバー診断: CORS誤設定（Origin反射＋資格情報許可）、パストラバーサル、オープンリダイレクト、反射型XSS（スクリプトを含まない無害な目印をGETで送り、エスケープされずにHTMLへ出るかを確認）、SSRF（渡されたURLを取りに行くサーバー。このマシン上の自前の待ち受けを指すURLでも）を確認。
                 • 既知CVEのバージョン照合: 無認証で到達できたRedis / Memcachedのバージョンを非破壊クエリで取得し、既知CVEのバージョン範囲と照合。攻撃ペイロードは送信しません。
                 • 開発サーバーのポート(127.0.0.1)に対しては、無認証の管理画面や API も確認します(プローブ webvuln-unauth-admin)。Cookie も認証もつけずに、固定の 7 つのパス(/admin・/api/admin・/api/users・/api/v1/users・/api/v1/user・/actuator/env・/swagger-ui/index.html)を 1 回ずつ GET し、応答が 200 で、データ(空でない JSON の配列、エラー用ではない JSON のオブジェクト、ユーザーの表のある HTML、Swagger UI)のときだけ指摘にします。ログイン画面・リダイレクト・SPA の枠・{"error":"unauthorized"} は指摘にしません。ログインは試さず、推測もファズもしません。副作用は、ログへの痕跡と多数のリクエストです。ブラウザ側のメニューを隠すだけで、サーバー側で認可を確認していないアプリを見つけるためのものです。
                 • MCPツール `run_active_vuln_scan` からも実行できます（プローブの宛先は127.0.0.1（ローカルホスト）だけです）。
@@ -179,7 +179,7 @@ extension RoamSwitchKnowledgeBase {
                 • 遮断: 未承認デバイスを排他的に占有（IOHIDDeviceのseize）し、そのデバイスのキー入力だけがシステムに届かないようにします。他のキーボードは通常どおり使えます。占有できない場合のみ、アクセシビリティ権限を使ったCGEventTapによる遮断に切り替えます。
                 • 承認: 最前面の承認ウィンドウで「信頼して許可する」または「拒否して遮断を維持」を選択。許可したキーボードは許可リストに登録されます。
                 • キー入力タイミング解析: 遮断中もそのデバイスからのキー入力間隔を計測。5回以上の入力で、平均間隔が12ms以下、または平均45ms以下かつ非常に均一（変動係数0.35以下）な場合に「自動入力(スクリプト)の兆候」として警告します。人間の打鍵にはない機械的な速さ・均一さを捉える補助シグナルで、遮断の判断自体には影響しません。
-                • 既定オフ。メニュー「ポート・デバイス監視」→「不正USB / BadUSB物理ポートガード (Pro)」で有効化し、「USB / BadUSBガード設定…」で許可リストを管理します。
+                • 既定オフ。メニュー「ポート・デバイス監視」→「不正USB / BadUSB物理ポートガード (Pro)」で有効化し、「USB / BadUSBガード設定…」で許可リストを管理します。有効にしたとき、macOSが「入力監視」の許可を求めます。許可しないと、新しいキーボードの接続を検知できません。
                 """,
                 recommendation: "外付けキーボードを使う場合は、自分で接続したものだけを「信頼して許可する」で登録してください。スクリプトの兆候の警告が出たデバイスは必ず拒否して取り外してください。"
             ),

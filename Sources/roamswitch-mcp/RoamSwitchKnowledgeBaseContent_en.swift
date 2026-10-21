@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.14.0 (build 173).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.15.0 (build 174).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -151,7 +151,7 @@ extension RoamSwitchKnowledgeBase {
                 • Enable: Ports & Devices Monitor → "Active Vulnerability Verification". This only unlocks the "Run Active Verification" button in the port audit screen; it sends nothing on its own, and every run asks "Send the verification request?" first.
                 • 127.0.0.1 only: nothing is ever sent to another host.
                 • Unauthenticated access: single, short-timeout, non-destructive probes to Redis (PING), Memcached (stats), and MongoDB (listDatabases).
-                • Generic dev servers: checks for CORS misconfiguration (reflected Origin with credentials), path traversal, open redirects, and SSRF (a server that fetches a URL it is given, even one pointing at a listener of our own on this machine).
+                • Generic dev servers: checks for CORS misconfiguration (reflected Origin with credentials), path traversal, open redirects, reflected XSS (a harmless marker with no script is sent by GET to see whether it is written into the page unescaped), and SSRF (a server that fetches a URL it is given, even one pointing at a listener of our own on this machine).
                 • Known-CVE version match: for Redis / Memcached reachable without auth, reads the version with a non-destructive query and compares it with known CVE version ranges. No exploit payloads are sent.
                 • For the development-server ports (127.0.0.1) it also checks for an admin page or API that answers without a login (probe webvuln-unauth-admin). With no cookie and no credentials it sends one GET to each of 7 fixed paths (/admin, /api/admin, /api/users, /api/v1/users, /api/v1/user, /actuator/env, /swagger-ui/index.html), and reports only when the answer is 200 and contains data (a non-empty JSON array, a JSON object that is not an error, an HTML page with a user table, or Swagger UI). A login page, a redirect, an SPA shell and {"error":"unauthorized"} are not reported. It never tries to log in, never guesses and never fuzzes. Its declared side effects are traces in the target's logs and a number of requests. It is meant to find apps that only hide a menu in the browser and never check authorization on the server.
                 • Also available as the MCP tool `run_active_vuln_scan` (its probes go to localhost only).
@@ -179,7 +179,7 @@ extension RoamSwitchKnowledgeBase {
                 • Blocking: the unapproved device is seized exclusively (IOHIDDevice seize), so only that device's keystrokes stop reaching the system; other keyboards keep working. Only if seizing fails does it fall back to a CGEventTap block, which uses the Accessibility permission.
                 • Approval: a front-most window offers "Trust & Allow" or "Reject & Keep Blocked". Allowed keyboards go on the allowlist.
                 • Keystroke timing analysis: while blocked, the device's keystroke intervals are still measured. After at least 5 intervals, a mean of 12 ms or less, or a mean of 45 ms or less that is also very uniform (coefficient of variation 0.35 or less), raises a "shows signs of scripted input" warning. It captures machine-like speed and regularity no human produces, as supplementary evidence only; it doesn't change the block decision.
-                • Off by default. Enable with Ports & Devices Monitor → "Unauthorized USB / BadUSB Physical Port Guard (Pro)"; manage the allowlist in "USB / BadUSB Guard Settings…".
+                • Off by default. Enable with Ports & Devices Monitor → "Unauthorized USB / BadUSB Physical Port Guard (Pro)"; manage the allowlist in "USB / BadUSB Guard Settings…". When you enable it, macOS asks for Input Monitoring permission. Without it, a newly connected keyboard cannot be detected.
                 """,
                 recommendation: "If you use external keyboards, register only the ones you connected yourself with Trust & Allow. Always reject and unplug a device that triggers the scripted-input warning."
             ),

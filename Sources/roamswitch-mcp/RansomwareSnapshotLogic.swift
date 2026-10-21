@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.14.0 (build 173).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.15.0 (build 174).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -245,5 +245,35 @@ enum RansomwareSnapshotPath {
             if !exists(candidate) { return candidate }
             i += 1
         }
+    }
+}
+
+/// Why one file or folder could not be copied out of a snapshot, as a short fixed English phrase. The helper has
+/// no localisation, so it sends one of these; the app translates them (`RansomwareExtractMessages`). A system
+/// error's own text is never sent: it is English, long and not for the person to read.
+enum RansomwareCopyFailure {
+    static let notFound = "file not found"
+    static let cannotRead = "cannot read the file"
+    static let cannotWrite = "cannot write to the destination"
+    static let noSpace = "no space left at the destination"
+    static let writeFailed = "writing the file failed"
+    static let unsupportedType = "not a regular file or folder"
+    /// Followed by a short code, `copy failed: <domain> <code>`.
+    static let genericPrefix = "copy failed"
+
+    static func message(for error: Error) -> String {
+        let ns = error as NSError
+        if ns.domain == NSCocoaErrorDomain {
+            switch CocoaError.Code(rawValue: ns.code) {
+            case .fileNoSuchFile, .fileReadNoSuchFile: return notFound
+            case .fileReadNoPermission: return cannotRead
+            case .fileWriteNoPermission: return cannotWrite
+            case .fileWriteOutOfSpace: return noSpace
+            case .fileWriteUnknown: return writeFailed
+            case .fileReadUnsupportedScheme: return unsupportedType
+            default: break
+            }
+        }
+        return "\(genericPrefix): \(ns.domain) \(ns.code)"
     }
 }

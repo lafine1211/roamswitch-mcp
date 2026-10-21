@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.14.0 (build 173).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.15.0 (build 174).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -152,7 +152,7 @@ extension RoamSwitchKnowledgeBase {
                 • 启用方法：菜单「端口与设备监控」→「实证型漏洞验证（主动可达性确认）」。该选项只是解锁端口诊断界面中的「执行实证验证」按钮，单独开启不会发送任何内容。每次执行时也会确认「是否发送验证请求？」。
                 • 仅针对 127.0.0.1：绝不会向其他主机发送任何内容。
                 • 无认证确认：向 Redis（PING）、Memcached（stats）、MongoDB（listDatabases）发送单次、短超时的非破坏性探测。
-                • 通用开发服务器诊断：检查 CORS 配置错误（Origin 反射＋允许凭据）、路径遍历、开放重定向和 SSRF（会请求所收到 URL 的服务器，即使该 URL 指向本机上自建的监听端口）。
+                • 通用开发服务器诊断：检查 CORS 配置错误（Origin 反射＋允许凭据）、路径遍历、开放重定向、反射型 XSS（通过 GET 发送不含脚本的无害标记，确认其是否未经转义就输出到页面）和 SSRF（会请求所收到 URL 的服务器，即使该 URL 指向本机上自建的监听端口）。
                 • 已知 CVE 版本比对：通过非破坏性查询获取可无认证访问的 Redis / Memcached 版本，并与已知 CVE 的受影响版本范围进行比对。不会发送攻击载荷。
                 • 对开发服务器的端口（127.0.0.1），还会检查无需登录就能应答的管理页面或 API（探测 webvuln-unauth-admin）。不带 Cookie 和任何凭据，对固定的 7 个路径（/admin、/api/admin、/api/users、/api/v1/users、/api/v1/user、/actuator/env、/swagger-ui/index.html）各发送 1 次 GET，只有在应答为 200 且包含数据（非空的 JSON 数组、不是错误信息的 JSON 对象、带用户表格的 HTML、Swagger UI）时才报告。登录页面、重定向、SPA 外壳以及 {"error":"unauthorized"} 都不会报告。它不会尝试登录，不会猜测，也不会模糊测试。声明的副作用是目标日志中的痕迹和较多的请求。它用于发现只在浏览器端隐藏菜单、却没有在服务器端检查授权的应用。
                 • 也可通过 MCP 工具 `run_active_vuln_scan` 执行（其探测仅发往本地主机）。
@@ -180,7 +180,7 @@ extension RoamSwitchKnowledgeBase {
                 • 拦截：独占未批准的设备（IOHIDDevice 的 seize），使仅该设备的按键输入无法到达系统。其他键盘可正常使用。仅在无法独占时，才切换为使用辅助功能权限的 CGEventTap 进行拦截。
                 • 批准：在最前端的批准窗口中选择「信任并允许」或「拒绝并保持拦截」。允许的键盘会被加入允许列表。
                 • 按键时序分析：即使在拦截期间也会测量该设备的按键间隔。在 5 次以上的输入中，若平均间隔不超过 12ms，或平均不超过 45ms 且极为均匀（变异系数不超过 0.35），则作为「自动化(脚本)输入的迹象」发出警告。这是捕捉人类打字所没有的机械速度与均匀性的辅助信号，不影响拦截判断本身。
-                • 默认关闭。通过菜单「端口与设备监控」→「非法 USB / BadUSB 物理端口防护 (Pro)」启用，并在「USB / BadUSB 防护设置…」中管理允许列表。
+                • 默认关闭。通过菜单「端口与设备监控」→「非法 USB / BadUSB 物理端口防护 (Pro)」启用，并在「USB / BadUSB 防护设置…」中管理允许列表。启用时，macOS 会请求“输入监控”权限。未允许则无法发现新连接的键盘。
                 """,
                 recommendation: "使用外接键盘时，请只将自己连接的键盘通过「信任并允许」注册。出现脚本迹象警告的设备，请务必拒绝并拔下。"
             ),

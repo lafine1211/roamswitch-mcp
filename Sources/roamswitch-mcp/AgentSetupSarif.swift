@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.14.0 (build 173).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.15.0 (build 174).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -62,7 +62,8 @@ extension AgentSetupAuditor {
         case "persistence_instruction", "skill_broad_tool_grant", "openclaw_auth_disabled", "openclaw_wide_bind",
              "openclaw_weak_token", "openclaw_origin_wildcard", "openclaw_dangerous_flag",
              "openclaw_broad_trusted_proxy", "openclaw_proxy_trust_loosened", "openclaw_audit_suppressed",
-             "agent_settings_hook", "agent_settings_bypass", "agent_settings_broad_allow", "agent_settings_weakened":
+             "agent_settings_hook", "agent_settings_bypass", "agent_settings_broad_allow", "agent_settings_weakened",
+             "agent_settings_writable":
             return Tags(owaspLLM: ["LLM06"], attack: [])
         case "openclaw_open_dm":
             return Tags(owaspLLM: ["LLM01", "LLM06"], attack: [])
@@ -122,6 +123,7 @@ extension AgentSetupAuditor {
         "agent_settings_broad_allow": "Claude Code settings allow any shell command without asking",
         "agent_settings_endpoint_override": "Claude Code settings send API traffic to another host",
         "agent_settings_weakened": "Claude Code settings are looser than the accepted state",
+        "agent_settings_writable": "Settings, tasks or workflow file writable by every user",
     ]
 
     /// `artifactLocation.uri`: absolute paths as `file://`, every byte outside the unreserved set

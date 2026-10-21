@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.14.0 (build 173).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.15.0 (build 174).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -866,18 +866,35 @@ enum PackageCveScanLanguages {
         var lockfileName: String { (lockfile as NSString).lastPathComponent }
     }
 
+    /// What a dependency scan found, and what it could not check. An empty `findings` means "clean" only for the
+    /// ecosystems that are in `dependencies` and not in `noData`.
+    struct ScanOutcome {
+        var findings: [Finding] = []
+        /// Dependencies read from lockfiles, by ecosystem.
+        var dependencies: [String: Int] = [:]
+        /// Ecosystems that have dependencies in the folders but no CVE map on this Mac: those were not checked.
+        var noData: [String] = []
+    }
+
     /// Scans every watched folder for known lockfiles, then checks each
     /// discovered dependency against the matching ecosystem's local CVE
     /// map. Ecosystems whose map has no installed data (seed-only, updater
     /// hasn't run yet) are simply never matched — never fabricated.
     static func runScan(watchedFolders: [String], maps suppliedMaps: [String: CveMap]? = nil) -> [Finding] {
+        runScanDetailed(watchedFolders: watchedFolders, maps: suppliedMaps).findings
+    }
+
+    /// `runScan` with the counts that tell a clean result from one that checked nothing.
+    static func runScanDetailed(watchedFolders: [String], maps suppliedMaps: [String: CveMap]? = nil) -> ScanOutcome {
         let maps = suppliedMaps ?? loadAllCVEMaps()
-        guard !maps.values.allSatisfy({ $0.entries.isEmpty }) else { return [] }
 
         var deps: [WatchedDependency] = []
         for folder in watchedFolders {
             deps.append(contentsOf: scanWatchedFolder(URL(fileURLWithPath: folder), maxDepth: 6))
         }
+        var outcome = ScanOutcome()
+        for dep in deps { outcome.dependencies[dep.ecosystem, default: 0] += 1 }
+        outcome.noData = outcome.dependencies.keys.filter { maps[$0]?.entries.isEmpty ?? true }.sorted()
 
         var findings: [Finding] = []
         for dep in deps {
@@ -897,7 +914,34 @@ enum PackageCveScanLanguages {
                 ))
             }
         }
-        return ordered(findings)
+        outcome.findings = ordered(mergeDuplicateFindings(findings))
+        return outcome
+    }
+
+    /// One finding per (lockfile, ecosystem, package, installed version, CVE). A CVE that the map lists in two rows
+    /// (two advisories for the same package) matches twice; the person sees one finding with the nearest fix
+    /// (the smallest fixed version). Keeps the first-seen order.
+    static func mergeDuplicateFindings(_ findings: [Finding]) -> [Finding] {
+        var out: [Finding] = []
+        var index: [String: Int] = [:]
+        for f in findings {
+            let key = [f.lockfile, f.ecosystem, f.package, f.installedVersion, f.cveId.lowercased()].joined(separator: "\u{1F}")
+            guard let i = index[key] else {
+                index[key] = out.count
+                out.append(f)
+                continue
+            }
+            let e = out[i]
+            let nearer = e.fixedVersion.isEmpty
+                || (!f.fixedVersion.isEmpty && compareVersions(ecosystem: f.ecosystem, f.fixedVersion, e.fixedVersion) < 0)
+            out[i] = Finding(
+                ecosystem: e.ecosystem, package: e.package, installedVersion: e.installedVersion, cveId: e.cveId,
+                cvssScore: max(e.cvssScore, f.cvssScore),
+                fixedVersion: nearer ? f.fixedVersion : e.fixedVersion,
+                summary: e.summary, lockfile: e.lockfile,
+                epss: e.epss ?? f.epss, epssDate: e.epss != nil ? e.epssDate : f.epssDate)
+        }
+        return out
     }
 
     /// Grouped by project, so the findings of one repository sit together; inside a project by severity band,

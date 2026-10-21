@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.14.0 (build 173).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.15.0 (build 174).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -78,6 +78,100 @@ public struct ExecLogVerifyResult: Codable, Equatable {
     /// Records written after the newest checkpoint of the newest segment: the stretch `verify` cannot
     /// cover yet. nil when that segment has no checkpoint (an older log, or the chain is off).
     public var uncheckedTailRecords: Int? = nil
+    /// The same findings as `problems`, as a kind plus arguments, so the app can write them in its own
+    /// language. nil when the helper that produced this result predates the field (`ExecLogVerifyIssue.parse`
+    /// then recovers the kind from the English sentence). `problems` stays English for the MCP tools.
+    public var issues: [ExecLogVerifyIssue]? = nil
+}
+
+/// One finding of `ExecLogReader.verify`: what went wrong (`kind`) and where (`segment`, indexes).
+/// `kind` is a plain string so a kind added by a newer helper still decodes in an older app.
+public struct ExecLogVerifyIssue: Codable, Equatable {
+    public enum Kind: String, CaseIterable {
+        case unreadable
+        case missingHeader
+        /// `foundIndex` = the oldest retained segment's index, `removedThroughIndex` = what retention recorded.
+        case retentionGap
+        /// `expectedIndex` / `foundIndex`.
+        case indexGap
+        case chainDisabled
+        case unchainedSealed
+        case linkToUnchained
+        case linkMismatch
+        case checkpointMismatch
+        case sealMismatch
+        case notSealed
+    }
+
+    public var kind: String
+    public var segment: String
+    public var expectedIndex: UInt64? = nil
+    public var foundIndex: UInt64? = nil
+    public var removedThroughIndex: UInt64? = nil
+
+    public init(_ kind: Kind, segment: String, expectedIndex: UInt64? = nil, foundIndex: UInt64? = nil,
+                removedThroughIndex: UInt64? = nil) {
+        self.kind = kind.rawValue
+        self.segment = segment
+        self.expectedIndex = expectedIndex
+        self.foundIndex = foundIndex
+        self.removedThroughIndex = removedThroughIndex
+    }
+
+    public var knownKind: Kind? { Kind(rawValue: kind) }
+
+    /// The English sentence (what `ExecLogVerifyResult.problems` carries). nil for an unknown kind.
+    public var englishText: String? {
+        guard let k = knownKind else { return nil }
+        let name = segment
+        switch k {
+        case .unreadable: return "\(name): unreadable"
+        case .missingHeader: return "\(name): missing or invalid header"
+        case .retentionGap:
+            return "\(name): oldest retained segment is index \(foundIndex ?? 0) but retention only recorded removal through \(removedThroughIndex ?? 0) — segments were deleted outside retention"
+        case .indexGap:
+            return "\(name): index gap (expected \(expectedIndex ?? 0), found \(foundIndex ?? 0)) — a segment is missing"
+        case .chainDisabled:
+            return "\(name): hash chain disabled after chained segments (setting changed, or a sealed segment was rewritten)"
+        case .unchainedSealed: return "\(name): unchained header on a sealed segment"
+        case .linkToUnchained:
+            return "\(name): chain link points at a segment that is now unchained — the previous segment was rewritten"
+        case .linkMismatch: return "\(name): chain link does not match the previous segment's seal"
+        case .checkpointMismatch:
+            return "\(name): records before a checkpoint do not match it (edited, removed or reordered)"
+        case .sealMismatch: return "\(name): content does not match its seal (edited or truncated)"
+        case .notSealed: return "\(name): not sealed although newer segments exist"
+        }
+    }
+
+    /// Recovers an issue from an English sentence written by a helper that has no `issues` field.
+    /// nil when the sentence is not one `verify` writes.
+    public static func parse(english text: String) -> ExecLogVerifyIssue? {
+        guard let sep = text.range(of: ": ") else { return nil }
+        let name = String(text[text.startIndex..<sep.lowerBound])
+        let rest = String(text[sep.upperBound...])
+        for k in Kind.allCases where k != .retentionGap && k != .indexGap {
+            let probe = ExecLogVerifyIssue(k, segment: name)
+            if probe.englishText == text { return probe }
+        }
+        func numbers(_ pattern: String) -> [UInt64]? {
+            guard let re = try? NSRegularExpression(pattern: pattern),
+                  let m = re.firstMatch(in: rest, range: NSRange(rest.startIndex..., in: rest)) else { return nil }
+            var out: [UInt64] = []
+            for i in 1..<m.numberOfRanges {
+                guard let r = Range(m.range(at: i), in: rest), let n = UInt64(rest[r]) else { return nil }
+                out.append(n)
+            }
+            return out
+        }
+        if let n = numbers(#"^index gap \(expected (\d+), found (\d+)\) — a segment is missing$"#), n.count == 2 {
+            return ExecLogVerifyIssue(.indexGap, segment: name, expectedIndex: n[0], foundIndex: n[1])
+        }
+        if let n = numbers(#"^oldest retained segment is index (\d+) but retention only recorded removal through (\d+) — segments were deleted outside retention$"#), n.count == 2 {
+            return ExecLogVerifyIssue(.retentionGap, segment: name, foundIndex: n[0], removedThroughIndex: n[1])
+        }
+        return nil
+    }
 }
 
 public final class ExecLogWriter {
@@ -518,7 +612,7 @@ public enum ExecLogReader {
     /// what that does and does not prove).
     public static func verify(dir: URL) -> ExecLogVerifyResult {
         let urls = segmentURLs(dir: dir)
-        var problems: [String] = []
+        var issues: [ExecLogVerifyIssue] = []
         var sealed = 0
         var prevSealHash: String?
         var prevIndex: UInt64?
@@ -528,36 +622,41 @@ public enum ExecLogReader {
         let marker = ExecLogRetentionMarker.read(dir: dir)
         for (i, url) in urls.enumerated() {
             let name = url.lastPathComponent
-            guard let data = try? Data(contentsOf: url) else { problems.append("\(name): unreadable"); prevSealHash = nil; continue }
+            func add(_ kind: ExecLogVerifyIssue.Kind, expectedIndex: UInt64? = nil, foundIndex: UInt64? = nil,
+                     removedThroughIndex: UInt64? = nil) {
+                issues.append(ExecLogVerifyIssue(kind, segment: name, expectedIndex: expectedIndex,
+                                                 foundIndex: foundIndex, removedThroughIndex: removedThroughIndex))
+            }
+            guard let data = try? Data(contentsOf: url) else { add(.unreadable); prevSealHash = nil; continue }
             let lines = data.split(separator: 0x0A, omittingEmptySubsequences: true).map { Data($0) }
             guard let firstLine = lines.first, let hdr = parseHeader(firstLine) else {
-                problems.append("\(name): missing or invalid header"); prevSealHash = nil; continue
+                add(.missingHeader); prevSealHash = nil; continue
             }
             if prevIndex == nil, let m = marker, hdr.index != m.removedThroughIndex + 1 {
-                problems.append("\(name): oldest retained segment is index \(hdr.index) but retention only recorded removal through \(m.removedThroughIndex) — segments were deleted outside retention")
+                add(.retentionGap, foundIndex: hdr.index, removedThroughIndex: m.removedThroughIndex)
             }
-            if let pi = prevIndex, hdr.index != pi + 1 { problems.append("\(name): index gap (expected \(pi + 1), found \(hdr.index)) — a segment is missing") }
+            if let pi = prevIndex, hdr.index != pi + 1 { add(.indexGap, expectedIndex: pi + 1, foundIndex: hdr.index) }
             prevIndex = hdr.index
             if hdr.prev == "-" {
                 // Chain disabled for this segment. After a chained segment that is a downgrade
                 // (the setting was switched off, or a sealed segment's header was rewritten to
                 // skip the seal check); a sealed segment can't have been written unchained.
-                if sawChained { problems.append("\(name): hash chain disabled after chained segments (setting changed, or a sealed segment was rewritten)") }
-                if let l = lines.last, parseSeal(l) != nil { problems.append("\(name): unchained header on a sealed segment") }
+                if sawChained { add(.chainDisabled) }
+                if let l = lines.last, parseSeal(l) != nil { add(.unchainedSealed) }
                 prevSealHash = nil
                 prevWasUnchained = true
                 continue
             }
             // A chain restarted after unchained segments begins at genesis (ExecLogWriter.open).
             if prevWasUnchained, hdr.prev != ExecLogChain.genesis {
-                problems.append("\(name): chain link points at a segment that is now unchained — the previous segment was rewritten")
+                add(.linkToUnchained)
             }
             prevWasUnchained = false
             sawChained = true
-            if let p = prevSealHash, p != hdr.prev { problems.append("\(name): chain link does not match the previous segment's seal") }
+            if let p = prevSealHash, p != hdr.prev { add(.linkMismatch) }
             let isLast = i == urls.count - 1
             if hasBadCheckpoint(data: data, prev: hdr.prev) {
-                problems.append("\(name): records before a checkpoint do not match it (edited, removed or reordered)")
+                add(.checkpointMismatch)
             }
             if isLast { uncheckedTail = recordsAfterLastCheckpoint(lines) }
             if let lastLine = lines.last, let seal = parseSeal(lastLine) {
@@ -566,14 +665,14 @@ public enum ExecLogReader {
                 let sealStart = data.count - lastLineByteLength(data: data)
                 let body = Data(data[data.startIndex..<sealStart])
                 let expect = ExecLogChain.hash(prev: hdr.prev, body: body)
-                if expect != seal.hash { problems.append("\(name): content does not match its seal (edited or truncated)") }
+                if expect != seal.hash { add(.sealMismatch) }
                 prevSealHash = seal.hash
             } else {
-                if !isLast { problems.append("\(name): not sealed although newer segments exist") }
+                if !isLast { add(.notSealed) }
                 prevSealHash = nil
             }
         }
-        return ExecLogVerifyResult(segmentsChecked: urls.count, sealedSegments: sealed, ok: problems.isEmpty, problems: problems, uncheckedTailRecords: uncheckedTail)
+        return ExecLogVerifyResult(segmentsChecked: urls.count, sealedSegments: sealed, ok: issues.isEmpty, problems: issues.compactMap(\.englishText), uncheckedTailRecords: uncheckedTail, issues: issues)
     }
 
     /// Byte length of the final line including its trailing newline.

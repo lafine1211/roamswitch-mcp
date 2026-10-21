@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.14.0 (build 173).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.15.0 (build 174).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -1355,6 +1355,27 @@ public enum ActiveVulnScan {
                     )
                 },
                 outcome: CheckOutcome(port: port.port, processName: port.processName, check: loc("認証なしで、管理用らしいパスがデータを返す"))
+            )
+
+            // Reflected XSS (see `ReflectedXssProbe`). `xssDetail` carries where it was found from the probe to the finding text.
+            var xssDetail: String?
+            runOne(
+                probeName: "webvuln-xss",
+                probe: {
+                    let r = ReflectedXssProbe.probe(port: port.port)
+                    xssDetail = r.detail
+                    return r.vulnerable
+                },
+                makeFinding: {
+                    Finding(
+                        port: port.port,
+                        processName: port.processName,
+                        title: loc("反射型XSS（入力値が無害化されずにHTMLへ出力される）"),
+                        description: loc("検証用の無害な文字列（< > と引用符を含み、スクリプトは含みません）をGETパラメータに入れて送ったところ、エスケープされないままHTMLに出力されました。悪意あるリンクを開いた利用者のブラウザで、攻撃者のスクリプトが実行される危険があります。") + (xssDetail.map { " [\($0)]" } ?? ""),
+                        recommendation: loc("出力時にHTMLエスケープしてください（テンプレートエンジンの自動エスケープを有効にし、innerHTML や dangerouslySetInnerHTML などで生の文字列を挿入しない）。あわせて Content-Security-Policy を設定すると、万一の被害を抑えられます。")
+                    )
+                },
+                outcome: CheckOutcome(port: port.port, processName: port.processName, check: loc("反射型XSS（入力値が無害化されずにHTMLへ出力される）"))
             )
         }
 

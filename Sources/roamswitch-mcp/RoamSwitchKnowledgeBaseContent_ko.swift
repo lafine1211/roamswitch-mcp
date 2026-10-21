@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.14.0 (build 173).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.15.0 (build 174).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -152,7 +152,7 @@ extension RoamSwitchKnowledgeBase {
                 • 활성화 방법: 포트·기기 모니터링 → "실증형 취약점 검증(능동적 도달 확인)". 이 설정은 포트 진단 화면의 "실증 확인 실행" 버튼을 여는 것일 뿐 그 자체로는 아무것도 전송하지 않으며, 실행할 때마다 "검증 요청을 전송하시겠습니까?"라고 먼저 묻습니다.
                 • 127.0.0.1로만 전송: 다른 호스트로는 절대 전송하지 않습니다.
                 • 비인증 접근: Redis(PING), Memcached(stats), MongoDB(listDatabases)에 단발성, 짧은 타임아웃의 비파괴적 프로브를 보냅니다.
-                • 일반 개발 서버: CORS 설정 오류(자격 증명 포함 Origin 반사), 경로 순회, 오픈 리다이렉트, SSRF(전달받은 URL을 가져오는 서버. 이 머신의 자체 대기 포트를 가리키는 URL 포함)를 확인합니다.
+                • 일반 개발 서버: CORS 설정 오류(자격 증명 포함 Origin 반사), 경로 순회, 오픈 리다이렉트, 반사형 XSS(스크립트가 없는 무해한 표식을 GET으로 보내 이스케이프 없이 페이지에 출력되는지), SSRF(전달받은 URL을 가져오는 서버. 이 머신의 자체 대기 포트를 가리키는 URL 포함)를 확인합니다.
                 • 알려진 CVE 버전 대조: 인증 없이 도달 가능한 Redis/Memcached의 버전을 비파괴적 쿼리로 읽어 알려진 CVE 버전 범위와 대조합니다. 공격용 페이로드는 전송하지 않습니다.
                 • 개발 서버 포트(127.0.0.1)에 대해서는 로그인 없이 응답하는 관리 화면이나 API도 확인합니다(프로브 webvuln-unauth-admin). 쿠키도 인증 정보도 붙이지 않고 고정된 7개 경로(/admin, /api/admin, /api/users, /api/v1/users, /api/v1/user, /actuator/env, /swagger-ui/index.html)에 한 번씩 GET을 보내며, 응답이 200이고 데이터(비어 있지 않은 JSON 배열, 오류가 아닌 JSON 객체, 사용자 표가 있는 HTML, Swagger UI)일 때만 지적합니다. 로그인 화면, 리다이렉트, SPA 틀, {"error":"unauthorized"}는 지적하지 않습니다. 로그인을 시도하지 않고, 추측도 퍼징도 하지 않습니다. 선언된 부작용은 로그에 남는 흔적과 다수의 요청입니다. 브라우저 쪽 메뉴만 숨기고 서버에서는 권한을 확인하지 않는 앱을 찾기 위한 것입니다.
                 • MCP 도구 `run_active_vuln_scan`으로도 사용할 수 있습니다(프로브는 localhost로만 전송합니다).
@@ -180,7 +180,7 @@ extension RoamSwitchKnowledgeBase {
                 • 차단 방식: 미승인 기기는 독점적으로 점유(IOHIDDevice seize)되어 해당 기기의 키 입력만 시스템에 도달하지 못하게 됩니다. 다른 키보드는 계속 정상 작동합니다. 점유에 실패한 경우에만 손쉬운 사용 권한을 사용하는 CGEventTap 차단으로 대체합니다.
                 • 승인 방식: 최전면 창에서 "신뢰하고 허용" 또는 "거부하고 차단 유지"를 선택할 수 있습니다. 허용된 키보드는 허용 목록에 추가됩니다.
                 • 키 입력 타이밍 분석: 차단 중에도 해당 기기의 키 입력 간격을 계속 측정합니다. 최소 5회 이상의 간격을 확보한 뒤 평균이 12ms 이하이거나, 평균이 45ms 이하이면서 매우 균일(변동 계수 0.35 이하)하면 "자동 입력(스크립트)의 징후" 경고가 발생합니다. 이는 사람이 낼 수 없는 기계적인 속도와 규칙성을 포착하는 보조 증거일 뿐이며, 차단 여부 판단 자체는 바꾸지 않습니다.
-                • 기본값은 꺼짐입니다. 포트·기기 모니터링 → "무단 USB / BadUSB 물리 포트 가드 (Pro)"에서 활성화하고, "USB / BadUSB 가드 설정…"에서 허용 목록을 관리합니다.
+                • 기본값은 꺼짐입니다. 포트·기기 모니터링 → "무단 USB / BadUSB 물리 포트 가드 (Pro)"에서 활성화하고, "USB / BadUSB 가드 설정…"에서 허용 목록을 관리합니다. 활성화하면 macOS가 '입력 모니터링' 권한을 요청합니다. 허용하지 않으면 새로 연결된 키보드를 감지할 수 없습니다.
                 """,
                 recommendation: "외장 키보드를 사용한다면 본인이 직접 연결한 것만 신뢰하고 허용으로 등록하세요. 스크립트 입력 경고가 뜬 기기는 항상 거부하고 뽑아 두세요."
             ),
