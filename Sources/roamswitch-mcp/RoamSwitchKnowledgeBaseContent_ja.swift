@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.15.0 (build 174).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.15.1 (build 175).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -349,6 +349,7 @@ extension RoamSwitchKnowledgeBase {
                 • 検知: kqueue によるリアルタイム監視と60秒ごとの定期確認を併用。同じファイルの連続イベントは10秒のクールダウンで重複処理を防ぎます。直近60秒以内に変更された実ファイルも「影響を受けた可能性があるファイル」として記録します。
                 • 自動対応: ①アプリケーションファイアウォールのロックダウン ②エアギャップ隔離（pfで送受信を全遮断＋Wi-Fi無線オフ、feat_airgap_containment）③共有サービス（SMB / SSH / 画面共有）の停止 ④疑わしいプロセスを強制終了ではなく一時停止（SIGSTOP）⑤緊急通知と最前面の緊急モーダル表示。
                 • 凍結の理由: 通信はすでに遮断されているため、停止したプロセスはそれ以上被害を広げられません。誤検知だった場合は解除時に再開（SIGCONT）でき、データを失いません。
+                • ファイルを取り戻すには: 緊急モーダルに、無償の復号ツールを集めた No More Ransom と警察庁のページへのリンクと、前者の QR コードを出します(隔離中はこの Mac で開けないため)。復号ツールがあるのは仕組みが解析された一部の種類だけで、RoamSwitch 自身はファイルを復号しません。
                 • 解除時: ネットワークとWi-Fiを復旧し、停止したプロセスを再開し、改ざんされたおとりファイルを再生成します。
                 • 汎用検知（エントロピー解析、Pro）: おとりファイルに触れない暗号化も、`Documents`・`Desktop`・`Downloads`・`Pictures` に書き込まれたファイルの中身で検知します。ファイル全体のシャノンエントロピーが 7.92 以上のファイルが、5秒以内に20個以上になると、大量暗号化のバーストとして扱います。ファイルの先頭だけ、または4KiB以上のブロックを1つおきに暗号化する方式に備えて、4KiB ごとの区間も調べ、7.9 以上の区間が2つ以上ある16KiB以上のファイルも数えます。ZIP・PDF・JPEG など、圧縮形式の先頭が壊れていないファイルは対象外です。区間の判定は、ビルド成果物（`.o`・`.a`・`.rlib`・`.rmeta`・`.so`・`.dylib`・`.class`・`.pyc`・`.wasm` など）と `target` フォルダ内にも使いません。4KiB より小さいブロック（16バイトや256バイトなど）だけを暗号化する方式は、この判定では見えません。実測では、書類などの実ファイル3,531件に追加の検出はありませんでした。実ファイル150件で、先頭だけ・4KiB以上のブロックを1つおきに暗号化した場合を模擬すると、全体の値では0〜35%、区間の判定では100%を検出しました。
                 • 既定値: Proライセンスの初回有効化時に自動でオン。検知履歴はMCPの `get_canary_status` で確認できます。メニューの「ランサムウェア防護シミュレーション (動作確認)」で安全にテストできます。

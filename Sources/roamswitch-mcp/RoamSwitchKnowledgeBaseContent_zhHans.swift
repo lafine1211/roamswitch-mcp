@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.15.0 (build 174).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.15.1 (build 175).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -350,6 +350,7 @@ extension RoamSwitchKnowledgeBase {
                 • 检测：同时使用基于 kqueue 的实时监视和每 60 秒一次的定期检查。同一文件的连续事件以 10 秒冷却期防止重复处理。最近 60 秒内被修改的真实文件也会被记录为「可能受影响的文件」。
                 • 自动响应：① 应用程序防火墙锁定 ② 气隙隔离（通过 pf 阻断所有收发＋关闭 Wi-Fi 无线，feat_airgap_containment）③ 停止共享服务（SMB / SSH / 屏幕共享）④ 暂停（SIGSTOP）而非强制结束可疑进程 ⑤ 发送紧急通知并显示最前端的紧急弹窗。
                 • 冻结的原因：由于通信已被阻断，已暂停的进程无法进一步扩大损害。如果是误报，解除时可恢复运行（SIGCONT），不会丢失数据。
+                • 找回文件：紧急弹窗会显示指向 No More Ransom 和日本警察厅页面（二者汇集了免费解密工具）的链接，以及前者的二维码（隔离期间这台 Mac 无法打开）。只有部分已被分析清楚的勒索软件才有解密工具，RoamSwitch 本身不会解密文件。
                 • 解除时：恢复网络和 Wi-Fi，恢复已暂停的进程，并重新生成被篡改的诱饵文件。
                 • 通用检测（熵分析，Pro）：即使加密没有触碰诱饵文件，也能根据写入 `Documents`、`Desktop`、`Downloads`、`Pictures` 的文件内容检测出来。整个文件的香农熵达到 7.92 以上的文件，在 5 秒内达到 20 个以上时，会被视为大规模加密的突发。为了应对只加密文件开头、或每隔一个 4KiB 以上的块加密一次的方式，还会检查每个 4KiB 的区间：有 2 个以上区间达到 7.9 以上、且大小在 16KiB 以上的文件也会计入。压缩格式的文件头完好的文件（ZIP、PDF、JPEG 等）不在检查范围内。区间判定不用于构建产物（`.o`、`.a`、`.rlib`、`.rmeta`、`.so`、`.dylib`、`.class`、`.pyc`、`.wasm` 等）以及 `target` 文件夹内的文件。只加密小于 4KiB 的块（例如 16 字节或 256 字节）的方式，这个判定看不到。实测中，这些文件夹里的 3,531 个真实文件没有出现额外的检出。用 150 个真实文件模拟只加密开头、以及每隔一个 4KiB 以上的块加密一次的情形，整个文件的数值检出了 0～35%，区间判定检出了 100%。
                 • 默认值：首次激活 Pro 许可证时自动开启。检测历史可通过 MCP 的 `get_canary_status` 查看。可通过菜单中的「🚨 勒索软件防御模拟测试（验证运行）…」安全地进行测试。

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.15.0 (build 174).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.15.1 (build 175).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -350,6 +350,7 @@ extension RoamSwitchKnowledgeBase {
                 • 탐지 방식: 실시간 kqueue 감시와 60초마다의 확인을 함께 사용합니다. 파일별로 10초의 대기 시간을 두어 한 번의 이벤트 폭주가 중복 처리되지 않도록 합니다. 지난 60초 이내에 수정된 실제 파일은 영향을 받았을 가능성이 있는 파일로 기록됩니다.
                 • 자동 대응: (1) 응용 프로그램 방화벽 잠금 (2) 에어갭 봉쇄(pf가 모든 트래픽을 차단하고 Wi-Fi 무선을 끔, feat_airgap_containment) (3) 공유 서비스(SMB / SSH / 화면 공유) 정지 (4) 의심되는 프로세스를 강제 종료 대신 SIGSTOP으로 일시 정지 (5) 긴급 경보와 최전면 긴급 창 표시.
                 • 종료 대신 정지하는 이유: 네트워크가 이미 차단되었으므로 정지된 프로세스는 더 이상 피해를 줄 수 없습니다. 오탐이었다면 해제 시 SIGCONT로 재개되어 데이터 손실이 없습니다.
+                • 파일 되찾기: 긴급 창에 무료 복호화 도구를 모아 둔 No More Ransom과 일본 경찰청 페이지로의 링크, 그리고 앞쪽의 QR 코드가 표시됩니다(격리 중에는 이 Mac에서 열 수 없기 때문). 도구가 있는 것은 동작 방식이 분석된 일부 종류뿐이며, RoamSwitch 자체는 파일을 복호화하지 않습니다.
                 • 해제 시: 네트워크와 Wi-Fi가 복원되고, 정지된 프로세스가 재개되며, 변조된 미끼 파일이 다시 생성됩니다.
                 • 범용 탐지(엔트로피 분석, Pro): 미끼 파일을 건드리지 않는 암호화도 `Documents`·`Desktop`·`Downloads`·`Pictures`에 기록되는 파일의 내용으로 탐지합니다. 파일 전체의 섀넌 엔트로피가 7.92 이상인 파일이 5초 안에 20개 이상이 되면 대량 암호화 버스트로 취급합니다. 파일의 앞부분만, 또는 4KiB 이상의 블록을 하나 걸러 암호화하는 방식에 대비해 4KiB 단위 구간도 확인하며, 7.9 이상인 구간이 2개 이상 있는 16KiB 이상의 파일도 셉니다. ZIP·PDF·JPEG 등 압축 형식의 헤더가 온전한 파일은 대상에서 제외합니다. 구간 판정은 빌드 산출물(`.o`·`.a`·`.rlib`·`.rmeta`·`.so`·`.dylib`·`.class`·`.pyc`·`.wasm` 등)과 `target` 폴더 안에는 사용하지 않습니다. 4KiB보다 작은 블록(16바이트나 256바이트 등)만 암호화하는 방식은 이 판정으로는 보이지 않습니다. 실측에서는 해당 폴더의 실제 파일 3,531개에서 추가 탐지가 없었습니다. 실제 파일 150개로 앞부분만, 그리고 4KiB 이상 블록을 하나 걸러 암호화한 경우를 모의했을 때, 파일 전체 값으로는 0~35%, 구간 판정으로는 100%를 탐지했습니다.
                 • 기본값: Pro를 처음 활성화할 때 자동으로 켜집니다. 사고 기록은 MCP 도구 `get_canary_status`로 확인할 수 있습니다. 메뉴의 "랜섬웨어 방어 시뮬레이션(동작 확인)"으로 안전하게 테스트할 수 있습니다.

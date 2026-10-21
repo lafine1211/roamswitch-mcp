@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.15.0 (build 174).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.15.1 (build 175).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -350,6 +350,7 @@ extension RoamSwitchKnowledgeBase {
                 • 偵測方式：結合即時 kqueue 監控與每 60 秒的定期檢查。每個檔案有 10 秒的冷卻時間，避免同一波事件被重複處理。過去 60 秒內遭修改的真實檔案也會被記錄為可能受影響。
                 • 自動回應：（1）套用「應用程式防火牆」鎖定 （2）氣隙圍堵（pf 封鎖所有流量並關閉 Wi-Fi 無線電，feat_airgap_containment） （3）停止共享服務（SMB / SSH / 螢幕共享） （4）以 SIGSTOP 暫停可疑程序而非強制結束 （5）發出緊急警示並顯示最前端的緊急視窗。
                 • 為何暫停而非結束：網路已經被切斷，因此暫停的程序無法造成進一步損害。若確認是誤判，解除時會以 SIGCONT 恢復該程序，不會遺失任何資料。
+                • 找回檔案：緊急視窗會顯示指向 No More Ransom 與日本警察廳頁面（兩者彙整了免費解密工具）的連結，以及前者的 QR 碼（隔離期間這台 Mac 無法開啟）。只有部分已被分析清楚的勒索軟體才有解密工具，RoamSwitch 本身不會解密檔案。
                 • 解除時：網路與 Wi-Fi 會恢復，暫停的程序會被恢復執行，遭竄改的誘餌檔案也會重新產生。
                 • 通用偵測（熵分析，Pro）：即使加密沒有碰觸誘餌檔案，也能根據寫入 `Documents`、`Desktop`、`Downloads`、`Pictures` 的檔案內容偵測出來。整個檔案的夏農熵達到 7.92 以上的檔案，在 5 秒內達到 20 個以上時，會被視為大規模加密的突發。為了因應只加密檔案開頭、或每隔一個 4KiB 以上的區塊加密一次的方式，還會檢查每個 4KiB 的區間：有 2 個以上區間達到 7.9 以上、且大小在 16KiB 以上的檔案也會計入。壓縮格式的檔頭完好的檔案（ZIP、PDF、JPEG 等）不在檢查範圍內。區間判定不用於建置產物（`.o`、`.a`、`.rlib`、`.rmeta`、`.so`、`.dylib`、`.class`、`.pyc`、`.wasm` 等）以及 `target` 資料夾內的檔案。只加密小於 4KiB 的區塊（例如 16 位元組或 256 位元組）的方式，這個判定看不到。實測中，這些資料夾裡的 3,531 個真實檔案沒有出現額外的偵測。用 150 個真實檔案模擬只加密開頭、以及每隔一個 4KiB 以上的區塊加密一次的情形，整個檔案的數值偵測到 0～35%，區間判定偵測到 100%。
                 • 預設值：首次啟用 Pro 時自動開啟。事件記錄可透過 MCP 工具 `get_canary_status` 取得，並可在選單中使用「勒索軟體防禦模擬測試（驗證運作）」安全地測試。
