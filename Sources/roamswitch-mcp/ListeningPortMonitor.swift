@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.16.0 (build 176).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.16.1 (build 177).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -28,16 +28,80 @@ public struct ListeningPortInfo: Identifiable, Equatable, Hashable {
     /// **or a bind to any concrete non-loopback address**. A backdoor that
     /// binds straight to the LAN address (`192.168.1.5:4444`) is as exposed
     /// as one on `0.0.0.0` but is not `isGloballyExposed`.
+    /// An address that is only an alias on the loopback interface `lo0` (a test setup that puts
+    /// `203.0.113.5` on `lo0`) is not reachable from outside, whatever the address looks like.
     public var isNetworkReachable: Bool {
-        isGloballyExposed || Self.isReachableBind(bindHost)
+        isGloballyExposed || Self.isReachableBind(bindHost, loopbackInterfaceAddresses: Self.loopbackInterfaceAddressesIfNeeded(bindHost))
     }
 
     static func isReachableBind(_ host: String) -> Bool {
+        isReachableBind(host, loopbackInterfaceAddresses: loopbackInterfaceAddressesIfNeeded(host))
+    }
+
+    /// `loopbackInterfaceAddresses` are the addresses configured on `lo0` (see `addresses(onInterface:)`), in the
+    /// form `normalizedAddress` gives.
+    static func isReachableBind(_ host: String, loopbackInterfaceAddresses: Set<String>) -> Bool {
         var h = host.trimmingCharacters(in: CharacterSet(charactersIn: "[]")).lowercased()
         if let zone = h.firstIndex(of: "%") { h = String(h[..<zone]) }
         if h.isEmpty || h == "localhost" || h == "::1" || h.hasPrefix("127.") { return false }
         if h.hasPrefix("::ffff:127.") { return false }
+        if let normalized = normalizedAddress(h), normalized != "0.0.0.0", normalized != "::", loopbackInterfaceAddresses.contains(normalized) { return false }
         return true
+    }
+
+    /// Reads the interface list only for a host that would otherwise count as reachable.
+    private static func loopbackInterfaceAddressesIfNeeded(_ host: String) -> Set<String> {
+        let h = host.trimmingCharacters(in: CharacterSet(charactersIn: "[]")).lowercased()
+        if h.isEmpty || h == "*" || h == "localhost" || h == "::1" || h.hasPrefix("127.") { return [] }
+        return addresses(onInterface: "lo0")
+    }
+
+    /// An address in one spelling (`inet_pton` then `inet_ntop`), so `[2001:DB8::1]` and `2001:db8:0::1` compare equal.
+    /// An IPv4-mapped IPv6 address is reduced to its IPv4 form. nil when `text` is not an address.
+    static func normalizedAddress(_ text: String) -> String? {
+        var t = text.trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
+        if let zone = t.firstIndex(of: "%") { t = String(t[..<zone]) }
+        var v4 = in_addr()
+        if inet_pton(AF_INET, t, &v4) == 1 {
+            var buf = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
+            return inet_ntop(AF_INET, &v4, &buf, socklen_t(buf.count)).map { String(cString: $0) }
+        }
+        var v6 = in6_addr()
+        if inet_pton(AF_INET6, t, &v6) == 1 {
+            let isMapped = withUnsafeBytes(of: &v6) { raw in
+                raw.prefix(10).allSatisfy { $0 == 0 } && raw[10] == 0xff && raw[11] == 0xff
+            }
+            if isMapped {
+                var mapped = in_addr()
+                withUnsafeBytes(of: &v6) { raw in
+                    withUnsafeMutableBytes(of: &mapped) { $0.copyMemory(from: UnsafeRawBufferPointer(rebasing: raw[12..<16])) }
+                }
+                var buf = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
+                return inet_ntop(AF_INET, &mapped, &buf, socklen_t(buf.count)).map { String(cString: $0) }
+            }
+            var buf = [CChar](repeating: 0, count: Int(INET6_ADDRSTRLEN))
+            return inet_ntop(AF_INET6, &v6, &buf, socklen_t(buf.count)).map { String(cString: $0) }
+        }
+        return nil
+    }
+
+    /// The IPv4 and IPv6 addresses configured on the interface named `name` (`getifaddrs`), normalized.
+    static func addresses(onInterface name: String) -> Set<String> {
+        var head: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&head) == 0, let first = head else { return [] }
+        defer { freeifaddrs(head) }
+        var out = Set<String>()
+        var cursor: UnsafeMutablePointer<ifaddrs>? = first
+        while let entry = cursor {
+            defer { cursor = entry.pointee.ifa_next }
+            guard String(cString: entry.pointee.ifa_name) == name, let sa = entry.pointee.ifa_addr else { continue }
+            var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+            guard sa.pointee.sa_family == UInt8(AF_INET) || sa.pointee.sa_family == UInt8(AF_INET6),
+                  getnameinfo(sa, socklen_t(sa.pointee.sa_len), &host, socklen_t(host.count), nil, 0, NI_NUMERICHOST) == 0,
+                  let normalized = normalizedAddress(String(cString: host)) else { continue }
+            out.insert(normalized)
+        }
+        return out
     }
 }
 
