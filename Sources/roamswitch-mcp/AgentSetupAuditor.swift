@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.16.1 (build 177).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.16.2 (build 178).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -379,11 +379,11 @@ enum AgentSetupAuditor {
                                    message: message("mcp_server_added")))
             case .settingsWeakened(let path, let reasons):
                 // A hook, a higher permission mode or a switched-off sandbox changes what runs without asking: high.
-                // Fewer deny rules or a wider allow rule is medium.
+                // Fewer deny rules, a wider allow rule or a hook that is gone is medium.
                 let severe = reasons.contains { reason in
                     switch reason {
                     case .hookAdded, .modeRaised, .sandboxDisabled, .dangerousPromptSkipped: return true
-                    case .denyRemoved, .broadAllowAdded: return false
+                    case .denyRemoved, .broadAllowAdded, .hookRemoved: return false
                     }
                 }
                 out.append(Finding(id: "agent_settings_weakened", severity: severe ? "high" : "medium", area: "settings", file: path,
@@ -685,6 +685,7 @@ enum AgentSetupAuditor {
         case .denyRemoved(let n): return "\(n) deny rule\(n == 1 ? "" : "s") removed"
         case .broadAllowAdded(let n): return "\(n) allow rule\(n == 1 ? "" : "s") that let any command run added"
         case .hookAdded(let n): return "\(n) hook command\(n == 1 ? "" : "s") added or changed"
+        case .hookRemoved(let n): return "\(n) hook command\(n == 1 ? "" : "s") from the accepted state \(n == 1 ? "is" : "are") gone"
         case .modeRaised(let from, let to): return "permission mode \(from) -> \(to)"
         case .sandboxDisabled: return "sandbox switched off"
         case .dangerousPromptSkipped: return "the warning before bypassPermissions switched off"

@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.16.1 (build 177). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.16.2 (build 178). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -33,6 +33,12 @@ final class TyposquatGuardTests: XCTestCase {
 
     func testUnrelatedNameIsNotFlagged() {
         XCTAssertNil(TyposquatGuard.checkName("some-totally-unrelated-package-name", against: popular))
+    }
+
+    func testShortNamesAreNotComparedByEditDistance() {
+        // `@eslint/js` unscopes to `js`, one edit from `ws`.
+        XCTAssertNil(TyposquatGuard.checkName("@eslint/js", against: ["ws", "react"]))
+        XCTAssertNil(TyposquatGuard.checkName("js", against: ["ws"]))
     }
 
     func testScopedPackageComparesByBaseName() {
@@ -97,6 +103,7 @@ final class TyposquatGuardTests: XCTestCase {
         let findings = TyposquatGuard.scanWatchedFolder(root, maxDepth: 6, against: popular)
         XCTAssertEqual(findings.count, 1)
         XCTAssertEqual(findings.first?.dependencyName, "reactt")
+        XCTAssertTrue(findings.first?.projectDir.hasSuffix("packages/app") ?? false)
     }
 
     func testPopularPackageNamesTwoTierLoadingPrefersNewerUpdatedList() throws {

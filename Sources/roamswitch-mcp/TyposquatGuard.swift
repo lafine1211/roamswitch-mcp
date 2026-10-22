@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.16.1 (build 177).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.16.2 (build 178).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -37,7 +37,13 @@ enum TyposquatGuard {
         let dependencyName: String
         let suspectedTarget: String
         let distance: Int
-        var id: String { dependencyName }
+        /// The project folder whose `package.json` declares the name; empty
+        /// when the check ran on a bare name (`checkName`).
+        var projectDir: String = ""
+        var id: String { projectDir + "\u{0}" + dependencyName }
+
+        /// The project folder with the home folder shortened to `~`.
+        var projectDisplay: String { (projectDir as NSString).abbreviatingWithTildeInPath }
     }
 
     private struct PopularPackageList: Decodable {
@@ -84,6 +90,9 @@ enum TyposquatGuard {
     /// false positives. Not exhaustive; see this type's doc comment.
     private static let knownLookalikeAllowlist: Set<String> = ["preact", "is-array", "isarray", "node-fetch"]
 
+    /// Names shorter than this are not compared at all.
+    private static let minBaseNameLength = 4
+
     /// The base name a person actually types/reads — `@scope/pkg` compares
     /// as `pkg`, since a typosquat targets the recognizable part of the
     /// name.
@@ -117,6 +126,9 @@ enum TyposquatGuard {
     /// anything popular to be worth a second look.
     static func checkName(_ name: String, against popular: [String]) -> Finding? {
         let base = unscoped(name)
+        // One edit apart means nothing at two or three letters (`js`/`ws`,
+        // `pg`/`pm`); every short name would be "close" to some popular one.
+        if base.count < minBaseNameLength { return nil }
         if knownLookalikeAllowlist.contains(base) { return nil }
         if popular.contains(base) { return nil } // it IS the popular package
 
@@ -160,7 +172,11 @@ enum TyposquatGuard {
                 names.formUnion(deps.keys)
             }
         }
-        return names.sorted().compactMap { checkName($0, against: popular) }
+        return names.sorted().compactMap { name in
+            guard var finding = checkName(name, against: popular) else { return nil }
+            finding.projectDir = base
+            return finding
+        }
     }
 
     private static let skipDirNames: Set<String> =

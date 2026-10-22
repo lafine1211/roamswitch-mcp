@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.16.1 (build 177).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.16.2 (build 178).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -72,6 +72,9 @@ enum AgentSetupBaseline {
         case denyRemoved(Int)
         case broadAllowAdded(Int)
         case hookAdded(Int)
+        /// A hook of the accepted state is gone and nothing replaced it. A hook can be a guard (a monitor, a command
+        /// that blocks a tool call), so losing one weakens the setup as much as gaining one.
+        case hookRemoved(Int)
         case modeRaised(from: String, to: String)
         case sandboxDisabled
         case dangerousPromptSkipped
@@ -212,6 +215,10 @@ enum AgentSetupBaseline {
             if allowAdded > 0 { reasons.append(.broadAllowAdded(allowAdded)) }
             let hooksAdded = Set(now.hooks).subtracting(before.hooks).count
             if hooksAdded > 0 { reasons.append(.hookAdded(hooksAdded)) }
+            // An edited hook shows up as one gone and one new, which is already `hookAdded`: only the ones without a
+            // replacement count as removed.
+            let hooksRemoved = max(0, Set(before.hooks).subtracting(now.hooks).count - hooksAdded)
+            if hooksRemoved > 0 { reasons.append(.hookRemoved(hooksRemoved)) }
             let oldMode = before.defaultMode ?? "default"
             let newMode = now.defaultMode ?? "default"
             if let a = modeRank[oldMode], let b = modeRank[newMode], b > a { reasons.append(.modeRaised(from: oldMode, to: newMode)) }

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.16.1 (build 177).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.16.2 (build 178).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -38,6 +38,14 @@ enum PackageCveScriptScan {
         let dangerPatternLabel: String?
 
         var id: String { "\(relativePath)|\(scriptName)" }
+
+        /// The project folder that owns the `node_modules` the package sits
+        /// in, with the home folder shortened to `~`.
+        var projectDisplay: String {
+            let dir = relativePath.range(of: "/node_modules/").map { String(relativePath[..<$0.lowerBound]) }
+                ?? (relativePath as NSString).deletingLastPathComponent
+            return (dir as NSString).abbreviatingWithTildeInPath
+        }
     }
 
     static let lifecycleScriptNames: [String] = ["preinstall", "install", "postinstall", "prepare"]

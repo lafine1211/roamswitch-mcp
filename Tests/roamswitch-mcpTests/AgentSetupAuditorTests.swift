@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.16.1 (build 177). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.16.2 (build 178). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -841,6 +841,38 @@ final class AgentSetupAuditorTests: XCTestCase {
         let hooked = try settingsRun(write, home: home, baseline: baseline)
         XCTAssertEqual(hooked.findings.map(\.id), ["agent_settings_weakened"])
         XCTAssertEqual(hooked.findings.first?.severity, "high")
+    }
+
+    func testARemovedHookIsAMediumWeakeningAndAnEditedOneStaysHigh() throws {
+        let (home, write) = try makeHome()
+        defer { try? FileManager.default.removeItem(atPath: home) }
+        let baseline = URL(fileURLWithPath: home + "/baseline.json")
+        func hooks(_ commands: [String]) -> String {
+            let entries = commands.map { #"{"type":"command","command":"\#($0)"}"# }.joined(separator: ",")
+            return #"{"hooks":{"PostToolUse":[{"matcher":"*","hooks":["# + entries + "]}]}}"
+        }
+        try write(".claude/settings.json", hooks(["agent-monitor", "say done"]))
+        try AgentSetupAuditor.acceptCurrentState(try settingsRun(write, home: home, baseline: baseline), baselineURL: baseline)
+
+        // One hook gone: medium, and the text says what happened without copying the command.
+        try write(".claude/settings.json", hooks(["say done"]))
+        let removed = try settingsRun(write, home: home, baseline: baseline)
+        XCTAssertEqual(removed.findings.map(\.id), ["agent_settings_weakened"])
+        XCTAssertEqual(removed.findings.first?.severity, "medium")
+        XCTAssertTrue(removed.findings.first?.detail.contains("1 hook command from the accepted state is gone") ?? false, removed.findings.first?.detail ?? "")
+        XCTAssertFalse(removed.findings.first?.detail.contains("agent-monitor") ?? true)
+
+        // Every hook gone.
+        try write(".claude/settings.json", #"{"hooks":{}}"#)
+        let all = try settingsRun(write, home: home, baseline: baseline)
+        XCTAssertTrue(all.findings.first?.detail.contains("2 hook commands from the accepted state are gone") ?? false, all.findings.first?.detail ?? "")
+
+        // A hook whose command was edited is one added, not one removed as well: high.
+        try write(".claude/settings.json", hooks(["agent-monitor --quiet", "say done"]))
+        let edited = try settingsRun(write, home: home, baseline: baseline)
+        XCTAssertEqual(edited.findings.first?.severity, "high")
+        XCTAssertTrue(edited.findings.first?.detail.contains("1 hook command added or changed") ?? false)
+        XCTAssertFalse(edited.findings.first?.detail.contains("gone") ?? true)
     }
 
     func testANarrowNewAllowRuleIsNotAWeakeningButABroadOneIs() throws {
