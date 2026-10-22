@@ -628,7 +628,7 @@ extension RoamSwitchKnowledgeBase {
                 • 開き方: メニュー「マルウェア対策」→「📦 パッケージCVE照合 (Homebrew)…」。依存関係は「依存関係」タブでプロジェクトフォルダを追加。
                 • Homebrew: `brew list --versions` の結果を、NVDの実データから生成したformula→CPE対応表と照合。検出結果には確度（confirmed = 検証済みの対応表 / gray = 未検証のキーワード一致で誤検知の可能性あり）が付きます。
                 • 依存関係: package-lock.json / requirements.txt / Pipfile.lock / poetry.lock / Cargo.lock / Gemfile.lock / composer.lock / go.sum / pom.xml を解析し、npm・PyPI・crates.io・RubyGems・Packagist・Go・Maven の既知CVEマップ（OSV.dev由来、CVSS 7.0以上）と照合。
-                • データ配信: CVEマップは約30日に1回、署名付きマニフェストから受信専用で取得します。未取得の間は「未取得」と表示され、何も検出しません。
+                • データ配信: CVEマップは週に1回、署名付きマニフェストから受信専用で取得します。未取得の間は「未取得」と表示され、何も検出しません。
                 • MCPツール: `run_package_cve_scan`（Homebrew）と `run_package_cve_scan_languages`（依存関係、`watchedFolders` 引数）。
                 """,
                 recommendation: "定期的にHomebrewのスキャンを実行し、開発中のプロジェクトは依存関係タブに登録して、重大なCVEを含むパッケージを早めに更新してください。"
@@ -695,7 +695,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • 対象範囲: プロジェクト自身のpackage.jsonのdependencies/devDependencies/optionalDependenciesのみ(peerDependenciesは対象外)。node_modules配下(既にインストール済みの推移的依存関係)は意図的に対象外——タイポは人間がpackage.jsonに依存関係を追加する瞬間に生まれるものであるため。
                 • 判定ロジック: 標準的なレーベンシュタイン距離のDP実装で各依存関係名を人気npmパッケージ名リストと照合。スコープ付きパッケージ(`@scope/pkg`)はベース名(`pkg`)で比較。長さの差が2を超える候補は事前フィルタでスキップ。閾値は人気パッケージ名の長さが8文字以上なら距離2まで、それ未満なら距離1のみ許容。
-                • 更新の仕組み: 判定に使う人気パッケージ名リストは、`PackageCveMapUpdater`が既存のCVEマップ群と同じ「約30日に1回・受信専用・Ed25519署名検証済み」マニフェスト経由で配信する(build-time埋め込みシード + 更新分の二段構え、mapVersion比較で新しい方を採用)。アプリのリリースを待たずにリストを更新できる。
+                • 更新の仕組み: 判定に使う人気パッケージ名リストは、`PackageCveMapUpdater`が既存のCVEマップ群と同じ「週に1回・受信専用・Ed25519署名検証済み」マニフェスト経由で配信する(build-time埋め込みシード + 更新分の二段構え、mapVersion比較で新しい方を採用)。アプリのリリースを待たずにリストを更新できる。
                 • 参考情報であり断定ではありません。正規の類似パッケージ(preact等)は既知の許可リストで一部除外していますが完全ではありません。
                 • 開き方: 「📦 パッケージCVE照合」→「タイポスクワッティング検知 (Pro)」タブ。「依存関係」タブと同じプロジェクトフォルダを対象にします。MCP: `run_typosquat_scan`(`watchedFolders`引数、Pro限定)。
                 """,
@@ -1644,7 +1644,7 @@ extension RoamSwitchKnowledgeBase {
                   - アプリのアップデート確認（Sparkle）
                   - ClamAVウイルス定義の更新（`freshclam`）
                   - 短縮URLの展開（リンク診断で、対象のURL自体へ直接アクセスする。診断APIや開発元への送信はない）
-                  - リンク保護の脅威フィード、パッケージCVEマップ、脆弱性CVEマップの取得（フィードは1日1回、マップは約30日に1回。受信専用・署名検証・識別子の送信なし。リンク保護の自動更新はオフにできます）
+                  - リンク保護の脅威フィード、パッケージCVEマップ、脆弱性CVEマップの取得（フィードは1日1回、マップは週に1回。受信専用・署名検証・識別子の送信なし。リンク保護の自動更新はオフにできます）
                   - ユーザーが設定したVPN・セキュアDNSプロバイダーへの通常の通信
                   - 実証型脆弱性診断の、127.0.0.1（このMac自身）への非破壊プローブ
                   - npm署名検証（オプトイン・Pro限定）の実行時に registry.npmjs.org へ通信

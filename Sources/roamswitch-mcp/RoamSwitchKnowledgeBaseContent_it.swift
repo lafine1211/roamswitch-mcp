@@ -629,7 +629,7 @@ extension RoamSwitchKnowledgeBase {
                 • Apri: Protezione da malware → «📦 Verifica CVE dei pacchetti (Homebrew)…». Per le dipendenze, aggiungi le cartelle di progetto nella scheda Dipendenze.
                 • Homebrew: `brew list --versions` viene confrontato con una tabella formula-CPE generata da dati NVD reali. I risultati riportano un livello di fiducia: confirmed (tabella verificata) o gray (corrispondenza di parola chiave non verificata che potrebbe essere un falso positivo).
                 • Dipendenze: analizza package-lock.json / requirements.txt / Pipfile.lock / poetry.lock / Cargo.lock / Gemfile.lock / composer.lock / go.sum / pom.xml e li confronta con mappe di CVE note per npm, PyPI, crates.io, RubyGems, Packagist, Go e Maven (da OSV.dev, CVSS 7,0 o superiore).
-                • Distribuzione dei dati: le mappe di CVE vengono recuperate circa ogni 30 giorni da un manifesto firmato, solo in ricezione. Prima del recupero risultano non ancora scaricate e non rilevano nulla.
+                • Distribuzione dei dati: le mappe di CVE vengono recuperate circa una volta a settimana da un manifesto firmato, solo in ricezione. Prima del recupero risultano non ancora scaricate e non rilevano nulla.
                 • Strumenti MCP: `run_package_cve_scan` (Homebrew) e `run_package_cve_scan_languages` (dipendenze, argomento `watchedFolders`).
                 """,
                 recommendation: "Esegui regolarmente la scansione Homebrew, registra i progetti attivi nella scheda Dipendenze, e aggiorna tempestivamente i pacchetti con CVE gravi."
@@ -696,7 +696,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • Ambito: solo le dependencies/devDependencies/optionalDependencies proprie del progetto in package.json (peerDependencies è escluso). Anche node_modules (dipendenze transitive già installate) è deliberatamente escluso — un errore di battitura viene introdotto nel momento in cui una persona aggiunge una dipendenza a package.json.
                 • Logica di confronto: un'implementazione DP standard della distanza di Levenshtein confronta ogni nome di dipendenza con un elenco di pacchetti npm popolari. I pacchetti con scope (`@scope/pkg`) vengono confrontati in base al nome base (`pkg`). I candidati la cui lunghezza differisce di più di 2 vengono scartati da un pre-filtro economico. La soglia è una distanza di modifica fino a 2 per nomi popolari di 8 o più caratteri, solo distanza 1 per nomi più brevi.
-                • Come l'elenco resta aggiornato: l'elenco dei nomi di pacchetti popolari con cui viene confrontato è distribuito da `PackageCveMapUpdater` tramite lo stesso manifest (recuperato circa ogni 30 giorni), di sola ricezione e firmato Ed25519 delle mappe CVE (un seed incorporato in fase di build più una sostituzione a due livelli, preferendo quella con `mapVersion` più recente). L'elenco può essere aggiornato senza attendere una nuova release dell'app.
+                • Come l'elenco resta aggiornato: l'elenco dei nomi di pacchetti popolari con cui viene confrontato è distribuito da `PackageCveMapUpdater` tramite lo stesso manifest (recuperato circa una volta a settimana), di sola ricezione e firmato Ed25519 delle mappe CVE (un seed incorporato in fase di build più una sostituzione a due livelli, preferendo quella con `mapVersion` più recente). L'elenco può essere aggiornato senza attendere una nuova release dell'app.
                 • Informazione di riferimento, non un verdetto — una whitelist nota sopprime alcuni pacchetti legittimi simili (ad es. preact), ma non è esaustiva.
                 • Come aprirlo: scheda «📦 Verifica CVE dei pacchetti» → «Rilevamento typosquatting (Pro)», rivolta alle stesse cartelle di progetto della scheda «Dipendenze». MCP: `run_typosquat_scan` (argomento `watchedFolders`, solo Pro).
                 """,
@@ -1645,7 +1645,7 @@ extension RoamSwitchKnowledgeBase {
                   - I controlli di aggiornamento dell'app (Sparkle)
                   - Gli aggiornamenti delle definizioni ClamAV (`freshclam`)
                   - L'espansione degli URL abbreviati nella verifica dei link (accede all'URL di destinazione stesso; nulla viene inviato a un'API di analisi né allo sviluppatore)
-                  - I download dell'elenco delle minacce della Protezione link, delle mappe CVE dei pacchetti, e delle mappe CVE delle vulnerabilità (l'elenco ogni giorno, le mappe circa ogni 30 giorni; solo in ricezione, verificate tramite firma, senza inviare identificatori; l'aggiornamento automatico della Protezione link può essere disattivato)
+                  - I download dell'elenco delle minacce della Protezione link, delle mappe CVE dei pacchetti, e delle mappe CVE delle vulnerabilità (l'elenco ogni giorno, le mappe circa una volta a settimana; solo in ricezione, verificate tramite firma, senza inviare identificatori; l'aggiornamento automatico della Protezione link può essere disattivato)
                   - Il traffico normale verso i provider VPN e DNS sicuro che configuri
                   - Le sonde non distruttive della verifica attiva delle vulnerabilità verso 127.0.0.1 (questo stesso Mac)
                   - La verifica delle firme npm (opt-in, solo Pro) contatta registry.npmjs.org quando viene eseguita

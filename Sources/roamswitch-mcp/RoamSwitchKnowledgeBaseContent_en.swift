@@ -628,7 +628,7 @@ extension RoamSwitchKnowledgeBase {
                 • Open: Malware Protection → "📦 Package CVE Scan (Homebrew)…". For dependencies, add project folders in the Dependencies tab.
                 • Homebrew: `brew list --versions` is matched against a formula-to-CPE table generated from real NVD data. Findings carry a confidence level: confirmed (verified table) or gray (unverified keyword match that may be a false positive).
                 • Dependencies: parses package-lock.json / requirements.txt / Pipfile.lock / poetry.lock / Cargo.lock / Gemfile.lock / composer.lock / go.sum / pom.xml and checks them against known-CVE maps for npm, PyPI, crates.io, RubyGems, Packagist, Go, and Maven (from OSV.dev, CVSS 7.0 or higher).
-                • Data delivery: the CVE maps are fetched about once every 30 days from a signed manifest, receive-only. Until fetched they show as not yet downloaded and detect nothing.
+                • Data delivery: the CVE maps are fetched about once a week from a signed manifest, receive-only. Until fetched they show as not yet downloaded and detect nothing.
                 • MCP tools: `run_package_cve_scan` (Homebrew) and `run_package_cve_scan_languages` (dependencies, `watchedFolders` argument).
                 """,
                 recommendation: "Run the Homebrew scan regularly, register active projects in the Dependencies tab, and update packages with serious CVEs promptly."
@@ -695,7 +695,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • Scope: only the project's own package.json dependencies/devDependencies/optionalDependencies (peerDependencies is out of scope). node_modules (already-installed transitive dependencies) is deliberately out of scope too — a typo is introduced at the moment a human adds a dependency to package.json.
                 • Matching logic: a standard Levenshtein-distance DP implementation checks each dependency name against a list of popular npm package names. Scoped packages (`@scope/pkg`) compare by their base name (`pkg`). Candidates whose length differs by more than 2 are skipped by a cheap pre-filter. The threshold is edit distance up to 2 for popular names of 8+ characters, distance 1 only for shorter names.
-                • How the list stays current: the popular-package-name list checked against is distributed by `PackageCveMapUpdater` via the same receive-only, Ed25519-signed manifest (fetched about every 30 days) as the CVE maps (a build-time embedded seed plus a two-tier override, preferring whichever has the newer `mapVersion`). The list can be refreshed without waiting for an app release.
+                • How the list stays current: the popular-package-name list checked against is distributed by `PackageCveMapUpdater` via the same receive-only, Ed25519-signed manifest (fetched about once a week) as the CVE maps (a build-time embedded seed plus a two-tier override, preferring whichever has the newer `mapVersion`). The list can be refreshed without waiting for an app release.
                 • Reference information, not a verdict — a known allowlist suppresses some legitimate look-alike packages (e.g. preact), but it isn't exhaustive.
                 • How to open: "📦 Package CVE Scan" → "Typosquat Detection (Pro)" tab, targeting the same project folders as the "Dependencies" tab. MCP: `run_typosquat_scan` (`watchedFolders` argument, Pro only).
                 """,
@@ -1644,7 +1644,7 @@ extension RoamSwitchKnowledgeBase {
                   - App update checks (Sparkle)
                   - ClamAV definition updates (`freshclam`)
                   - Shortened-URL expansion in the link check (accesses the target URL itself; nothing goes to an analysis API or the developer)
-                  - Downloads of the Link Guard threat feed, package CVE maps, and vulnerability CVE maps (the feed daily, the maps about every 30 days; receive-only, signature-verified, no identifiers sent; Link Guard auto-update can be turned off)
+                  - Downloads of the Link Guard threat feed, package CVE maps, and vulnerability CVE maps (the feed daily, the maps about once a week; receive-only, signature-verified, no identifiers sent; Link Guard auto-update can be turned off)
                   - Normal traffic to the VPN and secure DNS providers you configure
                   - Active vulnerability verification's non-destructive probes to 127.0.0.1 (this Mac itself)
                   - npm signature verification (opt-in, Pro only) contacts registry.npmjs.org when run

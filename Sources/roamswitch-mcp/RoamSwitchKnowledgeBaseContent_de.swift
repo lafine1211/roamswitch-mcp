@@ -629,7 +629,7 @@ extension RoamSwitchKnowledgeBase {
                 • Öffnen: Malware-Schutz → „📦 Paket-CVE-Abgleich (Homebrew)…“. Für Abhängigkeiten fügen Sie Projektordner im Tab „Abhängigkeiten“ hinzu.
                 • Homebrew: `brew list --versions` wird mit einer aus echten NVD-Daten erzeugten Formula-zu-CPE-Tabelle abgeglichen. Funde tragen eine Vertrauensstufe: confirmed (verifizierte Tabelle) oder gray (unverifizierter Schlüsselwort-Treffer, möglicherweise ein Fehlalarm).
                 • Abhängigkeiten: Analysiert package-lock.json / requirements.txt / Pipfile.lock / poetry.lock / Cargo.lock / Gemfile.lock / composer.lock / go.sum / pom.xml und gleicht sie mit bekannten CVE-Karten für npm, PyPI, crates.io, RubyGems, Packagist, Go und Maven ab (aus OSV.dev, CVSS 7.0 oder höher).
-                • Datenzustellung: Die CVE-Karten werden etwa alle 30 Tage aus einem signierten Manifest rein empfangend abgerufen. Vor dem Abruf werden sie als noch nicht heruntergeladen angezeigt und erkennen nichts.
+                • Datenzustellung: Die CVE-Karten werden etwa einmal pro Woche aus einem signierten Manifest rein empfangend abgerufen. Vor dem Abruf werden sie als noch nicht heruntergeladen angezeigt und erkennen nichts.
                 • MCP-Tools: `run_package_cve_scan` (Homebrew) und `run_package_cve_scan_languages` (Abhängigkeiten, Argument `watchedFolders`).
                 """,
                 recommendation: "Führen Sie den Homebrew-Scan regelmäßig aus, registrieren Sie aktive Projekte im Tab „Abhängigkeiten“ und aktualisieren Sie Pakete mit schwerwiegenden CVEs umgehend."
@@ -696,7 +696,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • Umfang: nur die eigenen dependencies/devDependencies/optionalDependencies des Projekts in package.json (peerDependencies ist ausgenommen). node_modules (bereits installierte transitive Abhängigkeiten) ist ebenfalls bewusst ausgenommen — ein Tippfehler entsteht in dem Moment, in dem ein Mensch eine Abhängigkeit zu package.json hinzufügt.
                 • Abgleichlogik: eine standardmäßige DP-Implementierung der Levenshtein-Distanz prüft jeden Abhängigkeitsnamen gegen eine Liste beliebter npm-Paketnamen. Paket mit Scope (`@scope/pkg`) werden anhand des Basisnamens (`pkg`) verglichen. Kandidaten mit mehr als 2 Zeichen Längenunterschied werden durch einen günstigen Vorfilter übersprungen. Der Schwellenwert liegt bei Editierdistanz bis 2 für beliebte Namen ab 8 Zeichen, sonst nur Distanz 1.
-                • Wie die Liste aktuell bleibt: Die Liste beliebter Paketnamen wird von `PackageCveMapUpdater` über dasselbe nur empfangende, Ed25519-signierte Manifest (etwa alle 30 Tage abgerufen) wie die CVE-Maps verteilt (ein eingebauter Seed zur Build-Zeit plus eine zweistufige Aktualisierung, wobei die Version mit der neueren `mapVersion` bevorzugt wird). Die Liste kann aktualisiert werden, ohne auf ein App-Release zu warten.
+                • Wie die Liste aktuell bleibt: Die Liste beliebter Paketnamen wird von `PackageCveMapUpdater` über dasselbe nur empfangende, Ed25519-signierte Manifest (etwa einmal pro Woche abgerufen) wie die CVE-Maps verteilt (ein eingebauter Seed zur Build-Zeit plus eine zweistufige Aktualisierung, wobei die Version mit der neueren `mapVersion` bevorzugt wird). Die Liste kann aktualisiert werden, ohne auf ein App-Release zu warten.
                 • Referenzinformation, kein Urteil — eine bekannte Positivliste unterdrückt einige legitime Doppelgänger-Pakete (z. B. preact), ist aber nicht vollständig.
                 • Öffnen: Tab „📦 Paket-CVE-Abgleich“ → „Typosquatting-Erkennung (Pro)“, bezogen auf dieselben Projektordner wie der Tab „Abhängigkeiten“. MCP: `run_typosquat_scan` (Argument `watchedFolders`, nur Pro).
                 """,
@@ -1645,7 +1645,7 @@ extension RoamSwitchKnowledgeBase {
                   - App-Updateprüfungen (Sparkle)
                   - ClamAV-Definitionsaktualisierungen (`freshclam`)
                   - Auflösen verkürzter URLs in der Link-Prüfung (ruft die Ziel-URL selbst auf; nichts geht an eine Analyse-API oder den Entwickler)
-                  - Downloads der Link-Schutz-Bedrohungsliste, der Paket-CVE-Karten und der Schwachstellen-CVE-Karten (die Liste täglich, die Karten etwa alle 30 Tage; rein empfangend, signaturgeprüft, ohne Übertragung von Kennungen; das Auto-Update des Link-Schutzes lässt sich ausschalten)
+                  - Downloads der Link-Schutz-Bedrohungsliste, der Paket-CVE-Karten und der Schwachstellen-CVE-Karten (die Liste täglich, die Karten etwa einmal pro Woche; rein empfangend, signaturgeprüft, ohne Übertragung von Kennungen; das Auto-Update des Link-Schutzes lässt sich ausschalten)
                   - Normaler Datenverkehr zu den von Ihnen konfigurierten VPN- und sicheren DNS-Anbietern
                   - Nicht-destruktive Sondierungen der aktiven Schwachstellenverifizierung an 127.0.0.1 (diesen Mac selbst)
                   - Die npm-Signaturprüfung (Opt-in, nur Pro) kontaktiert beim Ausführen registry.npmjs.org

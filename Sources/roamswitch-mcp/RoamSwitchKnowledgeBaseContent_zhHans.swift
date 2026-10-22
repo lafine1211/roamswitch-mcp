@@ -629,7 +629,7 @@ extension RoamSwitchKnowledgeBase {
                 • 打开方式：菜单「恶意软件防护」→「📦 软件包CVE照合（Homebrew）…」。依赖关系请在「依赖关系」标签页中添加项目文件夹。
                 • Homebrew：将 `brew list --versions` 的结果与根据 NVD 实际数据生成的 formula→CPE 对应表进行比对。检测结果会附带可信度（confirmed = 经验证的对应表 / gray = 未经验证的关键词匹配，可能存在误报）。
                 • 依赖关系：解析 package-lock.json / requirements.txt / Pipfile.lock / poetry.lock / Cargo.lock / Gemfile.lock / composer.lock / go.sum / pom.xml，并与 npm、PyPI、crates.io、RubyGems、Packagist、Go、Maven 的已知 CVE 映射（源自 OSV.dev，CVSS 7.0 以上）进行比对。
-                • 数据分发：CVE 映射约每 30 天一次从签名清单中以仅接收方式获取。尚未获取时会显示「未获取」，且不会检测出任何内容。
+                • 数据分发：CVE 映射约每周一次从签名清单中以仅接收方式获取。尚未获取时会显示「未获取」，且不会检测出任何内容。
                 • MCP 工具：`run_package_cve_scan`（Homebrew）和 `run_package_cve_scan_languages`（依赖关系，`watchedFolders` 参数）。
                 """,
                 recommendation: "请定期运行 Homebrew 扫描，并将开发中的项目登记到依赖关系标签页，尽早更新含有严重 CVE 的软件包。"
@@ -696,7 +696,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • 范围：仅限项目自身 package.json 的 dependencies/devDependencies/optionalDependencies（peerDependencies 不在范围内）。node_modules（已安装的传递依赖）也刻意不在范围内——打字错误产生于人类将依赖添加到 package.json 的那一刻。
                 • 比对逻辑：标准的 Levenshtein 距离动态规划实现，将每个依赖名称与知名 npm 包名列表比对。带作用域的包（`@scope/pkg`）以其基础名称（`pkg`）比较。长度差超过 2 的候选会被低成本预过滤跳过。阈值为：知名名称长度 8 个字符以上时允许距离最多为 2，更短则仅允许距离 1。
-                • 列表保持更新的方式：用于比对的热门包名列表由 `PackageCveMapUpdater` 通过与 CVE 映射相同的约每 30 天一次、仅接收、Ed25519 签名验证的清单进行分发（构建时内嵌种子加两层覆盖，优先采用 `mapVersion` 较新的一方）。无需等待应用发布即可更新该列表。
+                • 列表保持更新的方式：用于比对的热门包名列表由 `PackageCveMapUpdater` 通过与 CVE 映射相同的约每周一次、仅接收、Ed25519 签名验证的清单进行分发（构建时内嵌种子加两层覆盖，优先采用 `mapVersion` 较新的一方）。无需等待应用发布即可更新该列表。
                 • 这是参考信息，并非定论——已知的许可清单会部分排除一些正规的相似软件包（如 preact），但并不完整。
                 • 开启方式：「📦 软件包 CVE 比对」→「打字仿冒检测 (Pro)」标签页，针对与「依赖关系」标签页相同的项目文件夹。MCP：`run_typosquat_scan`（`watchedFolders` 参数，仅限 Pro）。
                 """,
@@ -1645,7 +1645,7 @@ extension RoamSwitchKnowledgeBase {
                   - 应用更新检查（Sparkle）
                   - ClamAV 病毒库更新（`freshclam`）
                   - 链接检查中的短链接展开（直接访问目标 URL 本身，不会向分析 API 或开发者发送任何内容）
-                  - 获取链接保护的威胁情报源、软件包 CVE 映射和漏洞 CVE 映射（威胁情报源每天一次、映射约每 30 天一次；仅接收、签名验证、不发送标识符；链接保护的自动更新可以关闭）
+                  - 获取链接保护的威胁情报源、软件包 CVE 映射和漏洞 CVE 映射（威胁情报源每天一次、映射约每周一次；仅接收、签名验证、不发送标识符；链接保护的自动更新可以关闭）
                   - 与用户配置的 VPN、安全 DNS 服务商之间的正常通信
                   - 实证型漏洞验证向 127.0.0.1（本 Mac）发送的非破坏性探测
                   - npm 签名验证（选择性启用，仅限 Pro）运行时会连接 registry.npmjs.org

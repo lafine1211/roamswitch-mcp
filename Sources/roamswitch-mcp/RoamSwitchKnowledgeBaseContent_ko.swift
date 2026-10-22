@@ -629,7 +629,7 @@ extension RoamSwitchKnowledgeBase {
                 • 열기: 악성코드 보호 → "📦 패키지 CVE 대조 (Homebrew)…". 의존성은 의존성 탭에서 프로젝트 폴더를 추가하세요.
                 • Homebrew: `brew list --versions` 결과를 실제 NVD 데이터로 생성한 formula-CPE 대응표와 비교합니다. 결과에는 신뢰도가 표시됩니다: confirmed(검증된 대응표) 또는 gray(검증되지 않은 키워드 일치로 오탐일 수 있음).
                 • 의존성: package-lock.json / requirements.txt / Pipfile.lock / poetry.lock / Cargo.lock / Gemfile.lock / composer.lock / go.sum / pom.xml을 분석하여 npm, PyPI, crates.io, RubyGems, Packagist, Go, Maven의 알려진 CVE 맵(OSV.dev 기반, CVSS 7.0 이상)과 대조합니다.
-                • 데이터 배포: CVE 맵은 서명된 매니페스트에서 약 30일에 한 번 수신 전용으로 받아옵니다. 받아오기 전에는 아직 다운로드되지 않았다고 표시되며 아무것도 탐지하지 않습니다.
+                • 데이터 배포: CVE 맵은 서명된 매니페스트에서 약 일주일에 한 번 수신 전용으로 받아옵니다. 받아오기 전에는 아직 다운로드되지 않았다고 표시되며 아무것도 탐지하지 않습니다.
                 • MCP 도구: `run_package_cve_scan`(Homebrew)과 `run_package_cve_scan_languages`(의존성, `watchedFolders` 인자).
                 """,
                 recommendation: "정기적으로 Homebrew 검사를 실행하고, 진행 중인 프로젝트를 의존성 탭에 등록하며, 심각한 CVE가 있는 패키지는 신속히 업데이트하세요."
@@ -696,7 +696,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • 범위: package.json의 프로젝트 자체 dependencies/devDependencies/optionalDependencies만 해당(peerDependencies는 제외). node_modules(이미 설치된 전이 의존성)도 의도적으로 제외됩니다 — 오타는 사람이 package.json에 의존성을 추가하는 순간 발생하기 때문입니다.
                 • 비교 로직: 표준 레벤슈타인 거리 DP 구현으로 각 의존성 이름을 인기 npm 패키지 이름 목록과 비교합니다. 스코프가 있는 패키지(`@scope/pkg`)는 기본 이름(`pkg`)으로 비교합니다. 길이 차이가 2를 초과하는 후보는 저비용 사전 필터로 건너뜁니다. 임계값은 인기 패키지 이름이 8자 이상이면 편집 거리 2까지, 그보다 짧으면 거리 1만 허용합니다.
-                • 목록이 최신 상태로 유지되는 방식: 비교 대상인 인기 패키지 이름 목록은 `PackageCveMapUpdater`가 CVE 맵과 동일하게 약 30일에 한 번, 수신 전용, Ed25519 서명된 매니페스트를 통해 배포합니다(빌드 시점에 내장된 시드와 2단계 재정의 중 `mapVersion`이 더 최신인 쪽을 선택). 앱 릴리스를 기다리지 않고 목록을 갱신할 수 있습니다.
+                • 목록이 최신 상태로 유지되는 방식: 비교 대상인 인기 패키지 이름 목록은 `PackageCveMapUpdater`가 CVE 맵과 동일하게 약 일주일에 한 번, 수신 전용, Ed25519 서명된 매니페스트를 통해 배포합니다(빌드 시점에 내장된 시드와 2단계 재정의 중 `mapVersion`이 더 최신인 쪽을 선택). 앱 릴리스를 기다리지 않고 목록을 갱신할 수 있습니다.
                 • 참고 정보이며 단정이 아닙니다 — 알려진 허용 목록으로 일부 정상적인 유사 패키지(예: preact)를 제외하지만 완전하지 않습니다.
                 • 여는 방법: "📦 패키지 CVE 대조" → "오타스쿼팅 탐지 (Pro)" 탭에서 "의존성" 탭과 동일한 프로젝트 폴더를 대상으로 합니다. MCP: `run_typosquat_scan`(`watchedFolders` 인자, Pro 전용).
                 """,
@@ -1645,7 +1645,7 @@ extension RoamSwitchKnowledgeBase {
                   - 앱 업데이트 확인(Sparkle)
                   - ClamAV 정의 업데이트(`freshclam`)
                   - 링크 점검의 단축 URL 펼치기(대상 URL 자체에 직접 접속하며, 분석 API나 개발자에게는 아무것도 전송하지 않음)
-                  - 링크 보호 위협 정보, 패키지 CVE 맵, 취약점 CVE 맵의 다운로드(위협 정보는 매일, 맵은 약 30일마다. 수신 전용, 서명 검증, 식별자 미전송; 링크 보호 자동 업데이트는 끌 수 있음)
+                  - 링크 보호 위협 정보, 패키지 CVE 맵, 취약점 CVE 맵의 다운로드(위협 정보는 매일, 맵은 약 일주일마다. 수신 전용, 서명 검증, 식별자 미전송; 링크 보호 자동 업데이트는 끌 수 있음)
                   - 사용자가 설정한 VPN 및 보안 DNS 제공업체와의 일반 트래픽
                   - 실증형 취약점 검증의 127.0.0.1(이 Mac 자체)로의 비파괴적 프로브
                   - npm 서명 검증(옵트인, Pro 전용)을 실행할 때 registry.npmjs.org와 통신

@@ -629,7 +629,7 @@ extension RoamSwitchKnowledgeBase {
                 • 開啟方式：「惡意軟體防護」→「📦 軟體包CVE比對（Homebrew）…」。相依性部分請在「相依性」分頁新增專案資料夾。
                 • Homebrew：以 `brew list --versions` 的結果比對由真實 NVD 資料產生的 formula 對 CPE 對應表。結果會附上信心等級：confirmed（已驗證的對應表）或 gray（未驗證的關鍵字比對，可能為誤判）。
                 • 相依性：解析 package-lock.json / requirements.txt / Pipfile.lock / poetry.lock / Cargo.lock / Gemfile.lock / composer.lock / go.sum / pom.xml，並與 npm、PyPI、crates.io、RubyGems、Packagist、Go、Maven 的已知 CVE 對應表比對（來源為 OSV.dev，CVSS 7.0 以上）。
-                • 資料更新：CVE 對應表約每 30 天從已簽署的清單取得一次，僅接收。取得之前會顯示尚未下載，且不會偵測到任何項目。
+                • 資料更新：CVE 對應表約每週從已簽署的清單取得一次，僅接收。取得之前會顯示尚未下載，且不會偵測到任何項目。
                 • MCP 工具：`run_package_cve_scan`（Homebrew）與 `run_package_cve_scan_languages`（相依性，`watchedFolders` 參數）。
                 """,
                 recommendation: "定期執行 Homebrew 掃描，在「相依性」分頁登錄開發中的專案，並儘快更新含有嚴重 CVE 的套件。"
@@ -696,7 +696,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • 範圍：僅限專案自身 package.json 的 dependencies/devDependencies/optionalDependencies（peerDependencies 不在範圍內）。node_modules（已安裝的傳遞相依性）也刻意不在範圍內——打字錯誤產生於人類將相依性加入 package.json 的那一刻。
                 • 比對邏輯：標準的 Levenshtein 距離動態規劃實作，將每個相依名稱與知名 npm 套件名稱清單比對。帶作用域的套件（`@scope/pkg`）以其基礎名稱（`pkg`）比較。長度差超過 2 的候選會被低成本預過濾跳過。閾值為：知名名稱長度 8 個字元以上時允許距離最多為 2，更短則僅允許距離 1。
-                • 清單保持更新的方式：用於比對的熱門套件名稱清單由 `PackageCveMapUpdater` 透過與 CVE 對應表相同的約每 30 天一次、僅接收、Ed25519 簽章驗證的清單進行分發（建置時內嵌種子加兩層覆蓋，優先採用 `mapVersion` 較新的一方）。無需等待應用程式發布即可更新該清單。
+                • 清單保持更新的方式：用於比對的熱門套件名稱清單由 `PackageCveMapUpdater` 透過與 CVE 對應表相同的約每週一次、僅接收、Ed25519 簽章驗證的清單進行分發（建置時內嵌種子加兩層覆蓋，優先採用 `mapVersion` 較新的一方）。無需等待應用程式發布即可更新該清單。
                 • 這是參考資訊，並非定論——已知的許可清單會部分排除一些正規的相似套件（如 preact），但並不完整。
                 • 開啟方式：「📦 套件 CVE 比對」→「打字仿冒偵測 (Pro)」分頁，針對與「相依性」分頁相同的專案資料夾。MCP：`run_typosquat_scan`（`watchedFolders` 參數，僅限 Pro）。
                 """,
@@ -1645,7 +1645,7 @@ extension RoamSwitchKnowledgeBase {
                   - 應用程式更新檢查（Sparkle）
                   - ClamAV 特徵庫更新（`freshclam`）
                   - 連結檢查中的短網址展開（直接連線到目標網址本身，不會向分析 API 或開發者傳送任何內容）
-                  - 下載連結保護的威脅情資、套件 CVE 對應表與漏洞 CVE 對應表（威脅情資每天、對應表約每 30 天一次；僅接收、經簽署驗證、不傳送任何識別碼；連結保護的自動更新可以關閉）
+                  - 下載連結保護的威脅情資、套件 CVE 對應表與漏洞 CVE 對應表（威脅情資每天、對應表約每週一次；僅接收、經簽署驗證、不傳送任何識別碼；連結保護的自動更新可以關閉）
                   - 與您所設定的 VPN 與安全 DNS 供應商之間的一般流量
                   - 實證型漏洞驗證針對 127.0.0.1（這台 Mac 本機）的非破壞性探測
                   - npm 簽章驗證（選擇性啟用，僅限 Pro）執行時會連線至 registry.npmjs.org
