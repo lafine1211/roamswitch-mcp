@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.16.2 (build 178).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.0 (build 179).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -405,7 +405,36 @@ enum PackageCveScan {
     /// install is just as real a target). Returns an empty array (never throws)
     /// on any failure — Homebrew may simply not be installed.
     static func enumerateHomebrewPackages() -> [InstalledPackage] {
-        guard let brewPath = resolveBrewPath() else { return [] }
+        enumerateHomebrewInventory().packages
+    }
+
+    /// What the inventory step could do. "Nothing found" is only true when the inventory was read: with no Homebrew,
+    /// or a `brew` that failed, nothing was checked, and the window must not say "no vulnerable package found".
+    enum InventoryState: Equatable {
+        /// Homebrew is not installed (no `brew` at either path).
+        case brewMissing
+        /// `brew list` could not be run or ended with an error.
+        case brewFailed
+        /// Read, and `packages` is what it listed (possibly none).
+        case read(count: Int)
+
+        /// Something was actually looked at.
+        var checkedSomething: Bool {
+            if case .read(let count) = self { return count > 0 }
+            return false
+        }
+    }
+
+    /// Pure: how the pieces of the inventory step become a state.
+    static func classifyInventory(brewPath: String?, exitStatus: Int32?, packageCount: Int) -> InventoryState {
+        guard brewPath != nil else { return .brewMissing }
+        guard let exitStatus, exitStatus == 0 else { return .brewFailed }
+        return .read(count: packageCount)
+    }
+
+    static func enumerateHomebrewInventory() -> (packages: [InstalledPackage], state: InventoryState) {
+        let brewPath = resolveBrewPath()
+        guard let brewPath else { return ([], classifyInventory(brewPath: nil, exitStatus: nil, packageCount: 0)) }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: brewPath)
         process.arguments = ["list", "--versions"]
@@ -415,11 +444,11 @@ enum PackageCveScan {
         do {
             try process.run()
         } catch {
-            return []
+            return ([], classifyInventory(brewPath: brewPath, exitStatus: nil, packageCount: 0))
         }
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
-        guard process.terminationStatus == 0 else { return [] }
+        guard process.terminationStatus == 0 else { return ([], classifyInventory(brewPath: brewPath, exitStatus: process.terminationStatus, packageCount: 0)) }
 
         var packages: [InstalledPackage] = []
         for line in String(decoding: data, as: UTF8.self).split(separator: "\n") {
@@ -430,7 +459,7 @@ enum PackageCveScan {
                 packages.append(InstalledPackage(name: name, version: String(version)))
             }
         }
-        return packages
+        return (packages, classifyInventory(brewPath: brewPath, exitStatus: 0, packageCount: packages.count))
     }
 
     /// `brew` lives at a different path on Apple Silicon (`/opt/homebrew/bin/brew`)
@@ -526,6 +555,17 @@ enum PackageCveScan {
         findings.sorted {
             PackageCveEpss.precedes(cvssA: $0.cvssScore, epssA: $0.epss, idA: $0.id,
                                     cvssB: $1.cvssScore, epssB: $1.epss, idB: $1.id)
+        }
+    }
+}
+
+extension PackageCveScan.InventoryState {
+    /// What to say when nothing was inventoried (grey, never the green "nothing found").
+    var nothingCheckedText: String {
+        switch self {
+        case .brewMissing: return loc("Homebrewが見つかりません。何も調べていません。")
+        case .brewFailed: return loc("Homebrewのパッケージ一覧を読めませんでした。何も調べていません。")
+        case .read: return loc("インストール済みのHomebrewパッケージがありません。何も調べていません。")
         }
     }
 }

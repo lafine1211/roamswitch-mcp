@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.16.2 (build 178).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.0 (build 179).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -43,6 +43,11 @@ public enum ActiveVulnScan {
         /// A known-CVE finding added after a confirmed one is `versionRangeMatch`; nmap's is `externalToolReport`.
         var probeName: String? = nil
         var evidenceKind: EvidenceKind = .confirmed
+        /// ISO 8601 time the same probe on the same port last reached a verdict earlier and that verdict was
+        /// `safe`. Set only when the latest earlier verdict is `safe`; a probe that was never run, or whose
+        /// earlier runs were all inconclusive, leaves it `nil`. It says what the log holds, not that a fix was undone:
+        /// the listener may be a different program, or the probe may have changed since.
+        var previouslySafeAt: String? = nil
     }
 
     /// One probe that did NOT produce a `Finding` — either the target was
@@ -172,6 +177,26 @@ public enum ActiveVulnScan {
             entries.removeFirst(entries.count - maxProbeLogEntries)
         }
         saveProbeLog(entries, to: url)
+    }
+
+    /// The newest row before this run for `probeName` on `port` that reached a verdict (`safe` or `vulnerable`).
+    /// `inconclusive` rows are skipped: a run that could not connect says nothing about the state.
+    static func previousVerdict(probeName: String, port: Int, in entries: [ProbeRunRecord]) -> ProbeRunRecord? {
+        entries
+            .filter { $0.probeName == probeName && $0.port == port && $0.outcome != "inconclusive" }
+            .max { $0.lastFinishedAt < $1.lastFinishedAt }
+    }
+
+    /// Marks each finding whose probe and port were last judged `safe` before this run.
+    static func markingPreviouslySafe(_ findings: [Finding], history: [ProbeRunRecord]) -> [Finding] {
+        findings.map { finding in
+            guard let name = finding.probeName,
+                  let previous = previousVerdict(probeName: name, port: finding.port, in: history),
+                  previous.outcome == "safe" else { return finding }
+            var marked = finding
+            marked.previouslySafeAt = previous.lastFinishedAt
+            return marked
+        }
     }
 
     // MARK: - SLA / staleness surfacing (`passAge`)
@@ -1177,6 +1202,8 @@ public enum ActiveVulnScan {
     static func runScan(ports: [ListeningPortInfo], probeLogURL: URL = probeLogURL, includeNmapNSE: Bool = true) -> ScanRunResult {
         var result = ScanRunResult()
         var logEntries: [ProbeRunRecord] = []
+        // Read before this run appends its own rows, so "earlier" never includes the run itself.
+        let history = loadProbeLog(at: probeLogURL)
 
         for port in ports {
             let signatures = ServiceSignatures.match(processName: port.processName, executablePath: port.executablePath)
@@ -1428,6 +1455,7 @@ public enum ActiveVulnScan {
             }
         }
 
+        result.findings = markingPreviouslySafe(result.findings, history: history)
         appendProbeLog(logEntries, to: probeLogURL)
         return result
     }

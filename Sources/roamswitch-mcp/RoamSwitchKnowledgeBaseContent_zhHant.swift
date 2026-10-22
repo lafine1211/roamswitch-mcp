@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.16.2 (build 178).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.0 (build 179).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -72,6 +72,7 @@ extension RoamSwitchKnowledgeBase {
                 • 誤判控制：同一個閘道硬體廣播的第二個 SSID（訪客網路、改名的路由器）不會被標記。已知 SSID 搭配新的閘道 MAC（路由器更換）只會被記錄，不會單獨發出警告。
                 • 偵測到 ARP 詐騙期間會跳過觀察，避免將攻擊者的 MAC 學習為合法紀錄。
                 • 此警告為即時通知，於 Pro 版發送。已學習的歷史記錄可透過 MCP 工具 `get_network_history` 取得。
+                • macOS 不會把 Wi-Fi 名稱(SSID)提供給沒有定位服務權限的 App。沒有名稱時,無法偵測名稱相似的偽造存取點。選單會顯示「已連線(無法取得名稱)」,加密類型仍可在沒有名稱的情況下檢查。選擇該選單項目可查看原因,並可視需要要求定位服務權限(RoamSwitch 不會讀取 Mac 的位置)。
                 """,
                 recommendation: "若收到此警告，請不要在該 Wi-Fi 上輸入帳密，並確認真正的網路名稱與所在位置。VPN 隧道（feat_vpn_tunnel）是最可靠的因應方式。"
             ),
@@ -156,6 +157,7 @@ extension RoamSwitchKnowledgeBase {
                 • 已知 CVE 版本比對：對於無需驗證即可存取的 Redis / Memcached，會以非破壞性查詢讀取版本，並與已知 CVE 版本範圍比對。不會傳送任何攻擊酬載。
                 • 對開發伺服器的連接埠（127.0.0.1），還會檢查不需登入就能回應的管理頁面或 API（探測 webvuln-unauth-admin）。不帶 Cookie 與任何憑證，對固定的 7 個路徑（/admin、/api/admin、/api/users、/api/v1/users、/api/v1/user、/actuator/env、/swagger-ui/index.html）各發送 1 次 GET，只有在回應為 200 且包含資料（非空的 JSON 陣列、不是錯誤訊息的 JSON 物件、帶使用者表格的 HTML、Swagger UI）時才回報。登入頁面、重新導向、SPA 外殼以及 {"error":"unauthorized"} 都不會回報。它不會嘗試登入，不會猜測，也不會模糊測試。宣告的副作用是目標日誌中的痕跡與較多的請求。它用於找出只在瀏覽器端隱藏選單、卻沒有在伺服器端檢查授權的應用程式。
                 • 也可透過 MCP 工具 `run_active_vuln_scan` 使用（其探測僅傳送至本機）。
+                • 在 MCP 工具的結果中，若同一項檢查上一次被判定為沒有問題，對應的發現會帶有 `previouslySafeAt`（當時的時間）。這並不證明修正被還原：同一連接埠換成另一個程式時也會顯示相同。
                 """,
                 recommendation: "只有在想確認自己 Mac 上執行的 Redis、Docker、本機 LLM 等是否真的能在未驗證下被存取時，才需要開啟此功能。"
             ),
@@ -206,6 +208,7 @@ extension RoamSwitchKnowledgeBase {
                 • 工具依賴：macOS 沒有讓應用程式切換 Bluetooth 電源的公開 API，因此 RoamSwitch 使用開源的 Homebrew 工具 `blueutil`（`brew install blueutil`）。若尚未安裝，選單會顯示安裝指引。
                 • 恢復方式：只有在 RoamSwitch 關閉 Bluetooth 之前它原本是開啟的，才會在回到受信任網路時重新開啟；您在外出時自行做出的選擇不會被覆蓋。
                 • 預設關閉：許多人在咖啡廳等場所會使用 AirPods 等裝置，若靜默切斷音訊將造成困擾，因此為自行開啟選項。
+                • 如果之後找不到 blueutil,該防護什麼也不會做。選單會顯示「找不到 blueutil,已停止」,並發送一則通知。
                 """,
                 recommendation: "若外出時不使用 Bluetooth 配件，建議開啟此功能以避免電波掃描與未經同意的配對。"
             ),
@@ -323,6 +326,7 @@ extension RoamSwitchKnowledgeBase {
                 • hosts 備援：在延伸功能尚未生效期間，攔截模式會由特權輔助工具將網域以 `0.0.0.0` 寫入 `/etc/hosts` 的受管理區段。
                 • 威脅情資：每天取得一次，僅接收（不傳送任何識別碼），並以專屬的 Ed25519 情資金鑰驗證（與應用程式更新金鑰分開）。關閉「自動更新」後對外流量為零，仍可依靠內建資料與同形異義字偵測運作。
                 • 非 Pro 版：模式會被保存，但不會執行任何攔截。
+                • 系統延伸功能等待批准超過 10 分鐘後,會發送一則通知(三天最多一次)。等待期間,選單中的連結防護項目會帶有 🟡 與「系統延伸功能等待批准」,`get_guard_status` 中的 linkGuard 為 partial(原因 system_extension_not_approved)。這段期間只靠 /etc/hosts 清單運作,無法攔截使用加密 DNS(DoH)的瀏覽器的連線。請在「系統設定」>「一般」>「登入項目與延伸功能」中批准。
                 """,
                 recommendation: "保持預設的自動攔截並核准系統延伸功能，是最可靠的保護方式。若內部工具遭誤攔截，可使用通知中的「本次允許（5 分鐘）」。"
             ),
@@ -354,6 +358,7 @@ extension RoamSwitchKnowledgeBase {
                 • 解除時：網路與 Wi-Fi 會恢復，暫停的程序會被恢復執行，遭竄改的誘餌檔案也會重新產生。
                 • 通用偵測（熵分析，Pro）：即使加密沒有碰觸誘餌檔案，也能根據寫入 `Documents`、`Desktop`、`Downloads`、`Pictures` 的檔案內容偵測出來。整個檔案的夏農熵達到 7.92 以上的檔案，在 5 秒內達到 20 個以上時，會被視為大規模加密的突發。為了因應只加密檔案開頭、或每隔一個 4KiB 以上的區塊加密一次的方式，還會檢查每個 4KiB 的區間：有 2 個以上區間達到 7.9 以上、且大小在 16KiB 以上的檔案也會計入。壓縮格式的檔頭完好的檔案（ZIP、PDF、JPEG 等）不在檢查範圍內。區間判定不用於建置產物（`.o`、`.a`、`.rlib`、`.rmeta`、`.so`、`.dylib`、`.class`、`.pyc`、`.wasm` 等）以及 `target` 資料夾內的檔案。只加密小於 4KiB 的區塊（例如 16 位元組或 256 位元組）的方式，這個判定看不到。實測中，這些資料夾裡的 3,531 個真實檔案沒有出現額外的偵測。用 150 個真實檔案模擬只加密開頭、以及每隔一個 4KiB 以上的區塊加密一次的情形，整個檔案的數值偵測到 0～35%，區間判定偵測到 100%。
                 • 預設值：首次啟用 Pro 時自動開啟。事件記錄可透過 MCP 工具 `get_canary_status` 取得，並可在選單中使用「勒索軟體防禦模擬測試（驗證運作）」安全地測試。
+                • 放置數量:選單項目會顯示「已放置 N/M」。一個都沒放成時會帶 ⚠️ 並顯示原因。憑證蜜標同樣如此,會統計未放置的原因(已有真實檔案、存在符號連結、寫入失敗),並顯示在 `get_honeytoken_status` 的 placement 中。
                 """,
                 recommendation: "為保護重要資料免受未知勒索軟體侵害，請保持開啟，且不要刪除隱藏的誘餌檔案。"
             ),
@@ -369,6 +374,7 @@ extension RoamSwitchKnowledgeBase {
                 • 限制：macOS 可能會在約 24 小時後自動刪除本機快照（可用空間不足時更早），已經不存在的快照無法使用。取出檔案需要在「完整磁碟取用權限」中允許 RoamSwitch（建立快照不需要）。
                 • MCP：唯讀的 `get_ransomware_recovery_snapshots` 可查看清單與建議項（無法執行復原）。
                 • Pro: 此視窗（清單與取出檔案）和 MCP 工具屬於 Pro 功能。快照的建立本身在非 Pro 下也會執行。
+                • 建立快照失敗(`tmutil localsnapshot` 失敗)時,原因會顯示在「勒索軟體復原…」視窗與 `get_ransomware_recovery_snapshots` 的 lastSnapshotError 中。連續失敗 3 次後會發送一則通知。成功後消失。
                 """,
                 recommendation: "為防範勒索軟體，請保持事前快照開啟。發現受損後，請先中斷網路，再從「建議」的事前快照（而非偵測時快照）中取出檔案。"
             ),
@@ -399,6 +405,8 @@ extension RoamSwitchKnowledgeBase {
                 • 為何 Gatekeeper 無法阻止：這是您自己合法的殼層，完全依照您輸入的內容執行，因此程序本身看不出任何異常。
                 • 互補功能：剪貼簿保護（feat_secret_leak_auditor）會在複製當下就攔截該指令，涵蓋貼到指令碼編輯器、Spotlight 等 Terminal 以外的位置。
                 • 預設關閉：由於這是一種相對較新的啟發式判斷方式，並會自動斷網，因此設為自行開啟。
+                • 能偵測到的時間點有限:zsh 的預設設定下,執行的指令要到 shell 結束時才寫入歷史檔,所以要等到關閉「終端機」分頁後才會被偵測到(實測;「終端機」設定的 `~/.zsh_sessions/*.historynew` 在 shell 運行期間也一直是空的)。在 `~/.zshrc` 中加入 `setopt INC_APPEND_HISTORY`,即可在指令執行後立刻偵測到。這項限制會顯示在啟用對話框、選單項目與 `get_guard_status` 的說明中。
+                • 貼上前的檢查與立即寫入的設定:開啟後,也會檢查您複製的內容(只觀察剪貼簿的變更計數,變化時才讀取文字;文字不會被儲存,通知中只顯示規則名稱與開頭幾個字元)。如果可能是危險的指令,會在貼上之前通知,可用通知按鈕「清空剪貼簿」清除。不會自動清除或隔離,因為指令尚未執行。macOS 15.4 以上,App 讀取剪貼簿需要許可;沒有許可時不會讀取,狀態會顯示「未允許檢查剪貼簿」。針對歷史記錄的延遲,可透過選單「把立即寫入歷史記錄的設定加到 ~/.zshrc…」,在您同意後加入 `setopt INC_APPEND_HISTORY`(會顯示要新增的行與檔案,寫入前把 ~/.zshrc 複製為 ~/.zshrc.roamswitch-backup,也可以還原)。
                 """,
                 recommendation: "若擔心被假錯誤頁面或驗證碼誘騙而執行指令，建議考慮開啟此功能。"
             ),
@@ -441,6 +449,7 @@ extension RoamSwitchKnowledgeBase {
                 • 判斷:5 分鐘內 3 次因當機訊號(SIGSEGV、SIGABRT、SIGBUS、SIGILL、SIGFPE)而終止。SIGKILL 等不計入。
                 • 僅通知:每台伺服器每小時最多一次,不會停止或封鎖任何內容。
                 • 預設:Pro 下開啟。
+                • 狀態:沒有開關,隨應用程式啟動而開始。正在追蹤的記錄檔數量顯示在選單「Web Shell 等偵測規則設定…」視窗中。沒有可追蹤的記錄檔時(例如沒有執行 Web 伺服器的 Mac)什麼也不監視,`get_guard_status` 中的 webWorkerCrashWatch 為 off(原因 log_not_found)。通知僅限 Pro 版。
                 """,
                 recommendation: "請用 `grep signal` 檢視錯誤記錄,並在存取記錄中查找同一時間、每次當機之前的請求。同時請確認 nginx、Apache 是否有尚未套用的安全修補。"
             ),
@@ -454,6 +463,7 @@ extension RoamSwitchKnowledgeBase {
                 • 預設關閉：大多數使用者並未使用 Docker，因此即使是 Pro 版也預設關閉。
                 • 測試方式：「⚠️ Docker 風險偵測模擬（驗證運作）…」可在不接觸 Docker 的情況下檢查通知路徑是否正常。
                 • Exegol（滲透測試環境）的容器：因特權等原因被偵測到的容器，如果帶有 `org.exegol.*` 標籤或使用 Exegol 官方映像檔（`registry.exegol.com/exegol`、`nwodtuhs/exegol`），通知中會多一句說明。僅僅是 Exegol 容器本身不會觸發通知（很多人是有意啟動的）。
+                • 看不到的內容:開啟時已在執行的容器不會被檢查。每 20 秒檢查一次,所以在兩次檢查之間啟動又結束的容器看不到。docker 沒有回應期間(Docker Desktop 已停止或未安裝)什麼也偵測不到,選單項目會帶有 ⚠️ 與原因。
                 """,
                 recommendation: "若您在開發時使用 Docker，建議開啟此功能以及早發現容器逃逸風險。"
             ),
@@ -551,6 +561,7 @@ extension RoamSwitchKnowledgeBase {
                 • MITRE ATT&CK：僅在對應確定時才附上技術 ID（ARP 詐騙 = T1557；誘餌檔案遭刪除或重新命名 = T1485；加密 = T1486；其他竄改 = T1565）。不會猜測任何內容。
                 • 儲存位置：`~/Library/Application Support/RoamSwitch/containment_incident_timeline.json`（保留最新 200 筆）。絕不會傳送到任何地方。
                 • MCP 工具 `get_incident_timeline` 可取得這份統一時間軸（在氣隙期間可用於協助本機 AI 進行事件分析）。個別防護的歷史也可透過 `get_canary_status`、`get_port_anomaly_incidents` 與 `get_runtime_threat_status` 取得。
+                • 記錄檔無法讀取時(損壞或沒有權限),會顯示為讀取失敗,而不是空清單(活動記錄視窗,以及 `get_incident_timeline` 中 recordFile 為 unreadable)。損壞的檔案會在寫入下一筆記錄之前另存為 .bak(不會被覆寫或刪除)。
                 """,
                 recommendation: "發生自動斷網後，請將此時間軸與通知歷史一併檢視，以找出原因並避免再次發生。"
             ),
@@ -631,6 +642,7 @@ extension RoamSwitchKnowledgeBase {
                 • 相依性：解析 package-lock.json / requirements.txt / Pipfile.lock / poetry.lock / Cargo.lock / Gemfile.lock / composer.lock / go.sum / pom.xml，並與 npm、PyPI、crates.io、RubyGems、Packagist、Go、Maven 的已知 CVE 對應表比對（來源為 OSV.dev，CVSS 7.0 以上）。
                 • 資料更新：CVE 對應表約每週從已簽署的清單取得一次，僅接收。取得之前會顯示尚未下載，且不會偵測到任何項目。
                 • MCP 工具：`run_package_cve_scan`（Homebrew）與 `run_package_cve_scan_languages`（相依性，`watchedFolders` 參數）。
+                • 什麼都沒檢查時:沒有 Homebrew、brew 失敗或沒有套件時,視窗會顯示灰色的「什麼都沒有檢查」,而不是綠色的「未發現」(`run_package_cve_scan` 的 homebrewInventory 為 brew_missing 或 brew_failed)。CVE 資料更新失敗時,視窗與選單會顯示上次成功更新的時間與失敗原因,`get_guard_status` 的 feedUpdates 中也有。
                 """,
                 recommendation: "定期執行 Homebrew 掃描，在「相依性」分頁登錄開發中的專案，並儘快更新含有嚴重 CVE 的套件。"
             ),
@@ -645,6 +657,7 @@ extension RoamSwitchKnowledgeBase {
                 • 通知緊急程度：若偵測時 npm/yarn/pnpm 本身正在執行，會記錄於通知記錄中並以靜音方式通知；未執行時的竄改則為一般緊急通知。無論何種情況，偵測本身都必定執行。
                 • 若 Pro 授權失效將自動停用。
                 • 接受變更:基準不會自動更新。如果是你自己做的變更(例如 npm install),請在選單列選擇「將鎖定檔基準更新為目前狀態…」,目前狀態就會成為基準。已通知的變更會被儲存,重新啟動 App 後不會重複同一則通知。
+                • 沒有登錄任何監視資料夾時,什麼也不會監視。選單項目會顯示「未登錄監視資料夾」,`get_guard_status` 中該防護為 off(原因 no_folders_registered)。請在「套件 CVE 比對」中登錄專案資料夾。
                 """,
                 recommendation: "建議將重要專案登記到套件 CVE 比對的「相依關係」分頁中，並保持此功能開啟（啟用 Pro 後預設開啟）。"
             ),
@@ -823,6 +836,7 @@ extension RoamSwitchKnowledgeBase {
                 • audit_mcp_configs: MCP 伺服器的 env 中如果有讓通訊經由代理的設定（HTTP_PROXY, HTTPS_PROXY, ALL_PROXY）、讓其信任額外憑證授權單位的設定（NODE_EXTRA_CA_CERTS, SSL_CERT_FILE, SSL_CERT_DIR, REQUESTS_CA_BUNDLE, CURL_CA_BUNDLE, GIT_SSL_CAINFO）或關閉憑證驗證的設定（NODE_TLS_REJECT_UNAUTHORIZED=0），也會指出（traffic_interception_env，嚴重度 medium）。不會顯示值，代理只顯示 host。這也可能是正確的公司代理設定，提示文字中也會這樣說明。
                 • 安全性：由於沒有任何工具能變更設定或保護等級，即使 AI 遭提示注入操縱，也無法變更保護等級或隔離連接埠。
                 • 對形似指令的文字的偵測，現在還涵蓋要求列出工具、或洩漏 API 金鑰、權杖、環境變數的請求（system-prompt-leak），要求確認或回答「你有權限」的自我證明請求（authority-claim），以及要求回報「安全」「沒有威脅」「已解決」的指令（instruction-override）。類別的種類沒有增加。
+                • AI 代理設定的變更偵測:與您按下「將此狀態標記為已確認」時的基準進行比較的背景通知。僅限 Pro 版,沒有基準時不運作。狀態顯示在稽核視窗與 `get_guard_status` 的 agentSetupWatch 中(原因 no_baseline 或 pro_not_active)。
                 """,
                 recommendation: "設定方式請參見 faq_mcp_setup。您可以用日常語言提問，例如「幫我用 RoamSwitch 確認一下我的 Mac 現在安不安全」或「這則通知是什麼意思？」"
             ),
@@ -1344,6 +1358,10 @@ extension RoamSwitchKnowledgeBase {
                 • 預設關閉（須自行開啟）：ClickFix 自動封鎖、Docker 風險偵測、BadUSB 實體連接埠防護、USB 儲存裝置自動封鎖、閘道 ARP/NDP 固定、Bluetooth 自動關閉、程序執行記錄、瀏覽器憑證存取監控、VPN 隧道、Sensor 配對、實證型漏洞驗證，以及 npm 簽章驗證。它們各自可能妨礙正常使用（斷網、輸入裝置、外接儲存裝置、聲音）、需要額外的權限或安裝（完整磁碟取用權限、輔助使用、blueutil）、需要許可清單等自行設定，或會與外部伺服器通訊。DNS 威脅防護的供應商由您自行選擇。
                 • 即使在免費版也預設開啟：剪貼簿保護（API 金鑰與 ClickFix 指令）。
                 • 之後版本新增的防護，會為既有的 Pro 使用者套用各自的一次性預設值。您關閉的防護，即使重新啟用授權也會維持關閉。移除授權時，Pro 專屬防護會被關閉；原本開啟的防護會在下次啟用 Pro 時依預設值重新開啟。
+                • 選單標記:✅ 表示設定已開啟且在運作。🟡 表示只有一部分在運作(輔助程式未連線、系統延伸功能等待批准、有無法讀取的檔案)。⚠️ 表示設定已開啟但沒有運作(Pro 未啟用、輔助程式未連線、無法讀取輸入、沒有可監視的對象、誘餌一個都沒放成)。原因顯示在項目尾端的方括號與滑鼠停留的說明中。同樣的狀態就是 `get_guard_status` 中的 liveState 與 liveStateReason。
+                • 啟動時無法驗證授權:如果儲存的授權無法通過驗證(Pro 已過期、為另一台 Mac 簽發、簽章無效),啟動後不久會用一則通知點名那些設定仍開啟但已停止的防護。首次啟用 Pro 之後,也會用一則通知列出已開啟的防護、需要自行開啟的防護,以及仍無法運作的原因(輔助程式批准、系統延伸功能批准、完整磁碟取用權限、登錄監視資料夾)。
+                • 自我監控(當機後自動重新啟動):預設關閉。在選單的「自我監控…」中同意後,會把應用程式內的小型監控程式註冊為登入項目(可能需要在系統設定中批准)。狀態顯示在選單與 `get_detection_coverage`(T1562.001 的 liveState 與 liveStateReason)中。關閉也在同一項目中進行,解除安裝時會一併移除。
+                • 當 macOS 通知未被允許,或通知樣式為「無」時,警告不會顯示在螢幕上(仍保留在通知記錄中)。選單最上方會出現「通知未被允許…」一行,診斷與通知記錄視窗裡會出現橫幅。首次使用指引中也有一頁,說明通知以及之後需要的權限(完整磁碟取用權限、系統延伸功能、輔助使用、定位服務)。
                 """,
                 recommendation: "啟用 Pro 後，請檢查選單中的 ✅ 標記。不符合您使用情境的防護（例如未使用 Docker）可維持關閉，並開啟您需要的功能（例如經常使用公共 Wi-Fi 就開啟 VPN）。"
             ),
@@ -1510,6 +1528,7 @@ extension RoamSwitchKnowledgeBase {
                 • 核准後：選單會顯示「強制點：系統延伸功能（支援 DoH）」。
                 • 若顯示系統延伸功能錯誤：請確認應用程式位於「應用程式」資料夾中，然後重新選擇一次連結保護的模式以重試。
                 • 此方式不需要 App Store 審核或申請額外授權（採用 Developer ID 簽署並公證）。
+                • 忘了批准時:等待批准 10 分鐘後會收到通知,選單中的連結防護項目會帶有 🟡。可隨時從選單的「批准系統延伸功能(打開系統設定)…」打開。批准之前只靠 /etc/hosts 清單運作。
                 """,
                 recommendation: "核准系統延伸功能，即使瀏覽器使用 DNS over HTTPS，保護也能持續生效。"
             ),

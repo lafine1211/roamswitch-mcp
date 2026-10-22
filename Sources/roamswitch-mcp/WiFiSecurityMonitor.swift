@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.16.2 (build 178).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.0 (build 179).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -35,25 +35,55 @@ public struct WiFiInfo: Equatable {
     public var ssid: String?
     public var bssid: String?
     public var securityLevel: WiFiSecurityLevel
+    /// The Mac is on a Wi-Fi network but macOS did not give the app its name. Since macOS 14 the name (and the
+    /// access point's address) is withheld from an app that has no Location Services permission. Measured with a
+    /// command-line program on a connected Mac: `ssid()` and `bssid()` were nil, `rssiValue()` was -59 and
+    /// `security()` was WPA2, so "no name" does not mean "not connected".
+    public var ssidWithheld: Bool = false
+
+    /// The level above is a reading of the real network: the name was read, or the connection was seen and its
+    /// encryption read without the name.
+    public var levelIsMeasured: Bool {
+        ssid != nil || (ssidWithheld && securityLevel != .notConnected)
+    }
+
+    /// Connected, but neither the name nor the encryption could be read: "not connected" would be a guess.
+    public var readingUnreliable: Bool {
+        ssidWithheld && securityLevel == .notConnected
+    }
 }
 
 final class WiFiSecurityMonitor {
     static let shared = WiFiSecurityMonitor()
 
     func checkCurrentWiFi() -> WiFiInfo {
-        guard let interface = CWWiFiClient.shared().interface(),
-              let ssid = interface.ssid() else {
+        guard let interface = CWWiFiClient.shared().interface() else {
             return WiFiInfo(ssid: nil, bssid: nil, securityLevel: .notConnected)
         }
+        return Self.classify(powerOn: interface.powerOn(), ssid: interface.ssid(), bssid: interface.bssid(),
+                             rssi: interface.rssiValue(), security: interface.security())
+    }
 
-        let bssid = interface.bssid()
-        let secType = interface.security()
-        let level = parseSecurity(secType)
-
-        return WiFiInfo(ssid: ssid, bssid: bssid, securityLevel: level)
+    /// Pure: what the readings of the Wi-Fi interface mean. A name that is nil with a signal on the interface is a
+    /// connected network whose name was withheld, not a missing connection.
+    static func classify(powerOn: Bool, ssid: String?, bssid: String?, rssi: Int, security: CWSecurity) -> WiFiInfo {
+        if let ssid {
+            return WiFiInfo(ssid: ssid, bssid: bssid, securityLevel: parseSecurityLevel(security))
+        }
+        // Wi-Fi off, or no signal (not associated): nothing to read.
+        guard powerOn, rssi != 0 else {
+            return WiFiInfo(ssid: nil, bssid: nil, securityLevel: .notConnected)
+        }
+        // Associated, name withheld. The encryption is still readable; with it unknown, say nothing about it.
+        let level: WiFiSecurityLevel = security == .unknown ? .notConnected : parseSecurityLevel(security)
+        return WiFiInfo(ssid: nil, bssid: bssid, securityLevel: level, ssidWithheld: true)
     }
 
     private func parseSecurity(_ sec: CWSecurity) -> WiFiSecurityLevel {
+        Self.parseSecurityLevel(sec)
+    }
+
+    static func parseSecurityLevel(_ sec: CWSecurity) -> WiFiSecurityLevel {
         switch sec {
         case .none:
             return .open

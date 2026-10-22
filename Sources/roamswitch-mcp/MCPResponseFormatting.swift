@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.16.2 (build 178).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.0 (build 179).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -106,6 +106,9 @@ public struct MCPActiveVulnScanFindingPayload: Codable, Equatable {
     /// range), `external_tool_report` (nmap's own output, not verified by RoamSwitch).
     public var probeName: String? = nil
     public var evidenceKind: String? = nil
+    /// Additive. ISO 8601 time this probe on this port last reached a verdict before this run, present only when
+    /// that verdict was `safe`. It does not say a fix was undone: the listener may be another program.
+    public var previouslySafeAt: String? = nil
 }
 
 /// What one probe that ran declares it leaves on the machine (`ProbeSideEffect` raw values: `ioc_in_logs`,
@@ -184,6 +187,13 @@ public struct MCPPackageCveScanResultPayload: Codable, Equatable {
     public let mapVersion: String
     public let findings: [MCPPackageCveFindingPayload]
     public let acceptance: MCPVulnerabilityAcceptancePayload
+    /// `read` (Homebrew's package list was read), `brew_missing` (no Homebrew: nothing was checked) or `brew_failed`
+    /// (`brew list` failed: nothing was checked). Empty `findings` means "nothing found" only for `read` with
+    /// `packagesChecked` above 0.
+    public var homebrewInventory: String? = nil
+    public var packagesChecked: Int? = nil
+    /// Present while the last update of the CVE data failed; the map used may be old.
+    public var mapUpdateError: String? = nil
 }
 
 public struct MCPPackageCveLanguageFindingPayload: Codable, Equatable {
@@ -475,6 +485,29 @@ public struct MCPHoneytokenStatusPayload: Codable, Equatable {
     public let isEnabled: Bool
     public let recentEventsAvailable: Bool
     public let recentEvents: [MCPHoneytokenEventPayload]
+    /// How many decoy files are really in place, and why the others are not. A guard that is on with `placed` 0 watches
+    /// nothing. Absent until the app has placed once.
+    public var placement: MCPDecoyPlacementPayload? = nil
+}
+
+public struct MCPDecoyPlacementPayload: Codable, Equatable {
+    public let placed: Int
+    public let expected: Int
+    /// Paths that hold a file that is not ours: left alone, not watched.
+    public let realFilesKept: Int
+    /// Paths that are a symbolic link or a special file: left alone.
+    public let specialSkipped: Int
+    public let writeFailed: Int
+    public let at: String
+
+    init(_ record: DecoyPlacementRecord) {
+        placed = record.placed
+        expected = record.expected
+        realFilesKept = record.realFilesKept
+        specialSkipped = record.specialSkipped
+        writeFailed = record.writeFailed
+        at = ISO8601DateFormatter().string(from: Date(timeIntervalSince1970: record.at))
+    }
 }
 
 public struct MCPHoneytokenEventPayload: Codable, Equatable {
@@ -693,6 +726,25 @@ public struct MCPGuardStatusPayload: Codable, Equatable {
     public let isolatedDevPorts: [Int]?
     public let usbStorageAllowedVolumeCount: Int?
     public let caveats: [String]
+    /// When each signed data feed last updated and the last failure, if the last attempt failed. A feed that keeps
+    /// failing leaves old data in use (a CVE scan against an old map, an old link list).
+    public var feedUpdates: [MCPFeedUpdatePayload]? = nil
+}
+
+public struct MCPFeedUpdatePayload: Codable, Equatable {
+    /// `packageCveMap`, `activeVulnCveMap` or `linkGuardFeed`.
+    public let feed: String
+    public let lastSuccessAt: String?
+    /// Present only while the last attempt failed.
+    public let lastError: String?
+    public let lastErrorAt: String?
+
+    static func make(feed: String, record: FeedUpdateRecord) -> MCPFeedUpdatePayload {
+        let iso = ISO8601DateFormatter()
+        func time(_ t: Double?) -> String? { t.map { iso.string(from: Date(timeIntervalSince1970: $0)) } }
+        return MCPFeedUpdatePayload(feed: feed, lastSuccessAt: time(record.lastSuccessAt),
+                                    lastError: record.isFailing ? record.lastError : nil, lastErrorAt: record.isFailing ? time(record.lastErrorAt) : nil)
+    }
 }
 
 /// One `ContainmentIncidentTimeline` entry. `source`/`actionTaken`/`status`
@@ -720,6 +772,9 @@ public struct MCPIncidentTimelinePayload: Codable, Equatable {
     public let unresolvedCount: Int
     public let events: [MCPIncidentTimelineEventPayload]
     public let caveats: [String]
+    /// `ok`, `missing` (no incident was ever recorded) or `unreadable` (the file exists but cannot be read: an empty
+    /// `events` list then does NOT mean there were no incidents).
+    public var recordFile: String? = nil
 }
 
 public struct MCPKnownNetworkPayload: Codable, Equatable {
@@ -1032,6 +1087,14 @@ public enum MCPResponseFormatting {
         )
     }
 
+    static func inventoryCode(_ state: PackageCveScan.InventoryState) -> String {
+        switch state {
+        case .brewMissing: return "brew_missing"
+        case .brewFailed: return "brew_failed"
+        case .read: return "read"
+        }
+    }
+
     // MARK: get_guard_status / activeSecurityLevel
 
     /// Replicates `AppState.activeSecurityLevel`'s UserDefaults-backed
@@ -1079,7 +1142,8 @@ public enum MCPResponseFormatting {
         defaults: UserDefaults = .standard,
         readerHealth: [String: GuardReaderHealth]? = nil,
         now: Date = Date(),
-        environment: GuardEnvironment = .unchecked
+        environment: GuardEnvironment = .unchecked,
+        agentSetupBaselineAccepted: Bool = false
     ) -> MCPGuardStatusPayload {
         let level = resolveActiveSecurityLevel(gatewayMAC: gatewayMAC, defaults: defaults)
         let health = readerHealth ?? GuardReaderHealthStore.all(defaults: defaults)
@@ -1139,8 +1203,16 @@ public enum MCPResponseFormatting {
         guards.append(entry("airGapAutoWiFiKill", airGapAutoWiFiKillKey, defaultWhenUnset: true))
         guards.append(entry("wireGuardVPN", wireGuardVPNKey, defaultWhenUnset: false))
         guards.append(entry("tailscaleKillSwitch", tailscaleKillSwitchKey, defaultWhenUnset: false))
+        // The better enforcement point (the content-filter system extension) may be missing or waiting for the person's
+        // approval; then the guard works with less (the /etc/hosts list only), which DoH browsers bypass.
+        var linkLive = linkMode != .off ? "on" : "off"
+        var linkReason: String?
+        if linkMode != .off, let enforcement = LinkGuardEnforcement.read(defaults: defaults, now: now.timeIntervalSince1970), enforcement.isDegraded {
+            linkLive = "partial"
+            linkReason = enforcement == .waitingForApproval ? "system_extension_not_approved" : "system_extension_not_active"
+        }
         guards.append(MCPGuardEntryPayload(key: "linkGuard", enabledInSettings: linkMode != .off, usingDefault: storedLinkMode == nil,
-                                           liveState: linkMode != .off ? "on" : "off"))
+                                           liveState: linkLive, liveStateReason: linkReason))
         guards.append(entry("linkGuardFeedUpdates", linkGuardUpdatesKey, defaultWhenUnset: true))
         guards.append(entry("activeVulnScan", ActiveVulnScan.enabledDefaultsKey, defaultWhenUnset: false))
         // The web-rules folder scan has no switch of its own: it runs daily for Pro. Its entry follows the Pro cache.
@@ -1150,13 +1222,28 @@ public enum MCPResponseFormatting {
             liveState: GuardReaderHealthStore.guardLiveState(guardKey: "webRulesFolderScan", enabledInSettings: scanOn, records: health, now: now.timeIntervalSince1970),
             readers: readers(for: "webRulesFolderScan")))
 
+        // The web worker crash watch has no switch either: it starts with the app and follows the error logs it finds; its
+        // alert is Pro. Its entry follows the Pro cache, like the web rules folder scan.
+        guards.append(MCPGuardEntryPayload(
+            key: "webWorkerCrashWatch", enabledInSettings: scanOn, usingDefault: nil,
+            liveState: GuardReaderHealthStore.guardLiveState(guardKey: "webWorkerCrashWatch", enabledInSettings: scanOn, records: health, now: now.timeIntervalSince1970),
+            readers: readers(for: "webWorkerCrashWatch")))
+
+        // The AI agent setup change watch has no switch: it compares with the state the person accepted in the "AI agent
+        // setup" window, so "on" means such a state exists. Without one it watches nothing (`no_baseline`).
+        guards.append(MCPGuardEntryPayload(
+            key: "agentSetupWatch", enabledInSettings: agentSetupBaselineAccepted, usingDefault: nil,
+            liveState: GuardReaderHealthStore.guardLiveState(guardKey: "agentSetupWatch", enabledInSettings: agentSetupBaselineAccepted, records: health, now: now.timeIntervalSince1970),
+            readers: readers(for: "agentSetupWatch")))
+
         // Pro and the helper: a guard that needs either and does not have it is not working, whatever its toggle says.
         guards = guards.map { g in
             let folded = GuardReaderHealthStore.applyingEnvironment(guardKey: g.key, enabledInSettings: g.enabledInSettings,
                                                                     state: g.liveState ?? (g.enabledInSettings ? "on" : "off"), environment: environment)
             var out = g
             out.liveState = folded.state
-            out.liveStateReason = folded.reason
+            out.liveStateReason = folded.reason ?? g.liveStateReason
+            if g.key == "agentSetupWatch", !g.enabledInSettings { out.liveStateReason = "no_baseline" }
             return out
         }
 
@@ -1185,6 +1272,7 @@ public enum MCPResponseFormatting {
         caveats.append(loc("usingDefault が true の項目は、ユーザーが一度も切り替えていない既定値です。ポート異常ガード・着信ポートスキャン検知・ARPスプーフィング自動封じ込め・ランタイム脅威封じ込め・ランサムウェア検知（カナリア・エントロピー）・認証情報ハニートークン・重要パスの改ざん監視・依存関係ロックファイルの改ざん監視・定期ログ監査は、Pro版を有効化した時点で一度だけ自動的にオンになります。USBキーボード／ストレージ・Bluetooth・ClickFix・Docker・ゲートウェイARP固定・プロセス実行記録・ブラウザ認証情報の監視・VPNは、Proでも既定ではオフです。"))
         caveats.append(loc("liveState が off のとき、そのガードは入力を読めていないか、必要なPro版やヘルパーがありません(入力は readers に、Pro版とヘルパーは liveStateReason に理由があります)。partial は、直近24時間に入力を取りこぼしたことを示します。gaps は、読み取りが止まってから再開するまでの間に起きたことを見られなかった回数で、再開しても遡って読むことはありません。unknown は、まだ状態の報告がないことを示します。ヘルパーが止まっていると記録は更新されません。"))
         caveats.append(loc("VPNトンネルの実際の接続状態とキルスイッチの適用状態は特権ヘルパーが管理しているため、このツールからは確認できません。VPN関連の項目は設定値のみを示しています。"))
+        caveats.append(loc("clickFixGuard は、シェルが履歴ファイルに書いたコマンドを読みます。zshの既定設定では、書かれるのはシェルを終了したときなので、Terminalのタブを閉じるまで検知されません。~/.zshrc に「setopt INC_APPEND_HISTORY」を足すと、実行の直後に読めます。"))
 
         return MCPGuardStatusPayload(
             activeSecurityLevel: level.rawValue,
@@ -1198,7 +1286,8 @@ public enum MCPResponseFormatting {
             dnsThreatGuardScope: dnsScope,
             isolatedDevPorts: isolatedPorts,
             usbStorageAllowedVolumeCount: allowedVolumeCount,
-            caveats: caveats
+            caveats: caveats,
+            feedUpdates: FeedUpdateStatusStore.all.map { MCPFeedUpdatePayload.make(feed: $0, record: FeedUpdateStatusStore.read($0, defaults: defaults)) }
         )
     }
 
@@ -1235,7 +1324,7 @@ public enum MCPResponseFormatting {
         }
     }
 
-    public static func makeIncidentTimelinePayload(events: [ContainmentIncidentEvent]) -> MCPIncidentTimelinePayload {
+    public static func makeIncidentTimelinePayload(events: [ContainmentIncidentEvent], fileState: ContainmentIncidentTimeline.FileState = .ok) -> MCPIncidentTimelinePayload {
         let iso = ISO8601DateFormatter()
         var payloads: [MCPIncidentTimelineEventPayload] = []
         var unresolved = 0
@@ -1265,10 +1354,19 @@ public enum MCPResponseFormatting {
                 resolvedAt: event.resolvedAt.map { iso.string(from: $0) }
             ))
         }
-        let caveats: [String] = [
+        var caveats: [String] = [
             loc("summary は検知時点に記録された文言をそのまま返します。後から表示言語を変更しても、過去の記録には反映されません。")
         ]
-        return MCPIncidentTimelinePayload(unresolvedCount: unresolved, events: payloads, caveats: caveats)
+        if fileState == .unreadable {
+            caveats.append(loc("インシデントの記録ファイルを読めませんでした。events が空でも、インシデントがなかったとは限りません。壊れたファイルは、次の記録の前に .bak として退避されます。"))
+        }
+        let fileName: String
+        switch fileState {
+        case .ok: fileName = "ok"
+        case .missing: fileName = "missing"
+        case .unreadable: fileName = "unreadable"
+        }
+        return MCPIncidentTimelinePayload(unresolvedCount: unresolved, events: payloads, caveats: caveats, recordFile: fileName)
     }
 
     // MARK: get_network_history
@@ -1365,6 +1463,15 @@ public struct MCPRansomwareRecoverySnapshotsPayload: Codable, Equatable {
     public let recommendedSnapshotId: String?
     public let snapshots: [MCPRansomwareSnapshotPayload]
     public let notes: [String]
+    /// Present when the last attempt to take a snapshot failed (`tmutil localsnapshot`): the reason, when, and how
+    /// many attempts in a row. A list that is empty or old may be because of this. Absent after a success.
+    public var lastSnapshotError: MCPRansomwareSnapshotErrorPayload? = nil
+}
+
+public struct MCPRansomwareSnapshotErrorPayload: Codable, Equatable {
+    public let message: String
+    public let at: String
+    public let consecutiveFailures: Int
 }
 
 enum MCPRansomwareRecoveryFormatting {
@@ -1392,7 +1499,10 @@ enum MCPRansomwareRecoveryFormatting {
                     note: $0.kind == .detection ? detectionNote : nil
                 )
             },
-            notes: generalNotes
+            notes: generalNotes,
+            lastSnapshotError: status.lastFailure.map {
+                MCPRansomwareSnapshotErrorPayload(message: $0.message, at: iso.string(from: $0.at), consecutiveFailures: $0.consecutive)
+            }
         )
     }
 }

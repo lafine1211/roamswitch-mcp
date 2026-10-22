@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.16.2 (build 178).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.0 (build 179).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -428,6 +428,7 @@ public struct RoamSwitchKnowledgeBase: Sendable {
             EntryMeta(id: "feat_passive_link_guard", topic: t, tags: ["link", "linkguard", "phishing", "homograph", "hosts", "sinkhole", "system-extension", "content-filter", "doh", "sni", "ja3", "warn", "fail-closed", "feed", "pro", "receive-only"]),
             EntryMeta(id: "feat_link_safety_auditor", topic: t, tags: ["link", "url", "phishing", "homograph", "punycode", "zerotelemetry", "audit", "mcp", "free"]),
             EntryMeta(id: "feat_ransomware_canary_guard", topic: t, tags: ["ransomware", "canary", "bait", "airgap", "sigstop", "freeze", "kqueue", "sha256", "pro", "default-on-pro"]),
+            EntryMeta(id: "feat_ransomware_recovery", topic: t, tags: ["ransomware", "recovery", "snapshot", "apfs", "tmutil", "local-snapshot", "restore", "pro"]),
             EntryMeta(id: "feat_runtime_threat_containment", topic: t, tags: ["xprotect", "runtime-threat", "airgap", "malware", "log-stream", "gatekeeper", "wifi", "pro", "default-on-pro"]),
             EntryMeta(id: "feat_clickfix_guard", topic: t, tags: ["clickfix", "social-engineering", "terminal", "shell-history", "clipboard", "airgap", "pro", "opt-in"]),
             EntryMeta(id: "feat_persistence_monitor_guard", topic: t, tags: ["persistence", "launchagent", "launchdaemon", "fsevents", "malware", "infostealer", "detection-only", "pro"]),

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.16.2 (build 178).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.0 (build 179).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -271,7 +271,8 @@ public enum GuardReaderHealthStore {
         "portScanGuard": GuardSources(sources: ["portScanTcpdump"], auxiliary: ["linkSource"], idleIsHealthy: false),
         "execRecorder": GuardSources(sources: ["execRecorder"], auxiliary: [], idleIsHealthy: false),
         "runtimeThreatContainment": GuardSources(sources: ["runtimeThreatLogStream"], auxiliary: [], idleIsHealthy: false),
-        "clickFixGuard": GuardSources(sources: ["clickFixHistory"], auxiliary: [], idleIsHealthy: false),
+        // The clipboard check is the narrower input: without macOS's permission to read it the guard still sees the history.
+        "clickFixGuard": GuardSources(sources: ["clickFixHistory"], auxiliary: ["clickFixClipboard"], idleIsHealthy: false),
         // FSEvents is a trigger here and the timer is the backstop, so a watch that cannot start is `partial`, not `off`.
         "criticalPathFim": GuardSources(sources: ["criticalPathFimHelper"], auxiliary: ["criticalPathFimFSEvents"], idleIsHealthy: false),
         "lockfileTamperGuard": GuardSources(sources: ["lockfileTamperScan"], auxiliary: ["lockfileTamperFSEvents"], idleIsHealthy: false),
@@ -287,6 +288,18 @@ public enum GuardReaderHealthStore {
         // A subscription to the system configuration store; if it cannot be set up the guard sees nothing.
         "networkSettingsWatch": GuardSources(sources: ["networkSettingsStore"], auxiliary: [], idleIsHealthy: false),
         "ransomwareCanaryGuard": GuardSources(sources: ["ransomwareCanaryFiles"], auxiliary: [], idleIsHealthy: false),
+        // The decoy files themselves are the input: with none in place (every path holds a real file, or cannot be
+        // written) the guard watches nothing, whatever its switch says.
+        "credentialHoneytokenGuard": GuardSources(sources: ["honeytokenPlaced"], auxiliary: [], idleIsHealthy: false),
+        // The comparison itself runs on a timer; FSEvents only brings it forward. A stream that cannot start leaves the
+        // timer (five minutes), so the guard still works with less.
+        "agentSetupWatch": GuardSources(sources: [], auxiliary: ["agentSetupWatchStream"], idleIsHealthy: true),
+        // The guard drives `blueutil`; with the tool gone, the switch does nothing.
+        "bluetoothGuard": GuardSources(sources: ["bluetoothBlueutil"], auxiliary: [], idleIsHealthy: false),
+        // The error logs of nginx, Apache and PHP-FPM; with none to follow, a crashing worker is not seen.
+        "webWorkerCrashWatch": GuardSources(sources: ["webWorkerCrashLogs"], auxiliary: [], idleIsHealthy: false),
+        // `docker ps` is how the guard sees containers; without an answer it sees none.
+        "dockerEventGuard": GuardSources(sources: ["dockerDaemon"], auxiliary: [], idleIsHealthy: false),
         // A batch scan (daily and on demand), so being idle between runs is healthy; what it can report is what the last
         // scan could not examine.
         "webRulesFolderScan": GuardSources(sources: ["webRuleFolderScan"], auxiliary: [], idleIsHealthy: true),
@@ -474,6 +487,8 @@ extension GuardReaderHealthStore {
         "ransomwareCanaryGuard": Requirements(pro: true, helper: .partial),          // detection in the app; stopping the process and the Air-Gap are the helper's
         "ransomwareEntropyGuard": Requirements(pro: true, helper: .partial),
         "credentialHoneytokenGuard": Requirements(pro: true, helper: .none),
+        "webWorkerCrashWatch": Requirements(pro: true, helper: .none),                   // the alert is Pro; there is no switch
+        "agentSetupWatch": Requirements(pro: true, helper: .none),                       // the comparison and the notice are Pro; it needs an accepted state
         "browserCredentialWatchGuard": Requirements(pro: true, helper: .none),
         "reverseShellWatch": Requirements(pro: true, helper: .none),
         "networkSettingsWatch": Requirements(pro: true, helper: .none),

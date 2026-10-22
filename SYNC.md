@@ -70,6 +70,9 @@ All files live in `Sources/roamswitch-mcp/`.
 | `DependencySourceScan.swift` | `RoamSwitch/DependencySourceScan.swift` |
 | `ProxyAutoDiscoveryCheck.swift` | `RoamSwitch/ProxyAutoDiscoveryCheck.swift` |
 | `AgentCredentialFileCheck.swift` | `RoamSwitch/AgentCredentialFileCheck.swift` |
+| `DecoyPlacement.swift` | `RoamSwitch/DecoyPlacement.swift` |
+| `FeedUpdateStatus.swift` | `RoamSwitch/FeedUpdateStatus.swift` |
+| `LinkGuardEnforcement.swift` | `RoamSwitch/LinkGuardEnforcement.swift` |
 | `SecretLeakScanning.swift` | `RoamSwitch/SecretLeakScanning.swift` |
 | `FrontendBundleScan.swift` | `RoamSwitch/FrontendBundleScan.swift` |
 | `TrustAnchorCheck.swift` | `RoamSwitch/TrustAnchorCheck.swift` |
@@ -99,6 +102,7 @@ All files live in `Sources/roamswitch-mcp/`.
 | `SSHGuardCore.swift` | `Shared/SSHGuardCore.swift` (from `Shared/`) |
 | `GuardReaderHealth.swift` | `Shared/GuardReaderHealth.swift` (from `Shared/`) |
 | `StrictJSON.swift` | `Shared/StrictJSON.swift` (from `Shared/`) |
+| `WatchdogAgentState.swift` | `Shared/WatchdogAgentState.swift` (from `Shared/`) |
 | `SSHGuardStatusReader.swift` | `RoamSwitch/SSHGuardStatusReader.swift` |
 
 This is exactly the source set the app compiles into its `RoamSwitchMCPServer` target

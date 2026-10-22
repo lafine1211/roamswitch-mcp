@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.16.2 (build 178).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.0 (build 179).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -72,6 +72,7 @@ extension RoamSwitchKnowledgeBase {
                 • Control de falsos positivos: el mismo hardware de puerta de enlace que difunde un segundo SSID (red de invitados, router renombrado) no se señala. Un SSID conocido observado con una nueva MAC de puerta de enlace (router sustituido) se registra pero nunca alerta por sí solo.
                 • Mientras se detecta suplantación ARP, se omite la observación para que la MAC de un atacante nunca se aprenda como legítima.
                 • El aviso es una alerta en tiempo real, enviada en Pro. El historial aprendido está disponible mediante la herramienta MCP `get_network_history`.
+                • macOS no da el nombre de la red Wi-Fi (SSID) a una app sin el permiso de Localización. Sin el nombre, no funciona la detección de puntos de acceso falsos con nombre parecido. El menú muestra «conectado (nombre no disponible)» y el tipo de cifrado se comprueba igualmente sin el nombre. El elemento del menú explica el motivo y, si lo desea, permite solicitar el permiso de Localización (RoamSwitch no lee la ubicación del Mac).
                 """,
                 recommendation: "Si recibes este aviso, no introduzcas credenciales en ese Wi-Fi y verifica el nombre y la ubicación reales de la red. Un túnel VPN (feat_vpn_tunnel) es la contramedida más fiable."
             ),
@@ -156,6 +157,7 @@ extension RoamSwitchKnowledgeBase {
                 • Coincidencia con CVE conocidas: para Redis / Memcached accesibles sin autenticación, se lee la versión con una consulta no destructiva y se compara con rangos de versión de CVE conocidas. No se envían cargas útiles de explotación.
                 • Para los puertos de los servidores de desarrollo (127.0.0.1), también comprueba si alguna página de administración o API responde sin iniciar sesión (sonda webvuln-unauth-admin). Sin cookie ni credenciales, envía un GET a cada una de 7 rutas fijas (/admin, /api/admin, /api/users, /api/v1/users, /api/v1/user, /actuator/env, /swagger-ui/index.html) y solo informa cuando la respuesta es 200 y contiene datos (una matriz JSON no vacía, un objeto JSON que no es un error, una página HTML con una tabla de usuarios o Swagger UI). No se informa de una página de inicio de sesión, una redirección, una carcasa SPA ni de {"error":"unauthorized"}. Nunca intenta iniciar sesión, nunca adivina y nunca hace fuzzing. Los efectos secundarios declarados son rastros en los registros del destino y un número de solicitudes. Sirve para encontrar aplicaciones que solo ocultan un menú en el navegador y no comprueban la autorización en el servidor.
                 • También disponible como la herramienta MCP `run_active_vuln_scan` (sus sondas van únicamente hacia localhost).
+                • En el resultado de la herramienta MCP, un hallazgo cuya comprobación se juzgó sin problema en una ejecución anterior lleva `previouslySafeAt` (la hora de esa ejecución). No demuestra que se haya revertido una corrección, porque otro programa en el mismo puerto se ve igual.
                 """,
                 recommendation: "Actívala solo cuando quieras confirmar si Redis, Docker, un LLM local o similar que se ejecuta en tu propio Mac es realmente accesible sin autenticación."
             ),
@@ -206,6 +208,7 @@ extension RoamSwitchKnowledgeBase {
                 • Herramienta: macOS no ofrece una API pública para alternar la alimentación del Bluetooth, así que RoamSwitch usa la herramienta de código abierto de Homebrew `blueutil` (`brew install blueutil`). Si falta, el menú muestra instrucciones de instalación.
                 • Restauración: el Bluetooth vuelve a activarse en una red de confianza solo si estaba activo justo antes de que RoamSwitch lo desactivara; una elección que hayas hecho tú mismo fuera de casa no se anula.
                 • Desactivada por defecto: mucha gente usa AirPods y similares en cafeterías, así que cortar el audio en silencio no sería bien recibido. Opcional.
+                • Si más adelante no se encuentra blueutil, la protección no hace nada. El menú muestra «no se encuentra blueutil, así que está detenida» y se envía una notificación.
                 """,
                 recommendation: "Si no usas accesorios Bluetooth fuera de casa, actívala para evitar el rastreo por radio y los emparejamientos no solicitados."
             ),
@@ -323,6 +326,7 @@ extension RoamSwitchKnowledgeBase {
                 • Alternativa mediante hosts: mientras la extensión no está activa, el modo bloqueo hace que el asistente privilegiado escriba los dominios como `0.0.0.0` en una sección gestionada de `/etc/hosts`.
                 • Lista de amenazas: se obtiene una vez al día, solo en recepción, sin enviar identificadores, y se verifica con una clave de lista Ed25519 dedicada (distinta de la clave de actualización de la app). Desactivar la «Actualización automática» significa cero tráfico saliente; los datos incluidos y la detección de homógrafos siguen funcionando.
                 • Sin Pro: el modo se guarda pero no se bloquea nada.
+                • Si la extensión del sistema espera aprobación durante 10 minutos, se envía una notificación (como máximo una cada tres días). Mientras espera, el elemento Protección de enlaces del menú muestra 🟡 y «extensión del sistema pendiente de aprobación», y linkGuard en `get_guard_status` es partial (motivo system_extension_not_approved). Durante ese tiempo solo actúa la lista de /etc/hosts y no se pueden detener las conexiones de navegadores que cifran el DNS (DoH). Apruébela en Ajustes del Sistema > General > Ítems de inicio y extensiones.
                 """,
                 recommendation: "Mantén el bloqueo automático predeterminado y aprueba la extensión del sistema para la protección más fiable. Si una herramienta interna se bloquea por error, usa «Permitir una vez (5 min)» en la notificación."
             ),
@@ -354,6 +358,7 @@ extension RoamSwitchKnowledgeBase {
                 • Al liberar: se restauran la red y el Wi-Fi, se reanuda el proceso pausado, y se regeneran los archivos señuelo alterados.
                 • Detección genérica (análisis de entropía, Pro): detecta también el cifrado que no toca ningún archivo señuelo, a partir del contenido de lo que se escribe en `Documents`, `Desktop`, `Downloads` y `Pictures`. Cuenta un archivo cuya entropía de Shannon sobre todo el archivo es 7,92 o más, y 20 de esos archivos en 5 segundos se tratan como una ráfaga de cifrado masivo. Para detectar el cifrado solo del inicio de un archivo, o de uno de cada dos bloques de 4 KiB o más, revisa además cada ventana de 4 KiB: un archivo de 16 KiB o más con al menos dos ventanas de 7,9 o más también cuenta. Se omiten los archivos que conservan la cabecera de un formato comprimido (ZIP, PDF, JPEG y similares). La comprobación por ventanas no se aplica a la salida de compilación (`.o`, `.a`, `.rlib`, `.rmeta`, `.so`, `.dylib`, `.class`, `.pyc`, `.wasm` y similares) ni a nada dentro de una carpeta `target`. El cifrado de bloques menores de 4 KiB (por ejemplo de 16 o 256 bytes) no lo ve esta comprobación. Medido: ningún acierto adicional entre 3.531 archivos reales de esas carpetas. Al simular el cifrado solo del inicio y de uno de cada dos bloques (de 4 KiB o más) en 150 archivos reales, la cifra sobre todo el archivo detectó entre el 0 y el 35 %, y la comprobación por ventanas el 100 %.
                 • Predeterminado: se activa automáticamente al activar Pro por primera vez. Historial de incidentes mediante la herramienta MCP `get_canary_status`. Pruébalo con seguridad con «Simulación de defensa contra ransomware (Modo prueba)» en el menú.
+                • Cuántos se colocaron: el elemento del menú muestra «colocados N/M». Si no se pudo colocar ninguno, aparece ⚠️ con el motivo. Los honeytokens de credenciales funcionan igual y cuentan por qué se omitieron señuelos (ya hay un archivo real, hay un enlace simbólico, falló la escritura) en `placement` de `get_honeytoken_status`.
                 """,
                 recommendation: "Mantenla activada para proteger datos importantes de ransomware desconocido, y no elimines los archivos señuelo ocultos."
             ),
@@ -369,6 +374,7 @@ extension RoamSwitchKnowledgeBase {
                 • Límites: macOS puede eliminar las instantáneas locales por sí mismo tras unas 24 horas (antes si queda poco espacio libre), y una generación que ya no existe no se puede usar. Extraer archivos requiere que RoamSwitch esté permitido en Acceso total al disco (crear instantáneas no).
                 • MCP: la herramienta de solo lectura `get_ransomware_recovery_snapshots` muestra la lista y la recomendación (no puede restaurar nada).
                 • Pro: Esta ventana (lista y extracción de archivos) y la herramienta MCP son funciones Pro. La creación de las instantáneas funciona también sin Pro.
+                • Cuando falla la creación de una instantánea (`tmutil localsnapshot` falla), el motivo aparece en la ventana «Recuperación de ransomware…» y en lastSnapshotError de `get_ransomware_recovery_snapshots`. Tras tres fallos seguidos se envía una notificación. Desaparece tras un éxito.
                 """,
                 recommendation: "Mantenga activadas las instantáneas previas. Si nota daños, corte primero la red y extraiga los archivos de la instantánea previa recomendada, no de la de detección."
             ),
@@ -399,6 +405,8 @@ extension RoamSwitchKnowledgeBase {
                 • Por qué Gatekeeper no puede evitarlo: es tu propio shell legítimo ejecutando exactamente lo que escribiste, así que nada en el proceso en sí parece inusual.
                 • Complemento: la protección del portapapeles (feat_secret_leak_auditor) intercepta el comando al copiarlo, cubriendo los pegados en el Editor de scripts, Spotlight y otros lugares además de Terminal.
                 • Desactivada por defecto: un corte automático de red impulsado por una heurística relativamente nueva, por lo que es opcional.
+                • Cuándo detecta: con la configuración predeterminada de zsh, un comando no se escribe en el archivo de historial hasta que se cierra el shell, así que no se detecta hasta cerrar la pestaña de Terminal (medido; el archivo por sesión `~/.zsh_sessions/*.historynew` que configura Terminal también permanece vacío mientras el shell está abierto). Añadir `setopt INC_APPEND_HISTORY` a `~/.zshrc` permite detectarlo justo después de ejecutarlo. Este límite aparece en el diálogo de activación, en el elemento del menú y en las notas de `get_guard_status`.
+                • Comprobación antes de pegar y ajuste de escritura inmediata: cuando está activada, también comprueba lo que copia (solo observa el contador de cambios del portapapeles y lee el texto cuando cambia; el texto no se guarda y una notificación solo lleva el nombre de la regla y los primeros caracteres). Si el texto puede ser un comando peligroso, se le avisa antes de pegarlo, y el botón «Vaciar el portapapeles» de la notificación lo vacía. No se vacía ni se aísla nada automáticamente, porque el comando aún no se ha ejecutado. Desde macOS 15.4 una app necesita permiso para leer el portapapeles; sin él no se lee nada y el estado indica «la comprobación del portapapeles no está permitida». Para el retraso del historial, el elemento de menú «Añadir a ~/.zshrc el ajuste de escritura inmediata del historial…» añade `setopt INC_APPEND_HISTORY` con su consentimiento (muestra la línea y el archivo, copia ~/.zshrc a ~/.zshrc.roamswitch-backup antes de escribir y se puede deshacer).
                 """,
                 recommendation: "Considera activarla si te preocupa que te engañen falsas páginas de error o verificaciones para ejecutar comandos."
             ),
@@ -441,6 +449,7 @@ extension RoamSwitchKnowledgeBase {
                 • Criterio: tres cierres en cinco minutos por una señal de fallo (SIGSEGV, SIGABRT, SIGBUS, SIGILL, SIGFPE). SIGKILL y similares no cuentan.
                 • Solo notificación: una vez por servidor y hora; no se detiene ni se bloquea nada.
                 • Por defecto: activado con Pro.
+                • Estado: no hay interruptor; empieza con la app. El número de registros seguidos aparece en la ventana «Reglas de detección de web shells y otras…» del menú. Sin ningún registro que seguir (por ejemplo, un Mac sin servidor web) no se vigila nada, y webWorkerCrashWatch en `get_guard_status` está off (motivo log_not_found). La notificación es solo Pro.
                 """,
                 recommendation: "Revise el registro de errores con `grep signal` y busque en el registro de accesos, a esas mismas horas, las solicitudes justo antes de cada fallo. Compruebe también si falta alguna corrección de seguridad de nginx o Apache."
             ),
@@ -454,6 +463,7 @@ extension RoamSwitchKnowledgeBase {
                 • Desactivada por defecto: la mayoría de los usuarios no usa Docker, así que está desactivada incluso en Pro.
                 • Prueba: «⚠️ Simulación de detección de riesgos de Docker (Modo prueba)…» comprueba la vía de notificación sin tocar Docker.
                 • Contenedores de Exegol (entorno de pentesting): cuando un contenedor señalado por modo privilegiado u otro motivo lleva etiquetas `org.exegol.*` o usa una imagen oficial de Exegol (`registry.exegol.com/exegol`, `nwodtuhs/exegol`), la notificación añade una línea que lo indica. Ser un contenedor de Exegol nunca basta por sí solo para notificar (mucha gente lo inicia a propósito).
+                • Lo que no ve: los contenedores ya en marcha al activarla no se inspeccionan. Comprueba cada 20 segundos, así que un contenedor que arranca y termina entre dos comprobaciones no se ve. Mientras docker no responda (Docker Desktop detenido o no instalado) no se detecta nada, y el elemento del menú muestra ⚠️ y el motivo.
                 """,
                 recommendation: "Si usas Docker para desarrollo, actívala para detectar pronto los riesgos de escape de contenedor."
             ),
@@ -551,6 +561,7 @@ extension RoamSwitchKnowledgeBase {
                 • MITRE ATT&CK: solo se añade un identificador de técnica cuando la correspondencia es segura (suplantación ARP = T1557; archivo señuelo eliminado o renombrado = T1485; cifrado = T1486; otra manipulación = T1565). Nada se adivina.
                 • Almacenamiento: `~/Library/Application Support/RoamSwitch/containment_incident_timeline.json` (los 200 más recientes). Nunca se envía a ningún sitio.
                 • La herramienta MCP `get_incident_timeline` devuelve esta cronología unificada (útil para triaje con una IA local durante un Air-Gap). El historial por protección también está disponible mediante `get_canary_status`, `get_port_anomaly_incidents` y `get_runtime_threat_status`.
+                • Cuando no se puede leer el archivo de registro (dañado o sin permiso), se indica como ilegible en lugar de una lista vacía (ventana del registro de actividad; recordFile es unreadable en `get_incident_timeline`). Un archivo dañado se aparta como .bak antes de escribir el siguiente registro (ni se sobrescribe ni se borra).
                 """,
                 recommendation: "Después de un corte automático, revisa esta cronología junto con el historial de notificaciones para encontrar la causa y evitar que se repita."
             ),
@@ -631,6 +642,7 @@ extension RoamSwitchKnowledgeBase {
                 • Dependencias: analiza package-lock.json / requirements.txt / Pipfile.lock / poetry.lock / Cargo.lock / Gemfile.lock / composer.lock / go.sum / pom.xml y los compara con mapas de CVE conocidas para npm, PyPI, crates.io, RubyGems, Packagist, Go y Maven (de OSV.dev, CVSS 7,0 o superior).
                 • Entrega de datos: los mapas de CVE se obtienen aproximadamente una vez por semana desde un manifiesto firmado, solo en recepción. Antes de obtenerse se muestran como aún no descargados y no detectan nada.
                 • Herramientas MCP: `run_package_cve_scan` (Homebrew) y `run_package_cve_scan_languages` (dependencias, argumento `watchedFolders`).
+                • Cuando no se comprobó nada: sin Homebrew, con un brew que falla o sin paquetes, la ventana muestra un «no se comprobó nada» gris en lugar del «no se encontró nada» verde (homebrewInventory de `run_package_cve_scan` es brew_missing o brew_failed). Si falla la actualización de los datos CVE, la ventana y el menú muestran cuándo se actualizó por última vez y por qué falló, y también aparece en feedUpdates de `get_guard_status`.
                 """,
                 recommendation: "Ejecuta el análisis de Homebrew regularmente, registra los proyectos activos en la pestaña Dependencias, y actualiza cuanto antes los paquetes con CVE graves."
             ),
@@ -645,6 +657,7 @@ extension RoamSwitchKnowledgeBase {
                 • Urgencia de la notificación: si npm/yarn/pnpm se está ejecutando en el momento de la detección, se registra en el historial de notificaciones con una alerta silenciosa; en caso contrario es una alerta crítica normal. La detección en sí nunca se omite en ningún caso.
                 • Se desactiva automáticamente si se pierde la licencia Pro.
                 • Aceptar cambios: la referencia nunca avanza sola. Para un cambio hecho por usted (p. ej. npm install), elija «Actualizar la referencia de lockfiles al estado actual…» en la barra de menús para que el estado actual pase a ser la referencia. Los cambios ya notificados se guardan, por lo que la misma notificación no se repite al reiniciar la app.
+                • Sin ninguna carpeta registrada, no se vigila nada. El elemento del menú muestra «Sin carpetas que vigilar» y la protección está off en `get_guard_status` (motivo no_folders_registered). Registre sus carpetas de proyecto en «Comparación de CVE de paquetes».
                 """,
                 recommendation: "Registre los proyectos importantes en la pestaña «Dependencias» del cotejo de CVE de paquetes y déjelo activado (predeterminado con Pro activo)."
             ),
@@ -823,6 +836,7 @@ extension RoamSwitchKnowledgeBase {
                 • audit_mcp_configs: También señala, en el env de un servidor MCP, las variables que hacen pasar su tráfico por un proxy (HTTP_PROXY, HTTPS_PROXY, ALL_PROXY), le hacen confiar en una autoridad de certificación adicional (NODE_EXTRA_CA_CERTS, SSL_CERT_FILE, SSL_CERT_DIR, REQUESTS_CA_BUNDLE, CURL_CA_BUNDLE, GIT_SSL_CAINFO) o desactivan la comprobación de certificados (NODE_TLS_REJECT_UNAUTHORIZED=0) (traffic_interception_env, gravedad medium). Los valores nunca se muestran, y de un proxy solo se muestra el host. Puede ser un ajuste correcto de un proxy de empresa; el mensaje lo indica.
                 • Seguridad: ninguna herramienta cambia un ajuste ni el nivel de protección, así que ni siquiera una IA manipulada mediante inyección de instrucciones puede cambiar el nivel de protección ni aislar puertos.
                 • La detección de textos con forma de instrucción cubre ahora también las peticiones de listar las herramientas o de revelar claves de API, tokens o variables de entorno (system-prompt-leak), las peticiones de confirmar o responder que se tiene autoridad (authority-claim) y las órdenes de informar de que algo es seguro, de que no hay amenaza o de que está resuelto (instruction-override). El número de categorías no cambia.
+                • Detección de cambios en la configuración de agentes de IA: un aviso en segundo plano que compara con el estado que aceptó al pulsar «Marcar este estado como revisado». Es solo Pro y no funciona mientras no haya un estado aceptado. Su estado aparece en la ventana de auditoría y como agentSetupWatch en `get_guard_status` (motivo no_baseline o pro_not_active).
                 """,
                 recommendation: "Para la configuración, consulta faq_mcp_setup. Puedes preguntar en lenguaje natural, como «¿Está mi Mac seguro ahora mismo?» o «¿Qué significa esta notificación?»"
             ),
@@ -1344,6 +1358,10 @@ extension RoamSwitchKnowledgeBase {
                 • Desactivadas por defecto (opcionales): bloqueo automático ClickFix, detección de riesgos de Docker, protección física del puerto BadUSB, bloqueo automático de almacenamiento USB, fijación ARP/NDP de la puerta de enlace, desactivación automática de Bluetooth, registro de ejecución de procesos, supervisión de acceso a credenciales del navegador, túnel VPN, emparejamiento del Sensor, verificación activa de vulnerabilidades y verificación de firmas de npm. Cada una puede interrumpir el uso normal (corte de red, dispositivos de entrada, unidades externas, audio), necesita un permiso o una instalación adicional (Acceso total al disco, Accesibilidad, blueutil), requiere ajustes propios como una lista de permitidos, o se comunica con un servidor externo. El proveedor de la Protección contra amenazas DNS es tu elección.
                 • Activada por defecto incluso en la edición gratuita: protección del portapapeles (claves API y comandos ClickFix).
                 • Las protecciones añadidas en versiones posteriores reciben su propio valor predeterminado, una sola vez, para los usuarios Pro existentes. Una protección que desactives sigue desactivada aunque la licencia se vuelva a activar. Si se retira la licencia, las protecciones exclusivas de Pro se desactivan, y las que estaban activadas vuelven a activarse por defecto en la siguiente activación de Pro.
+                • Marcas del menú: ✅ significa que el ajuste está activado y la protección funciona. 🟡 significa que funciona solo en parte (asistente sin conexión, extensión del sistema pendiente de aprobación, archivos ilegibles). ⚠️ significa que el ajuste está activado pero la protección no funciona (Pro inactivo, asistente sin conexión, entrada ilegible, nada que vigilar, ningún señuelo colocado). El motivo aparece entre corchetes al final del elemento y en su ayuda emergente. El mismo estado es liveState y liveStateReason en `get_guard_status`.
+                • Cuando la licencia no se puede verificar al iniciar: si la licencia guardada no es válida (Pro caducado, emitida para otro Mac, firma no válida), poco después del inicio una notificación nombra las protecciones que siguen activadas pero detenidas. Justo después de activar Pro por primera vez, otra notificación indica qué se activó, qué activa usted y qué aún no funciona (aprobación del asistente, de la extensión del sistema, acceso total al disco, registro de carpetas a vigilar).
+                • Autosupervisión (reinicio tras un cierre inesperado): desactivada por defecto. Si acepta en el elemento de menú «Autosupervisión…», el pequeño programa de vigilancia incluido en la app se registra como elemento de inicio (puede que deba aprobarlo en Ajustes del Sistema). Su estado aparece en el menú y en `get_detection_coverage` (liveState y liveStateReason de T1562.001). Se desactiva desde el mismo elemento y la desinstalación también la elimina.
+                • Cuando las notificaciones de macOS no están permitidas, o el estilo es «Ninguno», las alertas no aparecen en pantalla (siguen en el historial de notificaciones). Aparece una línea «Las notificaciones no están permitidas…» en la parte superior del menú y un aviso en las ventanas de diagnóstico e historial de notificaciones. La guía de primer uso tiene también una página sobre notificaciones y los permisos que se necesitarán después (acceso total al disco, extensión del sistema, accesibilidad, localización).
                 """,
                 recommendation: "Después de activar Pro, comprueba las marcas ✅ en el menú. Deja desactivadas las protecciones que no encajen con tu uso (por ejemplo Docker si no lo usas), y activa lo que necesites (por ejemplo la VPN si usas a menudo Wi-Fi público)."
             ),
@@ -1510,6 +1528,7 @@ extension RoamSwitchKnowledgeBase {
                 • Tras la aprobación: el menú muestra «Aplicación: extensión del sistema (compatible con DoH)».
                 • Si aparece un error de extensión del sistema: asegúrate de que la app está en la carpeta Aplicaciones, y luego vuelve a seleccionar un modo de Protección de enlaces para reintentarlo.
                 • Este método no requiere revisión de la App Store ni solicitud de permiso adicional (firmada con Developer ID y notarizada).
+                • Si olvidó aprobarla: tras 10 minutos de espera recibe una notificación y el elemento Protección de enlaces del menú muestra 🟡. Puede abrir la pantalla en cualquier momento desde «Aprobar la extensión del sistema (abrir Ajustes del Sistema)…» en el menú. Hasta que se apruebe solo actúa la lista de /etc/hosts.
                 """,
                 recommendation: "Aprueba la extensión del sistema para que la protección se mantenga incluso cuando tu navegador use DNS sobre HTTPS."
             ),

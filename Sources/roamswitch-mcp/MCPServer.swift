@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.16.2 (build 178).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.0 (build 179).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -419,7 +419,8 @@ enum MCPServer {
         // `resolveActiveSecurityLevel` above does for other app-owned state.
         let isolatedPorts = Set((sharedDefaults.array(forKey: "RoamSwitch.IsolatedDevPorts") as? [Int]) ?? [])
         let interfacePresent = CWWiFiClient.shared().interface() != nil
-        let ssidResolved = wifi.ssid != nil
+        // The name, or (with the name withheld) a connection that was seen and whose encryption was read.
+        let ssidResolved = wifi.levelIsMeasured
         let report = SecurityHealthChecker.shared.generateComprehensiveReport(
             wifiInfo: wifi,
             arpStatus: arp,
@@ -545,7 +546,8 @@ enum MCPServer {
                     description: $0.description,
                     recommendation: $0.recommendation,
                     probeName: $0.probeName,
-                    evidenceKind: $0.evidenceKind.rawValue
+                    evidenceKind: $0.evidenceKind.rawValue,
+                    previouslySafeAt: $0.previouslySafeAt
                 )
             },
             confirmedSafe: scan.confirmedSafe.map {
@@ -569,7 +571,9 @@ enum MCPServer {
     /// file), so there is no opt-in flag to check here.
     private static func callRunPackageCveScan() -> [String: Any] {
         let map = PackageCveScan.loadCVEMap()
-        let findings = map.entries.isEmpty ? [] : PackageCveScan.runScan()
+        let inventory = map.entries.isEmpty ? nil : PackageCveScan.enumerateHomebrewInventory()
+        let findings = inventory.map { PackageCveScan.scan(installed: $0.packages, map: map) } ?? []
+        let update = FeedUpdateStatusStore.read(FeedUpdateStatusStore.packageCveMap, defaults: sharedDefaults)
         let payload = MCPPackageCveScanResultPayload(
             mapInstalled: !map.entries.isEmpty,
             mapVersion: map.mapVersion,
@@ -587,7 +591,10 @@ enum MCPServer {
                 )
             },
             acceptance: MCPVulnerabilityAcceptancePayload(VulnerabilityAcceptance.counts(
-                store: VulnerabilityAcceptance.load(), subjects: findings.map(\.acceptanceSubject), now: Date()))
+                store: VulnerabilityAcceptance.load(), subjects: findings.map(\.acceptanceSubject), now: Date())),
+            homebrewInventory: inventory.map { MCPResponseFormatting.inventoryCode($0.state) },
+            packagesChecked: inventory.map { $0.packages.count },
+            mapUpdateError: update.isFailing ? update.lastError : nil
         )
         return textContentResult(payload)
     }
@@ -1013,7 +1020,8 @@ enum MCPServer {
             recentEventsAvailable: !events.isEmpty,
             recentEvents: events.map {
                 MCPHoneytokenEventPayload(timestamp: iso.string(from: $0.timestamp), path: $0.path, kind: $0.kind, suspectedProcess: $0.suspectedProcess)
-            }
+            },
+            placement: DecoyPlacementStore.read(key: DecoyPlacementStore.honeytokenKey, defaults: sharedDefaults).map(MCPDecoyPlacementPayload.init)
         )
         return textContentResult(payload)
     }
@@ -1170,7 +1178,7 @@ enum MCPServer {
         let requested = (arguments["limit"] as? Int) ?? 50
         let limit = min(max(requested, 1), 200)
         let events = ContainmentIncidentTimeline.loadRecent(limit: limit)
-        return textContentResult(MCPResponseFormatting.makeIncidentTimelinePayload(events: events))
+        return textContentResult(MCPResponseFormatting.makeIncidentTimelinePayload(events: events, fileState: ContainmentIncidentTimeline.fileState()))
     }
 
     /// SENDS NO NETWORK REQUESTS AT ALL — read-only search over the process-exec
@@ -1218,18 +1226,29 @@ enum MCPServer {
     /// any other value, or none, returns the usual payload.
     private static func callGetDetectionCoverage(arguments: [String: Any]) -> [String: Any] {
         let guards = MCPResponseFormatting.makeGuardStatusPayload(gatewayMAC: nil, defaults: sharedDefaults,
-                                                                  environment: GuardEnvironment.read(defaults: sharedDefaults)).guards
-        let payload = DetectionCoverage.payload(guards: guards)
+                                                                  environment: GuardEnvironment.read(defaults: sharedDefaults),
+                                                                  agentSetupBaselineAccepted: AgentSetupBaseline.load() != nil).guards
+        let payload = DetectionCoverage.payload(guards: guards, featureStates: detectionFeatureStates())
         if arguments["format"] as? String == "navigator" {
             return textContentResult(json: DetectionCoverage.navigatorLayerJSON(payload))
         }
         return textContentResult(payload)
     }
 
+    /// The running state of the features that have no toggle, as the app last wrote it (the watchdog). `unknown` while
+    /// the app has not reported lately: this process cannot ask the system itself.
+    private static func detectionFeatureStates() -> [String: DetectionCoverage.FeatureState] {
+        guard let watchdog = WatchdogAgentSnapshot.read(defaults: sharedDefaults, now: Date().timeIntervalSince1970) else {
+            return ["watchdog": DetectionCoverage.FeatureState(state: "unknown", reason: "app_not_reporting")]
+        }
+        return ["watchdog": DetectionCoverage.FeatureState(state: watchdog.liveState, reason: watchdog.reasonCode)]
+    }
+
     private static func callGetGuardStatus() -> [String: Any] {
         let mac = GatewayFingerprint.currentGatewayMACAddress()
         let payload = MCPResponseFormatting.makeGuardStatusPayload(gatewayMAC: mac, defaults: sharedDefaults,
-                                                                   environment: GuardEnvironment.read(defaults: sharedDefaults))
+                                                                   environment: GuardEnvironment.read(defaults: sharedDefaults),
+                                                                   agentSetupBaselineAccepted: AgentSetupBaseline.load() != nil)
         return textContentResult(payload)
     }
 
@@ -1327,7 +1346,7 @@ enum MCPServer {
         ],
         [
             "name": "run_active_vuln_scan",
-            "description": "UNLIKE MOST TOOLS, THIS SENDS NETWORK REQUESTS (to 127.0.0.1 only; the one tool that reaches an external server is run_npm_audit_signatures). Three check families, all non-destructive, read-only, 127.0.0.1-only, single request with a short timeout, never touching another host: (1) known unauthenticated-by-default services already detected on this host — Redis, Memcached, MongoDB and the local AI/ML services Ollama, Jupyter Server, MLflow and Gradio (one read-only HTTP GET each) — verified with a protocol-appropriate probe (e.g. Redis PING); (2) generic checks against any detected local dev-server port — CORS misconfiguration (arbitrary Origin reflected with credentials allowed), path traversal (reading /etc/passwd via ../ to prove insufficient path validation), and open redirect (a handful of common parameter names like redirect/url/next tried against the root path, flagged only if the server actually redirects to our unregistered probe domain), and reflected XSS (GET only: a harmless marker with no script is sent in parameters read from the root page's links and GET forms plus a few common names, and flagged only if it comes back unescaped where markup or an attribute quote takes effect; nothing reflected is reported as inconclusive, not safe), and SSRF (a URL pointing at a throw-away listener of our own on 127.0.0.1 is passed in url/uri/src/image-style parameters, flagged only if the server actually connects to it; the listener answers with a redirect to a second listener, so a server that follows redirects is covered too; and an admin path that answers with no login (seven fixed paths such as /api/users and /actuator/env are asked once each with no cookie or credential, and a finding needs the answer to be data, not a login page, a redirect or an app shell; nothing is guessed and no login is tried)); (3) known-CVE version matching — when a Redis, Memcached, Ollama, Jupyter Server, MLflow or Gradio instance is confirmed unauthenticated in (1), its version is read via a further non-destructive query (Redis INFO / Memcached stats / each AI service's own version endpoint) and checked against a small table of known CVEs (e.g. CVE-2022-24834 for Redis, CVE-2018-1000115 for Memcached) by version range only, never by sending an actual exploit payload. Disabled by default: requires the 'Active Vulnerability Verification' toggle enabled in RoamSwitch Settings, and refuses to run otherwise. Each finding carries `probeName` and `evidenceKind` (confirmed = a request showed the weakness; version_range_match = only the version is in an affected range; external_tool_report = nmap's own output), and `probesRun` lists every probe that ran with its declared `sideEffects` (ioc_in_logs = attack-shaped content the target or an IDS may log; temporary_listener = a throw-away 127.0.0.1 listener; many_requests = more than five requests to one port; an empty list = one ordinary request). Read-only toward the targets, but each run appends its probe results to RoamSwitch's local scan history (get_vulnerability_scan_history), so the tool is not annotated read-only.",
+            "description": "UNLIKE MOST TOOLS, THIS SENDS NETWORK REQUESTS (to 127.0.0.1 only; the one tool that reaches an external server is run_npm_audit_signatures). Three check families, all non-destructive, read-only, 127.0.0.1-only, single request with a short timeout, never touching another host: (1) known unauthenticated-by-default services already detected on this host — Redis, Memcached, MongoDB and the local AI/ML services Ollama, Jupyter Server, MLflow and Gradio (one read-only HTTP GET each) — verified with a protocol-appropriate probe (e.g. Redis PING); (2) generic checks against any detected local dev-server port — CORS misconfiguration (arbitrary Origin reflected with credentials allowed), path traversal (reading /etc/passwd via ../ to prove insufficient path validation), and open redirect (a handful of common parameter names like redirect/url/next tried against the root path, flagged only if the server actually redirects to our unregistered probe domain), and reflected XSS (GET only: a harmless marker with no script is sent in parameters read from the root page's links and GET forms plus a few common names, and flagged only if it comes back unescaped where markup or an attribute quote takes effect; nothing reflected is reported as inconclusive, not safe), and SSRF (a URL pointing at a throw-away listener of our own on 127.0.0.1 is passed in url/uri/src/image-style parameters, flagged only if the server actually connects to it; the listener answers with a redirect to a second listener, so a server that follows redirects is covered too; and an admin path that answers with no login (seven fixed paths such as /api/users and /actuator/env are asked once each with no cookie or credential, and a finding needs the answer to be data, not a login page, a redirect or an app shell; nothing is guessed and no login is tried)); (3) known-CVE version matching — when a Redis, Memcached, Ollama, Jupyter Server, MLflow or Gradio instance is confirmed unauthenticated in (1), its version is read via a further non-destructive query (Redis INFO / Memcached stats / each AI service's own version endpoint) and checked against a small table of known CVEs (e.g. CVE-2022-24834 for Redis, CVE-2018-1000115 for Memcached) by version range only, never by sending an actual exploit payload. Disabled by default: requires the 'Active Vulnerability Verification' toggle enabled in RoamSwitch Settings, and refuses to run otherwise. A finding whose probe on that port was judged safe on an earlier run carries `previouslySafeAt` (ISO 8601 of that run); it is what the local scan history holds, not proof that a fix was undone, since the listener may be another program. Each finding carries `probeName` and `evidenceKind` (confirmed = a request showed the weakness; version_range_match = only the version is in an affected range; external_tool_report = nmap's own output), and `probesRun` lists every probe that ran with its declared `sideEffects` (ioc_in_logs = attack-shaped content the target or an IDS may log; temporary_listener = a throw-away 127.0.0.1 listener; many_requests = more than five requests to one port; an empty list = one ordinary request). Read-only toward the targets, but each run appends its probe results to RoamSwitch's local scan history (get_vulnerability_scan_history), so the tool is not annotated read-only.",
             "inputSchema": ["type": "object", "properties": [String: Any]()],
         ],
         [

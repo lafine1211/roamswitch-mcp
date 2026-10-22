@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.16.2 (build 178).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.0 (build 179).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -137,15 +137,68 @@ public enum ContainmentIncidentTimeline {
     /// forwarder (`EventForwarder`); it stays `nil` in the targets that only read this file's data.
     public static var recordObserver: ((ContainmentIncidentEvent) -> Void)?
 
+    /// What reading the timeline file found. A file that is damaged or cannot be read used to look the same as a file
+    /// that has no incidents, and the next record wrote over it (audit D-L1).
+    public enum FileState: Equatable {
+        /// There is no file yet: no incident was ever recorded.
+        case missing
+        case ok
+        /// The file exists but is not a readable timeline (damaged, or no permission).
+        case unreadable
+    }
+
+    /// Pure: the events in the file's bytes, and what state the file is in. `data == nil` means the file is not there
+    /// (`fileExists` false) or could not be read (true).
+    static func parse(_ data: Data?, fileExists: Bool) -> (events: [ContainmentIncidentEvent], state: FileState) {
+        guard let data else { return ([], fileExists ? .unreadable : .missing) }
+        guard let events = try? JSONDecoder().decode([ContainmentIncidentEvent].self, from: data) else { return ([], .unreadable) }
+        return (events, .ok)
+    }
+
+    private static func loadAllWithState() -> (events: [ContainmentIncidentEvent], state: FileState) {
+        let url = storeURL
+        return parse(try? Data(contentsOf: url), fileExists: FileManager.default.fileExists(atPath: url.path))
+    }
+
     private static func loadAll() -> [ContainmentIncidentEvent] {
-        guard let data = try? Data(contentsOf: storeURL) else { return [] }
-        return (try? JSONDecoder().decode([ContainmentIncidentEvent].self, from: data)) ?? []
+        loadAllWithState().events
+    }
+
+    /// Where a damaged file is kept before the next record replaces it.
+    static func backupURL(for url: URL, existing: (URL) -> Bool, now: Date = Date()) -> URL {
+        let plain = url.appendingPathExtension("bak")
+        guard existing(plain) else { return plain }
+        return url.appendingPathExtension("bak.\(Int(now.timeIntervalSince1970))")
+    }
+
+    /// Persisted so the activity log and the MCP tool can say that the record was damaged and set aside.
+    public static let damagedAtKey = "RoamSwitch.IncidentTimeline.DamagedAt"
+    public static let damagedBackupKey = "RoamSwitch.IncidentTimeline.DamagedBackup"
+
+    /// The file state now, for the windows and the MCP tool.
+    public static func fileState() -> FileState { queue.sync { loadAllWithState().state } }
+
+    /// A damaged file is renamed to `.bak` (never overwritten, never deleted) before anything new is written.
+    private static func setAsideIfDamaged(defaults: UserDefaults = .standard) {
+        let url = storeURL
+        let (_, state) = loadAllWithState()
+        guard state == .unreadable else { return }
+        let target = backupURL(for: url, existing: { FileManager.default.fileExists(atPath: $0.path) })
+        do {
+            try FileManager.default.moveItem(at: url, to: target)
+            defaults.set(Date(), forKey: damagedAtKey)
+            defaults.set(target.lastPathComponent, forKey: damagedBackupKey)
+            NSLog("RoamSwitch ContainmentIncidentTimeline: the record could not be read; set aside as \(target.lastPathComponent)")
+        } catch {
+            NSLog("RoamSwitch ContainmentIncidentTimeline: the record could not be read and could not be set aside: \(error)")
+        }
     }
 
     private static func saveAll(_ events: [ContainmentIncidentEvent]) {
         guard let data = try? JSONEncoder().encode(events) else { return }
         let url = storeURL
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        setAsideIfDamaged()
         try? data.write(to: url, options: .atomic)
     }
 

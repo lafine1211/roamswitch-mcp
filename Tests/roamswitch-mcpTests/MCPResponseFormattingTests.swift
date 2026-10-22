@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.16.2 (build 178). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.0 (build 179). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -108,11 +108,12 @@ final class MCPResponseFormattingTests: XCTestCase {
         disableDefaultOnGuards()
         let payload = MCPResponseFormatting.makeGuardStatusPayload(gatewayMAC: nil, defaults: defaults)
 
-        // `webRulesFolderScan` is not a setting: it follows the Pro cache (the daily scan has no switch), so it is
-        // counted apart from the 31 toggles.
-        let toggles = payload.guards.filter { $0.key != "webRulesFolderScan" }
+        // `webRulesFolderScan`, `webWorkerCrashWatch` and `agentSetupWatch` are not settings: the first two follow the Pro cache (they have
+        // no switch), the third follows whether a state was accepted in the AI agent setup window. They are counted
+        // apart from the 31 toggles.
+        let toggles = payload.guards.filter { !["webRulesFolderScan", "agentSetupWatch", "webWorkerCrashWatch"].contains($0.key) }
         XCTAssertEqual(toggles.count, 31)
-        XCTAssertEqual(Set(payload.guards.map(\.key)).count, 32, "guard keys must be unique")
+        XCTAssertEqual(Set(payload.guards.map(\.key)).count, 34, "guard keys must be unique")
         XCTAssertTrue(toggles.allSatisfy { !$0.enabledInSettings })
         XCTAssertEqual(payload.guards.first { $0.key == "webRulesFolderScan" }?.enabledInSettings, false, "not Pro in this test's defaults")
         XCTAssertFalse(payload.caveats.isEmpty)
@@ -128,7 +129,7 @@ final class MCPResponseFormattingTests: XCTestCase {
         let enabledKeys = Set(payload.guards.filter(\.enabledInSettings).map(\.key))
 
         XCTAssertEqual(enabledKeys, ["portAnomalyGuard", "arpSpoofAutoContainment", "clickFixGuard"])
-        XCTAssertTrue(payload.guards.filter { $0.key != "webRulesFolderScan" }.allSatisfy { $0.usingDefault != nil })
+        XCTAssertTrue(payload.guards.filter { !["webRulesFolderScan", "agentSetupWatch", "webWorkerCrashWatch"].contains($0.key) }.allSatisfy { $0.usingDefault != nil })
         XCTAssertEqual(payload.guards.first { $0.key == "clickFixGuard" }?.usingDefault, false)
         XCTAssertEqual(payload.guards.first { $0.key == "bluetoothGuard" }?.usingDefault, true)
     }
@@ -141,7 +142,7 @@ final class MCPResponseFormattingTests: XCTestCase {
             "webMailDownloadGuard", "dnsThreatGuard", "persistenceMonitor",
             "secretLeakClipboardAuditor", "airGapAutoWiFiKill", "linkGuard", "linkGuardFeedUpdates",
         ])
-        XCTAssertTrue(payload.guards.filter { $0.key != "webRulesFolderScan" }.allSatisfy { $0.usingDefault == true })
+        XCTAssertTrue(payload.guards.filter { !["webRulesFolderScan", "agentSetupWatch", "webWorkerCrashWatch"].contains($0.key) }.allSatisfy { $0.usingDefault == true })
         XCTAssertEqual(payload.linkGuardMode, "block")
         XCTAssertEqual(payload.vpnBackend, "wireguard")
         XCTAssertEqual(payload.tailscaleExitNodeConfigured, false)

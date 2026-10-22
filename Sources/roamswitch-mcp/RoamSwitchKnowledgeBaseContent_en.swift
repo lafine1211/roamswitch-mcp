@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.16.2 (build 178).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.0 (build 179).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -71,6 +71,7 @@ extension RoamSwitchKnowledgeBase {
                 • False-positive control: the same gateway hardware broadcasting a second SSID (guest network, renamed router) is not flagged. A known SSID seen with a new gateway MAC (router replaced) is recorded but never alerts on its own.
                 • While ARP spoofing is detected, the observation is skipped so an attacker's MAC is never learned as legitimate.
                 • The warning is a real-time alert, sent on Pro. The learned history is available via the MCP tool `get_network_history`.
+                • macOS does not give the Wi-Fi name (SSID) to an app without the Location Services permission. Without the name, detection of look-alike fake access points does not run. The menu shows "connected (name unavailable)" and the encryption type is still checked without the name. Choose the menu item to read why, and to ask for the Location Services permission if you want (RoamSwitch does not read your Mac's location).
                 """,
                 recommendation: "If you get this warning, don't enter credentials on that Wi-Fi and confirm the real network name and location. A VPN tunnel (feat_vpn_tunnel) is the most reliable countermeasure."
             ),
@@ -155,6 +156,7 @@ extension RoamSwitchKnowledgeBase {
                 • Known-CVE version match: for Redis / Memcached reachable without auth, reads the version with a non-destructive query and compares it with known CVE version ranges. No exploit payloads are sent.
                 • For the development-server ports (127.0.0.1) it also checks for an admin page or API that answers without a login (probe webvuln-unauth-admin). With no cookie and no credentials it sends one GET to each of 7 fixed paths (/admin, /api/admin, /api/users, /api/v1/users, /api/v1/user, /actuator/env, /swagger-ui/index.html), and reports only when the answer is 200 and contains data (a non-empty JSON array, a JSON object that is not an error, an HTML page with a user table, or Swagger UI). A login page, a redirect, an SPA shell and {"error":"unauthorized"} are not reported. It never tries to log in, never guesses and never fuzzes. Its declared side effects are traces in the target's logs and a number of requests. It is meant to find apps that only hide a menu in the browser and never check authorization on the server.
                 • Also available as the MCP tool `run_active_vuln_scan` (its probes go to localhost only).
+                • In the MCP tool's result, a finding whose check was judged safe on an earlier run carries `previouslySafeAt` (the time of that run). It does not prove that a fix was undone: a different program on the same port looks the same.
                 """,
                 recommendation: "Enable it only when you want to confirm whether Redis, Docker, a local LLM, or similar running on your own Mac is really reachable without authentication."
             ),
@@ -205,6 +207,7 @@ extension RoamSwitchKnowledgeBase {
                 • Tooling: macOS has no public API for toggling Bluetooth power, so RoamSwitch uses the open-source Homebrew tool `blueutil` (`brew install blueutil`). If it's missing, the menu shows setup guidance.
                 • Restore: Bluetooth is turned back on at a trusted network only if it was on right before RoamSwitch turned it off; a choice you made yourself while away isn't overridden.
                 • Off by default: many people use AirPods and similar at cafés, so silently cutting audio would be unwelcome. Opt-in.
+                • If blueutil later goes missing, the guard does nothing. The menu shows "blueutil was not found, so it is stopped" and one notification is sent.
                 """,
                 recommendation: "If you don't use Bluetooth accessories while away, enable it to avoid radio scanning and unsolicited pairing."
             ),
@@ -322,6 +325,7 @@ extension RoamSwitchKnowledgeBase {
                 • hosts fallback: while the extension isn't active, block mode has the privileged helper write the domains as `0.0.0.0` in a managed section of `/etc/hosts`.
                 • Threat feed: fetched once a day, receive-only, with no identifiers sent, and verified with a dedicated Ed25519 feed key (separate from the app-update key). Turning Auto-update off means zero outbound traffic; the bundled data and homograph detection still work.
                 • Without Pro: the mode is saved but nothing is blocked.
+                • If the system extension waits for approval for 10 minutes, one notification is sent (at most once in three days). While it waits, the Link protection item in the menu gets 🟡 and "waiting for system extension approval", and linkGuard in `get_guard_status` is partial (reason system_extension_not_approved). During that time only the /etc/hosts list is used, and connections from browsers that encrypt DNS (DoH) cannot be stopped. Approve it in System Settings > General > Login Items & Extensions.
                 """,
                 recommendation: "Keep the default auto-block and approve the system extension for the most reliable protection. If an internal tool gets blocked by mistake, use the notification's “Allow once (5 min)”."
             ),
@@ -353,6 +357,7 @@ extension RoamSwitchKnowledgeBase {
                 • On release: networking and Wi-Fi are restored, the paused process is resumed, and tampered bait files are regenerated.
                 • Generic detection (entropy analysis, Pro): it also catches encryption that never touches a decoy file, by looking at what is written to `Documents`, `Desktop`, `Downloads` and `Pictures`. A file whose whole-file Shannon entropy is 7.92 or higher counts, and 20 such files within 5 seconds are treated as a mass-encryption burst. To catch encryption of only the head of a file, or of every other block of 4 KiB or more, it also checks each 4 KiB window: a file of 16 KiB or more with at least two windows at 7.9 or higher counts as well. Files that keep the header of a compressed format (ZIP, PDF, JPEG and the like) are skipped. The window check is not used on build output (`.o`, `.a`, `.rlib`, `.rmeta`, `.so`, `.dylib`, `.class`, `.pyc`, `.wasm` and similar) or on anything under a `target` folder. Encryption of blocks smaller than 4 KiB (16 or 256 bytes, for example) is not seen by this check. Measured: no extra hit among 3,531 real files in those folders. Simulating head-only and alternate-block encryption (4 KiB or larger) on 150 real files, the whole-file figure caught 0 to 35% and the window check 100%.
                 • Default: turned on automatically the first time Pro is activated. Incident history via the MCP tool `get_canary_status`. Test safely with "Ransomware Defense Simulation (Test Mode)" in the menu.
+                • How many were placed: the menu item shows "placed N/M". When none could be placed it gets ⚠️ and the reason. The credential honeytokens work the same way and count why decoys were left out (a real file is already there, a symbolic link is in the way, the write failed) in `placement` of `get_honeytoken_status`.
                 """,
                 recommendation: "Keep it on to protect important data from unknown ransomware, and don't delete the hidden bait files."
             ),
@@ -368,6 +373,7 @@ extension RoamSwitchKnowledgeBase {
                 • Limits: macOS may delete local snapshots by itself after about 24 hours (sooner when free space is low), and a generation that is gone cannot be used. Taking files out needs RoamSwitch to be allowed in Full Disk Access (creating snapshots does not).
                 • MCP: the read-only `get_ransomware_recovery_snapshots` shows the list and the recommendation (it cannot restore anything).
                 • Pro: This window (listing and taking files out) and the MCP tool are Pro features. Taking the snapshots themselves works without Pro.
+                • When creating a snapshot fails (`tmutil localsnapshot` fails), the reason is shown in the "Ransomware recovery…" window and in lastSnapshotError of `get_ransomware_recovery_snapshots`. After three failures in a row one notification is sent. It clears after a success.
                 """,
                 recommendation: "Keep the pre-damage snapshots turned on. If you notice damage, cut the network first and take files out of the recommended pre-damage snapshot, not the detection one."
             ),
@@ -398,6 +404,8 @@ extension RoamSwitchKnowledgeBase {
                 • Why Gatekeeper can't stop it: it's your own legitimate shell running exactly what you typed, so nothing about the process looks unusual.
                 • Complement: clipboard protection (feat_secret_leak_auditor) catches the command at copy time, covering pastes into Script Editor, Spotlight, and other places besides Terminal.
                 • Off by default: an automatic network cutoff driven by a relatively new heuristic, so it's opt-in.
+                • When it can detect: with zsh's default settings a command is not written to the history file until the shell exits, so it is not detected until the Terminal tab is closed (measured; the per-session `~/.zsh_sessions/*.historynew` that Terminal sets up also stays empty while the shell runs). Adding `setopt INC_APPEND_HISTORY` to `~/.zshrc` makes detection happen right after the command runs. This limit is stated in the enable dialog, on the menu item and in the `get_guard_status` caveats.
+                • Checking before a paste, and the write-at-once setting: when it is on, it also checks what you copy (it watches only the clipboard's change count and reads the text when that changes; the text is not stored, and a notification carries only the rule name and the first few characters). If the text may be a dangerous command, you are warned before you paste it, and the notification button "Empty the clipboard" clears it. Nothing is cleared or isolated automatically, because the command has not run yet. On macOS 15.4 and later an app needs permission to read the clipboard; without it nothing is read and the state says "the clipboard check is not permitted". For the history delay, the menu item "Add the setting that writes the history at once to ~/.zshrc…" adds `setopt INC_APPEND_HISTORY` with your consent (it shows the line and the file, copies ~/.zshrc to ~/.zshrc.roamswitch-backup before writing, and can be undone).
                 """,
                 recommendation: "Consider enabling it if you're worried about being tricked by fake error pages or CAPTCHAs into running commands."
             ),
@@ -440,6 +448,7 @@ extension RoamSwitchKnowledgeBase {
                 • Judgment: three exits in five minutes by a crash signal (SIGSEGV, SIGABRT, SIGBUS, SIGILL, SIGFPE). SIGKILL and the like are not counted.
                 • Notification only: once per server per hour; nothing is stopped or blocked.
                 • Default: on with Pro.
+                • State: there is no switch; it starts with the app. The number of logs followed is shown in the "Web shell and other detection rules…" window of the menu. With no log to follow (a Mac that runs no web server, for example) nothing is watched, and webWorkerCrashWatch in `get_guard_status` is off (reason log_not_found). The notification is Pro only.
                 """,
                 recommendation: "Check the error log with `grep signal`, then look in the access log at the same times for the requests just before each crash. Also check whether nginx or Apache is missing a security fix."
             ),
@@ -453,6 +462,7 @@ extension RoamSwitchKnowledgeBase {
                 • Off by default: most users don't use Docker, so it's off even with Pro.
                 • Test: "⚠️ Docker Risk Detection Simulation (Test Mode)…" checks the notification path without touching Docker.
                 • Exegol (pentest environment) containers: when a container flagged for privileged mode or similar carries `org.exegol.*` labels or uses an official Exegol image (`registry.exegol.com/exegol`, `nwodtuhs/exegol`), the notification gets one more line saying so. Being an Exegol container is never a reason to notify by itself (many people start them on purpose).
+                • What it does not see: containers already running when you switch it on are not inspected. It checks every 20 seconds, so a container that starts and ends in between is not seen. While docker does not answer (Docker Desktop stopped, or not installed) nothing can be detected, and the menu item gets ⚠️ and the reason.
                 """,
                 recommendation: "If you use Docker for development, enable it to spot container-escape risks early."
             ),
@@ -550,6 +560,7 @@ extension RoamSwitchKnowledgeBase {
                 • MITRE ATT&CK: a technique ID is attached only when the mapping is certain (ARP spoofing = T1557; bait file deleted or renamed = T1485; encryption = T1486; other tampering = T1565). Nothing is guessed.
                 • Storage: `~/Library/Application Support/RoamSwitch/containment_incident_timeline.json` (latest 200). Never sent anywhere.
                 • The MCP tool `get_incident_timeline` returns this unified timeline (useful for triage with a local AI during an Air-Gap). Per-guard history is also available via `get_canary_status`, `get_port_anomaly_incidents`, and `get_runtime_threat_status`.
+                • When the record file cannot be read (damaged, or no permission), it is reported as unreadable instead of an empty list (the activity log window, and recordFile is unreadable in `get_incident_timeline`). A damaged file is set aside as .bak before the next record is written (it is neither overwritten nor deleted).
                 """,
                 recommendation: "After an automatic cutoff, review this timeline together with the notification history to find the cause and prevent a recurrence."
             ),
@@ -630,6 +641,7 @@ extension RoamSwitchKnowledgeBase {
                 • Dependencies: parses package-lock.json / requirements.txt / Pipfile.lock / poetry.lock / Cargo.lock / Gemfile.lock / composer.lock / go.sum / pom.xml and checks them against known-CVE maps for npm, PyPI, crates.io, RubyGems, Packagist, Go, and Maven (from OSV.dev, CVSS 7.0 or higher).
                 • Data delivery: the CVE maps are fetched about once a week from a signed manifest, receive-only. Until fetched they show as not yet downloaded and detect nothing.
                 • MCP tools: `run_package_cve_scan` (Homebrew) and `run_package_cve_scan_languages` (dependencies, `watchedFolders` argument).
+                • When nothing was checked: with no Homebrew, a failing brew or no packages, the window shows a grey "nothing was checked" instead of the green "nothing found" (homebrewInventory of `run_package_cve_scan` is brew_missing or brew_failed). When updating the CVE data fails, the window and the menu show when it last updated and why it failed, and it is also in feedUpdates of `get_guard_status`.
                 """,
                 recommendation: "Run the Homebrew scan regularly, register active projects in the Dependencies tab, and update packages with serious CVEs promptly."
             ),
@@ -644,6 +656,7 @@ extension RoamSwitchKnowledgeBase {
                 • Notification urgency: if npm/yarn/pnpm itself is running at detection time, it's recorded in notification history with a quiet, non-critical alert; otherwise it's a standard critical alert. Detection itself is never skipped either way.
                 • Automatically disabled if the Pro license is lost.
                 • Accepting changes: the baseline never advances on its own. For a change you made yourself (e.g. npm install), choose "Update lockfile baseline to current state…" in the menu bar to make the current state the baseline. Already-announced changes are saved, so the same notification is not repeated after relaunching the app.
+                • With no watched folder registered, nothing is watched. The menu item shows "No folders to watch" and the guard is off in `get_guard_status` (reason no_folders_registered). Register your project folders in "Package CVE scan".
                 """,
                 recommendation: "Register important projects in the Package CVE Scan window's \"Dependencies\" tab and leave this on (the default once Pro is active)."
             ),
@@ -822,6 +835,7 @@ extension RoamSwitchKnowledgeBase {
                 • audit_mcp_configs: It also flags environment variables in an MCP server's env that send its traffic through a proxy (HTTP_PROXY, HTTPS_PROXY, ALL_PROXY), make it trust an extra certificate authority (NODE_EXTRA_CA_CERTS, SSL_CERT_FILE, SSL_CERT_DIR, REQUESTS_CA_BUNDLE, CURL_CA_BUNDLE, GIT_SSL_CAINFO) or turn certificate checking off (NODE_TLS_REJECT_UNAUTHORIZED=0) (traffic_interception_env, severity medium). The values are never shown, and for a proxy only the host is. This can be a correct company-proxy setting, and the message says so.
                 • Safety: no tool changes a setting or the protection level, so even an AI manipulated by prompt injection can't change the protection level or isolate ports.
                 • The detection of wording shaped like an instruction now also covers requests to list the tools or to reveal API keys, tokens or environment variables (system-prompt-leak), requests to confirm or answer that you have authority (authority-claim), and orders to report that something is safe, that there is no threat, or that it is resolved (instruction-override). The number of kinds is unchanged.
+                • AI agent setup change detection: a background notice that compares with the state you accepted by pressing "Mark this state as reviewed". It is Pro only and does not run while there is no accepted state. Its state is shown in the audit window and as agentSetupWatch in `get_guard_status` (reason no_baseline or pro_not_active).
                 """,
                 recommendation: "See faq_mcp_setup for setup. You can ask in plain language, like “Is my Mac secure right now?” or “What does this notification mean?”"
             ),
@@ -1343,6 +1357,10 @@ extension RoamSwitchKnowledgeBase {
                 • Off by default (opt-in): ClickFix auto-block, Docker risk detection, BadUSB physical port guard, USB storage auto-block, gateway ARP/NDP pinning, Bluetooth auto-off, process execution log, browser credential access monitoring, VPN tunnel, Sensor pairing, active vulnerability verification, and npm signature verification. Each of them can interrupt normal use (network cutoff, input devices, external drives, audio), needs an extra permission or install (Full Disk Access, Accessibility, blueutil), needs settings of your own such as an allow-list, or contacts an outside server. The DNS Threat Protection provider is your choice.
                 • On by default even in the free edition: clipboard protection (API keys and ClickFix commands).
                 • Guards added in later versions get their own one-time default for existing Pro users. A guard you turn off stays off, even if the license is activated again. If the license is removed, Pro-only guards are turned off, and the ones that were on come back on by default at the next Pro activation.
+                • Menu marks: ✅ means the setting is on and the guard works. 🟡 means it works only in part (helper not connected, system extension waiting for approval, some files unreadable). ⚠️ means the setting is on but the guard is not working (Pro is not active, helper not connected, input unreadable, nothing to watch, no decoy could be placed). The reason is shown in brackets at the end of the item and in its tooltip. The same state is liveState and liveStateReason in `get_guard_status`.
+                • When the licence cannot be verified at launch: if the saved licence does not validate (Pro expired, issued for another Mac, bad signature), one notification names the protections that are still switched on but stopped, shortly after launch. Right after Pro is activated for the first time, one notification also lists what turned on, what you switch on yourself, and what still does not work (helper approval, system extension approval, Full Disk Access, registering watched folders).
+                • Self-monitoring (restart after a crash): off by default. If you agree in the menu item "Self-monitoring…", the small watcher program inside the app is registered as a login item (you may need to approve it in System Settings). Its state is shown in the menu and in `get_detection_coverage` (liveState and liveStateReason of T1562.001). You turn it off from the same item, and uninstalling removes it.
+                • When macOS notifications are not allowed, or the style is "None", warnings do not appear on screen (they stay in the notification history). A line "Notifications are not allowed…" appears at the top of the menu and a banner in the diagnosis and notification history windows. The first-run guide also has a page on notifications and the permissions needed later (Full Disk Access, system extension, Accessibility, Location Services).
                 """,
                 recommendation: "After activating Pro, check the ✅ marks in the menu. Leave guards that don't fit your use (e.g. Docker if you don't use it) off, and turn on what you need (e.g. the VPN if you use public Wi-Fi often)."
             ),
@@ -1509,6 +1527,7 @@ extension RoamSwitchKnowledgeBase {
                 • After approval: the menu shows "Enforcement: system extension (DoH-aware)".
                 • If a system extension error is shown: make sure the app is in the Applications folder, then re-select a Link Guard mode to retry.
                 • This method needs no App Store review or entitlement application (Developer ID signed and notarized).
+                • If you forgot to approve it: after 10 minutes of waiting you get a notification and the Link protection item in the menu gets 🟡. You can open the screen at any time from "Approve the system extension (open System Settings)…" in the menu. Until it is approved only the /etc/hosts list is used.
                 """,
                 recommendation: "Approve the system extension so protection holds even when your browser uses DNS over HTTPS."
             ),

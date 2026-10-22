@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.16.2 (build 178).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.0 (build 179).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -55,7 +55,7 @@ enum DetectionCoverage {
         // (handleApplicationDidTerminate -> handleAppCrash) and shows a notification.
         Entry(technique: "T1562.001", name: "Impair Defenses: Disable or Modify Tools", coverage: .partial,
               sources: [feature("watchdog")],
-              blindSpot: "Covers only an unexpected exit of the RoamSwitch app itself, which is restarted with a notification. It says nothing about other security tools being disabled."),
+              blindSpot: "Covers only an unexpected exit of the RoamSwitch app itself, which is restarted with a notification, and only while the watchdog is registered: it is off until the person switches it on in the menu, and its state is shown here. It says nothing about other security tools being disabled."),
         // T1562.004. SecurityHealthChecker.swift host_firewall / MCPResponseFormatting.configOnlyCaveat: the
         // audit reports RoamSwitch's protection level, not a measurement of the macOS firewall.
         Entry(technique: "T1562.004", name: "Impair Defenses: Disable or Modify System Firewall", coverage: .none,
@@ -256,6 +256,8 @@ enum DetectionCoverage {
         "linkGuardFeedUpdates": "Keeps the link guard's feed current; covers nothing by itself (see T1566.002).",
         "activeVulnScan": "Probes this Mac's own listening services for weaknesses; an assessment, not the detection of an attack.",
         "scheduledLogAudit": "Looks for new or surging log patterns in general; not tied to one technique.",
+        "webWorkerCrashWatch": "Notices web server workers (nginx, Apache, PHP-FPM) that keep crashing, from their error logs; it does not name a technique.",
+        "agentSetupWatch": "Reports changes to an AI agent's instruction files, skills, MCP definitions and settings against a state the person accepted; no ATT&CK technique names that.",
     ]
 
     // MARK: Payload
@@ -280,6 +282,9 @@ enum DetectionCoverage {
         let coveredBy: [String]
         let blindSpot: String
         let liveState: String
+        /// Why a feature behind the technique is not running (`watchdog_not_registered`, `watchdog_requires_approval`,
+        /// `watchdog_not_in_bundle`, `app_not_reporting`). Absent when there is nothing to add.
+        var liveStateReason: String? = nil
     }
 
     struct GuardStatePayload: Codable, Equatable {
@@ -310,9 +315,22 @@ enum DetectionCoverage {
         let caveats: [String]
     }
 
-    static func liveState(of entry: Entry, guardStates: [String: String]) -> LiveState {
+    /// The state of a feature that has no toggle of its own but whose running state the app can know (the watchdog).
+    struct FeatureState: Equatable {
+        let state: String
+        var reason: String? = nil
+    }
+
+    static func liveState(of entry: Entry, guardStates: [String: String], featureStates: [String: FeatureState] = [:]) -> LiveState {
         if entry.sources.isEmpty { return .notApplicable }
-        let guards = entry.sources.filter { $0.kind == "guard" }.map { guardStates[$0.id] ?? "unknown" }
+        // A feature counts like a guard once the app has told its state; one nobody reports on stays unknown.
+        let guards = entry.sources.compactMap { source -> String? in
+            switch source.kind {
+            case "guard": return guardStates[source.id] ?? "unknown"
+            case "feature": return featureStates[source.id]?.state ?? "unknown"
+            default: return nil
+            }
+        }
         if guards.isEmpty || guards.contains("unknown") { return .unknown }
         if guards.allSatisfy({ $0 == "on" }) { return .on }
         if guards.allSatisfy({ $0 == "off" }) { return .off }
@@ -320,7 +338,7 @@ enum DetectionCoverage {
     }
 
     /// `guards` is the guard list `get_guard_status` builds from the shared preferences.
-    static func payload(guards: [MCPGuardEntryPayload]) -> Payload {
+    static func payload(guards: [MCPGuardEntryPayload], featureStates: [String: FeatureState] = [:]) -> Payload {
         // The guard's `liveState` (reader down -> off, input lost recently -> partial, not reported -> unknown) when
         // `get_guard_status` has one; the bare toggle otherwise.
         let states = Dictionary(guards.map { ($0.key, $0.liveState ?? ($0.enabledInSettings ? "on" : "off")) }, uniquingKeysWith: { first, _ in first })
@@ -329,15 +347,18 @@ enum DetectionCoverage {
         var summary = (detects: 0, partial: 0, none: 0, off: 0)
         let techniques = entries.map { entry -> TechniquePayload in
             for source in entry.sources where source.kind == "guard" && !used.contains(source.id) { used.append(source.id) }
-            let live = liveState(of: entry, guardStates: states)
+            let live = liveState(of: entry, guardStates: states, featureStates: featureStates)
             switch entry.coverage {
             case .detects: summary.detects += 1
             case .partial: summary.partial += 1
             case .none: summary.none += 1
             }
             if entry.coverage != .none && live == .off { summary.off += 1 }
+            // A feature that is not running says why (the watchdog: not registered, waiting for approval).
+            let featureReason = entry.sources.filter { $0.kind == "feature" }.compactMap { featureStates[$0.id] }.first { $0.state != "on" }?.reason
             return TechniquePayload(id: entry.technique, name: entry.name, platform: "macos", coverage: entry.coverage.rawValue,
-                                    coveredBy: entry.sources.map(\.id), blindSpot: entry.blindSpot, liveState: live.rawValue)
+                                    coveredBy: entry.sources.map(\.id), blindSpot: entry.blindSpot, liveState: live.rawValue,
+                                    liveStateReason: featureReason)
         }
         return Payload(
             platform: "macos",

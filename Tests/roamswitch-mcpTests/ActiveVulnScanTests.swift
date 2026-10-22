@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.16.2 (build 178). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.0 (build 179). Do not edit here; see SYNC.md.
 
 import XCTest
 import Network
@@ -923,6 +923,62 @@ final class ActiveVulnScanTests: XCTestCase {
             let statuses = ActiveVulnScan.probeStatusSummary(from: entries, now: now)
             XCTAssertEqual(statuses.map(\.probeName), ["a-probe", "m-probe", "z-probe"], "oldest exact timestamp must sort first even when passAgeDays ties")
         }
+    }
+
+
+    // MARK: - previouslySafeAt
+
+    private func finding(_ probeName: String?, port: Int) -> ActiveVulnScan.Finding {
+        ActiveVulnScan.Finding(port: port, processName: "p", title: "t", description: "d", recommendation: "r", probeName: probeName)
+    }
+
+    func testFindingIsMarkedWhenTheLatestEarlierVerdictWasSafe() {
+        let t0 = Date(timeIntervalSince1970: 1_000_000)
+        let history = [
+            record("redis-default-noauth", port: 6379, outcome: "vulnerable", finishedAt: t0),
+            record("redis-default-noauth", port: 6379, outcome: "safe", finishedAt: t0.addingTimeInterval(100)),
+        ]
+        let out = ActiveVulnScan.markingPreviouslySafe([finding("redis-default-noauth", port: 6379)], history: history)
+        XCTAssertEqual(out[0].previouslySafeAt, Self.isoFormatter.string(from: t0.addingTimeInterval(100)))
+    }
+
+    func testInconclusiveRowsBetweenDoNotHideTheSafeVerdict() {
+        let t0 = Date(timeIntervalSince1970: 1_000_000)
+        let history = [
+            record("p", port: 1, outcome: "safe", finishedAt: t0),
+            record("p", port: 1, outcome: "inconclusive", finishedAt: t0.addingTimeInterval(50)),
+        ]
+        let out = ActiveVulnScan.markingPreviouslySafe([finding("p", port: 1)], history: history)
+        XCTAssertEqual(out[0].previouslySafeAt, Self.isoFormatter.string(from: t0))
+    }
+
+    func testFindingIsNotMarkedWhenLatestVerdictWasVulnerableOrThereIsNoHistory() {
+        let t0 = Date(timeIntervalSince1970: 1_000_000)
+        let history = [
+            record("p", port: 1, outcome: "safe", finishedAt: t0),
+            record("p", port: 1, outcome: "vulnerable", finishedAt: t0.addingTimeInterval(10)),
+        ]
+        XCTAssertNil(ActiveVulnScan.markingPreviouslySafe([finding("p", port: 1)], history: history)[0].previouslySafeAt)
+        XCTAssertNil(ActiveVulnScan.markingPreviouslySafe([finding("p", port: 1)], history: [])[0].previouslySafeAt)
+    }
+
+    func testFindingIsNotMarkedFromAnotherPortOrProbeOrWithoutAProbeName() {
+        let t0 = Date(timeIntervalSince1970: 1_000_000)
+        let history = [
+            record("p", port: 2, outcome: "safe", finishedAt: t0),
+            record("q", port: 1, outcome: "safe", finishedAt: t0),
+        ]
+        XCTAssertNil(ActiveVulnScan.markingPreviouslySafe([finding("p", port: 1)], history: history)[0].previouslySafeAt)
+        XCTAssertNil(ActiveVulnScan.markingPreviouslySafe([finding(nil, port: 1)], history: history)[0].previouslySafeAt)
+    }
+
+    func testMCPPayloadCarriesPreviouslySafeAtAndOmitsItWhenNil() throws {
+        let with = MCPActiveVulnScanFindingPayload(port: 1, processName: "p", title: "t", description: "d", recommendation: "r", previouslySafeAt: "2026-10-20T00:00:00Z")
+        let without = MCPActiveVulnScanFindingPayload(port: 1, processName: "p", title: "t", description: "d", recommendation: "r")
+        let a = String(decoding: try JSONEncoder().encode(with), as: UTF8.self)
+        let b = String(decoding: try JSONEncoder().encode(without), as: UTF8.self)
+        XCTAssertTrue(a.contains("previouslySafeAt"))
+        XCTAssertFalse(b.contains("previouslySafeAt"))
     }
 
 }

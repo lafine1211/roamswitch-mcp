@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.16.2 (build 178).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.0 (build 179).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -72,6 +72,7 @@ extension RoamSwitchKnowledgeBase {
                 • 오탐 방지: 같은 게이트웨이 장비가 두 번째 SSID(게스트 네트워크, 이름을 바꾼 라우터)를 방송하는 경우는 표시되지 않습니다. 이미 알려진 SSID가 새로운 게이트웨이 MAC과 함께 관측된 경우(라우터 교체)는 기록만 될 뿐 그 자체로는 경고하지 않습니다.
                 • ARP 스푸핑이 감지되는 동안에는 관측을 건너뛰어, 공격자의 MAC이 정당한 것으로 학습되지 않도록 합니다.
                 • 이 경고는 Pro에서 발송되는 실시간 알림입니다. 학습된 이력은 MCP 도구 `get_network_history`로 확인할 수 있습니다.
+                • macOS는 위치 서비스 권한이 없는 앱에는 Wi-Fi 이름(SSID)을 알려 주지 않습니다. 이름을 알 수 없으면 비슷한 이름의 가짜 액세스 포인트 탐지가 동작하지 않습니다. 메뉴에는 '연결됨(이름을 가져올 수 없음)'이 표시되며, 암호화 방식은 이름 없이도 확인합니다. 메뉴 항목에서 이유를 확인하고, 원하면 위치 서비스 권한을 요청할 수 있습니다(RoamSwitch는 Mac의 위치를 읽지 않습니다).
                 """,
                 recommendation: "이 경고를 받으면 해당 Wi-Fi에서 계정 정보를 입력하지 말고 실제 네트워크 이름과 위치를 확인하세요. VPN 터널(feat_vpn_tunnel)이 가장 확실한 대응책입니다."
             ),
@@ -156,6 +157,7 @@ extension RoamSwitchKnowledgeBase {
                 • 알려진 CVE 버전 대조: 인증 없이 도달 가능한 Redis/Memcached의 버전을 비파괴적 쿼리로 읽어 알려진 CVE 버전 범위와 대조합니다. 공격용 페이로드는 전송하지 않습니다.
                 • 개발 서버 포트(127.0.0.1)에 대해서는 로그인 없이 응답하는 관리 화면이나 API도 확인합니다(프로브 webvuln-unauth-admin). 쿠키도 인증 정보도 붙이지 않고 고정된 7개 경로(/admin, /api/admin, /api/users, /api/v1/users, /api/v1/user, /actuator/env, /swagger-ui/index.html)에 한 번씩 GET을 보내며, 응답이 200이고 데이터(비어 있지 않은 JSON 배열, 오류가 아닌 JSON 객체, 사용자 표가 있는 HTML, Swagger UI)일 때만 지적합니다. 로그인 화면, 리다이렉트, SPA 틀, {"error":"unauthorized"}는 지적하지 않습니다. 로그인을 시도하지 않고, 추측도 퍼징도 하지 않습니다. 선언된 부작용은 로그에 남는 흔적과 다수의 요청입니다. 브라우저 쪽 메뉴만 숨기고 서버에서는 권한을 확인하지 않는 앱을 찾기 위한 것입니다.
                 • MCP 도구 `run_active_vuln_scan`으로도 사용할 수 있습니다(프로브는 localhost로만 전송합니다).
+                • MCP 도구의 결과에서, 같은 검사가 이전 실행에서 문제 없음으로 판정되었던 항목에는 `previouslySafeAt`(그때의 시각)이 붙습니다. 수정이 되돌려졌다는 증거는 아닙니다. 같은 포트에서 다른 프로그램이 동작하는 경우에도 똑같이 표시됩니다.
                 """,
                 recommendation: "본인 Mac에서 실행 중인 Redis, Docker, 로컬 LLM 등이 정말로 인증 없이 도달 가능한지 확인하고 싶을 때만 켜세요."
             ),
@@ -206,6 +208,7 @@ extension RoamSwitchKnowledgeBase {
                 • 사용 도구: macOS에는 앱에서 Bluetooth 전원을 전환할 수 있는 공개 API가 없으므로, RoamSwitch는 오픈소스 Homebrew 도구 `blueutil`(`brew install blueutil`)을 사용합니다. 설치되어 있지 않으면 메뉴에 설치 안내가 표시됩니다.
                 • 복원 방식: RoamSwitch가 끄기 직전에 Bluetooth가 켜져 있었던 경우에만 신뢰하는 네트워크에서 다시 켭니다. 외출 중에 사용자가 직접 내린 선택은 덮어쓰지 않습니다.
                 • 기본값 꺼짐: 카페 등에서 AirPods를 사용하는 사람이 많아 조용히 오디오를 끊으면 불편할 수 있으므로 선택적 사용으로 두었습니다.
+                • 나중에 blueutil을 찾을 수 없게 되면 가드는 아무것도 하지 않습니다. 메뉴에 'blueutil을 찾을 수 없어 중지되었습니다'가 표시되고 알림을 한 번 보냅니다.
                 """,
                 recommendation: "외출 중 Bluetooth 액세서리를 사용하지 않는다면 켜서 전파 탐색과 원치 않는 페어링을 방지하세요."
             ),
@@ -323,6 +326,7 @@ extension RoamSwitchKnowledgeBase {
                 • hosts 대체: 확장이 활성화되지 않은 동안, 차단 모드에서는 특권 헬퍼가 해당 도메인을 `/etc/hosts`의 관리 구역에 `0.0.0.0`으로 기록합니다.
                 • 위협 정보: 하루에 한 번 수신 전용으로 가져오며 식별자는 전송하지 않고, 전용 Ed25519 정보 키(앱 업데이트 키와는 별개)로 검증합니다. "자동 업데이트"를 끄면 외부 통신이 전혀 없으며 내장 데이터와 동형 문자 탐지만으로 동작합니다.
                 • Pro가 아닌 경우: 모드는 저장되지만 아무것도 차단되지 않습니다.
+                • 시스템 확장이 10분 동안 승인 대기 상태이면 알림을 한 번 보냅니다(3일에 한 번까지). 대기 중에는 메뉴의 링크 보호 항목에 🟡와 '시스템 확장 승인 대기'가 붙고, `get_guard_status`의 linkGuard가 partial(이유 system_extension_not_approved)이 됩니다. 이 동안은 /etc/hosts 목록만으로 동작하며 DNS를 암호화하는 브라우저(DoH)의 연결은 막을 수 없습니다. 승인은 시스템 설정 > 일반 > 로그인 항목 및 확장 프로그램에서 합니다.
                 """,
                 recommendation: "기본값인 자동 차단을 유지하고 시스템 확장을 승인하는 것이 가장 확실합니다. 사내 도구가 실수로 차단되면 알림의 \u{201C}이번만 허용(5분)\u{201D}을 사용하세요."
             ),
@@ -354,6 +358,7 @@ extension RoamSwitchKnowledgeBase {
                 • 해제 시: 네트워크와 Wi-Fi가 복원되고, 정지된 프로세스가 재개되며, 변조된 미끼 파일이 다시 생성됩니다.
                 • 범용 탐지(엔트로피 분석, Pro): 미끼 파일을 건드리지 않는 암호화도 `Documents`·`Desktop`·`Downloads`·`Pictures`에 기록되는 파일의 내용으로 탐지합니다. 파일 전체의 섀넌 엔트로피가 7.92 이상인 파일이 5초 안에 20개 이상이 되면 대량 암호화 버스트로 취급합니다. 파일의 앞부분만, 또는 4KiB 이상의 블록을 하나 걸러 암호화하는 방식에 대비해 4KiB 단위 구간도 확인하며, 7.9 이상인 구간이 2개 이상 있는 16KiB 이상의 파일도 셉니다. ZIP·PDF·JPEG 등 압축 형식의 헤더가 온전한 파일은 대상에서 제외합니다. 구간 판정은 빌드 산출물(`.o`·`.a`·`.rlib`·`.rmeta`·`.so`·`.dylib`·`.class`·`.pyc`·`.wasm` 등)과 `target` 폴더 안에는 사용하지 않습니다. 4KiB보다 작은 블록(16바이트나 256바이트 등)만 암호화하는 방식은 이 판정으로는 보이지 않습니다. 실측에서는 해당 폴더의 실제 파일 3,531개에서 추가 탐지가 없었습니다. 실제 파일 150개로 앞부분만, 그리고 4KiB 이상 블록을 하나 걸러 암호화한 경우를 모의했을 때, 파일 전체 값으로는 0~35%, 구간 판정으로는 100%를 탐지했습니다.
                 • 기본값: Pro를 처음 활성화할 때 자동으로 켜집니다. 사고 기록은 MCP 도구 `get_canary_status`로 확인할 수 있습니다. 메뉴의 "랜섬웨어 방어 시뮬레이션(동작 확인)"으로 안전하게 테스트할 수 있습니다.
+                • 배치된 수: 메뉴 항목에 '배치 N/M'이 표시됩니다. 하나도 배치하지 못하면 ⚠️와 이유가 표시됩니다. 자격 증명 허니토큰도 같아서, 배치하지 못한 이유(이미 실제 파일이 있음, 심볼릭 링크가 있음, 쓰기 실패)를 세어 `get_honeytoken_status`의 placement에 표시합니다.
                 """,
                 recommendation: "알 수 없는 랜섬웨어로부터 중요한 데이터를 보호하려면 계속 켜 두고, 숨겨진 미끼 파일은 삭제하지 마세요."
             ),
@@ -369,6 +374,7 @@ extension RoamSwitchKnowledgeBase {
                 • 제약: macOS는 로컬 스냅샷을 약 24시간 뒤에 자동으로 삭제할 수 있으며(여유 공간이 적으면 더 빨리), 남아 있지 않은 세대는 사용할 수 없습니다. 파일을 꺼내려면 전체 디스크 접근 권한에서 RoamSwitch를 허용해야 합니다(스냅샷 생성에는 불필요).
                 • MCP: 읽기 전용 `get_ransomware_recovery_snapshots`로 목록과 권장 항목을 확인할 수 있습니다(복원은 할 수 없습니다).
                 • Pro: 이 화면(목록 및 파일 꺼내기)과 MCP 도구는 Pro 기능입니다. 스냅샷 촬영 자체는 Pro가 아니어도 동작합니다.
+                • 스냅샷 생성이 실패하면(`tmutil localsnapshot` 실패) 그 이유를 '랜섬웨어 복구…' 창과 `get_ransomware_recovery_snapshots`의 lastSnapshotError에 표시합니다. 3회 연속 실패하면 알림을 한 번 보냅니다. 성공하면 사라집니다.
                 """,
                 recommendation: "랜섬웨어 피해에 대비해 사전 스냅샷을 켜 두세요. 피해를 발견하면 먼저 네트워크를 끊고, 감지 시 스냅샷이 아니라 '권장' 사전 스냅샷에서 파일을 꺼내세요."
             ),
@@ -399,6 +405,8 @@ extension RoamSwitchKnowledgeBase {
                 • Gatekeeper로 막을 수 없는 이유: 사용자 자신의 정당한 셸이 입력한 그대로 실행하는 것이므로 프로세스 자체에는 이상한 점이 없습니다.
                 • 보완 기능: 클립보드 보호(feat_secret_leak_auditor)는 복사하는 순간에 명령어를 탐지하여 터미널 외에 스크립트 편집기, Spotlight 등에 붙여넣는 것도 커버합니다.
                 • 기본값 꺼짐: 비교적 새로운 휴리스틱으로 자동 네트워크 차단을 실행하므로 선택적 사용으로 두었습니다.
+                • 탐지할 수 있는 시점의 한계: zsh의 기본 설정에서는 실행한 명령이 셸을 종료할 때까지 기록 파일에 쓰이지 않으므로 Terminal 탭을 닫기 전까지는 탐지되지 않습니다(실측. Terminal이 설정하는 `~/.zsh_sessions/*.historynew`도 실행 중에는 비어 있습니다). `~/.zshrc`에 `setopt INC_APPEND_HISTORY`를 추가하면 실행 직후에 탐지할 수 있습니다. 이 한계는 활성화 대화상자, 메뉴 항목, `get_guard_status` 설명에 표시됩니다.
+                • 붙여넣기 전 확인과 바로 쓰는 설정: 켜면 복사한 내용도 확인합니다(클립보드의 변경 횟수만 보고, 바뀐 때에만 읽습니다. 내용은 저장하지 않고, 알림에는 규칙 이름과 앞의 몇 글자만 표시합니다). 위험한 명령일 수 있으면 붙여넣기 전에 알리고, 알림의 '클립보드 비우기' 버튼으로 지울 수 있습니다. 아직 실행되지 않았으므로 자동으로 지우거나 격리하지 않습니다. macOS 15.4 이상에서는 앱이 클립보드를 읽으려면 허가가 필요합니다. 허가가 없으면 읽지 않으며 상태에 '클립보드 확인이 허용되지 않았습니다'가 표시됩니다. 기록의 지연에 대해서는 메뉴의 '기록을 바로 쓰는 설정을 ~/.zshrc에 추가…'로 동의하에 `setopt INC_APPEND_HISTORY`를 추가할 수 있습니다(추가할 줄과 파일을 보여 주고, 쓰기 전에 ~/.zshrc를 ~/.zshrc.roamswitch-backup으로 복사하며, 되돌릴 수 있습니다).
                 """,
                 recommendation: "가짜 오류 페이지나 캡차에 속아 명령어를 실행하게 될까 걱정된다면 활성화를 고려하세요."
             ),
@@ -441,6 +449,7 @@ extension RoamSwitchKnowledgeBase {
                 • 판정: 5분 안에 3회, 크래시 시그널(SIGSEGV·SIGABRT·SIGBUS·SIGILL·SIGFPE)로 종료되었을 때. SIGKILL 등은 세지 않습니다.
                 • 알림만: 같은 서버당 1시간에 1회이며, 멈추거나 차단하지 않습니다.
                 • 기본값: Pro에서 켜져 있습니다.
+                • 상태: 스위치는 없고 앱이 시작될 때 함께 시작됩니다. 추적 중인 로그 수는 메뉴 'Web 셸 등 탐지 규칙 설정…' 창에 표시됩니다. 추적할 로그가 하나도 없으면(웹 서버를 실행하지 않는 Mac 등) 아무것도 감시하지 않으며, `get_guard_status`의 webWorkerCrashWatch가 off(이유 log_not_found)가 됩니다. 알림은 Pro 전용입니다.
                 """,
                 recommendation: "`grep signal`로 오류 로그를 확인하고, 같은 시각의 접근 로그에서 크래시 직전의 요청을 찾아보세요. nginx·Apache에 적용하지 않은 보안 수정이 없는지도 확인하세요."
             ),
@@ -454,6 +463,7 @@ extension RoamSwitchKnowledgeBase {
                 • 기본값 꺼짐: 대부분의 사용자는 Docker를 사용하지 않으므로 Pro에서도 기본값은 꺼짐입니다.
                 • 테스트: "⚠️ Docker 위험 감지 시뮬레이션(동작 확인)…"으로 Docker를 건드리지 않고 알림 경로를 확인할 수 있습니다.
                 • Exegol(침투 테스트 환경) 컨테이너: 특권 모드 등으로 감지된 컨테이너가 `org.exegol.*` 라벨을 가졌거나 Exegol 공식 이미지(`registry.exegol.com/exegol`, `nwodtuhs/exegol`)를 쓰면, 알림에 그 사실을 알리는 한 줄이 추가됩니다. Exegol 컨테이너라는 이유만으로는 알리지 않습니다(의도적으로 시작하는 사람이 많기 때문입니다).
+                • 보이지 않는 것: 켠 시점에 이미 실행 중인 컨테이너는 검사하지 않습니다. 20초마다 확인하므로 그 사이에 시작하고 끝난 컨테이너는 보이지 않습니다. docker가 응답하지 않는 동안(Docker Desktop이 멈췄거나 미설치)은 아무것도 탐지할 수 없고, 메뉴 항목에 ⚠️와 이유가 붙습니다.
                 """,
                 recommendation: "개발에 Docker를 사용한다면 컨테이너 탈출 위험을 조기에 발견하기 위해 활성화하세요."
             ),
@@ -551,6 +561,7 @@ extension RoamSwitchKnowledgeBase {
                 • MITRE ATT&CK: 매핑이 확실할 때만 기법 ID를 붙입니다(ARP 스푸핑 = T1557, 미끼 파일 삭제 또는 이름 변경 = T1485, 암호화 = T1486, 그 외의 변조 = T1565). 추측으로 매핑하지 않습니다.
                 • 저장 위치: `~/Library/Application Support/RoamSwitch/containment_incident_timeline.json`(최신 200건). 어디로도 전송되지 않습니다.
                 • MCP 도구 `get_incident_timeline`은 이 통합 타임라인을 반환합니다(에어갭 상황에서 로컬 AI로 원인을 조사할 때 유용). 각 가드별 기록은 `get_canary_status`, `get_port_anomaly_incidents`, `get_runtime_threat_status`로도 확인할 수 있습니다.
+                • 기록 파일을 읽을 수 없을 때(손상되었거나 권한이 없음)는 빈 목록이 아니라 읽을 수 없었다고 표시합니다(활동 로그 창, `get_incident_timeline`의 recordFile이 unreadable). 손상된 파일은 다음 기록 전에 .bak으로 따로 보관합니다(덮어쓰거나 삭제하지 않습니다).
                 """,
                 recommendation: "자동 차단이 발생한 후에는 이 타임라인을 알림 기록과 함께 검토하여 원인을 찾고 재발을 방지하세요."
             ),
@@ -631,6 +642,7 @@ extension RoamSwitchKnowledgeBase {
                 • 의존성: package-lock.json / requirements.txt / Pipfile.lock / poetry.lock / Cargo.lock / Gemfile.lock / composer.lock / go.sum / pom.xml을 분석하여 npm, PyPI, crates.io, RubyGems, Packagist, Go, Maven의 알려진 CVE 맵(OSV.dev 기반, CVSS 7.0 이상)과 대조합니다.
                 • 데이터 배포: CVE 맵은 서명된 매니페스트에서 약 일주일에 한 번 수신 전용으로 받아옵니다. 받아오기 전에는 아직 다운로드되지 않았다고 표시되며 아무것도 탐지하지 않습니다.
                 • MCP 도구: `run_package_cve_scan`(Homebrew)과 `run_package_cve_scan_languages`(의존성, `watchedFolders` 인자).
+                • 아무것도 조사하지 않은 경우: Homebrew가 없거나 brew가 실패했거나 패키지가 0개이면 초록색 '발견되지 않았습니다' 대신 회색 '아무것도 조사하지 않았습니다'가 표시됩니다(`run_package_cve_scan`의 homebrewInventory가 brew_missing 또는 brew_failed). CVE 데이터 업데이트가 실패하면 마지막으로 업데이트된 시각과 실패 이유를 창과 메뉴에 표시하며, `get_guard_status`의 feedUpdates에도 들어갑니다.
                 """,
                 recommendation: "정기적으로 Homebrew 검사를 실행하고, 진행 중인 프로젝트를 의존성 탭에 등록하며, 심각한 CVE가 있는 패키지는 신속히 업데이트하세요."
             ),
@@ -645,6 +657,7 @@ extension RoamSwitchKnowledgeBase {
                 • 알림 긴급도: 감지 시점에 npm/yarn/pnpm 자체가 실행 중이면 알림 기록에는 남기되 조용한 알림으로 처리합니다. 실행 중이 아닐 때의 변조는 일반적인 긴급 알림입니다. 감지 자체는 두 경우 모두 항상 수행됩니다.
                 • Pro 라이선스를 잃으면 자동으로 비활성화됩니다.
                 • 변경 받아들이기: 기준은 자동으로 갱신되지 않습니다. 직접 한 변경(npm install 등)이라면 메뉴 막대의 「락 파일 기준을 현재 상태로 업데이트…」로 현재 상태를 기준으로 삼을 수 있습니다. 이미 알린 변경은 저장되므로 앱을 다시 시작해도 같은 알림이 반복되지 않습니다.
+                • 감시 폴더가 하나도 등록되어 있지 않으면 아무것도 감시하지 않습니다. 메뉴 항목에 '감시 폴더 없음'이 표시되고 `get_guard_status`에서 off(이유 no_folders_registered)가 됩니다. '패키지 CVE 대조'에서 프로젝트 폴더를 등록하세요.
                 """,
                 recommendation: "중요한 프로젝트는 패키지 CVE 대조의 \"의존성\" 탭에 등록하고, Pro 활성화 시 기본값인 켜짐 상태를 유지하는 것을 권장합니다."
             ),
@@ -823,6 +836,7 @@ extension RoamSwitchKnowledgeBase {
                 • audit_mcp_configs: MCP 서버의 env에 통신을 프록시로 보내는 설정(HTTP_PROXY, HTTPS_PROXY, ALL_PROXY), 추가 인증 기관을 신뢰하게 하는 설정(NODE_EXTRA_CA_CERTS, SSL_CERT_FILE, SSL_CERT_DIR, REQUESTS_CA_BUNDLE, CURL_CA_BUNDLE, GIT_SSL_CAINFO), 인증서 검증을 끄는 설정(NODE_TLS_REJECT_UNAUTHORIZED=0)이 있을 때도 지적합니다(traffic_interception_env, 중요도 medium). 값은 표시하지 않고, 프록시는 host만 표시합니다. 사내 프록시의 올바른 설정일 수도 있으므로, 안내 문구에도 그렇게 적습니다.
                 • 안전성: 설정이나 보호 수준을 바꾸는 도구가 없으므로 프롬프트 주입에 조작된 AI라도 보호 수준을 바꾸거나 포트를 격리할 수 없습니다.
                 • 지시처럼 보이는 문구의 탐지에 이제 도구 목록이나 API 키, 토큰, 환경 변수를 내놓으라는 요청(system-prompt-leak), “권한이 있다고 확인·응답하라”는 자기 증명 요청(authority-claim), “안전하다고 보고하라”, “위협 없음으로 보고하라”, “해결된 것으로 처리하라”는 지시(instruction-override)의 형태도 포함됩니다. 범주의 종류는 늘지 않았습니다.
+                • AI 에이전트 설정 변경 탐지: '이 상태를 확인 완료로 표시'를 눌러 정한 기준과 비교하는 백그라운드 알림입니다. Pro 전용이며 기준이 없는 동안은 동작하지 않습니다. 상태는 점검 창과 `get_guard_status`의 agentSetupWatch(이유 no_baseline 또는 pro_not_active)에 표시됩니다.
                 """,
                 recommendation: "설정 방법은 faq_mcp_setup을 참고하세요. \u{201C}지금 내 Mac이 안전한가요?\u{201D}나 \u{201C}이 알림은 무슨 뜻인가요?\u{201D}처럼 자연스러운 말로 물어볼 수 있습니다."
             ),
@@ -1344,6 +1358,10 @@ extension RoamSwitchKnowledgeBase {
                 • 기본값 꺼짐(선택적 사용): ClickFix 자동 차단, Docker 위험 탐지, BadUSB 물리 포트 가드, USB 저장장치 자동 차단, 게이트웨이 ARP/NDP 고정, Bluetooth 자동 끄기, 프로세스 실행 기록, 브라우저 자격 증명 접근 모니터링, VPN 터널, Sensor 페어링, 실증형 취약점 검증, npm 서명 검증. 이들은 각각 일반적인 사용을 방해할 수 있거나(네트워크 차단, 입력 장치, 외장 드라이브, 소리), 추가 권한이나 설치(전체 디스크 접근, 손쉬운 사용, blueutil)가 필요하거나, 허용 목록 같은 사용자 설정이 필요하거나, 외부 서버와 통신합니다. DNS 위협 보호의 제공업체는 사용자가 선택합니다.
                 • 무료 버전에서도 기본값 켜짐: 클립보드 보호(API 키와 ClickFix 명령어).
                 • 이후 버전에 추가되는 가드는 기존 Pro 사용자에게도 각각 한 번의 기본값이 적용됩니다. 직접 끈 가드는 라이선스를 다시 활성화해도 꺼진 채로 유지됩니다. 라이선스를 해제하면 Pro 전용 가드는 꺼지고, 켜져 있던 가드는 다음에 Pro를 활성화할 때 기본값으로 다시 켜집니다.
+                • 메뉴 표시: ✅는 설정이 켜져 있고 동작 중입니다. 🟡는 일부만 동작합니다(헬퍼 연결 안 됨, 시스템 확장 승인 대기, 읽을 수 없는 파일 있음). ⚠️는 설정은 켜져 있지만 동작하지 않습니다(Pro 비활성, 헬퍼 연결 안 됨, 입력을 읽을 수 없음, 감시할 대상 없음, 미끼를 배치하지 못함). 이유는 항목 끝의 대괄호와 마우스를 올렸을 때의 설명에 표시됩니다. 같은 상태가 `get_guard_status`의 liveState와 liveStateReason입니다.
+                • 시작할 때 라이선스를 검증할 수 없는 경우: 저장된 라이선스가 검증되지 않으면(Pro 만료, 다른 Mac용, 서명 무효) 시작 직후 설정은 켜져 있지만 멈춘 보호를 이름으로 알리는 알림을 한 번 보냅니다. Pro를 처음 활성화한 직후에도 켜진 보호, 직접 켜야 하는 보호, 아직 동작하지 않는 이유(헬퍼 승인, 시스템 확장 승인, 전체 디스크 접근, 감시 폴더 등록)를 알림으로 한 번 알립니다.
+                • 자체 감시(비정상 종료 후 자동 재시작): 기본은 꺼짐입니다. 메뉴의 '자체 감시…'에서 동의하면 앱에 포함된 작은 감시 프로그램이 로그인 항목으로 등록됩니다(시스템 설정에서 승인이 필요할 수 있습니다). 상태는 메뉴와 `get_detection_coverage`(T1562.001의 liveState와 liveStateReason)에 표시됩니다. 끄는 것도 같은 항목에서 하며, 제거 시에도 해제됩니다.
+                • macOS 알림이 허용되지 않았거나 스타일이 '없음'이면 경고가 화면에 표시되지 않습니다(알림 기록에는 남습니다). 메뉴 맨 위에 '알림이 허용되지 않았습니다…' 줄이 나타나고, 진단과 알림 기록 창에 띠가 나타납니다. 처음 안내에도 알림과 나중에 필요한 권한(전체 디스크 접근, 시스템 확장, 손쉬운 사용, 위치 서비스) 페이지가 있습니다.
                 """,
                 recommendation: "Pro를 활성화한 후 메뉴의 ✅ 표시를 확인하세요. 사용 목적에 맞지 않는 가드(예: Docker를 사용하지 않는다면)는 꺼둔 채로 두고, 필요한 것(예: 공용 Wi-Fi를 자주 사용한다면 VPN)은 켜세요."
             ),
@@ -1510,6 +1528,7 @@ extension RoamSwitchKnowledgeBase {
                 • 승인 후: 메뉴에 "적용 지점: 시스템 확장(DoH 대응)"이 표시됩니다.
                 • 시스템 확장 오류가 표시되면: 앱이 응용 프로그램 폴더에 있는지 확인한 후 링크 보호 모드를 다시 선택해 재시도하세요.
                 • 이 방식은 App Store 심사나 별도 권한 신청이 필요 없습니다(Developer ID로 서명 및 공증됨).
+                • 승인을 잊었을 때: 승인 대기 10분이 지나면 알림이 오고 메뉴의 링크 보호 항목에 🟡가 붙습니다. 메뉴의 '시스템 확장 승인(시스템 설정 열기)…'에서 언제든 열 수 있습니다. 승인 전에는 /etc/hosts 목록만으로 동작합니다.
                 """,
                 recommendation: "브라우저가 DNS over HTTPS를 사용해도 보호가 유지되도록 시스템 확장을 승인하세요."
             ),
