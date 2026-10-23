@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.3 (build 182).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.4 (build 183).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -1367,7 +1367,7 @@ extension RoamSwitchKnowledgeBase {
                 • 后续新增的防护也会对现有 Pro 用户按每项防护各应用一次默认值。您关闭的防护在重新激活许可证后仍保持关闭。移除许可证后，Pro 专属防护将被停用；原本开启的防护会在下次激活 Pro 时按默认值重新开启。
                 • 菜单标记:✅ 表示设置已开启且在运行。🟡 表示只有一部分在运行(辅助程序未连接、系统扩展等待批准、有无法读取的文件)。⚠️ 表示设置已开启但没有运行(Pro 未启用、辅助程序未连接、无法读取输入、没有可监视的对象、诱饵一个都没放成)。原因显示在条目末尾的方括号和悬停说明中。同样的状态就是 `get_guard_status` 中的 liveState 和 liveStateReason。
                 • 启动时无法验证许可证:如果保存的许可证无法通过验证(Pro 已过期、为另一台 Mac 签发、签名无效),启动后不久会用一条通知点名那些设置仍开启但已停止的防护。首次启用 Pro 之后,也会用一条通知列出已开启的防护、需要自行开启的防护,以及仍不能运行的原因(辅助程序批准、系统扩展批准、完全磁盘访问权限、登记监视文件夹)。
-                • 自我监控(崩溃后自动重启):默认关闭。在菜单的“自我监控…”中同意后,会把应用内的小型监控程序注册为登录项(可能需要在系统设置中批准)。状态显示在菜单和 `get_detection_coverage`(T1562.001 的 liveState 与 liveStateReason)中。关闭也在同一项中进行,卸载时会一并移除。
+                • 自我监控(崩溃后自动重启):默认关闭。在菜单的“自我监控…”中同意后,会把应用内的小型监控程序注册为登录项(可能需要在系统设置中批准)。状态显示在菜单和 `get_detection_coverage`(T1562.001 的 liveState 与 liveStateReason)中。关闭也在同一项中进行,卸载时会一并移除。 批准后，监视程序从下次登录起开始运行。
                 • 当 macOS 通知未被允许,或通知样式为“无”时,警告不会显示在屏幕上(仍保留在通知历史中)。菜单最上方会出现“通知未被允许…”一行,诊断和通知历史窗口里会出现横幅。首次使用指引中也有一页,讲通知以及之后需要的权限(完全磁盘访问权限、系统扩展、辅助功能、定位服务)。
                 """,
                 recommendation: "激活 Pro 后，请确认菜单中的 ✅ 标记。与您的使用方式不符的防护（例如不使用 Docker）保持原样即可，并额外启用所需的防护（例如经常使用公共 Wi-Fi 则启用 VPN）。"

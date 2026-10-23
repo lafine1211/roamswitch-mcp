@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.3 (build 182).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.4 (build 183).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -1367,7 +1367,7 @@ extension RoamSwitchKnowledgeBase {
                 • 이후 버전에 추가되는 가드는 기존 Pro 사용자에게도 각각 한 번의 기본값이 적용됩니다. 직접 끈 가드는 라이선스를 다시 활성화해도 꺼진 채로 유지됩니다. 라이선스를 해제하면 Pro 전용 가드는 꺼지고, 켜져 있던 가드는 다음에 Pro를 활성화할 때 기본값으로 다시 켜집니다.
                 • 메뉴 표시: ✅는 설정이 켜져 있고 동작 중입니다. 🟡는 일부만 동작합니다(헬퍼 연결 안 됨, 시스템 확장 승인 대기, 읽을 수 없는 파일 있음). ⚠️는 설정은 켜져 있지만 동작하지 않습니다(Pro 비활성, 헬퍼 연결 안 됨, 입력을 읽을 수 없음, 감시할 대상 없음, 미끼를 배치하지 못함). 이유는 항목 끝의 대괄호와 마우스를 올렸을 때의 설명에 표시됩니다. 같은 상태가 `get_guard_status`의 liveState와 liveStateReason입니다.
                 • 시작할 때 라이선스를 검증할 수 없는 경우: 저장된 라이선스가 검증되지 않으면(Pro 만료, 다른 Mac용, 서명 무효) 시작 직후 설정은 켜져 있지만 멈춘 보호를 이름으로 알리는 알림을 한 번 보냅니다. Pro를 처음 활성화한 직후에도 켜진 보호, 직접 켜야 하는 보호, 아직 동작하지 않는 이유(헬퍼 승인, 시스템 확장 승인, 전체 디스크 접근, 감시 폴더 등록)를 알림으로 한 번 알립니다.
-                • 자체 감시(비정상 종료 후 자동 재시작): 기본은 꺼짐입니다. 메뉴의 '자체 감시…'에서 동의하면 앱에 포함된 작은 감시 프로그램이 로그인 항목으로 등록됩니다(시스템 설정에서 승인이 필요할 수 있습니다). 상태는 메뉴와 `get_detection_coverage`(T1562.001의 liveState와 liveStateReason)에 표시됩니다. 끄는 것도 같은 항목에서 하며, 제거 시에도 해제됩니다.
+                • 자체 감시(비정상 종료 후 자동 재시작): 기본은 꺼짐입니다. 메뉴의 '자체 감시…'에서 동의하면 앱에 포함된 작은 감시 프로그램이 로그인 항목으로 등록됩니다(시스템 설정에서 승인이 필요할 수 있습니다). 상태는 메뉴와 `get_detection_coverage`(T1562.001의 liveState와 liveStateReason)에 표시됩니다. 끄는 것도 같은 항목에서 하며, 제거 시에도 해제됩니다. 승인한 뒤에는 다음 로그인부터 감시 프로그램이 동작합니다.
                 • macOS 알림이 허용되지 않았거나 스타일이 '없음'이면 경고가 화면에 표시되지 않습니다(알림 기록에는 남습니다). 메뉴 맨 위에 '알림이 허용되지 않았습니다…' 줄이 나타나고, 진단과 알림 기록 창에 띠가 나타납니다. 처음 안내에도 알림과 나중에 필요한 권한(전체 디스크 접근, 시스템 확장, 손쉬운 사용, 위치 서비스) 페이지가 있습니다.
                 """,
                 recommendation: "Pro를 활성화한 후 메뉴의 ✅ 표시를 확인하세요. 사용 목적에 맞지 않는 가드(예: Docker를 사용하지 않는다면)는 꺼둔 채로 두고, 필요한 것(예: 공용 Wi-Fi를 자주 사용한다면 VPN)은 켜세요."
