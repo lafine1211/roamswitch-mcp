@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.1 (build 180).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.2 (build 181).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -245,6 +245,7 @@ extension RoamSwitchKnowledgeBase {
                 • 开发用 Web 文件夹：`~/Sites`、`/Library/WebServer/Documents`、`~/Herd`、`~/Library/Application Support/Herd`、`/Applications/MAMP/htdocs`、`~/Library/Application Support/Local`、`~/Local Sites`、软件包 CVE 核对的目标文件夹，以及 Web 与邮件防护的监视文件夹，每天扫描一次，也可手动扫描。每天一次的扫描不会进入 `node_modules`（依赖包）和 `.git`（监视文件夹的即时检测，以及手动指定文件夹的扫描会检查 `node_modules`）。`tests`、`fixtures` 等测试用文件夹不适用规则。
                 • PHP 会话文件夹：同一次检查会读取 PHP 会话文件夹（Homebrew、MAMP、Herd 的 php.ini 中的 `session.save_path`；未指定时为 `/tmp`、`/private/var/tmp` 和临时文件夹；MAMP 的 `tmp/php`）中以 `sess_` 开头的文件。只列出文件夹内容，不深入子文件夹，也不会打开不以 `sess_` 开头的文件。在 upload_progress 的值中混入 PHP 代码的会话文件为 critical，会话值中带有 PHP 起始标签的为 high。critical 会移入隔离库，high 只通知。
                 • PHP 设置检查：设置中的「检查 PHP 设置」会读取 Homebrew、MAMP、Herd 和 PATH 中 php、php-fpm、frankenphp 的版本，php.ini、conf.d 和 FPM 池设置（session.upload_progress、PHP 8.5 的 fatal_error_backtraces、memory_limit），Apache 的 mod_php，以及会话文件。版本会与 2026 年 10 月 21 日公布的两个严重漏洞（CVE-2026-109618、CVE-2026-109619）的修复版本（8.2.35、8.3.36、8.4.27、8.5.12）比较，只判断这一件事。PHP 可执行文件只在显示版本时启动，不运行脚本，也不进行网络通信。结果只显示在屏幕上，不会更改任何文件。
+                • 域名检查：设置中的「检查域名」会检查所输入域名（最多 20 个）的 SPF、DMARC、MTA-STS 和注册到期日，并参考性地显示 CAA 和 DNSSEC。默认不查询任何内容，只有输入域名并按下按钮时才会运行。这台 Mac 的 `dig` 向解析器查询 TXT、CAA、DS 和 MX 记录，`curl` 向该 TLD 注册局的 RDAP 服务器查询（先读取 IANA 的公开列表，其中不含域名），对有 MX 和 `_mta-sts` TXT 记录的域名还会向该域名自己的 mta-sts 主机查询。结果只显示在屏幕上，不保存，也不定期运行。
                 • 隔离：默认只有 critical 的检测会走与其他威胁相同的流程（移入隔离库，可在「管理隔离文件」中恢复或删除）。high 只有通知、钩子和设置中的列表，不会动文件（也可改为「隔离 critical 和 high」或「不隔离」）。medium 和 low 仅报告，保留在通知历史中。被「排除并恢复」的文件，Web 规则不会再次检测（与 ClamAV 的排除是不同的列表）。
                 • 检测后钩子：把可执行文件放在 `~/Library/Application Support/RoamSwitch/hooks/post-detection`，每次检测都会运行它，并通过标准输入传入 JSON（要求所有者为自己或 root，组和其他人不可写，其上级文件夹也一样；30 秒后中止）。
                 • 账户处置（默认关闭）：在设置中启用后，对于文件已被移入隔离库的检测，会禁用该文件所有者的登录 shell（保留 high 或隔离失败时不做任何事）。需要管理员密码确认，对已登录的用户、root 以及 UID 小于 501 的账户不做任何事。原来的 shell 会被记录，可在设置中恢复。
@@ -324,6 +325,7 @@ extension RoamSwitchKnowledgeBase {
                 • 拦截对象：仅限威胁情报源中收录的域名，或品牌名称的 Unicode 同形异义字（homograph）仿冒等明确情况。子域名仿冒、高风险 TLD 等按警告处理。判定引擎和情报源与 Linux 版相同。
                 • 系统扩展（推荐）：内容过滤系统扩展 `RoamSwitchLinkFilter` 检查域名解析后的 TCP 通信。除了操作系统的域名解析信息外，还会读取 TLS ClientHello 中的 SNI，因此即使浏览器使用自带的 DoH / DoT 也能判定。在拦截模式下，会阻止无法读取 SNI 的 QUIC（UDP 443），使浏览器回退到 TCP。首次使用需要在系统设置中批准。
                 • JA3 指纹：对于能读取 SNI 的 TLS 连接，还会计算客户端的 JA3 哈希，并与威胁情报源中的 JA3 列表比对（对没有 SNI 的连接不进行单独的 JA3 判定）。
+                • 安全测试回调服务器：与 interact.sh、oast.*、burpcollaborator.net、oastify.com、dnslog.cn、ceye.io 等漏洞检测工具用来确认攻击是否成功的服务器通信时，只会发出通知。在任何模式下都不会阻止或暂停该通信。
                 • 警告模式（故障关闭）：暂停相应的通信，并显示「允许 / 阻止」通知和最前端面板，根据回答恢复或丢弃通信。若约 8 秒内未回答则阻断通信（阻断结果不缓存，下次访问时会再次确认）。用户选择的允许或阻止会被记住。警告模式需要系统扩展。
                 • hosts 回退：在系统扩展未生效期间，拦截模式下由特权辅助程序将目标域名以 `0.0.0.0` 写入 `/etc/hosts` 的托管区段。
                 • 威胁情报源：每天获取一次，仅接收（不发送标识符）。使用情报源专用的 Ed25519 密钥进行签名验证（与应用更新用的密钥分开）。关闭「自动更新」后对外通信为零，仅依靠随附数据和同形异义字检测运行。
@@ -564,6 +566,7 @@ extension RoamSwitchKnowledgeBase {
                 • MITRE ATT&CK：仅在能够确定对应关系时才附加技术 ID（ARP 欺骗 = T1557，诱饵文件删除或重命名 = T1485，加密 = T1486，其他篡改 = T1565）。不进行推测性分类。
                 • 保存：`~/Library/Application Support/RoamSwitch/containment_incident_timeline.json`（最新 200 条）。不会向外部发送。
                 • 可通过 MCP 工具 `get_incident_timeline` 获取此统一时间线（也可用于在 Air-Gap 期间借助本地 AI 调查原因）。各功能的单独历史也可通过 `get_canary_status`、`get_port_anomaly_incidents`、`get_runtime_threat_status` 查看。
+                • 保存证据包时，该保存会作为检测记录之下的一条记录加入，检测记录则带有证据包名称及其 manifest 的 SHA-256。只有在已知触发记录的 ID 时才会建立关联，不会仅因时间相近而关联。`get_incident_timeline` 仅在存在时才附带 parentEventID、rootEventID 和 evidenceRefs。
                 • 记录文件无法读取时(损坏或没有权限),会显示为读取失败,而不是空列表(活动日志窗口,以及 `get_incident_timeline` 中 recordFile 为 unreadable)。损坏的文件会在写入下一条记录之前另存为 .bak(不会被覆盖或删除)。
                 """,
                 recommendation: "发生自动阻断后，请结合此历史与通知历史进行确认，以帮助查明原因并防止再次发生。"
@@ -574,6 +577,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "对勒索软件或运行时威胁被封堵时自动保存的证据包，事后用保存在证据包之外的链记录检查它们是否被改动。这是篡改检测，不是篡改防止。",
                 details: """
                 • 保存：封堵勒索软件或运行时威胁的同时，把进程列表、网络连接、监视文件夹中最近修改的文件，以及（如果能识别）可疑进程打开的文件，保存为 `~/Library/Application Support/RoamSwitch/incident-evidence/` 下的证据包。manifest.json 中包含每个文件的 SHA-256。不包含数据包捕获和进程内存。
+                • 关联：manifest.json 会写入触发本次保存的检测记录的 ID（仅在已知时）。在事件时间线中，检测记录可按名称指向此证据包。
                 • 链：把证据包 manifest 的 SHA-256 连同上一行的哈希，逐行写入证据包之外的 `chain.log`（位于同一个 incident-evidence 文件夹，0600）。写入在刷到磁盘（F_FULLFSYNC）之后才确定。
                 • 检查：只读的 MCP 工具 `get_forensic_evidence_bundles` 会为每个证据包返回 `integrity`。取值为 `verified`、`manifest_altered`、`artifact_altered:<名称>`、`artifact_missing:<名称>`、`not_anchored`（链建立之前的证据包，或其行被删除）。还会返回整条链的 `chainOk`、`chainBrokenAt`，以及链中记录但已消失的证据包 `missingBundles`。
                 • 已损坏的链不会再追加行（以免掩盖是在哪里损坏的）。

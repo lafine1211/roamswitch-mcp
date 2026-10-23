@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.1 (build 180).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.2 (build 181).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -58,8 +58,12 @@ enum ForensicCaptureManager {
     /// Individual artifacts within the bundle are always best-effort — a
     /// missing `lsof`/`ps` or an empty recently-modified-files scan is
     /// recorded as such in `manifest.json`, never treated as a hard failure.
+    ///
+    /// `triggerEventID` is the id of the timeline record of the detection this bundle is for, when the caller has
+    /// it. It goes into `manifest.json`, the bundle is named on that record (`evidenceRefs`), and a
+    /// `.forensicCapture` record is added as its child. Without it nothing is added to the timeline, as before.
     @discardableResult
-    static func captureSnapshot(reason: String, suspectedPID: Int32?) -> URL? {
+    static func captureSnapshot(reason: String, suspectedPID: Int32?, triggerEventID: UUID? = nil) -> URL? {
         guard let root = evidenceRoot() else { return nil }
         let capturedAt = Date()
         let bundleDir = root.appendingPathComponent(bundleDirName(capturedAt: capturedAt), isDirectory: true)
@@ -106,7 +110,8 @@ enum ForensicCaptureManager {
             capturedAt: ISO8601DateFormatter().string(from: capturedAt),
             reason: reason,
             suspectedPID: suspectedPID,
-            artifacts: artifacts
+            artifacts: artifacts,
+            triggerEventID: triggerEventID?.uuidString
         )
         if let data = try? JSONEncoder().encode(manifest) {
             let manifestURL = bundleDir.appendingPathComponent("manifest.json")
@@ -117,10 +122,41 @@ enum ForensicCaptureManager {
             if !ForensicChain.record(root: root, bundleName: bundleDir.lastPathComponent, capturedAt: manifest.capturedAt, manifestData: data) {
                 forensicCaptureLog.error("evidence anchor could not be written")
             }
+            if let trigger = triggerEventID {
+                linkToTimeline(trigger: trigger, bundleName: bundleDir.lastPathComponent, manifest: manifest, manifestData: data)
+            }
         }
 
         forensicCaptureLog.log("evidence bundle captured at \(bundleDir.path, privacy: .public)")
         return bundleDir
+    }
+
+    /// The references a timeline record gets for a finished bundle: `manifest.json` first (its SHA-256 is the one in
+    /// the chain), then the captured files, at most `ContainmentIncidentTimeline.maxEvidenceRefs` in all. Bundle
+    /// folder name, file names and hashes only, never content.
+    static func timelineRefs(bundleName: String, manifest: ForensicManifest, manifestData: Data) -> [ContainmentEvidenceRef] {
+        var refs = [ContainmentEvidenceRef(bundle: bundleName, artifact: "manifest.json", sha256: ForensicChain.sha256Hex(manifestData))]
+        for a in manifest.artifacts where a.status == "captured" {
+            guard let rel = a.relativePath else { continue }
+            refs.append(ContainmentEvidenceRef(bundle: bundleName, artifact: rel, sha256: a.sha256))
+        }
+        return Array(refs.prefix(ContainmentIncidentTimeline.maxEvidenceRefs))
+    }
+
+    /// Records the bundle as a child of the detection and names it on the detection. The detection is recorded by the
+    /// caller before the capture starts; if it is not in the timeline the child is stored without a parent.
+    private static func linkToTimeline(trigger: UUID, bundleName: String, manifest: ForensicManifest, manifestData: Data) {
+        let refs = timelineRefs(bundleName: bundleName, manifest: manifest, manifestData: manifestData)
+        ContainmentIncidentTimeline.record(
+            source: .forensicCapture,
+            severity: "info",
+            summary: String(format: loc("証拠バンドルを保存しました: %@"), bundleName),
+            processID: manifest.suspectedPID,
+            actionTaken: "evidence_captured",
+            parentEventID: trigger,
+            evidenceRefs: refs
+        )
+        ContainmentIncidentTimeline.linkEvidence(to: trigger, refs: refs)
     }
 
     private static func writeTextArtifact(
@@ -279,6 +315,9 @@ struct ForensicManifest: Codable {
     let reason: String
     let suspectedPID: Int32?
     let artifacts: [ForensicArtifactRecord]
+    /// The timeline record of the detection this bundle was saved for, when the caller knew it. Absent in older
+    /// manifests; the SHA-256 chain covers it like every other byte of the file.
+    var triggerEventID: String? = nil
 }
 
 public struct ForensicBundleSummary: Codable, Equatable {

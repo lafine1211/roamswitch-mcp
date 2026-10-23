@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.1 (build 180).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.2 (build 181).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -58,6 +58,10 @@ public enum ContainmentIncidentSource: String, Codable {
     /// (menu action). A record of that decision, never an attack: not mapped to an ATT&CK technique. Added additively,
     /// same as the cases above.
     case criticalPathFim
+    /// `ForensicCaptureManager` saved an evidence bundle for another record's detection. An evidence-preserving action,
+    /// not a detection: never mapped to an ATT&CK technique. It is recorded as a child of the detection it was saved
+    /// for (`parentEventID`). Added additively, same as the cases above.
+    case forensicCapture
 }
 
 /// What a ransomware canary actually observed, as a stable identifier —
@@ -71,6 +75,36 @@ public enum ContainmentIncidentResolution: String, Codable {
     case released
     case autoTimeout
     case allowlisted
+}
+
+/// Points from a timeline record to saved evidence: the bundle folder name (never a path), optionally one file in it and
+/// that file's SHA-256. Nothing else is stored, so a reference cannot carry file content or a secret.
+public struct ContainmentEvidenceRef: Codable, Equatable {
+    public let bundle: String
+    public let artifact: String?
+    public let sha256: String?
+
+    public init(bundle: String, artifact: String? = nil, sha256: String? = nil) {
+        self.bundle = bundle
+        self.artifact = artifact
+        self.sha256 = sha256
+    }
+
+    /// The reference as it is stored: the bundle is its last path component, an artifact name is a relative path
+    /// without `..`, a hash is kept only if it is 64 hex digits. `nil` when no usable bundle name is left.
+    func sanitized() -> ContainmentEvidenceRef? {
+        let bundle = (self.bundle as NSString).lastPathComponent.trimmingCharacters(in: .whitespaces)
+        func plain(_ s: String) -> Bool { s.count <= 200 && !s.unicodeScalars.contains { CharacterSet.controlCharacters.contains($0) } }
+        guard !bundle.isEmpty, bundle != ".", bundle != "..", plain(bundle) else { return nil }
+        let artifact = self.artifact.map { $0.trimmingCharacters(in: .whitespaces) }.flatMap { a -> String? in
+            guard !a.isEmpty, plain(a), !a.hasPrefix("/"), !a.split(separator: "/").contains("..") else { return nil }
+            return a
+        }
+        let sha = self.sha256.map { $0.trimmingCharacters(in: .whitespaces).lowercased() }.flatMap { h -> String? in
+            h.count == 64 && h.allSatisfy(\.isHexDigit) ? h : nil
+        }
+        return ContainmentEvidenceRef(bundle: bundle, artifact: artifact, sha256: sha)
+    }
 }
 
 public struct ContainmentIncidentEvent: Identifiable, Codable, Equatable {
@@ -89,6 +123,14 @@ public struct ContainmentIncidentEvent: Identifiable, Codable, Equatable {
     public let actionTaken: String
     public var resolvedAt: Date?
     public var resolution: ContainmentIncidentResolution?
+    /// The record that caused this one, set only by a writer that holds that record's id. `record` drops it when the
+    /// parent is not in the timeline, when it would make a cycle, or when the chain would pass
+    /// `ContainmentIncidentTimeline.maxChainDepth`.
+    public var parentEventID: UUID?
+    /// The first record of the chain this one belongs to. Set by `record`, never by the writer.
+    public var rootEventID: UUID?
+    /// Evidence saved for this record (at most `ContainmentIncidentTimeline.maxEvidenceRefs`).
+    public var evidenceRefs: [ContainmentEvidenceRef]
 
     public init(
         id: UUID = UUID(),
@@ -101,7 +143,10 @@ public struct ContainmentIncidentEvent: Identifiable, Codable, Equatable {
         attackTechnique: String? = nil,
         actionTaken: String,
         resolvedAt: Date? = nil,
-        resolution: ContainmentIncidentResolution? = nil
+        resolution: ContainmentIncidentResolution? = nil,
+        parentEventID: UUID? = nil,
+        rootEventID: UUID? = nil,
+        evidenceRefs: [ContainmentEvidenceRef] = []
     ) {
         self.id = id
         self.timestamp = timestamp
@@ -114,6 +159,52 @@ public struct ContainmentIncidentEvent: Identifiable, Codable, Equatable {
         self.actionTaken = actionTaken
         self.resolvedAt = resolvedAt
         self.resolution = resolution
+        self.parentEventID = parentEventID
+        self.rootEventID = rootEventID
+        self.evidenceRefs = evidenceRefs
+    }
+
+    // The three link fields are newer than the file format: a file written before them has none of the keys, and a
+    // record without links is written without them, so an older build reads the file as before.
+    private enum CodingKeys: String, CodingKey {
+        case id, timestamp, source, severity, summary, processName, processID, attackTechnique, actionTaken
+        case resolvedAt, resolution, parentEventID, rootEventID, evidenceRefs
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        timestamp = try c.decode(Date.self, forKey: .timestamp)
+        source = try c.decode(ContainmentIncidentSource.self, forKey: .source)
+        severity = try c.decode(String.self, forKey: .severity)
+        summary = try c.decode(String.self, forKey: .summary)
+        processName = try c.decodeIfPresent(String.self, forKey: .processName)
+        processID = try c.decodeIfPresent(Int32.self, forKey: .processID)
+        attackTechnique = try c.decodeIfPresent(String.self, forKey: .attackTechnique)
+        actionTaken = try c.decode(String.self, forKey: .actionTaken)
+        resolvedAt = try c.decodeIfPresent(Date.self, forKey: .resolvedAt)
+        resolution = try c.decodeIfPresent(ContainmentIncidentResolution.self, forKey: .resolution)
+        parentEventID = try c.decodeIfPresent(UUID.self, forKey: .parentEventID)
+        rootEventID = try c.decodeIfPresent(UUID.self, forKey: .rootEventID)
+        evidenceRefs = try c.decodeIfPresent([ContainmentEvidenceRef].self, forKey: .evidenceRefs) ?? []
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(timestamp, forKey: .timestamp)
+        try c.encode(source, forKey: .source)
+        try c.encode(severity, forKey: .severity)
+        try c.encode(summary, forKey: .summary)
+        try c.encodeIfPresent(processName, forKey: .processName)
+        try c.encodeIfPresent(processID, forKey: .processID)
+        try c.encodeIfPresent(attackTechnique, forKey: .attackTechnique)
+        try c.encode(actionTaken, forKey: .actionTaken)
+        try c.encodeIfPresent(resolvedAt, forKey: .resolvedAt)
+        try c.encodeIfPresent(resolution, forKey: .resolution)
+        try c.encodeIfPresent(parentEventID, forKey: .parentEventID)
+        try c.encodeIfPresent(rootEventID, forKey: .rootEventID)
+        if !evidenceRefs.isEmpty { try c.encode(evidenceRefs, forKey: .evidenceRefs) }
     }
 }
 
@@ -132,6 +223,35 @@ public enum ContainmentIncidentTimeline {
     }
 
     private static let queue = DispatchQueue(label: "com.tetsuharu.RoamSwitch.ContainmentIncidentTimeline")
+
+    /// Evidence references kept on one record. More are dropped, not an error.
+    public static let maxEvidenceRefs = 8
+    /// A chain of cause links is never longer than this many records. A new record that would make it longer is
+    /// recorded without a parent.
+    public static let maxChainDepth = 16
+
+    /// Checks the cause link of a new record against the records already stored and fills `rootEventID`. A link that
+    /// cannot be trusted is dropped and the record is still stored; nothing here can fail. Pure, for tests.
+    static func resolveLinks(_ event: inout ContainmentIncidentEvent, existing: [ContainmentIncidentEvent]) {
+        event.rootEventID = nil
+        event.evidenceRefs = Array(event.evidenceRefs.compactMap { $0.sanitized() }.prefix(maxEvidenceRefs))
+        guard let parentID = event.parentEventID else { return }
+        func drop() { event.parentEventID = nil; event.rootEventID = nil }
+        func find(_ id: UUID?) -> ContainmentIncidentEvent? { id.flatMap { id in existing.first { $0.id == id } } }
+        guard parentID != event.id, var current = find(parentID) else { return drop() }
+        // Walk up from the parent. Meeting the new record's own id is a cycle; a walk past the cap, or one that
+        // loops among older records, is refused as well.
+        var seen = Set<UUID>()
+        var depth = 1
+        while true {
+            if current.id == event.id || !seen.insert(current.id).inserted { return drop() }
+            guard let next = find(current.parentEventID) else { break }
+            depth += 1
+            if depth >= maxChainDepth { return drop() }
+            current = next
+        }
+        event.rootEventID = current.id
+    }
 
     /// Called with every record after it was stored. The app sets it to hand the event to the opt-in
     /// forwarder (`EventForwarder`); it stays `nil` in the targets that only read this file's data.
@@ -214,19 +334,24 @@ public enum ContainmentIncidentTimeline {
         processName: String? = nil,
         processID: Int32? = nil,
         attackTechnique: String? = nil,
-        actionTaken: String
+        actionTaken: String,
+        parentEventID: UUID? = nil,
+        evidenceRefs: [ContainmentEvidenceRef] = []
     ) -> UUID {
-        let event = ContainmentIncidentEvent(
+        var event = ContainmentIncidentEvent(
             source: source,
             severity: severity,
             summary: summary,
             processName: processName,
             processID: processID,
             attackTechnique: attackTechnique ?? Self.attackTechnique(for: source, context: summary),
-            actionTaken: actionTaken
+            actionTaken: actionTaken,
+            parentEventID: parentEventID,
+            evidenceRefs: evidenceRefs
         )
         queue.sync {
             var events = loadAll()
+            resolveLinks(&event, existing: events)
             events.insert(event, at: 0)
             if events.count > maxEntries {
                 events.removeLast(events.count - maxEntries)
@@ -235,6 +360,28 @@ public enum ContainmentIncidentTimeline {
         }
         recordObserver?(event)
         return event.id
+    }
+
+    /// Adds `refs` to the evidence of the record with `id` (duplicates and anything past `maxEvidenceRefs` are skipped).
+    /// `false` when the record is not there. Best effort, like every writer here.
+    @discardableResult
+    public static func linkEvidence(to id: UUID, refs: [ContainmentEvidenceRef]) -> Bool {
+        queue.sync {
+            var events = loadAll()
+            guard let idx = events.firstIndex(where: { $0.id == id }) else { return false }
+            events[idx].evidenceRefs = appendingEvidence(refs, to: events[idx].evidenceRefs)
+            saveAll(events)
+            return true
+        }
+    }
+
+    /// Pure: `existing` followed by the usable, new entries of `refs`, never more than `maxEvidenceRefs`.
+    static func appendingEvidence(_ refs: [ContainmentEvidenceRef], to existing: [ContainmentEvidenceRef]) -> [ContainmentEvidenceRef] {
+        var out = existing
+        for r in refs.compactMap({ $0.sanitized() }) where out.count < maxEvidenceRefs && !out.contains(r) {
+            out.append(r)
+        }
+        return out
     }
 
     /// Marks the most recent unresolved event from `source` (optionally
@@ -322,7 +469,7 @@ public enum ContainmentIncidentTimeline {
             return "T1059.004" // Unix Shell — current callers always pass this explicitly anyway
         case .networkSettingsWatch:
             return "T1557" // Adversary-in-the-Middle — current callers always pass this explicitly anyway
-        case .runtimeThreat, .portAnomaly, .clickFix, .execRecorder, .vulnerabilityAcceptance, .criticalPathFim:
+        case .runtimeThreat, .portAnomaly, .clickFix, .execRecorder, .vulnerabilityAcceptance, .criticalPathFim, .forensicCapture:
             // XProtect/Gatekeeper/port-anomaly summaries don't carry a
             // Falco-style rule name to pattern-match on macOS, so this
             // stays unmapped rather than guessing.

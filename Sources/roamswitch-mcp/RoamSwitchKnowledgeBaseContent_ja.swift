@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.1 (build 180).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.2 (build 181).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -243,6 +243,7 @@ extension RoamSwitchKnowledgeBase {
                 • 開発用Webフォルダ: `~/Sites`、`/Library/WebServer/Documents`、`~/Herd`、`~/Library/Application Support/Herd`、`/Applications/MAMP/htdocs`、`~/Library/Application Support/Local`、`~/Local Sites`、パッケージCVE照合の対象フォルダ、Web・メール保護の監視対象フォルダを、1日1回と手動で検査します。1日1回の検査は `node_modules`（依存パッケージ）と `.git` に入りません（監視中のフォルダでの即時検知と、フォルダを指定した手動の検査では `node_modules` も調べます）。`tests` `fixtures` などのテスト用フォルダにはルールを適用しません。
                 • PHPのセッションフォルダ: 同じ検査で、PHPのセッションフォルダ（HomebrewとMAMPとHerdのphp.iniにある `session.save_path`。指定がなければ `/tmp`、`/private/var/tmp`、一時フォルダ。MAMPの `tmp/php`）の中の、`sess_` で始まるファイルを読みます。フォルダの中は掘らず、`sess_` 以外のファイルは開きません。upload_progress の値にPHPコードを混ぜたセッションファイルは critical、セッションの値にPHPの開始タグがあるものは high です。critical は隔離Vaultへ移し、high は通知だけです。
                 • PHPの設定の点検: 設定の「PHPの設定を点検」で、HomebrewとMAMPとHerdとPATHにある php、php-fpm、frankenphp の版、php.ini と conf.d とFPMのプール設定（session.upload_progress、PHP 8.5 の fatal_error_backtraces、memory_limit）、Apache の mod_php、セッションファイルを読みます。版は、2026年10月21日に公表された重大な脆弱性2件（CVE-2026-109618、CVE-2026-109619）の修正版（8.2.35、8.3.36、8.4.27、8.5.12）と比べ、この件だけを判定します。PHPの実行ファイルは版を表示させるときだけ起動し、スクリプトは実行せず、通信もしません。結果は画面に出るだけで、ファイルは変更しません。
+                • ドメインの点検: 設定の「ドメインの点検」で、書いたドメイン（最大20個）の SPF、DMARC、MTA-STS、登録の有効期限を調べ、参考として CAA と DNSSEC の有無も示します。既定では何も調べず、ドメインを書いてボタンを押したときだけ動きます。この Mac の `dig` がリゾルバーへ TXT・CAA・DS・MX を問い合わせ、`curl` がそのTLDの登録局の RDAP サーバー（先に IANA の公開リストを読みます。ドメイン名は含みません）へ、MX と `_mta-sts` の TXT があるドメインではそのドメイン自身の mta-sts ホストへ問い合わせます。結果は画面に出るだけで、保存も定期実行もしません。
                 • 隔離: 既定では critical の検知だけが、他の脅威と同じ流れ（隔離Vaultへ移動、「隔離ファイルを管理」で復元・削除）の対象です。high は通知とフック、設定画面の一覧だけで、ファイルには触れません（設定で「critical と high を隔離」「隔離しない」にも変えられます）。medium と low は報告のみで、通知履歴に残ります。「除外して復元」したファイルは、Webルールでは再び検知されません（ClamAVの除外とは別の一覧です）。
                 • 検知後のフック: `~/Library/Application Support/RoamSwitch/hooks/post-detection` に実行ファイルを置くと、検知のたびに JSON を標準入力で渡して実行します（所有者が自分か root、グループ・他人が書き込めない、親フォルダも同様、が条件。30秒で打ち切り）。
                 • アカウント対処（既定はオフ）: 設定で有効にすると、ファイルを隔離Vaultへ移した検知について、そのファイルの持ち主のログインシェルを無効化します（high を残した場合や、隔離に失敗した場合は何もしません）。管理者パスワードでの確認が必要で、ログイン中のユーザー、root、UID 501 未満のアカウントには何もしません。元のシェルは記録され、設定画面から戻せます。
@@ -323,6 +324,7 @@ extension RoamSwitchKnowledgeBase {
                 • 遮断対象: 脅威フィードに掲載されたドメイン、またはブランド名のUnicodeホモグラフ偽装など明確なケースのみ。サブドメイン偽装や高リスクTLDなどは警告扱いです。判定エンジンとフィードはLinux版と共通。
                 • システム拡張（推奨）: コンテンツフィルタのシステム拡張 `RoamSwitchLinkFilter` が名前解決後のTCP通信を検査。OSの名前解決情報に加え、TLS ClientHello の SNI を読むため、ブラウザ独自の DoH / DoT を使っていても判定できます。ブロックモードでは SNI を読めない QUIC（UDP 443）を遮断し、ブラウザをTCPにフォールバックさせます。初回はシステム設定での承認が必要です。
                 • JA3 フィンガープリント: SNI を読めたTLS接続では、クライアントのJA3ハッシュも算出し、脅威フィードのJA3一覧と照合します（SNIなしの接続にはJA3単独判定は行いません）。
+                • 診断用の外部サーバー: interact.sh、oast.*、burpcollaborator.net、oastify.com、dnslog.cn、ceye.io など脆弱性診断ツールが攻撃の成否を確かめるのに使うサーバーへの通信は、通知だけを出します。どのモードでも通信を止めたり保留したりはしません。
                 • 警告モード（フェイルクローズ）: 該当する通信を一時停止し、「許可する / ブロックする」の通知と最前面パネルを表示。回答を受けて通信を再開または破棄します。約8秒以内に回答がなければ通信を遮断します（遮断結果はキャッシュしないため、次回アクセス時に再度確認）。ユーザーが選んだ許可・ブロックは記憶されます。警告モードはシステム拡張が必要です。
                 • hostsフォールバック: システム拡張が有効でない間、ブロックモードでは特権ヘルパーが `/etc/hosts` の管理セクションに対象ドメインを `0.0.0.0` として書き込みます。
                 • 脅威フィード: 1日1回、受信専用で取得（識別子の送信なし）。フィード専用のEd25519鍵で署名検証します（アプリ更新用の鍵とは別）。「自動更新」をオフにすると外部通信ゼロで、同梱データとホモグラフ検知のみで動作します。
@@ -563,6 +565,7 @@ extension RoamSwitchKnowledgeBase {
                 • MITRE ATT&CK: 確実に対応付けられる場合のみ技術IDを付与（ARPスプーフィング = T1557、おとりファイルの削除・リネーム = T1485、暗号化 = T1486、その他の改ざん = T1565）。推測での分類は行いません。
                 • 保存: `~/Library/Application Support/RoamSwitch/containment_incident_timeline.json`（最新200件）。外部送信はありません。
                 • MCPツール `get_incident_timeline` でこの統合タイムラインを取得できます（Air-Gap中にローカルのAIで原因を調べる用途にも使えます）。個別の履歴は `get_canary_status`、`get_port_anomaly_incidents`、`get_runtime_threat_status` でも確認できます。
+                • 証拠バンドルを保存したときは、その保存が検知の記録の下の記録として加わり、検知の記録にはバンドル名と manifest の SHA-256 が付きます。結び付けるのは、きっかけの記録の ID が分かっている場合だけで、時刻が近いというだけでは結び付けません。`get_incident_timeline` には、あるときだけ parentEventID・rootEventID・evidenceRefs が付きます。
                 • 記録ファイルが読めないとき（壊れている、権限がない）は、空の一覧ではなく、読めなかったと出します（アクティビティログの窓、`get_incident_timeline` の recordFile が unreadable）。壊れたファイルは、次の記録の前に .bak として退避します（上書きも削除もしません）。
                 """,
                 recommendation: "自動遮断が発生した後は、この履歴と通知履歴を合わせて確認し、原因の特定と再発防止に役立ててください。"
@@ -573,6 +576,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "ランサムウェアや実行時の脅威の封じ込めのときに自動で保存される証拠バンドルが、あとで書き換えられていないかを、バンドルの外にあるチェーンの記録で確かめます。改ざんの検知であり、防止ではありません。",
                 details: """
                 • 保存: ランサムウェアや実行時の脅威の封じ込めと同時に、プロセス一覧・ネットワーク接続・監視フォルダで最近変更されたファイル・(分かれば)疑わしいプロセスの開いているファイルを、`~/Library/Application Support/RoamSwitch/incident-evidence/` の下のバンドルに保存します。manifest.json に、ファイルごとの SHA-256 が入ります。パケットキャプチャとプロセスのメモリは含みません。
+                • 関連づけ: manifest.json には、きっかけになった検知の記録の ID が入ります(分かるときだけ)。インシデントタイムラインでは、検知の記録からこのバンドルの名前をたどれます。
                 • チェーン: バンドルの manifest の SHA-256 を、バンドルの外の `chain.log`(同じ incident-evidence フォルダ、0600)に、1 行ずつ、前の行のハッシュと一緒に書きます。書き込みは、ディスクに書き出してから(F_FULLFSYNC)確定します。
                 • 確認: MCPツール `get_forensic_evidence_bundles`(読み取り専用)が、バンドルごとの `integrity` を返します。値は `verified`、`manifest_altered`、`artifact_altered:<名前>`、`artifact_missing:<名前>`、`not_anchored`(チェーンができる前のバンドル、または行が消された)です。全体の `chainOk`・`chainBrokenAt` と、チェーンにあって消えたバンドルの `missingBundles` も返します。
                 • 壊れたチェーンには、行を足しません(どこで壊れたかを隠さないため)。

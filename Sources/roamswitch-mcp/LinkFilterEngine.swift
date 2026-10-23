@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.1 (build 180).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.2 (build 181).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -30,7 +30,9 @@ public final class LinkFilterEngine {
     /// Which of `verdictWithReason`'s checks actually fired — threaded into
     /// `events.log` as a 4th field so the app's notification can say *why*
     /// a host was flagged, not just that it was.
-    public enum VerdictReason: String { case feed, ja3, extra, homograph, comboSquat }
+    public enum VerdictReason: String { case feed, ja3, extra, homograph, comboSquat
+        /// A security-test callback (OAST) server. Notice only: the verdict stays `.allow`.
+        case callbackDomain }
 
     public static let shared = LinkFilterEngine()
 
@@ -100,7 +102,12 @@ public final class LinkFilterEngine {
     /// the event line so the notification can say which app tried to reach the host.
     public func verdict(forHost host: String, ja3Hash: String?, sourceApp: String?) -> Verdict {
         let (v, reason) = verdictWithReason(forHost: host, ja3Hash: ja3Hash)
-        if v != .allow { recordEvent(v, host: host, reason: reason, sourceApp: sourceApp) }
+        if v != .allow {
+            recordEvent(v == .block ? "block" : "warn", host: host, reason: reason, sourceApp: sourceApp)
+        } else if reason == .callbackDomain {
+            // Notify only: the connection is allowed, the app shows a notice.
+            recordEvent("notice", host: host, reason: reason, sourceApp: sourceApp)
+        }
         return v
     }
 
@@ -133,6 +140,14 @@ public final class LinkFilterEngine {
         let host = LinkFilterEngine.normalizedHost(rawHost)
         reloadIfChanged(force: false)
         lock.lock(); defer { lock.unlock() }
+        return Self.decide(host: host, ja3Hash: ja3Hash, mode: mode, allowed: allowed,
+                           feedHosts: feedHosts, extraHosts: extraHosts, ja3Hashes: ja3Hashes)
+    }
+
+    /// The ordered checks, free of files and locks so tests can drive them. `host` is already normalized.
+    static func decide(host: String, ja3Hash: String?, mode: Mode, allowed: Set<String>,
+                       feedHosts: Set<String>, extraHosts: Set<String>,
+                       ja3Hashes: Set<String>) -> (Verdict, VerdictReason?) {
         if mode == .off { return (.allow, nil) }
         if matches(host, in: allowed) { return (.allow, nil) }
         if matches(host, in: feedHosts) {
@@ -151,6 +166,9 @@ public final class LinkFilterEngine {
         // `.warn` (pause + ask), never an automatic `.block`, even in block
         // mode, to bound the impact of a false positive on this one.
         if LinkFilterEngine.isBrandComboSquat(host) { return (.warn, .comboSquat) }
+        // Weakest signal, so it comes last. Never a block and never a hold: `.allow` with a reason,
+        // which the caller turns into a notice.
+        if CallbackDomains.matches(host) { return (.allow, .callbackDomain) }
         return (.allow, nil)
     }
 
@@ -160,7 +178,7 @@ public final class LinkFilterEngine {
     public func isUserBlocked(forHost host: String) -> Bool {
         reloadIfChanged(force: false)
         lock.lock(); defer { lock.unlock() }
-        return matches(LinkFilterEngine.normalizedHost(host), in: extraHosts)
+        return Self.matches(LinkFilterEngine.normalizedHost(host), in: extraHosts)
     }
 
     /// `evil.com.`(FQDNの末尾ドット)は`evil.com`と同じ宛先だが、そのままでは完全一致にも
@@ -182,7 +200,7 @@ public final class LinkFilterEngine {
 
     // MARK: - Event log (extension → app notifications)
 
-    /// One `events.log` line: `<epoch> TAB block|warn TAB host TAB reason TAB sourceApp`. The 4th and 5th fields were
+    /// One `events.log` line: `<epoch> TAB block|warn|notice TAB host TAB reason TAB sourceApp`. The 4th and 5th fields were
     /// added later: a reader of an older version ignores them. Tabs and line breaks cannot occur in a field.
     public static func eventLine(epoch: Int, kind: String, host: String, reason: String?, sourceApp: String?) -> String {
         func field(_ s: String?) -> String {
@@ -196,12 +214,12 @@ public final class LinkFilterEngine {
         let f = line.split(separator: "\t", omittingEmptySubsequences: false)
         guard f.count >= 3 else { return nil }
         let kind = String(f[1]), host = String(f[2])
-        guard kind == "block" || kind == "warn" else { return nil }
+        guard kind == "block" || kind == "warn" || kind == "notice" else { return nil }
         func optional(_ i: Int) -> String? { f.count > i && !f[i].isEmpty ? String(f[i]) : nil }
         return (kind, host, optional(3), optional(4))
     }
 
-    private func recordEvent(_ verdict: Verdict, host: String, reason: VerdictReason?, sourceApp: String? = nil) {
+    private func recordEvent(_ kind: String, host: String, reason: VerdictReason?, sourceApp: String? = nil) {
         lock.lock()
         // One line per host per hour — a busy page pulls a domain repeatedly.
         if let t = lastReported[host], Date().timeIntervalSince(t) < 3600 { lock.unlock(); return }
@@ -212,7 +230,6 @@ public final class LinkFilterEngine {
         }
         lock.unlock()
 
-        let kind = verdict == .block ? "block" : "warn"
         // 4th field (reason) is new — a version-skewed reader during an
         // upgrade moment must still parse the first 3 fields fine.
         let line = Self.eventLine(epoch: Int(Date().timeIntervalSince1970), kind: kind, host: host, reason: reason?.rawValue, sourceApp: sourceApp)
@@ -300,7 +317,7 @@ public final class LinkFilterEngine {
 
     /// `evil.com` matches `evil.com`, `a.evil.com`, `a.b.evil.com` — but never a
     /// bare public suffix.
-    private func matches(_ host: String, in set: Set<String>) -> Bool {
+    static func matches(_ host: String, in set: Set<String>) -> Bool {
         if set.contains(host) { return true }
         var h = host[...]
         while let dot = h.firstIndex(of: ".") {
@@ -421,5 +438,25 @@ public final class LinkFilterEngine {
         case "ｕ": return "u"
         default: return c
         }
+    }
+}
+
+
+/// Hosts of public out-of-band (OAST) servers. Security-testing tools (interactsh, Burp Collaborator,
+/// DNSLog, CEYE) make a victim connect to a unique name under one of these to prove an SSRF, XXE or RCE
+/// worked. A normal app has almost no reason to connect to them. Used for a notice only, never a block.
+/// The Linux list is the same: `roamswitch-core/src/callback_domains.rs`.
+public enum CallbackDomains {
+    public static let apexes: [String] = [
+        "interact.sh", "oast.pro", "oast.live", "oast.site", "oast.online", "oast.fun", "oast.me",
+        "burpcollaborator.net", "oastify.com", "dnslog.cn", "ceye.io",
+    ]
+
+    /// True for an apex itself or any subdomain of it, on a label boundary (`toast.pro` does not match
+    /// `oast.pro`). Case-insensitive; a trailing dot is ignored.
+    public static func matches(_ rawHost: String) -> Bool {
+        let host = LinkFilterEngine.normalizedHost(rawHost)
+        guard !host.isEmpty else { return false }
+        return apexes.contains { host == $0 || host.hasSuffix("." + $0) }
     }
 }

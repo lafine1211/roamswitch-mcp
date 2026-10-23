@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.1 (build 180).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.2 (build 181).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -245,6 +245,7 @@ extension RoamSwitchKnowledgeBase {
                 • 개발용 웹 폴더: `~/Sites`, `/Library/WebServer/Documents`, `~/Herd`, `~/Library/Application Support/Herd`, `/Applications/MAMP/htdocs`, `~/Library/Application Support/Local`, `~/Local Sites`, 패키지 CVE 대조 대상 폴더, 웹·메일 보호의 감시 폴더를 하루 한 번과 수동으로 검사합니다. 하루 한 번의 검사는 `node_modules`(의존 패키지)와 `.git`에 들어가지 않습니다(감시 중인 폴더의 즉시 탐지와, 폴더를 지정한 수동 검사에서는 `node_modules`도 검사합니다). `tests`, `fixtures` 같은 테스트용 폴더에는 규칙을 적용하지 않습니다.
                 • PHP 세션 폴더: 같은 검사에서 PHP 세션 폴더(Homebrew, MAMP, Herd의 php.ini에 있는 `session.save_path`. 지정이 없으면 `/tmp`, `/private/var/tmp`, 임시 폴더. MAMP의 `tmp/php`)에 있는 `sess_`로 시작하는 파일을 읽습니다. 폴더 안은 파고들지 않으며, `sess_`로 시작하지 않는 파일은 열지 않습니다. upload_progress 값에 PHP 코드를 섞은 세션 파일은 critical, 세션 값에 PHP 시작 태그가 있는 것은 high입니다. critical은 격리 보관소로 옮기고, high는 알림만 합니다.
                 • PHP 설정 점검: 설정의 "PHP 설정 점검"은 Homebrew, MAMP, Herd, PATH에 있는 php, php-fpm, frankenphp의 버전, php.ini와 conf.d와 FPM 풀 설정(session.upload_progress, PHP 8.5의 fatal_error_backtraces, memory_limit), Apache의 mod_php, 세션 파일을 읽습니다. 버전은 2026년 10월 21일에 공개된 치명적인 취약점 2건(CVE-2026-109618, CVE-2026-109619)의 수정 버전(8.2.35, 8.3.36, 8.4.27, 8.5.12)과 비교하며, 이 건만 판정합니다. PHP 실행 파일은 버전을 표시할 때만 실행하고, 스크립트는 실행하지 않으며, 통신도 하지 않습니다. 결과는 화면에 표시될 뿐 파일은 변경하지 않습니다.
+                • 도메인 점검: 설정의 "도메인 점검"은 입력한 도메인(최대 20개)의 SPF, DMARC, MTA-STS, 등록 만료일을 확인하고 참고로 CAA와 DNSSEC 여부도 보여 줍니다. 기본값으로는 아무것도 조회하지 않으며, 도메인을 입력하고 버튼을 눌렀을 때만 동작합니다. 이 Mac의 `dig`가 리졸버에 TXT, CAA, DS, MX를 조회하고, `curl`이 해당 TLD 등록 기관의 RDAP 서버(먼저 IANA의 공개 목록을 읽으며 도메인 이름은 들어 있지 않습니다)와, MX와 `_mta-sts` TXT가 있는 도메인은 그 도메인 자신의 mta-sts 호스트에 조회합니다. 결과는 화면에만 표시되며 저장하거나 정기 실행하지 않습니다.
                 • 격리: 기본적으로 critical 탐지만 다른 위협과 같은 흐름(격리 보관소로 이동, "격리된 파일 관리"에서 복원·삭제)의 대상입니다. high는 알림과 훅, 설정 화면의 목록만 있고 파일은 건드리지 않습니다(설정에서 "critical과 high 격리" 또는 "격리하지 않음"으로 바꿀 수도 있습니다). medium과 low는 보고만 하며 알림 기록에 남습니다. "제외하고 복원"한 파일은 웹 규칙에서 다시 탐지되지 않습니다(ClamAV 제외와는 별도 목록입니다).
                 • 탐지 후 훅: `~/Library/Application Support/RoamSwitch/hooks/post-detection`에 실행 파일을 두면 탐지할 때마다 JSON을 표준 입력으로 넘겨 실행합니다(소유자가 본인이나 root, 그룹·다른 사용자가 쓸 수 없음, 상위 폴더도 같음이 조건. 30초 후 중단).
                 • 계정 조치(기본값 꺼짐): 설정에서 켜면, 파일이 격리 보관소로 옮겨진 탐지에 대해 그 파일 소유자의 로그인 셸을 비활성화합니다(high를 그대로 둔 경우나 격리에 실패한 경우에는 아무것도 하지 않습니다). 관리자 비밀번호 확인이 필요하며, 로그인 중인 사용자, root, UID 501 미만 계정에는 아무것도 하지 않습니다. 원래 셸은 기록되며 설정에서 되돌릴 수 있습니다.
@@ -324,6 +325,7 @@ extension RoamSwitchKnowledgeBase {
                 • 차단 대상: 위협 정보에 등록된 도메인이나 브랜드의 유니코드 동형 문자 위장처럼 명백한 경우만 차단합니다. 브랜드를 서브도메인에 넣는 수법이나 고위험 TLD 등은 경고로 처리됩니다. 판정 엔진과 정보는 Linux 버전과 공유됩니다.
                 • 시스템 확장(권장): 콘텐츠 필터 시스템 확장 `RoamSwitchLinkFilter`가 이름 해석 이후의 TCP 흐름을 검사합니다. OS가 해석한 호스트 이름 외에도 TLS ClientHello의 SNI를 읽으므로, 브라우저가 자체 DoH / DoT를 사용해도 동작합니다. 차단 모드에서는 SNI를 볼 수 없는 QUIC(UDP 443)를 폐기하여 브라우저가 TCP로 대체하도록 유도합니다. 처음 사용할 때는 시스템 설정에서 승인이 필요합니다.
                 • JA3 지문: SNI를 읽을 수 있었던 TLS 연결에 대해 클라이언트의 JA3 해시도 계산하여 정보의 JA3 목록과 대조합니다(SNI가 없는 연결에서는 JA3만으로 판단하지 않습니다).
+                • 보안 점검용 외부 서버: interact.sh, oast.*, burpcollaborator.net, oastify.com, dnslog.cn, ceye.io 등 취약점 점검 도구가 공격의 성공 여부를 확인할 때 쓰는 서버와 통신하면 알림만 표시합니다. 어느 모드에서도 통신을 차단하거나 보류하지 않습니다.
                 • 경고 모드(실패 시 차단): 해당하는 연결이 일시 정지되고 허용/차단 알림과 최전면 패널이 표시됩니다. 답변에 따라 흐름이 재개되거나 폐기됩니다. 약 8초 안에 응답이 없으면 연결이 차단됩니다. 이 결과는 캐시되지 않으므로 다음 시도 때 다시 물어봅니다. 실제로 내린 답변은 기억됩니다. 경고 모드는 시스템 확장이 필요합니다.
                 • hosts 대체: 확장이 활성화되지 않은 동안, 차단 모드에서는 특권 헬퍼가 해당 도메인을 `/etc/hosts`의 관리 구역에 `0.0.0.0`으로 기록합니다.
                 • 위협 정보: 하루에 한 번 수신 전용으로 가져오며 식별자는 전송하지 않고, 전용 Ed25519 정보 키(앱 업데이트 키와는 별개)로 검증합니다. "자동 업데이트"를 끄면 외부 통신이 전혀 없으며 내장 데이터와 동형 문자 탐지만으로 동작합니다.
@@ -564,6 +566,7 @@ extension RoamSwitchKnowledgeBase {
                 • MITRE ATT&CK: 매핑이 확실할 때만 기법 ID를 붙입니다(ARP 스푸핑 = T1557, 미끼 파일 삭제 또는 이름 변경 = T1485, 암호화 = T1486, 그 외의 변조 = T1565). 추측으로 매핑하지 않습니다.
                 • 저장 위치: `~/Library/Application Support/RoamSwitch/containment_incident_timeline.json`(최신 200건). 어디로도 전송되지 않습니다.
                 • MCP 도구 `get_incident_timeline`은 이 통합 타임라인을 반환합니다(에어갭 상황에서 로컬 AI로 원인을 조사할 때 유용). 각 가드별 기록은 `get_canary_status`, `get_port_anomaly_incidents`, `get_runtime_threat_status`로도 확인할 수 있습니다.
+                • 증거 번들을 저장하면 그 저장이 탐지 기록 아래의 기록으로 추가되고, 탐지 기록에는 번들 이름과 manifest의 SHA-256이 붙습니다. 계기가 된 기록의 ID를 알 때만 연결하며, 시각이 가깝다는 이유만으로는 연결하지 않습니다. `get_incident_timeline`은 있을 때만 parentEventID, rootEventID, evidenceRefs를 덧붙입니다.
                 • 기록 파일을 읽을 수 없을 때(손상되었거나 권한이 없음)는 빈 목록이 아니라 읽을 수 없었다고 표시합니다(활동 로그 창, `get_incident_timeline`의 recordFile이 unreadable). 손상된 파일은 다음 기록 전에 .bak으로 따로 보관합니다(덮어쓰거나 삭제하지 않습니다).
                 """,
                 recommendation: "자동 차단이 발생한 후에는 이 타임라인을 알림 기록과 함께 검토하여 원인을 찾고 재발을 방지하세요."
@@ -574,6 +577,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "랜섬웨어나 실행 중 위협을 봉쇄할 때 자동으로 저장되는 증거 번들이 나중에 바뀌지 않았는지를, 번들 밖에 있는 체인 기록으로 확인합니다. 변조 탐지이며 변조 방지가 아닙니다.",
                 details: """
                 • 저장: 랜섬웨어나 실행 중 위협을 봉쇄할 때 프로세스 목록, 네트워크 연결, 감시 폴더에서 최근 변경된 파일, (식별되면) 의심스러운 프로세스가 열고 있는 파일을 `~/Library/Application Support/RoamSwitch/incident-evidence/` 아래의 번들로 저장합니다. manifest.json에 파일별 SHA-256이 들어갑니다. 패킷 캡처와 프로세스 메모리는 포함하지 않습니다.
+                • 연결: manifest.json에는 이번 저장의 계기가 된 탐지 기록의 ID가 들어갑니다(알 때만). 인시던트 타임라인에서는 탐지 기록에서 이 번들의 이름을 따라갈 수 있습니다.
                 • 체인: 번들 manifest의 SHA-256을 번들 밖의 `chain.log`(같은 incident-evidence 폴더, 0600)에 한 줄씩, 이전 줄의 해시와 함께 기록합니다. 기록은 디스크에 쓴 뒤(F_FULLFSYNC)에 확정합니다.
                 • 확인: 읽기 전용 MCP 도구 `get_forensic_evidence_bundles`가 번들마다 `integrity`를 반환합니다. 값은 `verified`, `manifest_altered`, `artifact_altered:<이름>`, `artifact_missing:<이름>`, `not_anchored`(체인이 생기기 전의 번들, 또는 줄이 지워진 경우)입니다. 전체 체인의 `chainOk`와 `chainBrokenAt`, 체인에는 있지만 사라진 번들의 `missingBundles`도 반환합니다.
                 • 깨진 체인에는 줄을 추가하지 않습니다(어디서 깨졌는지 숨기지 않기 위해서입니다).

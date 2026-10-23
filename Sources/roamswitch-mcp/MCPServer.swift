@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.1 (build 180).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.2 (build 181).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -1526,7 +1526,7 @@ enum MCPServer {
         ],
         [
             "name": "get_incident_timeline",
-            "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only a local JSON file. Returns RoamSwitch's unified, chronological containment incident timeline (newest first) across ARP spoofing auto-containment, the Ransomware Canary Guard, Runtime Threat Containment (XProtect Air-Gap) and the Port Anomaly Guard. Each event has timestamp, source (stable id + localized sourceLabel), severity, summary, process name/PID when known, a MITRE ATT&CK technique ID only where confidently mappable (never guessed), the action taken (air_gap / port_block, + localized label) and resolution status (open / released / autoTimeout / allowlisted). ARP spoofing containment is recorded ONLY here — no other tool reports it. Additive to get_canary_status, get_port_anomaly_incidents and get_runtime_threat_status (use those for per-guard detail). Same name and shape as the Linux edition's get_incident_timeline. Works during an Air-Gap.",
+            "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only a local JSON file. Returns RoamSwitch's unified, chronological containment incident timeline (newest first) across ARP spoofing auto-containment, the Ransomware Canary Guard, Runtime Threat Containment (XProtect Air-Gap) and the Port Anomaly Guard. Each event has timestamp, source (stable id + localized sourceLabel), severity, summary, process name/PID when known, a MITRE ATT&CK technique ID only where confidently mappable (never guessed), the action taken (air_gap / port_block, + localized label) and resolution status (open / released / autoTimeout / allowlisted). An event recorded because of another one (an evidence capture started by a detection) also has parentEventID and rootEventID, and evidenceRefs names the evidence bundles saved for it (bundle folder name, optional file name, optional SHA-256, never content); events without such a link do not have these three fields. ARP spoofing containment is recorded ONLY here — no other tool reports it. Additive to get_canary_status, get_port_anomaly_incidents and get_runtime_threat_status (use those for per-guard detail). Same name and shape as the Linux edition's get_incident_timeline. Works during an Air-Gap.",
             "inputSchema": [
                 "type": "object",
                 "properties": [

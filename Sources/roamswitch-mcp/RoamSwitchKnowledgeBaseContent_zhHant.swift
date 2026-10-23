@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.1 (build 180).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.2 (build 181).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -245,6 +245,7 @@ extension RoamSwitchKnowledgeBase {
                 • 開發用 Web 資料夾：`~/Sites`、`/Library/WebServer/Documents`、`~/Herd`、`~/Library/Application Support/Herd`、`/Applications/MAMP/htdocs`、`~/Library/Application Support/Local`、`~/Local Sites`、套件 CVE 比對的目標資料夾，以及 Web 與郵件防護的監視資料夾，每天掃描一次，也可手動掃描。每天一次的掃描不會進入 `node_modules`（相依套件）和 `.git`（監視資料夾的即時偵測，以及手動指定資料夾的掃描會檢查 `node_modules`）。`tests`、`fixtures` 等測試用資料夾不套用規則。
                 • PHP 工作階段資料夾：同一次檢查會讀取 PHP 工作階段資料夾（Homebrew、MAMP、Herd 的 php.ini 中的 `session.save_path`；未指定時為 `/tmp`、`/private/var/tmp` 和暫存資料夾；MAMP 的 `tmp/php`）中以 `sess_` 開頭的檔案。只列出資料夾內容，不深入子資料夾，也不會開啟不以 `sess_` 開頭的檔案。在 upload_progress 的值中混入 PHP 程式碼的工作階段檔案為 critical，工作階段值中帶有 PHP 起始標籤的為 high。critical 會移入隔離庫，high 只通知。
                 • PHP 設定檢查：設定中的「檢查 PHP 設定」會讀取 Homebrew、MAMP、Herd 和 PATH 中 php、php-fpm、frankenphp 的版本，php.ini、conf.d 和 FPM 池設定（session.upload_progress、PHP 8.5 的 fatal_error_backtraces、memory_limit），Apache 的 mod_php，以及工作階段檔案。版本會與 2026 年 10 月 21 日公布的兩個嚴重漏洞（CVE-2026-109618、CVE-2026-109619）的修復版本（8.2.35、8.3.36、8.4.27、8.5.12）比較，只判斷這一件事。PHP 可執行檔只在顯示版本時啟動，不執行腳本，也不進行網路通訊。結果只顯示在螢幕上，不會變更任何檔案。
+                • 網域檢查：設定中的「檢查網域」會檢查所輸入網域（最多 20 個）的 SPF、DMARC、MTA-STS 與註冊到期日，並以參考方式顯示 CAA 與 DNSSEC。預設不查詢任何內容，只有輸入網域並按下按鈕時才會執行。這台 Mac 的 `dig` 向解析器查詢 TXT、CAA、DS 與 MX 記錄，`curl` 向該 TLD 註冊局的 RDAP 伺服器查詢（先讀取 IANA 的公開清單，其中不含網域名稱），對有 MX 與 `_mta-sts` TXT 記錄的網域還會向該網域自己的 mta-sts 主機查詢。結果只顯示在畫面上，不儲存，也不定期執行。
                 • 隔離：預設只有 critical 的偵測會走與其他威脅相同的流程（移入隔離庫，可在「管理隔離檔案」中還原或刪除）。high 只有通知、掛鉤和設定中的清單，不會動檔案（也可改為「隔離 critical 和 high」或「不隔離」）。medium 和 low 僅回報，保留在通知記錄中。被「排除並還原」的檔案，Web 規則不會再次偵測（與 ClamAV 的排除是不同的清單）。
                 • 偵測後掛鉤：把可執行檔放在 `~/Library/Application Support/RoamSwitch/hooks/post-detection`，每次偵測都會執行它，並透過標準輸入傳入 JSON（要求擁有者為自己或 root，群組和其他人不可寫，其上層資料夾也一樣；30 秒後中止）。
                 • 帳號處置（預設關閉）：在設定中啟用後，對於檔案已被移入隔離庫的偵測，會停用該檔案擁有者的登入 shell（保留 high 或隔離失敗時不做任何事）。需要管理員密碼確認，對已登入的使用者、root 以及 UID 小於 501 的帳號不做任何事。原來的 shell 會被記錄，可在設定中還原。
@@ -324,6 +325,7 @@ extension RoamSwitchKnowledgeBase {
                 • 攔截對象：僅限明確的情況，也就是威脅情資中收錄的網域，或是品牌名稱的 Unicode 同形異義字仿冒。子網域仿冒、高風險 TLD 等則視為警告。判定引擎與情資與 Linux 版共用。
                 • 系統延伸功能（建議）：內容過濾系統延伸功能 `RoamSwitchLinkFilter` 會在名稱解析後檢查 TCP 連線。除了作業系統解析出的主機名稱外，也會讀取 TLS ClientHello 中的 SNI，因此即使瀏覽器使用自己的 DoH / DoT 也能判定。在攔截模式下，會捨棄看不到 SNI 的 QUIC（UDP 443），讓瀏覽器回退到 TCP。首次使用須在「系統設定」中核准。
                 • JA3 指紋：對於能讀取到 SNI 的 TLS 連線，也會計算用戶端的 JA3 雜湊值，並與情資中的 JA3 清單比對（沒有 SNI 的連線絕不會單獨使用 JA3 判定）。
+                • 安全測試回呼伺服器：與 interact.sh、oast.*、burpcollaborator.net、oastify.com、dnslog.cn、ceye.io 等弱點檢測工具用來確認攻擊是否成功的伺服器連線時，只會發出通知。在任何模式下都不會阻擋或暫停該連線。
                 • 警告模式（故障關閉）：相符的連線會被暫停，並顯示允許／封鎖通知與最前端面板，依您的回答恢復或捨棄該連線。若約 8 秒內沒有回應，該連線就會被封鎖。此結果不會被快取，因此下次嘗試時會再次詢問。您實際做出的選擇則會被記住。警告模式需要系統延伸功能。
                 • hosts 備援：在延伸功能尚未生效期間，攔截模式會由特權輔助工具將網域以 `0.0.0.0` 寫入 `/etc/hosts` 的受管理區段。
                 • 威脅情資：每天取得一次，僅接收（不傳送任何識別碼），並以專屬的 Ed25519 情資金鑰驗證（與應用程式更新金鑰分開）。關閉「自動更新」後對外流量為零，仍可依靠內建資料與同形異義字偵測運作。
@@ -564,6 +566,7 @@ extension RoamSwitchKnowledgeBase {
                 • MITRE ATT&CK：僅在對應確定時才附上技術 ID（ARP 詐騙 = T1557；誘餌檔案遭刪除或重新命名 = T1485；加密 = T1486；其他竄改 = T1565）。不會猜測任何內容。
                 • 儲存位置：`~/Library/Application Support/RoamSwitch/containment_incident_timeline.json`（保留最新 200 筆）。絕不會傳送到任何地方。
                 • MCP 工具 `get_incident_timeline` 可取得這份統一時間軸（在氣隙期間可用於協助本機 AI 進行事件分析）。個別防護的歷史也可透過 `get_canary_status`、`get_port_anomaly_incidents` 與 `get_runtime_threat_status` 取得。
+                • 儲存證據包時，該儲存會作為偵測記錄之下的一筆記錄加入，偵測記錄則帶有證據包名稱及其 manifest 的 SHA-256。只有在已知觸發記錄的 ID 時才會建立關聯，不會僅因時間相近而關聯。`get_incident_timeline` 僅在存在時才附帶 parentEventID、rootEventID 與 evidenceRefs。
                 • 記錄檔無法讀取時(損壞或沒有權限),會顯示為讀取失敗,而不是空清單(活動記錄視窗,以及 `get_incident_timeline` 中 recordFile 為 unreadable)。損壞的檔案會在寫入下一筆記錄之前另存為 .bak(不會被覆寫或刪除)。
                 """,
                 recommendation: "發生自動斷網後，請將此時間軸與通知歷史一併檢視，以找出原因並避免再次發生。"
@@ -574,6 +577,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "對勒索軟體或執行階段威脅被封堵時自動儲存的證據包，事後用保存在證據包之外的鏈記錄檢查它們是否被更動。這是竄改偵測，不是竄改防止。",
                 details: """
                 • 儲存：封堵勒索軟體或執行階段威脅的同時，把行程清單、網路連線、監視資料夾中最近修改的檔案，以及（如果能識別）可疑行程開啟的檔案，儲存為 `~/Library/Application Support/RoamSwitch/incident-evidence/` 下的證據包。manifest.json 中包含每個檔案的 SHA-256。不包含封包擷取與行程記憶體。
+                • 關聯：manifest.json 會寫入觸發本次儲存的偵測記錄的 ID（僅在已知時）。在事件時間軸中，偵測記錄可依名稱指向此證據包。
                 • 鏈：把證據包 manifest 的 SHA-256 連同上一行的雜湊，逐行寫入證據包之外的 `chain.log`（位於同一個 incident-evidence 資料夾，0600）。寫入在刷到磁碟（F_FULLFSYNC）之後才確定。
                 • 檢查：唯讀的 MCP 工具 `get_forensic_evidence_bundles` 會為每個證據包回傳 `integrity`。值為 `verified`、`manifest_altered`、`artifact_altered:<名稱>`、`artifact_missing:<名稱>`、`not_anchored`（鏈建立之前的證據包，或其行被刪除）。還會回傳整條鏈的 `chainOk`、`chainBrokenAt`，以及鏈中記錄但已消失的證據包 `missingBundles`。
                 • 已損壞的鏈不會再追加行（以免掩蓋是在哪裡損壞的）。

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.1 (build 180).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.2 (build 181).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -20,7 +20,7 @@ enum WatchdogAgentState: String, Codable, Equatable {
     case enabled
     /// Registered, waiting for the person to allow it in System Settings (Login Items).
     case requiresApproval
-    /// The app does not contain the agent's plist (a build that left it out).
+    /// The app does not contain the agent's plist or its program (a build that left it out).
     case notFound
     /// Started by `scripts/manage_watchdog.sh` (a plist in ~/Library/LaunchAgents) instead of by the app.
     case legacyScript
@@ -28,13 +28,32 @@ enum WatchdogAgentState: String, Codable, Equatable {
     /// What the system says about the registered agent. Mirrors `SMAppService.Status`, which the app converts.
     enum Registration: Equatable { case notRegistered, enabled, requiresApproval, notFound }
 
-    static func resolve(registration: Registration, legacyScriptInstalled: Bool) -> WatchdogAgentState {
+    /// `agentInBundle`: the plist and the program it names are really inside the running app (`bundleHasAgent`).
+    ///
+    /// macOS answers `notFound` for an agent that was never registered, even when its plist is in the app: the system
+    /// only knows the item once `register()` has run (seen on a signed, notarized build, where the plist and program
+    /// are in the bundle and the status is still `notFound`). So `notFound` means "left out of the app" only when the
+    /// bundle check agrees. Otherwise it is "not registered yet".
+    static func resolve(registration: Registration, legacyScriptInstalled: Bool, agentInBundle: Bool) -> WatchdogAgentState {
         switch registration {
         case .enabled: return .enabled
         case .requiresApproval: return .requiresApproval
-        case .notFound: return legacyScriptInstalled ? .legacyScript : .notFound
+        case .notFound:
+            if legacyScriptInstalled { return .legacyScript }
+            return agentInBundle ? .notRegistered : .notFound
         case .notRegistered: return legacyScriptInstalled ? .legacyScript : .notRegistered
         }
+    }
+
+    /// The agent's plist is in `<app>/Contents/Library/LaunchAgents` and the program it names (`BundleProgram`,
+    /// relative to the app) exists there.
+    static func bundleHasAgent(bundleURL: URL, plistName: String, fileManager: FileManager = .default) -> Bool {
+        let plistURL = bundleURL.appendingPathComponent("Contents/Library/LaunchAgents").appendingPathComponent(plistName)
+        guard let data = try? Data(contentsOf: plistURL),
+              let plist = (try? PropertyListSerialization.propertyList(from: data, format: nil)) as? [String: Any],
+              let program = plist["BundleProgram"] as? String, !program.isEmpty, !program.hasPrefix("/"), !program.contains("..")
+        else { return false }
+        return fileManager.isExecutableFile(atPath: bundleURL.appendingPathComponent(program).path)
     }
 
     /// The watchdog is running. Waiting for approval is not running.

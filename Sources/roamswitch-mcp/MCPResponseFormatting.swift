@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.1 (build 180).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.2 (build 181).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -766,6 +766,19 @@ public struct MCPIncidentTimelineEventPayload: Codable, Equatable {
     /// "open" | "released" | "autoTimeout" | "allowlisted"
     public let status: String
     public let resolvedAt: String?
+    /// Added later, and left out when absent: the id of the record that caused this one (for example the detection an
+    /// evidence capture was started for).
+    public var parentEventID: String? = nil
+    /// The first record of the chain this one belongs to.
+    public var rootEventID: String? = nil
+    /// Evidence bundles saved for this record: bundle folder name, optional file name, optional SHA-256. Never content.
+    public var evidenceRefs: [MCPEvidenceRefPayload]? = nil
+}
+
+public struct MCPEvidenceRefPayload: Codable, Equatable {
+    public let bundle: String
+    public let artifact: String?
+    public let sha256: String?
 }
 
 public struct MCPIncidentTimelinePayload: Codable, Equatable {
@@ -1309,6 +1322,7 @@ public enum MCPResponseFormatting {
         case .sshGuard: return loc("SSH総当たり検知")
         case .vulnerabilityAcceptance: return loc("脆弱性の受容")
         case .criticalPathFim: return loc("重要ファイルの改ざん監視")
+        case .forensicCapture: return loc("証拠バンドルの保存")
         }
     }
 
@@ -1351,7 +1365,10 @@ public enum MCPResponseFormatting {
                 actionTaken: event.actionTaken,
                 actionTakenLabel: containmentActionLabel(event.actionTaken),
                 status: status,
-                resolvedAt: event.resolvedAt.map { iso.string(from: $0) }
+                resolvedAt: event.resolvedAt.map { iso.string(from: $0) },
+                parentEventID: event.parentEventID?.uuidString,
+                rootEventID: event.rootEventID?.uuidString,
+                evidenceRefs: event.evidenceRefs.isEmpty ? nil : event.evidenceRefs.map { MCPEvidenceRefPayload(bundle: $0.bundle, artifact: $0.artifact, sha256: $0.sha256) }
             ))
         }
         var caveats: [String] = [
