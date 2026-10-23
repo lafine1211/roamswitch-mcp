@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.0 (build 179).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.1 (build 180).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -243,6 +243,8 @@ extension RoamSwitchKnowledgeBase {
                 • 檢查所寫內容：規則檔案的 JSON Schema 可在設定中透過「匯出 Schema」寫出（`~/Library/Application Support/RoamSwitch/web_rules.schema.json`）。在編輯器中指定它，即可補全鍵並提示拼寫錯誤。「檢查規則檔案…」會針對所選檔案顯示可用規則數、拼寫錯誤（遇到未知的鍵會附上最接近的已知鍵作為建議），以及它會取代哪些現有規則。自訂規則以相同的 id 取代內建規則或來源規則時，設定中會以備註而非警告顯示。
                 • 即時偵測：對 Web 與郵件防護（feat_webmail_download_guard）所監視資料夾中儲存或變更的 Web 檔案，在同一次靜態檢查中套用。與 Linux 版不同，無法在存取前阻止，全部為事後偵測（不使用 EndpointSecurity）。
                 • 開發用 Web 資料夾：`~/Sites`、`/Library/WebServer/Documents`、`~/Herd`、`~/Library/Application Support/Herd`、`/Applications/MAMP/htdocs`、`~/Library/Application Support/Local`、`~/Local Sites`、套件 CVE 比對的目標資料夾，以及 Web 與郵件防護的監視資料夾，每天掃描一次，也可手動掃描。每天一次的掃描不會進入 `node_modules`（相依套件）和 `.git`（監視資料夾的即時偵測，以及手動指定資料夾的掃描會檢查 `node_modules`）。`tests`、`fixtures` 等測試用資料夾不套用規則。
+                • PHP 工作階段資料夾：同一次檢查會讀取 PHP 工作階段資料夾（Homebrew、MAMP、Herd 的 php.ini 中的 `session.save_path`；未指定時為 `/tmp`、`/private/var/tmp` 和暫存資料夾；MAMP 的 `tmp/php`）中以 `sess_` 開頭的檔案。只列出資料夾內容，不深入子資料夾，也不會開啟不以 `sess_` 開頭的檔案。在 upload_progress 的值中混入 PHP 程式碼的工作階段檔案為 critical，工作階段值中帶有 PHP 起始標籤的為 high。critical 會移入隔離庫，high 只通知。
+                • PHP 設定檢查：設定中的「檢查 PHP 設定」會讀取 Homebrew、MAMP、Herd 和 PATH 中 php、php-fpm、frankenphp 的版本，php.ini、conf.d 和 FPM 池設定（session.upload_progress、PHP 8.5 的 fatal_error_backtraces、memory_limit），Apache 的 mod_php，以及工作階段檔案。版本會與 2026 年 10 月 21 日公布的兩個嚴重漏洞（CVE-2026-109618、CVE-2026-109619）的修復版本（8.2.35、8.3.36、8.4.27、8.5.12）比較，只判斷這一件事。PHP 可執行檔只在顯示版本時啟動，不執行腳本，也不進行網路通訊。結果只顯示在螢幕上，不會變更任何檔案。
                 • 隔離：預設只有 critical 的偵測會走與其他威脅相同的流程（移入隔離庫，可在「管理隔離檔案」中還原或刪除）。high 只有通知、掛鉤和設定中的清單，不會動檔案（也可改為「隔離 critical 和 high」或「不隔離」）。medium 和 low 僅回報，保留在通知記錄中。被「排除並還原」的檔案，Web 規則不會再次偵測（與 ClamAV 的排除是不同的清單）。
                 • 偵測後掛鉤：把可執行檔放在 `~/Library/Application Support/RoamSwitch/hooks/post-detection`，每次偵測都會執行它，並透過標準輸入傳入 JSON（要求擁有者為自己或 root，群組和其他人不可寫，其上層資料夾也一樣；30 秒後中止）。
                 • 帳號處置（預設關閉）：在設定中啟用後，對於檔案已被移入隔離庫的偵測，會停用該檔案擁有者的登入 shell（保留 high 或隔離失敗時不做任何事）。需要管理員密碼確認，對已登入的使用者、root 以及 UID 小於 501 的帳號不做任何事。原來的 shell 會被記錄，可在設定中還原。
@@ -435,6 +437,7 @@ extension RoamSwitchKnowledgeBase {
                 • 判斷依據：近期的資訊竊取程式常透過合法 Apple 簽署的 `/bin/bash` 或 `/usr/bin/osascript` 執行以 Base64 隱藏的指令碼來達成持久化。由於直譯器本身的簽署有效，任何直接啟動裸直譯器的註冊，無論簽署狀態都會被視為可疑，其指令碼參數也會經由靜態特徵碼檢查。未簽署或簽署無效的執行檔同樣會被標記。Homebrew services 的包裝程式則為例外。
                 • 僅偵測：由於未使用 EndpointSecurity 授權，無法阻止 plist 的寫入本身。系統會在寫入後約 1.5 秒內判斷並回報。
                 • 另外監看的位置（會自動執行的地方）：shell 啟動檔（`~/.zshrc`, `~/.zshenv`, `~/.zprofile`, `~/.zlogin`, `~/.zlogout`, `~/.bashrc`, `~/.bash_profile`, `~/.bash_login`, `~/.profile`, `~/.bash_logout`, `~/.config/fish/config.fish`, `/etc/zshrc`, `/etc/zshenv`, `/etc/zprofile`, `/etc/zlogin`, `/etc/profile`, `/etc/bashrc`）、`~/.ssh/rc` 和 `/etc/ssh/sshrc`、定期指令碼（`/etc/periodic/{daily,weekly,monthly}`、`/usr/local/etc/periodic/*`、`/etc/{daily,weekly,monthly}.local`，僅在存在時）、存放 git 掛鉤的資料夾（`~/.git-templates/hooks`、`~/.config/git/hooks`）、登入/登出掛鉤（`/Library/Preferences/com.apple.loginwindow.plist` 中的 LoginHook / LogoutHook），以及資料夾動作指令碼（`~/Library/Scripts/Folder Action Scripts` 和 `/Library/Scripts/Folder Action Scripts`；已編譯的 AppleScript 以 osadecompile 讀取，`.scptd` 套件不讀取）。每 5 秒檢查一次；第一次只記錄既有內容，不通知。不涵蓋 `emond`。
+                • Python 啟動檔案：也會檢查 Python 每次啟動時自行執行的檔案，即 Python 本身 site 資料夾以及家目錄下虛擬環境（向下尋找 4 層，每分鐘重新尋找一次，不含 Desktop、Documents、Downloads、Library）中的 `.pth` 檔、`sitecustomize.py`、`usercustomize.py`，以及 `.pth` 從同一資料夾匯入的模組。僅當程式碼讀取三種以上憑證存放位置、解碼後直接執行、下載後直接執行或呈反向 shell 形態時才會通知，隱藏字串的程式碼看不到。
                 • 判定（上述位置）：只通知形式為反向 Shell、解碼後直接執行、下載後直接執行、或執行暫存資料夾（`/tmp`、`/var/folders` 等）中程式的行。新增一般的行不會通知。shell 啟動檔、`~/.ssh/rc` 和 git 掛鉤由擁有者頻繁編輯，因此原本就有的可疑行不會再次通知，只通知新增的行。登入/登出掛鉤只要被設定就會通知。
                 • 預設值：Pro 版預設開啟。可在「惡意軟體防護」→「監控新增自動啟動註冊(LaunchAgent/Daemon) (Pro)」切換。
                 """,

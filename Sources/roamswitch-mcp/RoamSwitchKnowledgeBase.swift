@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.0 (build 179).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.1 (build 180).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -419,7 +419,7 @@ public struct RoamSwitchKnowledgeBase: Sendable {
             EntryMeta(id: "feat_usb_storage_guard", topic: t, tags: ["usb", "badusb", "diskarbitration", "clamav", "whitelist", "allowlist", "read-only", "pro", "storage"]),
             EntryMeta(id: "feat_bluetooth_guard", topic: t, tags: ["bluetooth", "blueutil", "ble", "blueborne", "pro", "homebrew", "lockdown"]),
             EntryMeta(id: "feat_webmail_download_guard", topic: t, tags: ["download", "mail", "fsevents", "quarantine", "clamav", "malware", "static-signature", "eicar", "pro"]),
-            EntryMeta(id: "feat_web_rules", topic: t, tags: ["webshell", "web-shell", "php", "javascript", "jsp", "asp", "htaccess", "injector", "rules", "feed", "hook", "post-detection", "rules.d", "static-signature", "quarantine", "development", "sites", "herd", "mamp", "pro", "receive-only"]),
+            EntryMeta(id: "feat_web_rules", topic: t, tags: ["webshell", "web-shell", "php", "javascript", "jsp", "asp", "htaccess", "injector", "rules", "feed", "hook", "post-detection", "rules.d", "static-signature", "quarantine", "development", "sites", "herd", "mamp", "session", "upload-progress", "php-fpm", "pro", "receive-only"]),
             EntryMeta(id: "feat_event_forwarding", topic: t, tags: ["siem", "syslog", "cef", "rfc5424", "webhook", "hmac", "forwarding", "json-lines", "tls", "queue", "export", "soc", "pro", "opt-in", "zero-telemetry"]),
             EntryMeta(id: "feat_ai_model_guard", topic: t, tags: ["ai", "model", "pickle", "safetensors", "gguf", "pytorch", "huggingface", "malware", "pro"]),
             EntryMeta(id: "feat_quarantine_manager", topic: t, tags: ["quarantine", "vault", "restore", "delete", "exclusion", "clamav", "false_positive", "mcp"]),

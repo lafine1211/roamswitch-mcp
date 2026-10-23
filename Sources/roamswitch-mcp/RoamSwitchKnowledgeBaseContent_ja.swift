@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.0 (build 179).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.1 (build 180).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -241,6 +241,8 @@ extension RoamSwitchKnowledgeBase {
                 • ルールの出どころ: 製品に組み込みのルール、署名付きの日次フィード（受信専用。`~/Library/Application Support/RoamSwitch/web_rules.json` に保存）、利用者定義のルール（`~/Library/Application Support/RoamSwitch/rules.d/*.json`）の3層です。利用者定義のルールは、所有者が自分か root で、グループ・他人が書き込めないファイルだけを読み込みます。
                 • 即時の検知: Web・メール保護（feat_webmail_download_guard）の監視対象フォルダに保存・変更されたWebファイルに、同じ静的検査の中で適用します。Linux版のようなアクセス前の阻止はできず、すべて事後の検知です（EndpointSecurityは使いません）。
                 • 開発用Webフォルダ: `~/Sites`、`/Library/WebServer/Documents`、`~/Herd`、`~/Library/Application Support/Herd`、`/Applications/MAMP/htdocs`、`~/Library/Application Support/Local`、`~/Local Sites`、パッケージCVE照合の対象フォルダ、Web・メール保護の監視対象フォルダを、1日1回と手動で検査します。1日1回の検査は `node_modules`（依存パッケージ）と `.git` に入りません（監視中のフォルダでの即時検知と、フォルダを指定した手動の検査では `node_modules` も調べます）。`tests` `fixtures` などのテスト用フォルダにはルールを適用しません。
+                • PHPのセッションフォルダ: 同じ検査で、PHPのセッションフォルダ（HomebrewとMAMPとHerdのphp.iniにある `session.save_path`。指定がなければ `/tmp`、`/private/var/tmp`、一時フォルダ。MAMPの `tmp/php`）の中の、`sess_` で始まるファイルを読みます。フォルダの中は掘らず、`sess_` 以外のファイルは開きません。upload_progress の値にPHPコードを混ぜたセッションファイルは critical、セッションの値にPHPの開始タグがあるものは high です。critical は隔離Vaultへ移し、high は通知だけです。
+                • PHPの設定の点検: 設定の「PHPの設定を点検」で、HomebrewとMAMPとHerdとPATHにある php、php-fpm、frankenphp の版、php.ini と conf.d とFPMのプール設定（session.upload_progress、PHP 8.5 の fatal_error_backtraces、memory_limit）、Apache の mod_php、セッションファイルを読みます。版は、2026年10月21日に公表された重大な脆弱性2件（CVE-2026-109618、CVE-2026-109619）の修正版（8.2.35、8.3.36、8.4.27、8.5.12）と比べ、この件だけを判定します。PHPの実行ファイルは版を表示させるときだけ起動し、スクリプトは実行せず、通信もしません。結果は画面に出るだけで、ファイルは変更しません。
                 • 隔離: 既定では critical の検知だけが、他の脅威と同じ流れ（隔離Vaultへ移動、「隔離ファイルを管理」で復元・削除）の対象です。high は通知とフック、設定画面の一覧だけで、ファイルには触れません（設定で「critical と high を隔離」「隔離しない」にも変えられます）。medium と low は報告のみで、通知履歴に残ります。「除外して復元」したファイルは、Webルールでは再び検知されません（ClamAVの除外とは別の一覧です）。
                 • 検知後のフック: `~/Library/Application Support/RoamSwitch/hooks/post-detection` に実行ファイルを置くと、検知のたびに JSON を標準入力で渡して実行します（所有者が自分か root、グループ・他人が書き込めない、親フォルダも同様、が条件。30秒で打ち切り）。
                 • アカウント対処（既定はオフ）: 設定で有効にすると、ファイルを隔離Vaultへ移した検知について、そのファイルの持ち主のログインシェルを無効化します（high を残した場合や、隔離に失敗した場合は何もしません）。管理者パスワードでの確認が必要で、ログイン中のユーザー、root、UID 501 未満のアカウントには何もしません。元のシェルは記録され、設定画面から戻せます。
@@ -434,6 +436,7 @@ extension RoamSwitchKnowledgeBase {
                 • 判定: 近年の情報窃取マルウェアは、正規署名済みの `/bin/bash` や `/usr/bin/osascript` にBase64で隠したスクリプトを実行させて永続化します。インタプリタ自体の署名は正しいため、生のインタプリタを直接起動する登録は署名に関係なく不審として扱い、スクリプト引数も静的シグネチャで検査します。署名が無効・未署名の実行ファイルも検知対象です。Homebrew services のラッパーは除外します。
                 • 検知のみ: EndpointSecurityのエンタイトルメントを使わないため、plistの書き込み自体は止められません。書き込みから約1.5秒以内に判定して通知します。
                 • 監視対象（自動で実行される場所）: シェルの起動ファイル（`~/.zshrc`、`~/.zshenv`、`~/.zprofile`、`~/.zlogin`、`~/.zlogout`、`~/.bashrc`、`~/.bash_profile`、`~/.bash_login`、`~/.profile`、`~/.bash_logout`、`~/.config/fish/config.fish`、`/etc/zshrc`、`/etc/zshenv`、`/etc/zprofile`、`/etc/zlogin`、`/etc/profile`、`/etc/bashrc`）、`~/.ssh/rc` と `/etc/ssh/sshrc`、定期スクリプト（`/etc/periodic/{daily,weekly,monthly}`、`/usr/local/etc/periodic/*`、`/etc/{daily,weekly,monthly}.local`。存在する場合のみ）、gitフックの置き場（`~/.git-templates/hooks`、`~/.config/git/hooks`）、ログイン/ログアウトフック（`/Library/Preferences/com.apple.loginwindow.plist` の LoginHook / LogoutHook）、フォルダアクションのスクリプト（`~/Library/Scripts/Folder Action Scripts` と `/Library/Scripts/Folder Action Scripts`。コンパイル済みのAppleScriptは osadecompile で読み、`.scptd` バンドルは読みません）。5秒ごとに確認し、最初の1回は今ある内容を記録するだけで通知しません。`emond` は対象外です。
+                • Pythonの起動ファイル: Pythonが起動のたびに自分で実行するファイルも見ます。Python本体のsiteフォルダーと、ホームの下の仮想環境(4階層まで、1分ごとに探し直します。Desktop、Documents、Downloads、Libraryは除きます)にある `.pth` ファイル、`sitecustomize.py`、`usercustomize.py` と、`.pth` が同じフォルダーから読み込むモジュールです。通知するのは、3種類以上の認証情報の置き場所を読む処理、復号してそのまま実行、ダウンロードしてそのまま実行、リバースシェルの形のコードだけで、文字列を隠したコードは見えません。
                 • 判定（上の場所）: リバースシェル、復号してそのまま実行、ダウンロードしてそのまま実行、一時フォルダ（`/tmp`・`/var/folders` など）にあるプログラムの実行の形をした行だけを通知します。普通の行が増えても通知しません。シェルの起動ファイル・`~/.ssh/rc`・gitフックは持ち主が頻繁に編集するため、元からあった不審な行は通知せず、新しく増えた行だけを通知します。ログイン/ログアウトフックは、設定されたこと自体を通知します。
                 • 既定値: Pro版で既定オン。メニュー「マルウェア対策」→「新規の自動起動登録(LaunchAgent/Daemon)を監視 (Pro)」で切替。
                 """,

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.0 (build 179).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.1 (build 180).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -139,6 +139,11 @@ enum DetectionCoverage {
         Entry(technique: "T1546.004", name: "Event Triggered Execution: Unix Shell Configuration Modification", coverage: .partial,
               sources: [guardSource("persistenceMonitor")],
               blindSpot: "Only a new line shaped like a reverse shell, decode-and-run, download-and-run or a program run from a temporary folder is notified. A suspicious line that was already in the file when the watch started is not reported again, and the start-up files of other shells such as csh and tcsh are not watched."),
+        // T1546.018. RoamSwitch/StartupScriptWatch.swift (PythonStartupJudge): .pth files, sitecustomize.py and
+        // usercustomize.py in the Python site folders and in virtual environments under the home folder.
+        Entry(technique: "T1546.018", name: "Event Triggered Execution: Python Startup Hooks", coverage: .partial,
+              sources: [guardSource("persistenceMonitor")],
+              blindSpot: "Only code that reads three or more kinds of credential store, decodes data and runs it, runs what it downloaded, or has the shape of a reverse shell is notified, and a module that hides its strings is not seen. Virtual environments are searched for four folders down from the home folder (not in Desktop, Documents, Downloads or Library) once a minute; environments elsewhere and inside containers are not watched."),
         Entry(technique: "T1547.015", name: "Boot or Logon Autostart Execution: Login Items", coverage: .none,
               sources: [],
               blindSpot: "Login items are not monitored; the persistence monitor watches LaunchAgent and LaunchDaemon plists and a few text files (shell start-up files, periodic scripts, hooks), not the Login Items list."),
@@ -224,12 +229,12 @@ enum DetectionCoverage {
         Entry(technique: "T1195.001", name: "Supply Chain Compromise: Compromise Software Dependencies and Development Tools", coverage: .partial,
               sources: [guardSource("lockfileTamperGuard")],
               blindSpot: "Notices that a lockfile changed, not whether the dependency it now pins is malicious. Only the npm-family lockfiles of registered project folders are hashed."),
-        // T1505.003. RoamSwitch/WebRuleFolderScanner.swift (local web roots and project folders, once a day and on demand)
+        // T1505.003. RoamSwitch/WebRuleFolderScanner.swift (local web roots, project folders and PHP session folders, once a day and on demand)
         // and RoamSwitch/WebMailDownloadGuard.swift (the same web rules on the download folders, live), through
         // StaticSignatureScanner.
         Entry(technique: "T1505.003", name: "Server Software Component: Web Shell", coverage: .partial,
               sources: [guardSource("webRulesFolderScan"), guardSource("webMailDownloadGuard")],
-              blindSpot: "Local web roots, project folders and the download folders only. A web shell written anywhere else is not examined, there is no view of a remote server, and a file larger than the read limit is checked at its start only."),
+              blindSpot: "Local web roots, project folders, the download folders and the PHP session folders (listed one level deep, `sess_` files only). A web shell written anywhere else is not examined, there is no view of a remote server, and a file larger than the read limit is checked at its start only."),
         // T1566.002. RoamSwitch/LinkGuardManager.swift: outbound connections to hosts in the phishing and scam feed are
         // blocked or paused for an answer (hosts sinkhole, plus the content-filter extension when it is active).
         Entry(technique: "T1566.002", name: "Phishing: Spearphishing Link", coverage: .partial,
