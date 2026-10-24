@@ -19,6 +19,7 @@ All files live in `Sources/roamswitch-mcp/`.
 | This repo | RoamSwitch app repo |
 | --- | --- |
 | `main.swift` | `RoamSwitchMCPServer/main.swift` |
+| `ProcessWait.swift` | `RoamSwitch/ProcessWait.swift` |
 | `AppLanguage.swift` | `RoamSwitch/AppLanguage.swift` |
 | `TrustedNetwork.swift` | `RoamSwitch/TrustedNetwork.swift` |
 | `GatewayFingerprint.swift` | `RoamSwitch/GatewayFingerprint.swift` |
@@ -103,6 +104,7 @@ All files live in `Sources/roamswitch-mcp/`.
 | `GuardReaderHealth.swift` | `Shared/GuardReaderHealth.swift` (from `Shared/`) |
 | `StrictJSON.swift` | `Shared/StrictJSON.swift` (from `Shared/`) |
 | `WatchdogAgentState.swift` | `Shared/WatchdogAgentState.swift` (from `Shared/`) |
+| `PFSystemAnchors.swift` | `Shared/PFSystemAnchors.swift` (from `Shared/`) |
 | `SSHGuardStatusReader.swift` | `RoamSwitch/SSHGuardStatusReader.swift` |
 
 This is exactly the source set the app compiles into its `RoamSwitchMCPServer` target

@@ -32,6 +32,18 @@ final class StdioSmokeTests: XCTestCase {
         stdin.fileHandleForWriting.write(payload)
         try stdin.fileHandleForWriting.close()
 
+        // Read stdout while the process runs. The reply to `tools/list` is larger than a pipe
+        // buffer (64 KiB), so a process that is only read after it exits would block on its own
+        // write until the timeout and the reply would be cut off.
+        final class Collected: @unchecked Sendable { var data = Data() }
+        let collected = Collected()
+        let reader = DispatchGroup()
+        reader.enter()
+        DispatchQueue.global().async {
+            collected.data = stdout.fileHandleForReading.readDataToEndOfFile()
+            reader.leave()
+        }
+
         let deadline = Date().addingTimeInterval(timeout)
         while process.isRunning && Date() < deadline {
             Thread.sleep(forTimeInterval: 0.05)
@@ -41,7 +53,8 @@ final class StdioSmokeTests: XCTestCase {
             XCTFail("roamswitch-mcp did not exit after stdin closed (possible hang)")
         }
 
-        let data = stdout.fileHandleForReading.readDataToEndOfFile()
+        _ = reader.wait(timeout: .now() + 5)
+        let data = collected.data
         return String(decoding: data, as: UTF8.self)
             .split(separator: "\n")
             .compactMap { (try? JSONSerialization.jsonObject(with: Data($0.utf8))) as? [String: Any] }
