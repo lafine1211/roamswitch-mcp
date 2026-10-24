@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.5 (build 184).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.6 (build 185).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -45,15 +45,19 @@ public struct GuardReaderHealth: Codable, Equatable {
     public var filesUnreadableAt: Double?
     /// Folders the last scan could not list, so everything below them was not looked at (nil where the source has no folders).
     public var foldersUnreadable: Int?
-    /// Files the last scan read only the beginning of, because they are longer than the read limit (nil where there is no limit).
+    /// Files the last scan read only the beginning and the end of, because they are longer than the whole-read limit (nil where there is no limit).
     public var filesTruncated: Int?
+    /// The last scan left part of what it should watch out because a limit was reached (more working copies than it
+    /// keeps, a walk that stopped at its folder limit, more files than its list holds). nil where the source has no such
+    /// limit. What was left out was not looked at, the same as an unreadable file.
+    public var scopeLimited: Bool?
     public var updatedAt: Double = 0
 
     public init() {}
 
     private enum CodingKeys: String, CodingKey {
         case active, restarts, lastRestartAt, gaps, lastGapAt, inGap, unreadable, reason, linesDropped, oversizeDropped
-        case filesUnreadable, filesUnreadableAt, foldersUnreadable, filesTruncated, updatedAt
+        case filesUnreadable, filesUnreadableAt, foldersUnreadable, filesTruncated, scopeLimited, updatedAt
     }
 
     public init(from decoder: Decoder) throws {
@@ -72,6 +76,7 @@ public struct GuardReaderHealth: Codable, Equatable {
         filesUnreadableAt = try c.decodeIfPresent(Double.self, forKey: .filesUnreadableAt)
         foldersUnreadable = try c.decodeIfPresent(Int.self, forKey: .foldersUnreadable)
         filesTruncated = try c.decodeIfPresent(Int.self, forKey: .filesTruncated)
+        scopeLimited = try c.decodeIfPresent(Bool.self, forKey: .scopeLimited)
         updatedAt = try c.decodeIfPresent(Double.self, forKey: .updatedAt) ?? 0
     }
 
@@ -152,6 +157,12 @@ public struct GuardReaderHealth: Codable, Equatable {
         foldersUnreadable = folders
         filesTruncated = truncated
         if files > 0 || folders > 0 { filesUnreadableAt = now }
+        updatedAt = now
+    }
+
+    /// Whether the last scan left part of its scope out because a limit was reached. Replaces the previous answer.
+    public mutating func setScopeLimited(_ limited: Bool, now: Double) {
+        scopeLimited = limited
         updatedAt = now
     }
 
@@ -336,6 +347,7 @@ public enum GuardReaderHealthStore {
         func lostRecently(_ h: GuardReaderHealth) -> Bool {
             h.inGap || (h.lastGapAt.map { now - $0 <= gapWindowSecs } ?? false)
                 || (h.filesUnreadable ?? 0) > 0 || (h.foldersUnreadable ?? 0) > 0 || (h.filesTruncated ?? 0) > 0
+                || h.scopeLimited == true
         }
         if healths.contains(where: lostRecently) { return "partial" }
         for id in def.auxiliary {

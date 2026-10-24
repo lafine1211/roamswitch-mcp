@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.5 (build 184). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.6 (build 185). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -90,6 +90,7 @@ final class MCPKnowledgeBaseTests: XCTestCase {
             "exec.quarantine_stripped_then_exec", "exec.launchd_untrusted_binary", "exec.keychain_access",
             "exec.interpreter_inline_obfuscated", "exec.dyld_insert_libraries", "exec.ransomware_recovery_tampering",
             "exec.honeytoken_path", "exec.offensive_tool_inventory", "exec.offensive_tool_burst", "exec.reverse_shell_argv",
+            "exec.shell_from_service",
         ]
         for code in RoamSwitchKnowledgeBase.supportedLanguageCodes {
             let entries = RoamSwitchKnowledgeBase.localizedEntries(for: code)
@@ -145,6 +146,34 @@ final class MCPKnowledgeBaseTests: XCTestCase {
                     XCTAssertTrue(entry.details.contains(needle), "\(code): \(check.id) does not mention \(needle)")
                 }
             }
+        }
+    }
+
+    /// The PHP settings check has its own entry. Its text exists in all ten languages; without an id in the
+    /// catalog nothing would return it (that is how the ransomware recovery entry went missing).
+    func testPhpCheckEntryIsRegisteredAndStatedInEveryLanguage() throws {
+        let needles = ["CVE-2026-109618", "CVE-2026-109619", "CVE-2026-115560", "8.2.35", "8.5.12",
+                       "session.upload_progress.enabled", "fatal_error_backtraces", "session.serialize_handler",
+                       "php_binary", "php_serialize", "ini_set()", "sess_", "node_modules", "critical", "high", "medium", "info",
+                       "feat_web_rules"]
+        let ja = try XCTUnwrap(kb.items(language: "ja").first { $0.id == "feat_php_check" })
+        for code in RoamSwitchKnowledgeBase.supportedLanguageCodes {
+            let item = try XCTUnwrap(kb.items(language: code).first { $0.id == "feat_php_check" }, "feat_php_check missing for \(code)")
+            XCTAssertEqual(item.topic, "feature")
+            XCTAssertFalse(item.summary.isEmpty, code)
+            XCTAssertNotNil(item.recommendation, code)
+            if code != "ja" {
+                XCTAssertNotEqual(item.title, ja.title, "\(code): the title is not translated")
+                XCTAssertNotEqual(item.details, ja.details, "\(code): the details are not translated")
+            }
+            for needle in needles {
+                XCTAssertTrue(item.details.contains(needle), "\(code): feat_php_check does not mention \(needle)")
+            }
+            // A search by the advisory number finds it in every language.
+            XCTAssertTrue(kb.search(query: "CVE-2026-115560", language: code).items.contains { $0.id == "feat_php_check" }, code)
+            // The web rules entry points to it instead of repeating it.
+            let rules = try XCTUnwrap(kb.items(language: code).first { $0.id == "feat_web_rules" })
+            XCTAssertTrue(rules.details.contains("feat_php_check"), "\(code): feat_web_rules does not point to feat_php_check")
         }
     }
 }

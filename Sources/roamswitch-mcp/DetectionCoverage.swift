@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.5 (build 184).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.6 (build 185).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -51,21 +51,19 @@ enum DetectionCoverage {
     static let knownFeatures: Set<String> = ["watchdog"]
 
     static let entries: [Entry] = [
-        // T1562.001. RoamSwitchWatchdog/WatchdogManager.swift: restarts the app after an unexpected exit
-        // (handleApplicationDidTerminate -> handleAppCrash) and shows a notification.
-        Entry(technique: "T1562.001", name: "Impair Defenses: Disable or Modify Tools", coverage: .partial,
+        // T1685. RoamSwitchWatchdog/WatchdogManager.swift: restarts the app after an unexpected exit
+        // (handleApplicationDidTerminate -> handleAppCrash) and shows a notification. ATT&CK v19 folded the old
+        // T1562.001 (Disable or Modify Tools) and T1562.006 (Indicator Blocking) into this one technique.
+        Entry(technique: "T1685", name: "Disable or Modify Tools", coverage: .partial,
               sources: [feature("watchdog")],
-              blindSpot: "Covers only an unexpected exit of the RoamSwitch app itself, which is restarted with a notification, and only while the watchdog is registered: it is off until the person switches it on in the menu, and its state is shown here. It says nothing about other security tools being disabled."),
-        // T1562.004. SecurityHealthChecker.swift host_firewall / MCPResponseFormatting.configOnlyCaveat: the
+              blindSpot: "Covers only an unexpected exit of the RoamSwitch app itself, which is restarted with a notification, and only while the watchdog is registered: it is off until the person switches it on in the menu, and its state is shown here. It says nothing about other security tools being disabled. Nothing detects log, event or telemetry sources being blocked or starved (blocking indicators, formerly T1562.006)."),
+        // T1686 (T1562.004 before ATT&CK v19). SecurityHealthChecker.swift host_firewall / MCPResponseFormatting.configOnlyCaveat: the
         // audit reports RoamSwitch's protection level, not a measurement of the macOS firewall.
-        Entry(technique: "T1562.004", name: "Impair Defenses: Disable or Modify System Firewall", coverage: .none,
+        Entry(technique: "T1686", name: "Disable or Modify System Firewall", coverage: .none,
               sources: [],
               blindSpot: "RoamSwitch applies its own firewall rules, but its audit reports RoamSwitch's protection level, not the macOS firewall, so a change made outside RoamSwitch is not detected."),
-        Entry(technique: "T1562.006", name: "Impair Defenses: Indicator Blocking", coverage: .none,
-              sources: [],
-              blindSpot: "No dedicated detection for log, event or telemetry sources being blocked or starved."),
-        // T1070.002. SecurityLogAuditor.swift reads logs for anomalies; nothing watches the logs themselves.
-        Entry(technique: "T1070.002", name: "Indicator Removal: Clear Linux or Mac System Logs", coverage: .none,
+        // T1685.006 (T1070.002 before ATT&CK v19). SecurityLogAuditor.swift reads logs for anomalies; nothing watches the logs themselves.
+        Entry(technique: "T1685.006", name: "Disable or Modify Tools: Clear Linux or Mac System Logs", coverage: .none,
               sources: [],
               blindSpot: "System logs are read for the log audit, but their deletion or truncation is not detected."),
         // T1070.003. ClickFixGuard.swift reads ~/.zsh_history and ~/.bash_history for pasted commands only.
@@ -108,13 +106,13 @@ enum DetectionCoverage {
         // interpreters and nc/ncat/socat for an outward public TCP connection that is their input and output.
         Entry(technique: "T1059.004", name: "Command and Scripting Interpreter: Unix Shell", coverage: .partial,
               sources: [guardSource("reverseShellWatch"), guardSource("execRecorder"), rule("exec.shell_from_app"), rule("exec.pipe_to_shell"), rule("exec.reverse_shell_argv")],
-              blindSpot: "Flags a shell started by a browser, Office or mail app, and a download piped into a shell only together with an aggravating fact. A plain curl | sh typed in a terminal looks like an official installer and is not flagged on its own. The exec recorder (opt-in) flags a reverse or bind shell only when it is spelled out on a sh -c command line or an nc, ncat or socat command line. The reverse-shell watch (Pro, on by default) sees a live one: a shell or interpreter, or nc, ncat or socat running a program, whose input and output are an established outward TCP connection to a public address, found on a poll every few seconds and notified once the second poll agrees. It reads the logged-in user's own processes only, so a root-owned shell is not seen. A peer on a private network (home LAN, Tailscale, containers) or loopback is not watched, and neither is a program that is not one of the listed shells, interpreters or relay tools. A shell written into a script file or compiled into a program is not seen until it connects."),
+              blindSpot: "Flags a shell started by a browser, Office or mail app, and a download piped into a shell only together with an aggravating fact. A plain curl | sh typed in a terminal looks like an official installer and is not flagged on its own. The exec recorder (opt-in) flags a reverse or bind shell only when it is spelled out on a sh -c command line or an nc, ncat or socat command line. The reverse-shell watch (Pro, on by default) sees a live one: a shell or interpreter, or nc, ncat or socat running a program, whose input and output are an established outward TCP connection to a public address, found on a poll every few seconds and notified once the second poll agrees. The app reads the logged-in user's own processes; the processes of other accounts, root's included, are read by the root helper and merged in (a helper older than the app is not asked, and then a root-owned shell is not seen). A peer on a private network (home LAN, Tailscale, containers) is not watched unless the person turns on the menu item that includes the local network (off by default), loopback is never watched, and neither is a program that is not one of the listed shells, interpreters or relay tools. A shell written into a script file or compiled into a program is not seen until it connects."),
         // T1557.003. RoamSwitch/NetworkSettingsWatch.swift and NetworkSettingsWatchGuard.swift (system configuration
         // store: DNS servers, router, proxy auto-config compared with what the same network gave before) and
         // ProxyAutoDiscoveryCheck.swift (audit check proxy_autodiscovery: Auto Proxy Discovery / PAC in force).
         Entry(technique: "T1557.003", name: "Adversary-in-the-Middle: DHCP Spoofing", coverage: .partial,
               sources: [guardSource("networkSettingsWatch"), check("proxy_autodiscovery")],
-              blindSpot: "A rogue DHCP server cannot be seen directly; only its result is. A new DNS server, or a new router together with one, on a network that RoamSwitch has seen before is notified, as is a new proxy auto-config (PAC) address or Auto Proxy Discovery (WPAD) switched on. The first time a network is seen it is only learned. A rogue server that hands out the same DNS and router as before, or a well-known public resolver, is not noticed, and neither is a change on a VPN or other tunnel. A DNS-over-HTTPS profile and addresses set by hand or by RoamSwitch's own secure DNS are not compared. The audit check reports Auto Proxy Discovery or a network-supplied PAC address being on, and does not read the PAC file."),
+              blindSpot: "A rogue DHCP server cannot be seen directly; only its result is. A new DNS server, or a new router together with one, on a network that RoamSwitch has seen before is notified, as is a new proxy auto-config (PAC) address or Auto Proxy Discovery (WPAD) switched on. The first time a network is seen it is only learned. A rogue server that hands out the same DNS and router as before, or a well-known public resolver, is not noticed, and neither is a change on a VPN or other tunnel. A DNS-over-HTTPS profile is not compared. The resolvers saved in a wired or Wi-Fi service's own settings (by `networksetup -setdnsservers` or the Network pane) are compared with that service's own history, not the network's: one that service never had saved, other than the router's address, loopback, a well-known public resolver or RoamSwitch's own secure DNS, is notified once as a weak notice. Who wrote the saved setting cannot be told, so a change the person made looks the same, and the first look after the watch starts and a service seen for the first time are only learned. The audit check reports Auto Proxy Discovery or a network-supplied PAC address being on, and does not read the PAC file."),
         // T1553.004. RoamSwitch/TrustAnchorCheck.swift (audit check trust_anchors: the certificates the user or an
         // administrator set to "trust", read with `security dump-trust-settings`).
         Entry(technique: "T1553.004", name: "Subvert Trust Controls: Install Root Certificate", coverage: .partial,
@@ -156,13 +154,13 @@ enum DetectionCoverage {
         // credential and cookie stores; the file header says who opened the file is a best-effort snapshot.
         Entry(technique: "T1555.003", name: "Credentials from Password Stores: Credentials from Web Browsers", coverage: .partial,
               sources: [guardSource("browserCredentialWatchGuard")],
-              blindSpot: "Opt-in and notify-only. macOS gives no reliable view of which process opened the file, so the reader is identified on a best-effort basis and the guard can be noisy or miss a short access."),
+              blindSpot: "Opt-in and notify-only. macOS does not tell an app which process opened a file. With the opt-in record of processes that open files (a second eslogger in the root helper, which keeps only the events that touch the decoys, in memory, for a few minutes, and stops itself when it costs too much CPU) the reader is named with its PID, parent, command and signature. Without it, or while it is paused or has not started yet, the reader is looked for on a best-effort basis and the notification says why it could not be named; the guard can be noisy or miss a short access."),
         // T1552.001. RoamSwitch/CredentialHoneytokenGuard.swift and Shared/ExecCorrelationRules.swift
         // honeytokenPath: decoy credential files only. RoamSwitch/AgentCredentialFileCheck.swift (audit check
         // agent_credential_files): permissions and location of the AI coding tools' sign-in files, metadata only.
         Entry(technique: "T1552.001", name: "Unsecured Credentials: Credentials In Files", coverage: .partial,
               sources: [guardSource("credentialHoneytokenGuard"), guardSource("execRecorder"), rule("exec.honeytoken_path"), check("agent_credential_files")],
-              blindSpot: "Only RoamSwitch's own decoy files are watched. Reading a real credential file is not detected: without Endpoint Security a Mac cannot see which process opened a file, and no decoy is placed at the paths real tools read on every start (it would fire constantly). The audit check looks at the permissions and location (a cloud-synced folder, a git work tree) of the sign-in files of Claude Code, Codex, Gemini CLI, GitHub Copilot and opencode, by metadata only, in their default locations. Claude Code keeps its sign-in in the Keychain on a Mac, so its file is checked only when it exists."),
+              blindSpot: "Only RoamSwitch's own decoy files are watched. Reading a real credential file is not detected: the record of processes that open files watches the decoys only, and no decoy is placed at the paths real tools read on every start (it would fire constantly). The audit check looks at the permissions and location (a cloud-synced folder, a git work tree) of the sign-in files of Claude Code, Codex, Gemini CLI, GitHub Copilot and opencode, by metadata only, in their default locations. Claude Code keeps its sign-in in the Keychain on a Mac, so its file is checked only when it exists."),
         // T1490. Shared/ExecCorrelationRules.swift ransomwareRecoveryTampering: tmutil deletelocalsnapshots or
         // thinlocalsnapshots run by anything other than RoamSwitch or the OS.
         Entry(technique: "T1490", name: "Inhibit System Recovery", coverage: .partial,
@@ -192,10 +190,11 @@ enum DetectionCoverage {
               blindSpot: "Scans against this Mac only, seen through the packet filter's log. A scan that stays under the distinct-port limits is not flagged, and a scan run from this Mac is not looked at. Needs the helper and Pro."),
         // T1486. RoamSwitch/RansomwareCanaryGuard.swift (bait files in Application Support and four user folders, compared
         // with their recorded SHA-256) and RoamSwitch/RansomwareEntropyGuard.swift (new writes in the same folders whose
-        // content looks like ciphertext: entropy of the whole file, and 4 KiB windows for partial encryption).
+        // content looks like ciphertext: entropy of the whole file, 4 KiB windows for partial encryption, and 256-byte windows in a pattern for a few
+        // hundred bytes of every few kilobytes).
         Entry(technique: "T1486", name: "Data Encrypted for Impact", coverage: .partial,
               sources: [guardSource("ransomwareCanaryGuard"), guardSource("ransomwareEntropyGuard")],
-              blindSpot: "Bait files and new writes inside the watched folders only. macOS gives no writing-process id, so encryption elsewhere, or slow encryption that stays under the entropy limit, is not seen, and the cause of a hit is attributed on a best-effort basis."),
+              blindSpot: "Bait files and new writes inside the watched folders only. macOS gives no writing-process id, so encryption elsewhere, or slow encryption that stays under the entropy limit, is not seen, and the cause of a hit is attributed on a best-effort basis. Of a file whose whole-file figure stays low, only the first 256 KiB is judged by 256-byte windows, and encryption of blocks as small as 16 bytes, or of fewer than eight blocks, is not seen."),
         // T1557.002. RoamSwitch/ARPSpoofContainmentManager.swift (the gateway's MAC address changing while its IP stays put
         // air-gaps the network) and RoamSwitch/GatewayARPLockManager.swift (pins the default gateway, the IPv6 router and
         // on-link DNS resolvers into the ARP / NDP cache).
@@ -231,10 +230,12 @@ enum DetectionCoverage {
               blindSpot: "Notices that a lockfile changed, not whether the dependency it now pins is malicious. Only the npm-family lockfiles of registered project folders are hashed."),
         // T1505.003. RoamSwitch/WebRuleFolderScanner.swift (local web roots, project folders and PHP session folders, once a day and on demand)
         // and RoamSwitch/WebMailDownloadGuard.swift (the same web rules on the download folders, live), through
-        // StaticSignatureScanner.
+        // StaticSignatureScanner. Shared/ExecCorrelationRules.swift rule 15: a shell, or a python/perl/ruby/node one-liner,
+        // started directly by a web or application service process while running as a service account (`_www` and the
+        // Linux build's list, plus the accounts added in RoamSwitch.ExecRule.ServiceUsers).
         Entry(technique: "T1505.003", name: "Server Software Component: Web Shell", coverage: .partial,
-              sources: [guardSource("webRulesFolderScan"), guardSource("webMailDownloadGuard")],
-              blindSpot: "Local web roots, project folders, the download folders and the PHP session folders (listed one level deep, `sess_` files only). A web shell written anywhere else is not examined, there is no view of a remote server, and a file larger than the read limit is checked at its start only."),
+              sources: [guardSource("webRulesFolderScan"), guardSource("webMailDownloadGuard"), guardSource("execRecorder"), rule("exec.shell_from_service")],
+              blindSpot: "Local web roots, project folders, the download folders and the PHP session folders (listed one level deep, `sess_` files only). A web shell written anywhere else is not examined, there is no view of a remote server, and a file larger than the read limit is checked at its start only. A web shell that runs code inside the web server process without starting a program is not seen. The exec recorder (opt-in) notifies a shell started by a service process (httpd, nginx, php-fpm, java, tomcat, gunicorn, uwsgi, node) running as a service account such as _www, or one added in the RoamSwitch.ExecRule.ServiceUsers setting; a shell under any other account (your own development server, apachectl, cron) is not flagged."),
         // T1566.002. RoamSwitch/LinkGuardManager.swift: outbound connections to hosts in the phishing and scam feed are
         // blocked or paused for an answer (hosts sinkhole, plus the content-filter extension when it is active).
         Entry(technique: "T1566.002", name: "Phishing: Spearphishing Link", coverage: .partial,
@@ -259,6 +260,7 @@ enum DetectionCoverage {
         "wireGuardVPN": "Network protection (the VPN tunnel); no detection.",
         "tailscaleKillSwitch": "Network protection (the Tailscale kill switch); no detection.",
         "linkGuardFeedUpdates": "Keeps the link guard's feed current; covers nothing by itself (see T1566.002).",
+        "signedUpdates": "Says whether the updaters of the signed detection data (CVE maps, web rules, link list) are still checking; it detects nothing itself.",
         "activeVulnScan": "Probes this Mac's own listening services for weaknesses; an assessment, not the detection of an attack.",
         "scheduledLogAudit": "Looks for new or surging log patterns in general; not tied to one technique.",
         "webWorkerCrashWatch": "Notices web server workers (nginx, Apache, PHP-FPM) that keep crashing, from their error logs; it does not name a technique.",
@@ -384,10 +386,11 @@ enum DetectionCoverage {
     // Navigator. Only techniques RoamSwitch assessed are listed; a technique that is not listed was not
     // assessed, and the Navigator shows it uncoloured. The colours say what RoamSwitch wrote about itself.
 
-    /// The ATT&CK version written to the layer's `versions.attack`. The upstream skill catalog this work was
-    /// compared with says v19.1; that was not checked against MITRE's release notes. The technique ids used here
-    /// have existed since well before v19, so a different version in the Navigator does not move them.
-    static let navigatorAttackVersion = "19"
+    /// The ATT&CK version written to the layer's `versions.attack`: **20**, the newest release when this was written.
+    /// Checked 2026-10-24 against MITRE's own STIX data (`attack-stix-data`, enterprise-attack-20.0.json): every id in
+    /// the table is a live technique (the four that v19 revoked were moved: T1562.001 and T1562.006 to T1685, T1562.004
+    /// to T1686, T1070.002 to T1685.006). A newer release needs the ids checked again first.
+    static let navigatorAttackVersion = "20"
     static let navigatorVersion = "5.1.0"
     static let navigatorLayerVersion = "4.5"
 
@@ -415,7 +418,9 @@ enum DetectionCoverage {
             "versions": ["attack": navigatorAttackVersion, "navigator": navigatorVersion, "layer": navigatorLayerVersion],
             "domain": "enterprise-attack",
             "description": "What RoamSwitch can and cannot see, for the techniques it assessed. This is RoamSwitch's own assessment, checked against its code, not a third-party test. Red (none) means no detection exists, not that no attack happened; green (detects) means a rule exists for the technique's main form, not every variant. A technique that is not listed was not assessed.",
-            "filters": ["platforms": ["macOS"]],
+            // The Navigator shows only techniques tagged with one of these platforms. T1091 and T1557.001 are tagged
+            // Windows only and T1610 Containers only in ATT&CK v20, so with "macOS" alone they would not appear at all.
+            "filters": ["platforms": ["macOS", "Windows", "Containers"]],
             "sorting": 0,
             "layout": ["layout": "side", "aggregateFunction": "average", "showID": true, "showName": true,
                        "showAggregateScores": false, "countUnscored": false, "expandedSubtechniques": "all"],

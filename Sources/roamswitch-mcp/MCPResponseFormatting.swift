@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.5 (build 184).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.6 (build 185).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -57,6 +57,14 @@ public struct MCPVerifiedFindingPayload: Codable, Equatable {
     public let counterEvidence: String?
     /// Only when the check still fails: what would raise or lower the concern.
     public let severityChangesIf: String?
+    /// What changed since the check was last measured conclusively by the app's own diagnosis (`FindingHistory`):
+    /// `fixed` (it failed then, it passes or does not apply now), `already_resolved` (it passed then too: not a fix),
+    /// `still_present`, `newly_present` (it passed then and fails now) or `no_earlier_check` (nothing recorded).
+    /// Absent when the verdict is `inconclusive`. Same codes on the Linux edition.
+    public var change: String? = nil
+    /// The earlier conclusive verdict `change` compares with, and when it was measured (ISO 8601, UTC). Absent when none is on record.
+    public var previousVerdict: SecurityCheckVerification? = nil
+    public var previousCheckedAt: String? = nil
 }
 
 public struct MCPVerifySecurityFindingsPayload: Codable, Equatable {
@@ -160,6 +168,9 @@ public struct MCPPackageCveFindingPayload: Codable, Equatable {
     /// A statistical estimate of exploitation activity within 30 days, not a record that one occurred.
     public var epss: Double? = nil
     public var epssDate: String? = nil
+    /// `true` when CISA's Known Exploited Vulnerabilities catalog lists the CVE (exploitation in the wild is
+    /// confirmed; a record of fact, unlike `epss`). Absent otherwise.
+    public var kev: Bool? = nil
 }
 
 /// How many of a scan's findings a person has accepted (see `VulnerabilityAcceptance`). Counts only: the
@@ -208,6 +219,10 @@ public struct MCPPackageCveLanguageFindingPayload: Codable, Equatable {
     public let summary: String
     public var epss: Double? = nil
     public var epssDate: String? = nil
+    /// See `MCPPackageCveFindingPayload.kev`.
+    public var kev: Bool? = nil
+    /// `true` when no fixed version has been published (`fixedVersion` is empty): updating does not close it.
+    public var unfixed: Bool? = nil
 }
 
 public struct MCPPackageCveScanLanguagesResultPayload: Codable, Equatable {
@@ -704,6 +719,9 @@ public struct MCPReaderHealthPayload: Codable, Equatable {
     /// Folders the last scan could not list (everything below them was not looked at), and files it read only the start of.
     public var foldersUnreadable: Int? = nil
     public var filesTruncated: Int? = nil
+    /// True when the last scan left part of what it should watch out because a limit was reached (more working copies
+    /// than it keeps, a walk that stopped at its folder limit). nil where the guard has no such limit.
+    public var scopeLimited: Bool? = nil
 }
 
 /// Every field added after the original five is optional so older
@@ -732,18 +750,22 @@ public struct MCPGuardStatusPayload: Codable, Equatable {
 }
 
 public struct MCPFeedUpdatePayload: Codable, Equatable {
-    /// `packageCveMap`, `activeVulnCveMap` or `linkGuardFeed`.
+    /// `packageCveMap`, `activeVulnCveMap`, `linkGuardFeed` or `webRules`.
     public let feed: String
     public let lastSuccessAt: String?
     /// Present only while the last attempt failed.
     public let lastError: String?
     public let lastErrorAt: String?
+    /// Present (true) only when the feed is in use and has not been checked for a week (two for the CVE maps, which are
+    /// fetched weekly), whether the checks worked or not. The updater is not running, so the data is ageing.
+    public var stale: Bool? = nil
 
-    static func make(feed: String, record: FeedUpdateRecord) -> MCPFeedUpdatePayload {
+    static func make(feed: String, record: FeedUpdateRecord, stale: Bool = false) -> MCPFeedUpdatePayload {
         let iso = ISO8601DateFormatter()
         func time(_ t: Double?) -> String? { t.map { iso.string(from: Date(timeIntervalSince1970: $0)) } }
         return MCPFeedUpdatePayload(feed: feed, lastSuccessAt: time(record.lastSuccessAt),
-                                    lastError: record.isFailing ? record.lastError : nil, lastErrorAt: record.isFailing ? time(record.lastErrorAt) : nil)
+                                    lastError: record.isFailing ? record.lastError : nil, lastErrorAt: record.isFailing ? time(record.lastErrorAt) : nil,
+                                    stale: stale ? true : nil)
     }
 }
 
@@ -985,7 +1007,9 @@ public enum MCPResponseFormatting {
         report: ComprehensiveSecurityReport,
         requestedCheckIds: [String]?,
         wifiInterfacePresent: Bool,
-        wifiSSIDResolved: Bool
+        wifiSSIDResolved: Bool,
+        /// アプリの診断が残した前回の測定(`FindingHistory.read`)。空なら、どの結果も `no_earlier_check`。
+        history: [String: FindingHistoryEntry] = [:]
     ) -> MCPVerifySecurityFindingsPayload {
         var caveats: [String] = []
         var itemsById: [String: SecurityAuditItem] = [:]
@@ -1028,6 +1052,11 @@ public enum MCPResponseFormatting {
                 )
             }
             let classification = SecurityCheckVerification.classify(item)
+            let entry = history[item.checkId]
+            let change = FindingHistory.change(verdict: classification.verdict, entry: entry)
+            // The earlier measurement is shown for a conclusive verdict only: next to "could not observe" an old
+            // failure would read as a current one.
+            let previous = change == nil ? nil : entry?.last
             return MCPVerifiedFindingPayload(
                 checkId: item.checkId,
                 title: item.title,
@@ -1036,9 +1065,12 @@ public enum MCPResponseFormatting {
                 statusText: item.statusText,
                 detail: item.detail,
                 verificationStatus: VerifyFindingDiscipline.status(verdict: classification.verdict, reason: classification.reason),
-                rationale: VerifyFindingDiscipline.rationale(reason: classification.reason),
+                rationale: VerifyFindingDiscipline.rationale(reason: classification.reason, change: change, previousAt: previous?.at),
                 counterEvidence: classification.verdict == .stillPresent ? VerifyFindingDiscipline.counterEvidence(checkId: item.checkId) : nil,
-                severityChangesIf: classification.verdict == .stillPresent ? VerifyFindingDiscipline.severityChangesIf(checkId: item.checkId) : nil
+                severityChangesIf: classification.verdict == .stillPresent ? VerifyFindingDiscipline.severityChangesIf(checkId: item.checkId) : nil,
+                change: change?.rawValue,
+                previousVerdict: previous?.verdict,
+                previousCheckedAt: previous.map { ISO8601DateFormatter().string(from: Date(timeIntervalSince1970: $0.at)) }
             )
         }
         let evaluated = Set(results.filter { $0.reason != "unknown_check_id" }.map(\.checkId))
@@ -1058,6 +1090,9 @@ public enum MCPResponseFormatting {
         }
         if !evaluated.isDisjoint(with: configOnlyCheckIds) {
             caveats.append(configOnlyCaveat)
+        }
+        if results.contains(where: { $0.verdict == .resolved && $0.change == FindingChange.noEarlierCheck.rawValue }) {
+            caveats.append(loc("判定が「解消」で change が no_earlier_check の項目には、前回の測定の記録がないため、直したのか、元から当てはまらなかったのかは分かりません。記録するのは RoamSwitch アプリが自分の診断のあとに残す測定だけなので、アプリを起動して診断を実行してから、もう一度確認してください。"))
         }
         if results.contains(where: { $0.checkId == "arp_spoof_monitor" && $0.reason == "no_baseline" }) {
             caveats.append(arpTrustedBaselineCaveat)
@@ -1150,6 +1185,28 @@ public enum MCPResponseFormatting {
         return networks.contains { $0.macAddress.caseInsensitiveCompare(gatewayMAC) == .orderedSame }
     }
 
+    /// The feeds this Mac is using, i.e. the ones an updater is expected to check: the package CVE map and the web
+    /// rules always; the link list while the link guard is on with its updates and Pro; the active-scan CVE map while
+    /// the active scan is on.
+    static func feedsInUse(defaults: UserDefaults) -> [String] {
+        var feeds = [FeedUpdateStatusStore.packageCveMap, FeedUpdateStatusStore.webRules]
+        let linkMode = LinkGuardMode(rawValue: defaults.string(forKey: linkGuardModeKey) ?? "") ?? .block
+        let linkUpdates = defaults.object(forKey: linkGuardUpdatesKey) == nil ? true : defaults.bool(forKey: linkGuardUpdatesKey)
+        if linkMode != .off, linkUpdates, defaults.bool(forKey: "RoamSwitch.IsProCache") { feeds.append(FeedUpdateStatusStore.linkGuardFeed) }
+        if defaults.bool(forKey: ActiveVulnScan.enabledDefaultsKey) { feeds.append(FeedUpdateStatusStore.activeVulnCveMap) }
+        return feeds
+    }
+
+    /// The feeds in use that the updaters have not checked for a week (two for the weekly CVE maps), with the time of
+    /// the last check, oldest first. The Linux build's `signedUpdates` guard says the same for its update timer.
+    static func staleFeeds(defaults: UserDefaults, now: Date = Date()) -> [(feed: String, lastRun: Double)] {
+        feedsInUse(defaults: defaults).compactMap { feed in
+            let record = FeedUpdateStatusStore.read(feed, defaults: defaults)
+            guard FeedUpdateStatusStore.isStale(record, feed: feed, now: now), let run = FeedUpdateStatusStore.lastRun(record) else { return nil }
+            return (feed, run)
+        }.sorted { $0.lastRun < $1.lastRun }
+    }
+
     public static func makeGuardStatusPayload(
         gatewayMAC: String?,
         defaults: UserDefaults = .standard,
@@ -1179,7 +1236,8 @@ public enum MCPResponseFormatting {
                                            lastRestartAt: time($0.lastRestartAt), gaps: $0.gaps, lastGapAt: time($0.lastGapAt),
                                            linesDropped: $0.linesDropped, oversizeDropped: $0.oversizeDropped,
                                            filesUnreadable: $0.filesUnreadable, filesUnreadableAt: time($0.filesUnreadableAt),
-                                           foldersUnreadable: $0.foldersUnreadable, filesTruncated: $0.filesTruncated)
+                                           foldersUnreadable: $0.foldersUnreadable, filesTruncated: $0.filesTruncated,
+                                           scopeLimited: $0.scopeLimited)
                 }
             }
         }
@@ -1227,6 +1285,13 @@ public enum MCPResponseFormatting {
         guards.append(MCPGuardEntryPayload(key: "linkGuard", enabledInSettings: linkMode != .off, usingDefault: storedLinkMode == nil,
                                            liveState: linkLive, liveStateReason: linkReason))
         guards.append(entry("linkGuardFeedUpdates", linkGuardUpdatesKey, defaultWhenUnset: true))
+        // The signed detection data (CVE maps, web rules, the link list) is only as good as its last update. It has no
+        // switch: it is "on" while the updaters are expected to run, and `off` (`state_stale`) when none of the feeds in
+        // use was checked for a week. It is not pushed as a notification; the menu and this list say it.
+        let staleNow = staleFeeds(defaults: defaults, now: now)
+        guards.append(MCPGuardEntryPayload(key: "signedUpdates", enabledInSettings: true, usingDefault: nil,
+                                           liveState: staleNow.isEmpty ? "on" : "off",
+                                           liveStateReason: staleNow.isEmpty ? nil : "state_stale"))
         guards.append(entry("activeVulnScan", ActiveVulnScan.enabledDefaultsKey, defaultWhenUnset: false))
         // The web-rules folder scan has no switch of its own: it runs daily for Pro. Its entry follows the Pro cache.
         let scanOn = defaults.bool(forKey: "RoamSwitch.IsProCache")
@@ -1300,7 +1365,9 @@ public enum MCPResponseFormatting {
             isolatedDevPorts: isolatedPorts,
             usbStorageAllowedVolumeCount: allowedVolumeCount,
             caveats: caveats,
-            feedUpdates: FeedUpdateStatusStore.all.map { MCPFeedUpdatePayload.make(feed: $0, record: FeedUpdateStatusStore.read($0, defaults: defaults)) }
+            feedUpdates: FeedUpdateStatusStore.all.map { name in
+                MCPFeedUpdatePayload.make(feed: name, record: FeedUpdateStatusStore.read(name, defaults: defaults), stale: staleNow.contains { $0.feed == name })
+            }
         )
     }
 
@@ -1545,6 +1612,28 @@ enum VerifyFindingDiscipline {
         case .inconclusive: return "unverified"
         case .resolved: return reason == "not_applicable" ? "false_positive" : "verified"
         case .stillPresent: return "verified"
+        }
+    }
+
+    /// `rationale(reason:)`, sharpened by what the earlier measurement says: a check that failed before and passes
+    /// now was fixed; one that already passed was not.
+    static func rationale(reason: String, change: FindingChange?, previousAt: Double?) -> String {
+        let day: String = {
+            guard let previousAt else { return "?" }
+            let f = DateFormatter()
+            f.locale = Locale(identifier: "en_US_POSIX")
+            f.dateFormat = "yyyy-MM-dd"
+            return f.string(from: Date(timeIntervalSince1970: previousAt))
+        }()
+        switch (reason, change) {
+        case ("passing", .fixed?):
+            return String(format: loc("前回測ったとき(%@)は不合格で、いまは合格しています。その後に直った項目です。"), day)
+        case ("passing", .alreadyResolved?):
+            return String(format: loc("いまは合格していて、前回測ったとき(%@)も合格でした。最近の変更で直したのではなく、元から当てはまらなかったか、それより前に直っていました。"), day)
+        case ("failing", .newlyPresent?):
+            return String(format: loc("同じ判定条件で測り直した結果、この項目は不合格です。前回測ったとき(%@)は合格だったので、再発したか、新しく出た問題です。"), day)
+        default:
+            return rationale(reason: reason)
         }
     }
 

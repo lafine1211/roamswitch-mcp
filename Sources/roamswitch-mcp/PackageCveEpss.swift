@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.5 (build 184).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.6 (build 185).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -51,9 +51,15 @@ enum PackageCveEpss {
         }
     }
 
-    /// True when `a` should be listed before `b`: higher band, then higher EPSS (a finding with a value before
-    /// one without), then higher CVSS, then the CVE id.
-    static func precedes(cvssA: Double, epssA: Double?, idA: String, cvssB: Double, epssB: Double?, idB: String) -> Bool {
+    /// The mark shown for a CVE that CISA's Known Exploited Vulnerabilities catalog lists. A record of fact
+    /// (exploitation in the wild is confirmed), unlike EPSS: such a finding is listed first.
+    static let kevLabel = "KEV"
+
+    /// True when `a` should be listed before `b`: a CISA KEV finding first, then higher band, then higher EPSS (a
+    /// finding with a value before one without), then higher CVSS, then the CVE id.
+    static func precedes(cvssA: Double, epssA: Double?, idA: String, cvssB: Double, epssB: Double?, idB: String,
+                         kevA: Bool = false, kevB: Bool = false) -> Bool {
+        if kevA != kevB { return kevA }
         let bandA = band(cvss: cvssA), bandB = band(cvss: cvssB)
         if bandA != bandB { return bandA > bandB }
         let eA = validated(epssA), eB = validated(epssB)

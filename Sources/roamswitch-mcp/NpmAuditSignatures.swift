@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.5 (build 184).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.6 (build 185).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -23,8 +23,9 @@ enum NpmAuditSignatures {
 
     static let enabledDefaultsKey = "RoamSwitch.NpmAuditSignaturesEnabled"
 
+    /// The app's own preferences domain, which the MCP server reads by suite name too.
     static var isEnabled: Bool {
-        UserDefaults.standard.bool(forKey: enabledDefaultsKey)
+        AppLanguage.sharedDefaults.bool(forKey: enabledDefaultsKey)
     }
 
     struct Result {
@@ -198,7 +199,7 @@ enum NpmAuditSignatures {
                 truncated = true
             }
         }
-        process.waitUntilExit()
+        process.waitUntilExitWithoutRunLoop()
         watchdog.cancel()
 
         lock.lock(); let didTimeOut = timedOut; lock.unlock()

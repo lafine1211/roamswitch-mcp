@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.5 (build 184).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.6 (build 185).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -51,7 +51,11 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     /// `ActiveVulnScan.isEnabled` (see `MCPServer.swift`'s `sharedDefaults`). No data
     /// migration needed: existing values written via `.standard` from the main app are
     /// already sitting in this exact same domain.
-    private static let sharedDefaults = UserDefaults(suiteName: "com.tetsuharu.RoamSwitch") ?? .standard
+    ///
+    /// Anything the app writes and the MCP server also reads or writes (the notification history, the
+    /// log-template baseline, the incident-timeline damage mark) uses this too, never `UserDefaults.standard`:
+    /// in the MCP process `.standard` is an empty domain of its own.
+    static let sharedDefaults = UserDefaults(suiteName: "com.tetsuharu.RoamSwitch") ?? .standard
 
     static var current: AppLanguage {
         get {

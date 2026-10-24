@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.5 (build 184). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.6 (build 185). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -111,9 +111,9 @@ final class MCPResponseFormattingTests: XCTestCase {
         // `webRulesFolderScan`, `webWorkerCrashWatch` and `agentSetupWatch` are not settings: the first two follow the Pro cache (they have
         // no switch), the third follows whether a state was accepted in the AI agent setup window. They are counted
         // apart from the 31 toggles.
-        let toggles = payload.guards.filter { !["webRulesFolderScan", "agentSetupWatch", "webWorkerCrashWatch"].contains($0.key) }
+        let toggles = payload.guards.filter { !["webRulesFolderScan", "agentSetupWatch", "webWorkerCrashWatch", "signedUpdates"].contains($0.key) }
         XCTAssertEqual(toggles.count, 31)
-        XCTAssertEqual(Set(payload.guards.map(\.key)).count, 34, "guard keys must be unique")
+        XCTAssertEqual(Set(payload.guards.map(\.key)).count, 35, "guard keys must be unique")
         XCTAssertTrue(toggles.allSatisfy { !$0.enabledInSettings })
         XCTAssertEqual(payload.guards.first { $0.key == "webRulesFolderScan" }?.enabledInSettings, false, "not Pro in this test's defaults")
         XCTAssertFalse(payload.caveats.isEmpty)
@@ -128,8 +128,8 @@ final class MCPResponseFormattingTests: XCTestCase {
         let payload = MCPResponseFormatting.makeGuardStatusPayload(gatewayMAC: nil, defaults: defaults)
         let enabledKeys = Set(payload.guards.filter(\.enabledInSettings).map(\.key))
 
-        XCTAssertEqual(enabledKeys, ["portAnomalyGuard", "arpSpoofAutoContainment", "clickFixGuard"])
-        XCTAssertTrue(payload.guards.filter { !["webRulesFolderScan", "agentSetupWatch", "webWorkerCrashWatch"].contains($0.key) }.allSatisfy { $0.usingDefault != nil })
+        XCTAssertEqual(enabledKeys, ["portAnomalyGuard", "arpSpoofAutoContainment", "clickFixGuard", "signedUpdates"])
+        XCTAssertTrue(payload.guards.filter { !["webRulesFolderScan", "agentSetupWatch", "webWorkerCrashWatch", "signedUpdates"].contains($0.key) }.allSatisfy { $0.usingDefault != nil })
         XCTAssertEqual(payload.guards.first { $0.key == "clickFixGuard" }?.usingDefault, false)
         XCTAssertEqual(payload.guards.first { $0.key == "bluetoothGuard" }?.usingDefault, true)
     }
@@ -140,9 +140,9 @@ final class MCPResponseFormattingTests: XCTestCase {
 
         XCTAssertEqual(enabledKeys, [
             "webMailDownloadGuard", "dnsThreatGuard", "persistenceMonitor",
-            "secretLeakClipboardAuditor", "airGapAutoWiFiKill", "linkGuard", "linkGuardFeedUpdates",
+            "secretLeakClipboardAuditor", "airGapAutoWiFiKill", "linkGuard", "linkGuardFeedUpdates", "signedUpdates",
         ])
-        XCTAssertTrue(payload.guards.filter { !["webRulesFolderScan", "agentSetupWatch", "webWorkerCrashWatch"].contains($0.key) }.allSatisfy { $0.usingDefault == true })
+        XCTAssertTrue(payload.guards.filter { !["webRulesFolderScan", "agentSetupWatch", "webWorkerCrashWatch", "signedUpdates"].contains($0.key) }.allSatisfy { $0.usingDefault == true })
         XCTAssertEqual(payload.linkGuardMode, "block")
         XCTAssertEqual(payload.vpnBackend, "wireguard")
         XCTAssertEqual(payload.tailscaleExitNodeConfigured, false)
@@ -380,8 +380,12 @@ final class MCPResponseFormattingTests: XCTestCase {
         ComprehensiveSecurityReport(score: 50, grade: "C", totalChecks: items.count, passedChecks: 0, items: items, timestamp: Date())
     }
 
-    private func verify(_ items: [SecurityAuditItem], ids: [String]? = nil, interface: Bool = false, ssid: Bool = true) -> MCPVerifySecurityFindingsPayload {
-        MCPResponseFormatting.makeVerifyPayload(report: verifyReport(items), requestedCheckIds: ids, wifiInterfacePresent: interface, wifiSSIDResolved: ssid)
+    /// `history: nil` gives every item an earlier measurement (so these tests see only the caveat they are about, not the
+    /// one for a result with nothing on record); pass `[:]` to see a result with no record.
+    private func verify(_ items: [SecurityAuditItem], ids: [String]? = nil, interface: Bool = false, ssid: Bool = true,
+                        history: [String: FindingHistoryEntry]? = nil) -> MCPVerifySecurityFindingsPayload {
+        let recorded = history ?? Dictionary(items.map { ($0.checkId, FindingHistoryEntry(lastStillPresentAt: 1, lastResolvedAt: 2)) }, uniquingKeysWith: { a, _ in a })
+        return MCPResponseFormatting.makeVerifyPayload(report: verifyReport(items), requestedCheckIds: ids, wifiInterfacePresent: interface, wifiSSIDResolved: ssid, history: recorded)
     }
 
     func testClassify_threeVerdictsAndNotApplicable() {
@@ -451,21 +455,23 @@ final class MCPResponseFormattingTests: XCTestCase {
     }
 
     func testMakeVerifyPayload_encodesLanguageIndependentJSONContract() throws {
-        let payload = verify([verifyItem("a", passed: false)])
+        let payload = verify([verifyItem("a", passed: false)], history: [:])
         let data = try JSONEncoder().encode(payload)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         XCTAssertEqual(Set(json.keys), ["results", "caveats", "timestamp"])
         let first = try XCTUnwrap((json["results"] as? [[String: Any]])?.first)
-        // The original six keys stay; `verificationStatus` and `rationale` are always present, and
-        // `counterEvidence` / `severityChangesIf` appear only for a known check that still fails.
-        XCTAssertEqual(Set(first.keys), ["checkId", "title", "verdict", "reason", "statusText", "detail", "verificationStatus", "rationale"])
+        // The original six keys stay; `verificationStatus` and `rationale` are always present, `change` is present for a
+        // conclusive result (and `previousVerdict` / `previousCheckedAt` with it when an earlier measurement is on record),
+        // and `counterEvidence` / `severityChangesIf` appear only for a known check that still fails.
+        XCTAssertEqual(Set(first.keys), ["checkId", "title", "verdict", "reason", "statusText", "detail", "verificationStatus", "rationale", "change"])
+        XCTAssertEqual(first["change"] as? String, "no_earlier_check")
         XCTAssertEqual(first["verdict"] as? String, "stillPresent")
         XCTAssertEqual(first["reason"] as? String, "failing")
         XCTAssertEqual(first["verificationStatus"] as? String, "verified")
 
-        let known = try JSONSerialization.jsonObject(with: JSONEncoder().encode(verify([verifyItem("luks_encryption", passed: false)]))) as? [String: Any]
+        let known = try JSONSerialization.jsonObject(with: JSONEncoder().encode(verify([verifyItem("luks_encryption", passed: false)], history: [:]))) as? [String: Any]
         let knownFirst = try XCTUnwrap((known?["results"] as? [[String: Any]])?.first)
-        XCTAssertEqual(Set(knownFirst.keys), ["checkId", "title", "verdict", "reason", "statusText", "detail", "verificationStatus", "rationale", "counterEvidence", "severityChangesIf"])
+        XCTAssertEqual(Set(knownFirst.keys), ["checkId", "title", "verdict", "reason", "statusText", "detail", "verificationStatus", "rationale", "counterEvidence", "severityChangesIf", "change"])
     }
 
     func testMakeVerifyPayload_caveatsOnlyForEvaluatedItems() {

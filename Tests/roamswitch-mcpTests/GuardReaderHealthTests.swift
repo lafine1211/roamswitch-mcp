@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.5 (build 184). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.6 (build 185). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -252,6 +252,23 @@ final class GuardReaderHealthTests: XCTestCase {
             var scanDown = healthy(); scanDown.markUnreadable(reason: "helper_unreachable", now: now)
             XCTAssertEqual(GuardReaderHealthStore.guardLiveState(guardKey: key, enabledInSettings: true, records: [main: scanDown, aux: healthy()], now: now), "off", key)
         }
+    }
+
+    func testThePersistenceMonitorIsPartialWhileTheStartupScanLeftWorkingCopiesOutAndOnAgainWhenItDidNot() throws {
+        let now = 9_000.0
+        let key = "persistenceMonitor"
+        XCTAssertTrue(GuardReaderHealthStore.sourceIDs(forGuard: key).contains("startupScriptPoll"))
+        var limited = healthy(); limited.setScopeLimited(true, now: now - 5)
+        var within = healthy(); within.setScopeLimited(false, now: now - 5)
+        for (name, record, expected) in [("limited", limited, "partial"), ("within", within, "on"), ("never said", healthy(), "on")] {
+            XCTAssertEqual(GuardReaderHealthStore.guardLiveState(guardKey: key, enabledInSettings: true,
+                                                                 records: ["persistenceMonitorFSEvents": healthy(), "startupScriptPoll": record], now: now), expected, name)
+        }
+        // An old record without the key still decodes, and the flag survives a round trip.
+        let old = try JSONDecoder().decode(GuardReaderHealth.self, from: Data(#"{"active":true,"restarts":0,"gaps":0}"#.utf8))
+        XCTAssertNil(old.scopeLimited)
+        let again = try JSONDecoder().decode(GuardReaderHealth.self, from: JSONEncoder().encode(limited))
+        XCTAssertEqual(again.scopeLimited, true)
     }
 
     func testTheDownloadGuardIsPartialWhileTheLastStaticScanSkippedSomethingAndOnAgainWhenItDidNot() {

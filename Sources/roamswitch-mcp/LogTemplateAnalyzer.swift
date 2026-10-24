@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.5 (build 184).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.6 (build 185).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -200,6 +200,10 @@ public enum LogTemplateAnalyzer {
     }
 
     // MARK: - Baseline persistence (UserDefaults, mirroring PortAnomalyGuard.swift)
+    //
+    // The app's own preferences domain (`AppLanguage.sharedDefaults`), not `.standard`: the MCP server's
+    // `audit_security_logs` runs this too, and in that process `.standard` is another domain, so it kept a
+    // baseline of its own apart from the app's scheduled audit.
 
     private static let knownTemplatesKey = "RoamSwitch.LogTemplateBaseline.KnownTemplatesV1"
     private static let baselineCapturedKey = "RoamSwitch.LogTemplateBaseline.BaselineCapturedV1"
@@ -222,36 +226,38 @@ public enum LogTemplateAnalyzer {
     /// observed live on the Linux side first.
     private static let lastProcessedMessageKey = "RoamSwitch.LogTemplateBaseline.LastProcessedMessageV1"
 
-    public static func loadBaseline() -> (known: Set<String>, captured: Bool, frequencyHistory: [String: TemplateFrequencyStats], lastProcessedMessage: String?) {
-        let captured = UserDefaults.standard.bool(forKey: baselineCapturedKey)
+    public static func loadBaseline(defaults: UserDefaults? = nil) -> (known: Set<String>, captured: Bool, frequencyHistory: [String: TemplateFrequencyStats], lastProcessedMessage: String?) {
+        let store = defaults ?? AppLanguage.sharedDefaults
+        let captured = store.bool(forKey: baselineCapturedKey)
         let known: Set<String>
-        if let data = UserDefaults.standard.data(forKey: knownTemplatesKey),
+        if let data = store.data(forKey: knownTemplatesKey),
            let decoded = try? JSONDecoder().decode([String].self, from: data) {
             known = Set(decoded)
         } else {
             known = []
         }
         let history: [String: TemplateFrequencyStats]
-        if let data = UserDefaults.standard.data(forKey: frequencyHistoryKey),
+        if let data = store.data(forKey: frequencyHistoryKey),
            let decoded = try? JSONDecoder().decode([String: TemplateFrequencyStats].self, from: data) {
             history = decoded
         } else {
             history = [:]
         }
-        let lastProcessedMessage = UserDefaults.standard.string(forKey: lastProcessedMessageKey)
+        let lastProcessedMessage = store.string(forKey: lastProcessedMessageKey)
         return (known, captured, history, lastProcessedMessage)
     }
 
-    public static func saveBaseline(known: Set<String>, frequencyHistory: [String: TemplateFrequencyStats], lastProcessedMessage: String?) {
+    public static func saveBaseline(known: Set<String>, frequencyHistory: [String: TemplateFrequencyStats], lastProcessedMessage: String?, defaults: UserDefaults? = nil) {
+        let store = defaults ?? AppLanguage.sharedDefaults
         if let data = try? JSONEncoder().encode(Array(known)) {
-            UserDefaults.standard.set(data, forKey: knownTemplatesKey)
+            store.set(data, forKey: knownTemplatesKey)
         }
         if let data = try? JSONEncoder().encode(frequencyHistory) {
-            UserDefaults.standard.set(data, forKey: frequencyHistoryKey)
+            store.set(data, forKey: frequencyHistoryKey)
         }
-        UserDefaults.standard.set(true, forKey: baselineCapturedKey)
+        store.set(true, forKey: baselineCapturedKey)
         if let lastProcessedMessage {
-            UserDefaults.standard.set(lastProcessedMessage, forKey: lastProcessedMessageKey)
+            store.set(lastProcessedMessage, forKey: lastProcessedMessageKey)
         }
     }
 

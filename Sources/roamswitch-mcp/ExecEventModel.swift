@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.5 (build 184).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.6 (build 185).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -202,6 +202,97 @@ public struct TrustedKeychainReader: Codable, Equatable, Hashable {
     }
 }
 
+// MARK: - File-event watch rules (the rest of the file-event recorder is in FileActorModel.swift)
+
+public enum FileActorLabel: String, Codable, Equatable, CaseIterable {
+    /// A decoy credential file (honeytoken): a READ is the signal.
+    case decoy
+    /// A file that steers an AI agent: a WRITE is the signal.
+    case agent
+    /// A file or folder that runs something by itself (shell start-up files, LaunchAgents, hooks): a WRITE is the signal.
+    case startup
+}
+
+public enum FileActorPaths {
+    /// `/private/var/at/tabs/x` -> `/var/at/tabs/x` (the same file; `/var`, `/etc` and `/tmp` are links into `/private`).
+    public static func canonical(_ path: String) -> String {
+        for dir in ["/private/var/", "/private/etc/", "/private/tmp/"] where path.hasPrefix(dir) {
+            return String(path.dropFirst("/private".count))
+        }
+        if path == "/private/etc" || path == "/private/var" || path == "/private/tmp" { return String(path.dropFirst("/private".count)) }
+        return path
+    }
+}
+
+/// What the helper keeps an eye out for in eslogger's stream. The app builds the list (it knows the home folder,
+/// the decoys and the agent folders) and pushes it with the recorder's config.
+public struct FileWatchRule: Codable, Equatable {
+    public enum Mode: String, Codable, Equatable {
+        /// The path is exactly `pattern`.
+        case exact
+        /// The path is `pattern` or below it (`pattern` is a folder; a trailing slash is allowed).
+        case prefix
+        /// `pattern` appears somewhere in the path.
+        case contains
+    }
+
+    public var mode: Mode
+    public var pattern: String
+    public var label: FileActorLabel
+    /// True: a read-only open counts (decoys). False: only a write counts (an open for writing, a create, a rename, a delete).
+    public var reads: Bool
+    public var requirePrefix: String?
+    public var requireSuffixes: [String]
+    public var requireContains: String?
+    public var excludeSuffixes: [String]
+    public var excludeContains: [String]
+
+    public init(mode: Mode, pattern: String, label: FileActorLabel, reads: Bool = false, requirePrefix: String? = nil,
+                requireSuffixes: [String] = [], requireContains: String? = nil, excludeSuffixes: [String] = [],
+                excludeContains: [String] = []) {
+        self.mode = mode
+        self.pattern = FileActorPaths.canonical(pattern)
+        self.label = label
+        self.reads = reads
+        self.requirePrefix = requirePrefix.map(FileActorPaths.canonical)
+        self.requireSuffixes = requireSuffixes
+        self.requireContains = requireContains
+        self.excludeSuffixes = excludeSuffixes
+        self.excludeContains = excludeContains
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        mode = try c.decode(Mode.self, forKey: .mode)
+        pattern = try c.decode(String.self, forKey: .pattern)
+        label = try c.decode(FileActorLabel.self, forKey: .label)
+        reads = try c.decodeIfPresent(Bool.self, forKey: .reads) ?? false
+        requirePrefix = try c.decodeIfPresent(String.self, forKey: .requirePrefix)
+        requireSuffixes = try c.decodeIfPresent([String].self, forKey: .requireSuffixes) ?? []
+        requireContains = try c.decodeIfPresent(String.self, forKey: .requireContains)
+        excludeSuffixes = try c.decodeIfPresent([String].self, forKey: .excludeSuffixes) ?? []
+        excludeContains = try c.decodeIfPresent([String].self, forKey: .excludeContains) ?? []
+    }
+
+    /// Whether `path` is a file this rule watches (the kind of access is decided separately, see `accepts`).
+    public func matches(_ rawPath: String) -> Bool {
+        let path = FileActorPaths.canonical(rawPath)
+        switch mode {
+        case .exact: guard path == pattern else { return false }
+        case .prefix:
+            let folder = pattern.hasSuffix("/") ? pattern : pattern + "/"
+            guard path.hasPrefix(folder) || path + "/" == folder else { return false }
+        case .contains: guard path.contains(pattern) else { return false }
+        }
+        if let requirePrefix, !path.hasPrefix(requirePrefix) { return false }
+        if !requireSuffixes.isEmpty, !requireSuffixes.contains(where: { path.hasSuffix($0) }) { return false }
+        if let requireContains, !path.contains(requireContains) { return false }
+        if excludeSuffixes.contains(where: { path.hasSuffix($0) }) { return false }
+        if excludeContains.contains(where: { path.contains($0) }) { return false }
+        return true
+    }
+}
+
 public struct ExecRecorderConfig: Codable, Equatable {
     public var enabled: Bool
     public var maxTotalMB: Int
@@ -219,6 +310,18 @@ public struct ExecRecorderConfig: Codable, Equatable {
     /// Keychain reads that stay quiet in `exec.keychain_access`. `nil` (also what an
     /// older config file decodes to) means the built-in list.
     public var trustedKeychainReaders: [TrustedKeychainReader]?
+    /// Accounts added to the built-in service accounts of `exec.shell_from_service` (`_www` and the like).
+    /// The setting adds to the list; it never removes `_www` from it. Empty by default.
+    public var serviceUsers: [String]
+    /// Opt-in, on top of `enabled`: also keep an eye on the files in `fileWatchRules` and remember, for a few minutes
+    /// and in memory only, which process read or wrote them (`FileActorModel`). Off by default: eslogger cannot
+    /// filter by path, so this costs CPU on every open the Mac makes (the helper stops it when it costs too much).
+    public var fileActors: Bool
+    /// The files to watch, built by the app. Ignored unless `enabled && fileActors`; an older helper ignores both.
+    public var fileWatchRules: [FileWatchRule]
+    /// The CPU limit of the `open` eslogger, percent of one core (five-minute average). nil: the built-in 12. Bounded by
+    /// `minFileActorBudgetPercent...maxFileActorBudgetPercent`. An older helper ignores it.
+    public var fileActorOpenBudgetPercent: Double?
 
     /// Claude Code reads its own login items from the keychain on every start
     /// (Developer ID: Anthropic PBC). Both names were seen on a real Mac, read by the
@@ -234,6 +337,10 @@ public struct ExecRecorderConfig: Codable, Equatable {
         trustedKeychainReaders ?? Self.defaultTrustedKeychainReaders
     }
 
+    public static let maxFileWatchRules = 400
+    /// Bounds of `fileActorOpenBudgetPercent` (`FileActorLoadGovernor` uses the same).
+    public static let minFileActorBudgetPercent: Double = 2
+    public static let maxFileActorBudgetPercent: Double = 60
     public static let defaultMaxTotalMB = 200
     public static let defaultMaxAgeDays = 14
 
@@ -241,7 +348,9 @@ public struct ExecRecorderConfig: Codable, Equatable {
         enabled: Bool = false, maxTotalMB: Int = ExecRecorderConfig.defaultMaxTotalMB,
         maxAgeDays: Int = ExecRecorderConfig.defaultMaxAgeDays, segmentMB: Int = 8, hashChain: Bool = true,
         persistForkExit: Bool = false, rulesEnabled: Bool = true, allowlistPrefixes: [String] = [],
-        launchPlistRecentSecs: Int = 86_400, trustedKeychainReaders: [TrustedKeychainReader]? = nil
+        launchPlistRecentSecs: Int = 86_400, trustedKeychainReaders: [TrustedKeychainReader]? = nil,
+        serviceUsers: [String] = [], fileActors: Bool = false, fileWatchRules: [FileWatchRule] = [],
+        fileActorOpenBudgetPercent: Double? = nil
     ) {
         self.enabled = enabled
         self.maxTotalMB = maxTotalMB
@@ -253,6 +362,17 @@ public struct ExecRecorderConfig: Codable, Equatable {
         self.allowlistPrefixes = allowlistPrefixes
         self.launchPlistRecentSecs = launchPlistRecentSecs
         self.trustedKeychainReaders = trustedKeychainReaders
+        self.serviceUsers = serviceUsers
+        self.fileActors = fileActors
+        self.fileWatchRules = fileWatchRules
+        self.fileActorOpenBudgetPercent = fileActorOpenBudgetPercent
+    }
+
+    /// Splits the stored setting (comma separated, like `exec_rule_service_users` in the Linux build).
+    public static func parseServiceUsers(_ text: String) -> [String] {
+        var seen = Set<String>()
+        return text.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && seen.insert($0).inserted }
     }
 
     /// Tolerant of missing keys (older/newer writers) — same `decodeIfPresent`
@@ -271,6 +391,10 @@ public struct ExecRecorderConfig: Codable, Equatable {
         launchPlistRecentSecs = try c.decodeIfPresent(Int.self, forKey: .launchPlistRecentSecs) ?? d.launchPlistRecentSecs
         // Absent (an older writer) stays nil = the built-in list.
         trustedKeychainReaders = try c.decodeIfPresent([TrustedKeychainReader].self, forKey: .trustedKeychainReaders)
+        serviceUsers = try c.decodeIfPresent([String].self, forKey: .serviceUsers) ?? d.serviceUsers
+        fileActors = try c.decodeIfPresent(Bool.self, forKey: .fileActors) ?? d.fileActors
+        fileWatchRules = try c.decodeIfPresent([FileWatchRule].self, forKey: .fileWatchRules) ?? d.fileWatchRules
+        fileActorOpenBudgetPercent = try c.decodeIfPresent(Double.self, forKey: .fileActorOpenBudgetPercent)
     }
 
     /// Bounds every numeric field so a corrupt or hostile config can neither
@@ -282,6 +406,11 @@ public struct ExecRecorderConfig: Codable, Equatable {
         c.segmentMB = min(max(c.segmentMB, 1), 64)
         c.launchPlistRecentSecs = min(max(c.launchPlistRecentSecs, 60), 7 * 86_400)
         c.allowlistPrefixes = Array(c.allowlistPrefixes.prefix(64))
+        c.serviceUsers = Array(c.serviceUsers.map { String($0.prefix(64)) }.prefix(64))
+        c.fileWatchRules = Array(c.fileWatchRules.prefix(ExecRecorderConfig.maxFileWatchRules)).filter { $0.pattern.hasPrefix("/") && $0.pattern.count <= 512 }
+        c.fileActorOpenBudgetPercent = c.fileActorOpenBudgetPercent.map {
+            $0.isFinite ? min(max($0, Self.minFileActorBudgetPercent), Self.maxFileActorBudgetPercent) : Self.minFileActorBudgetPercent
+        }
         return c
     }
 }
@@ -527,7 +656,7 @@ public enum ESLoggerParser {
 
     // MARK: helpers
 
-    private struct ProcInfo {
+    struct ProcInfo {
         var pid: Int32?
         var ppid: Int32?
         var uid: UInt32?
@@ -539,7 +668,7 @@ public enum ESLoggerParser {
         var csFlags: UInt32?
     }
 
-    private static func info(_ p: [String: Any]) -> ProcInfo {
+    static func info(_ p: [String: Any]) -> ProcInfo {
         var r = ProcInfo()
         if let tok = p["audit_token"] as? [String: Any] {
             r.pid = int(tok["pid"]).flatMap { Int32(exactly: $0) }
@@ -555,7 +684,7 @@ public enum ESLoggerParser {
         return r
     }
 
-    private static func str(_ v: Any?, max: Int, allowEmpty: Bool = false) -> String? {
+    static func str(_ v: Any?, max: Int, allowEmpty: Bool = false) -> String? {
         guard let s = v as? String else { return nil }
         if s.isEmpty && !allowEmpty { return nil }
         return s.count > max ? String(s.prefix(max)) : s
@@ -580,7 +709,7 @@ public enum ESLoggerParser {
         return nil
     }
 
-    private static func int(_ v: Any?) -> Int64? {
+    static func int(_ v: Any?) -> Int64? {
         if let n = v as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID() { return n.int64Value }
         return nil
     }

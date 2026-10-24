@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.5 (build 184).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.6 (build 185).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -40,6 +40,8 @@ public enum LinkRiskFactorKind: String, Codable, Equatable {
     case urlShortener
     /// ブランド名に secure / login などの語を足した非公式ドメイン(paypa1-secure-login のように、似た文字へ置き換えたものも含む)。
     case brandComboSquat
+    /// ホスト(または親ドメイン)が、端末内の脅威フィード(リンク保護と同じもの)に載っている。
+    case threatFeed
 }
 
 public struct LinkRiskFactor: Identifiable, Codable, Equatable {
@@ -121,7 +123,9 @@ public extension LinkAuditReport {
             // Legacy factors encoded before `kind` existed.
             return factor.title.contains("ホモグラフ") || factor.title.lowercased().contains("homograph")
         }
-        if homograph { return .block }
+        // The passive guard blocks a feed hit as well as a homograph (Linux: `Signals::clear_phishing`).
+        let feedHit = riskFactors.contains { $0.kind == .threatFeed }
+        if homograph || feedHit { return .block }
         if riskLevel == .dangerous || riskLevel == .caution || score < 60 { return .warn }
         return .allow
     }
@@ -129,6 +133,108 @@ public extension LinkAuditReport {
 
 public final class LinkSafetyAuditor {
     public static let shared = LinkSafetyAuditor()
+
+    /// Whether a host (or a parent domain of it) is on the threat feed. The default reads the feed file this
+    /// Mac already holds (see `localThreatFeedContains`); tests pass their own.
+    public typealias ThreatFeedLookup = (String) -> Bool
+    private let threatFeedLookup: ThreatFeedLookup
+
+    public init(threatFeedLookup: @escaping ThreatFeedLookup = LinkSafetyAuditor.localThreatFeedContains) {
+        self.threatFeedLookup = threatFeedLookup
+    }
+
+    // MARK: - Threat feed (the one the passive link guard uses; read from a local file, nothing is fetched)
+
+    /// The host and each parent domain above the public suffix (a bare TLD is never a candidate), as
+    /// `LinkFilterEngine.matches` walks them.
+    static func threatFeedCandidates(_ host: String) -> Set<String> {
+        var h = host.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        while h.hasSuffix(".") { h.removeLast() }
+        guard !h.isEmpty else { return [] }
+        var out: Set<String> = [h]
+        var rest = h[...]
+        while let dot = rest.firstIndex(of: ".") {
+            rest = rest[rest.index(after: dot)...]
+            if !rest.contains(".") { break }
+            out.insert(String(rest))
+        }
+        return out
+    }
+
+    /// The same answer as parsing the whole feed into a set and asking `LinkFilterEngine.matches`, without
+    /// keeping the set: a manual check asks about one host now and then, so the file is read and dropped.
+    /// One host per line, `#` starts a comment, `0.0.0.0 host` lines are tolerated. The feed is lower-case by
+    /// construction (`build_threatfeed.sh`), so the search is for the lower-case name.
+    ///
+    /// The real feed is tens of megabytes, so this does not walk it line by line: it searches the bytes for
+    /// each candidate name and parses only the few lines that contain one.
+    static func threatFeedData(_ data: Data, contains host: String) -> Bool {
+        let candidates = threatFeedCandidates(host)
+        guard !candidates.isEmpty, !data.isEmpty else { return false }
+        return data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) -> Bool in
+            guard let base = raw.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return false }
+            let count = raw.count
+            for candidate in candidates {
+                let needle = Array(candidate.utf8)
+                var from = 0
+                while from < count {
+                    guard let found = needle.withUnsafeBufferPointer({ n in memmem(base + from, count - from, n.baseAddress, n.count) }) else { break }
+                    let at = base.distance(to: found.assumingMemoryBound(to: UInt8.self))
+                    // Most hits are the tail of a longer name (`x.<candidate>`): the byte before must start a
+                    // token and the byte after must end one, or the line is not looked at.
+                    func endsToken(_ b: UInt8) -> Bool { b == 10 || b == 13 || b == 32 || b == 9 }
+                    let before: UInt8 = at == 0 ? 10 : base[at - 1]
+                    let afterIndex = at + needle.count
+                    let after: UInt8 = afterIndex < count ? base[afterIndex] : 10
+                    guard endsToken(before), endsToken(after) || after == 35 || after == 46 else { from = at + 1; continue }
+                    var lineStart = at
+                    while lineStart > 0, base[lineStart - 1] != 10 { lineStart -= 1 }
+                    var lineEnd = at + needle.count
+                    while lineEnd < count, base[lineEnd] != 10 { lineEnd += 1 }
+                    let line = String(decoding: UnsafeBufferPointer(start: base + lineStart, count: lineEnd - lineStart), as: UTF8.self)
+                    if threatFeedEntry(ofLine: line) == candidate { return true }
+                    from = lineEnd
+                }
+            }
+            return false
+        }
+    }
+
+    static func threatFeedText(_ text: String, contains host: String) -> Bool {
+        threatFeedData(Data(text.utf8), contains: host)
+    }
+
+    /// The host a feed line names (lower-case, no trailing dot), nil for a blank or comment-only line.
+    static func threatFeedEntry(ofLine raw: String) -> String? {
+        let line = raw.split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false).first ?? ""
+        guard let token = line.split(whereSeparator: { $0 == " " || $0 == "\t" || $0 == "\r" }).last else { return nil }
+        var entry = token.lowercased()
+        while entry.hasSuffix(".") { entry.removeLast() }
+        return entry.isEmpty ? nil : entry
+    }
+
+    /// The feed files this Mac can hold, newest source first: the copy the app refreshes every day, the seed
+    /// inside the app, then the copy the helper publishes for the filter extension.
+    static func threatFeedPaths() -> [String] {
+        var paths: [String] = []
+        if let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+            paths.append(support.appendingPathComponent("RoamSwitch/threatfeed/feed.txt").path)
+        }
+        if let bundled = Bundle.main.path(forResource: "feed", ofType: "txt") { paths.append(bundled) }
+        paths.append("/Applications/RoamSwitch.app/Contents/Resources/feed.txt")
+        paths.append("/Library/Application Support/RoamSwitch/linkfilter/feed.txt")
+        return paths
+    }
+
+    /// `threatFeedText(_:contains:)` against the first feed file that can be read (false when there is none).
+    public static func localThreatFeedContains(_ host: String) -> Bool {
+        for path in threatFeedPaths() where FileManager.default.isReadableFile(atPath: path) {
+            if let data = try? Data(contentsOf: URL(fileURLWithPath: path), options: .mappedIfSafe) {
+                return threatFeedData(data, contains: host)
+            }
+        }
+        return false
+    }
 
     /// Published attack-server addresses (JPCERT/CC, 2026-10); the list lives in `KnownAttackServers`.
     static let knownAttackIPs: Set<String> = Set(KnownAttackServers.ips)
@@ -237,6 +343,18 @@ public final class LinkSafetyAuditor {
                 detail: loc("このIPアドレスは、JPCERT/CCが2026年10月15日に公開した報告（Web・APIを狙う攻撃）で、攻撃に使われたサーバーとして挙げられています。開かないでください。貸しサーバーのアドレスは別の人に割り当て直されることがあり、今は無関係の可能性もあります。"),
                 isSevere: true,
                 kind: .ipAddressHost
+            ))
+        }
+
+        // 2a'. The host (or a parent domain) is on the threat feed the passive link guard also uses. A raw IP is
+        // not looked up: the feed lists domains, and an address would only match through its trailing octets.
+        if !isIPAddress(host), threatFeedLookup(host) {
+            penaltyScore += 60
+            riskFactors.append(LinkRiskFactor(
+                title: loc("脅威フィードに載っているドメイン"),
+                detail: loc("このドメイン（または親ドメイン）は、このMacにあるフィッシング・脅威フィードに載っています。開かないでください。照合はMac内のファイルを読むだけで、URLを外部へ送信することはありません。"),
+                isSevere: true,
+                kind: .threatFeed
             ))
         }
 

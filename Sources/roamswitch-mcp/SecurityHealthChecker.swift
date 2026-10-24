@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.5 (build 184).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.6 (build 185).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -82,6 +82,106 @@ public enum SecurityCheckVerification: String, Codable, Equatable {
     public static func inconclusiveReason(of item: SecurityAuditItem) -> String? {
         let result = classify(item)
         return result.verdict == .inconclusive ? result.reason : nil
+    }
+}
+
+/// 診断の履歴。`verify_security_findings` の `resolved` が「直した」のか「元から当てはまらなかった」のかを区別するために、
+/// 項目ごとに「失敗を最後に測った時刻」と「合格(または対象外)を最後に測った時刻」を残す。判定できなかった結果
+/// (`inconclusive`)は記録しない(測れなかったことは何も言わないため)。
+///
+/// 書くのはアプリだけ(診断のあと。`AppState.refreshDiagnostics`)。MCP サーバーは読むだけで、`verify_security_findings` は
+/// 読み取り専用のまま。入れ物はアプリの設定(`AppLanguage.sharedDefaults`。MCP は別プロセスなので `.standard` では読めない)。
+/// Linux 版の `finding_history` と同じ考え方と、同じ `change` のコード。
+public struct FindingHistoryEntry: Codable, Equatable {
+    /// 失敗を最後に測った時刻(unix 秒)。
+    public var lastStillPresentAt: Double?
+    /// 合格または対象外を最後に測った時刻(unix 秒)。
+    public var lastResolvedAt: Double?
+
+    public init(lastStillPresentAt: Double? = nil, lastResolvedAt: Double? = nil) {
+        self.lastStillPresentAt = lastStillPresentAt
+        self.lastResolvedAt = lastResolvedAt
+    }
+
+    /// 最後の判定とその時刻。一度も測っていなければ nil。
+    public var last: (verdict: SecurityCheckVerification, at: Double)? {
+        switch (lastStillPresentAt, lastResolvedAt) {
+        case let (f?, r?): return f >= r ? (.stillPresent, f) : (.resolved, r)
+        case let (f?, nil): return (.stillPresent, f)
+        case let (nil, r?): return (.resolved, r)
+        case (nil, nil): return nil
+        }
+    }
+}
+
+/// 前回の判定からの変化。言語に依存しないコード(Linux 版と同じ)。
+public enum FindingChange: String, Equatable {
+    /// 前回は失敗で、いまは合格(または対象外)。直した。
+    case fixed
+    /// 前回も合格だった。直したのではない(元から当てはまらなかったか、それより前に直っていた)。
+    case alreadyResolved = "already_resolved"
+    /// 前回も失敗で、いまも失敗。
+    case stillPresent = "still_present"
+    /// 前回は合格で、いまは失敗。再発したか、新しく出た。
+    case newlyPresent = "newly_present"
+    /// 記録がない。
+    case noEarlierCheck = "no_earlier_check"
+}
+
+public enum FindingHistory {
+    public static let defaultsKey = "RoamSwitch.FindingHistoryV1"
+    /// 残す項目 id の最大数(診断の項目は 30 に満たない)。
+    static let maxChecks = 256
+    private static let version = 1
+    private static let lock = NSLock()
+
+    private struct File: Codable {
+        var version = FindingHistory.version
+        var checks: [String: FindingHistoryEntry] = [:]
+    }
+
+    /// 壊れている・版が違う・無いときは空の履歴。履歴は結果に文脈を足すだけなので、結果を壊してはならない。
+    public static func read(defaults: UserDefaults) -> [String: FindingHistoryEntry] {
+        guard let data = defaults.data(forKey: defaultsKey),
+              let file = try? JSONDecoder().decode(File.self, from: data), file.version == version else { return [:] }
+        return file.checks
+    }
+
+    /// 1回の診断の、判定できた結果を履歴に足す(純関数)。変わったら true。
+    @discardableResult
+    static func apply(report: ComprehensiveSecurityReport, to history: inout [String: FindingHistoryEntry], now: Double) -> Bool {
+        var changed = false
+        for item in report.items where !item.checkId.isEmpty {
+            let (verdict, _) = SecurityCheckVerification.classify(item)
+            if verdict == .inconclusive { continue }
+            if history[item.checkId] == nil && history.count >= maxChecks { continue }
+            var entry = history[item.checkId] ?? FindingHistoryEntry()
+            if verdict == .stillPresent { entry.lastStillPresentAt = now } else { entry.lastResolvedAt = now }
+            history[item.checkId] = entry
+            changed = true
+        }
+        return changed
+    }
+
+    /// アプリが、診断のあとに呼ぶ。MCP サーバーは呼ばない(読み取り専用)。
+    public static func note(report: ComprehensiveSecurityReport, defaults: UserDefaults, now: Double = Date().timeIntervalSince1970) {
+        lock.lock(); defer { lock.unlock() }
+        var history = read(defaults: defaults)
+        guard apply(report: report, to: &history, now: now) else { return }
+        if let data = try? JSONEncoder().encode(File(checks: history)) { defaults.set(data, forKey: defaultsKey) }
+    }
+
+    /// いまの判定を、前回の判定と比べた変化。`inconclusive` には付けない(nil)。
+    public static func change(verdict: SecurityCheckVerification, entry: FindingHistoryEntry?) -> FindingChange? {
+        let previous = entry?.last?.verdict
+        switch (verdict, previous) {
+        case (.inconclusive, _): return nil
+        case (_, nil): return .noEarlierCheck
+        case (.resolved, .stillPresent?): return .fixed
+        case (.resolved, _): return .alreadyResolved
+        case (.stillPresent, .stillPresent?): return .stillPresent
+        case (.stillPresent, _): return .newlyPresent
+        }
     }
 }
 
@@ -809,7 +909,7 @@ enum SystemCommand {
             group.leave()
         }
         group.wait()
-        process.waitUntilExit()
+        process.waitUntilExitWithoutRunLoop()
         let status: Int32 = process.terminationReason == .uncaughtSignal ? -1 : process.terminationStatus
         return CommandOutput(status: status, stdout: String(decoding: outData, as: UTF8.self), stderr: String(decoding: errData, as: UTF8.self))
     }

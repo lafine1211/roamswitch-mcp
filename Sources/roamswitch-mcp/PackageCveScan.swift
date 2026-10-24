@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.5 (build 184).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.6 (build 185).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -301,9 +301,12 @@ enum PackageCveScan {
         let confidence: String
         /// EPSS (0...1) from the signed feed, if it carried one. See `PackageCveEpss`.
         let epss: Double?
+        /// CISA lists the CVE in its Known Exploited Vulnerabilities catalog (exploitation in the wild is
+        /// confirmed), as of the map's `kevDate`. Absent = not listed.
+        let kev: Bool
 
         enum CodingKeys: String, CodingKey {
-            case cveId, package, cvssScore, ranges, summary, confidence, epss
+            case cveId, package, cvssScore, ranges, summary, confidence, epss, kev
         }
 
         init(from decoder: Decoder) throws {
@@ -316,6 +319,7 @@ enum PackageCveScan {
             let raw = try c.decodeIfPresent(String.self, forKey: .confidence) ?? "gray"
             confidence = raw == "confirmed" ? "confirmed" : "gray"
             epss = PackageCveEpss.validated(try? c.decodeIfPresent(Double.self, forKey: .epss))
+            kev = (try? c.decodeIfPresent(Bool.self, forKey: .kev)) ?? false
         }
     }
 
@@ -325,15 +329,18 @@ enum PackageCveScan {
         let entries: [CveEntry]
         /// The day (`YYYY-MM-DD`) the entries' EPSS values were taken, if the feed said.
         var epssDate: String? = nil
+        /// The day of the CISA KEV catalog the entries' `kev` flags were taken from, if the feed said.
+        var kevDate: String? = nil
 
         static let empty = CveMap(mapVersion: "", ecosystem: "Homebrew", entries: [])
 
-        enum CodingKeys: String, CodingKey { case mapVersion, ecosystem, entries, epssDate }
-        init(mapVersion: String, ecosystem: String, entries: [CveEntry], epssDate: String? = nil) {
+        enum CodingKeys: String, CodingKey { case mapVersion, ecosystem, entries, epssDate, kevDate }
+        init(mapVersion: String, ecosystem: String, entries: [CveEntry], epssDate: String? = nil, kevDate: String? = nil) {
             self.mapVersion = mapVersion
             self.ecosystem = ecosystem
             self.entries = entries
             self.epssDate = epssDate
+            self.kevDate = kevDate
         }
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -341,6 +348,7 @@ enum PackageCveScan {
             ecosystem = try c.decode(String.self, forKey: .ecosystem)
             entries = try c.decode([CveEntry].self, forKey: .entries)
             epssDate = PackageCveEpss.validatedDate(try? c.decodeIfPresent(String.self, forKey: .epssDate))
+            kevDate = PackageCveEpss.validatedDate(try? c.decodeIfPresent(String.self, forKey: .kevDate))
         }
     }
 
@@ -447,7 +455,7 @@ enum PackageCveScan {
             return ([], classifyInventory(brewPath: brewPath, exitStatus: nil, packageCount: 0))
         }
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
+        process.waitUntilExitWithoutRunLoop()
         guard process.terminationStatus == 0 else { return ([], classifyInventory(brewPath: brewPath, exitStatus: process.terminationStatus, packageCount: 0)) }
 
         var packages: [InstalledPackage] = []
@@ -486,6 +494,8 @@ enum PackageCveScan {
         /// EPSS (0...1) and the day it was taken, when the signed feed carried them; nil otherwise.
         var epss: Double? = nil
         var epssDate: String? = nil
+        /// CISA lists the CVE as exploited in the wild (KEV). Listed first.
+        var kev: Bool = false
 
         var id: String { "\(cveId)|\(package)|\(installedVersion)" }
 
@@ -518,7 +528,8 @@ enum PackageCveScan {
                     summary: cve.summary,
                     confidence: cve.confidence,
                     epss: cve.epss,
-                    epssDate: cve.epss == nil ? nil : map.epssDate
+                    epssDate: cve.epss == nil ? nil : map.epssDate,
+                    kev: cve.kev
                 ))
             }
         }
@@ -545,16 +556,18 @@ enum PackageCveScan {
                 cvssScore: max(e.cvssScore, f.cvssScore),
                 fixedVersion: nearer ? f.fixedVersion : e.fixedVersion,
                 summary: e.summary, confidence: e.confidence,
-                epss: e.epss ?? f.epss, epssDate: e.epss != nil ? e.epssDate : f.epssDate)
+                epss: e.epss ?? f.epss, epssDate: e.epss != nil ? e.epssDate : f.epssDate,
+                kev: e.kev || f.kev)
         }
         return out
     }
 
-    /// Severity band first, then EPSS (higher first), then CVSS and CVE id. See `PackageCveEpss.precedes`.
+    /// CISA KEV first, then severity band, then EPSS (higher first), then CVSS and CVE id. See `PackageCveEpss.precedes`.
     static func ordered(_ findings: [Finding]) -> [Finding] {
         findings.sorted {
             PackageCveEpss.precedes(cvssA: $0.cvssScore, epssA: $0.epss, idA: $0.id,
-                                    cvssB: $1.cvssScore, epssB: $1.epss, idB: $1.id)
+                                    cvssB: $1.cvssScore, epssB: $1.epss, idB: $1.id,
+                                    kevA: $0.kev, kevB: $1.kev)
         }
     }
 }

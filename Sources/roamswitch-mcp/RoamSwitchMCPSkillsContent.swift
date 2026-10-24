@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.5 (build 184).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.6 (build 185).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -295,7 +295,16 @@ enum RoamSwitchMCPSkillsContent {
        lockfile) with different scores, report both — they may be
        different versions in different contexts and neither is more
        "correct" than the other by default.
-    5. Present the final list sorted by (severity band, then confidence,
+    5. A finding with `kev: true` is a CVE that CISA's Known Exploited
+       Vulnerabilities catalog lists as exploited in the wild. It is a record
+       of fact, unlike `epss`: put it first, whatever its CVSS band, and say
+       "CISA KEV". A finding without `kev` is not thereby safe: the map may
+       have been built without the catalog. A finding with `unfixed: true`
+       (project lockfile scan) has no fixed version published (`fixedVersion`
+       is empty): never tell the user to update the package to close it. Say
+       that no fix exists yet and that the options are a mitigation, removing
+       the dependency, or an acceptance with an end date.
+    5b. Present the final list sorted by (`kev` first, then severity band, then confidence,
        then score) with the package name, installed context (Homebrew vs.
        which lockfile/project), and the CVE identifier if present in the
        finding's fields, so the user can act without re-deriving the
@@ -535,7 +544,12 @@ enum RoamSwitchMCPSkillsContent {
        in the same result, state that chain and let the user judge it.
     7. Before telling the user something is fixed, re-measure it with
        `verify_security_findings` and report its answer, including
-       `inconclusive` when that is what it returned. Each result also says
+       `inconclusive` when that is what it returned. A `resolved` result is a
+       fix only when its `change` is `fixed` (the check failed when it was
+       last measured and passes now; `previousCheckedAt` says when). With
+       `already_resolved` it also passed last time: say it was not fixed by
+       a recent change. With `no_earlier_check` nothing was recorded, so say
+       that it is not known whether it was fixed or never applied. Each result also says
        how far the verdict can be trusted: `verificationStatus` is
        `verified` (the check applies and was measured), `false_positive`
        (by design it does not apply with the current settings) or

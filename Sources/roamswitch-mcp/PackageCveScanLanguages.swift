@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.5 (build 184).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.6 (build 185).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -452,8 +452,13 @@ enum PackageCveScanLanguages {
         let summary: String
         /// EPSS (0...1) from the signed feed, if it carried one. See `PackageCveEpss`.
         let epss: Double?
+        /// CISA lists the CVE in its Known Exploited Vulnerabilities catalog, as of the map's `kevDate`.
+        let kev: Bool
+        /// No fixed version exists: the package is affected from each listed `introduced` version on. `ranges`
+        /// then holds only the fixed ranges and may be empty (a client that predates this key matches nothing).
+        let unfixed: [String]
 
-        enum CodingKeys: String, CodingKey { case cveId, package, cvssScore, ranges, summary, epss }
+        enum CodingKeys: String, CodingKey { case cveId, package, cvssScore, ranges, summary, epss, kev, unfixed }
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             cveId = try c.decode(String.self, forKey: .cveId)
@@ -462,6 +467,13 @@ enum PackageCveScanLanguages {
             ranges = try c.decodeIfPresent([CveRange].self, forKey: .ranges) ?? []
             summary = try c.decodeIfPresent(String.self, forKey: .summary) ?? ""
             epss = PackageCveEpss.validated(try? c.decodeIfPresent(Double.self, forKey: .epss))
+            kev = (try? c.decodeIfPresent(Bool.self, forKey: .kev)) ?? false
+            unfixed = (try? c.decodeIfPresent([String].self, forKey: .unfixed)) ?? []
+        }
+        init(cveId: String, package: String, cvssScore: Double, ranges: [CveRange] = [], summary: String = "",
+             epss: Double? = nil, kev: Bool = false, unfixed: [String] = []) {
+            self.cveId = cveId; self.package = package; self.cvssScore = cvssScore; self.ranges = ranges
+            self.summary = summary; self.epss = epss; self.kev = kev; self.unfixed = unfixed
         }
     }
 
@@ -471,20 +483,24 @@ enum PackageCveScanLanguages {
         let entries: [CveEntry]
         /// The day (`YYYY-MM-DD`) the entries' EPSS values were taken, if the feed said.
         let epssDate: String?
+        /// The day of the CISA KEV catalog the entries' `kev` flags were taken from, if the feed said.
+        let kevDate: String?
 
-        enum CodingKeys: String, CodingKey { case mapVersion, ecosystem, entries, epssDate }
+        enum CodingKeys: String, CodingKey { case mapVersion, ecosystem, entries, epssDate, kevDate }
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             mapVersion = try c.decodeIfPresent(String.self, forKey: .mapVersion) ?? ""
             ecosystem = try c.decodeIfPresent(String.self, forKey: .ecosystem) ?? ""
             entries = try c.decodeIfPresent([CveEntry].self, forKey: .entries) ?? []
             epssDate = PackageCveEpss.validatedDate(try? c.decodeIfPresent(String.self, forKey: .epssDate))
+            kevDate = PackageCveEpss.validatedDate(try? c.decodeIfPresent(String.self, forKey: .kevDate))
         }
-        init(mapVersion: String, ecosystem: String, entries: [CveEntry], epssDate: String? = nil) {
+        init(mapVersion: String, ecosystem: String, entries: [CveEntry], epssDate: String? = nil, kevDate: String? = nil) {
             self.mapVersion = mapVersion
             self.ecosystem = ecosystem
             self.entries = entries
             self.epssDate = epssDate
+            self.kevDate = kevDate
         }
         static func empty(ecosystem: String) -> CveMap { CveMap(mapVersion: "", ecosystem: ecosystem, entries: []) }
     }
@@ -546,6 +562,25 @@ enum PackageCveScanLanguages {
                     && compareVersions(ecosystem: map.ecosystem, installedVersion, range.fixed) < 0
             }
         }
+    }
+
+    /// `findKnownCVEs` plus the entries whose only match is a "no fixed version" range: the installed version is
+    /// at or above one of the entry's `unfixed` introduced versions (`unfixed: true` in the result). An entry that
+    /// matches a fixed range is reported as that, once.
+    static func findKnownAndUnfixedCVEs(map: CveMap, package: String, installedVersion: String) -> [(entry: CveEntry, unfixed: Bool)] {
+        var out: [(entry: CveEntry, unfixed: Bool)] = []
+        for entry in map.entries where entry.package == package {
+            let byRange = entry.ranges.contains { range in
+                compareVersions(ecosystem: map.ecosystem, installedVersion, range.introduced) >= 0
+                    && compareVersions(ecosystem: map.ecosystem, installedVersion, range.fixed) < 0
+            }
+            if byRange {
+                out.append((entry, false))
+            } else if entry.unfixed.contains(where: { compareVersions(ecosystem: map.ecosystem, installedVersion, $0) >= 0 }) {
+                out.append((entry, true))
+            }
+        }
+        return out
     }
 
     private static func tightestFixedVersion(ecosystem: String, installedVersion: String, entry: CveEntry) -> String {
@@ -846,6 +881,10 @@ enum PackageCveScanLanguages {
         /// EPSS (0...1) and the day it was taken, when the signed feed carried them; nil otherwise.
         var epss: Double? = nil
         var epssDate: String? = nil
+        /// CISA lists the CVE as exploited in the wild (KEV). Listed first.
+        var kev: Bool = false
+        /// No fixed version has been published (`fixedVersion` is empty): updating the package does not close this.
+        var unfixed: Bool = false
 
         var id: String { "\(lockfile)|\(cveId)|\(ecosystem)|\(package)|\(installedVersion)" }
 
@@ -899,18 +938,20 @@ enum PackageCveScanLanguages {
         var findings: [Finding] = []
         for dep in deps {
             guard let map = maps[dep.ecosystem] else { continue }
-            for cve in findKnownCVEs(map: map, package: dep.name, installedVersion: dep.version) {
+            for (cve, unfixed) in findKnownAndUnfixedCVEs(map: map, package: dep.name, installedVersion: dep.version) {
                 findings.append(Finding(
                     ecosystem: dep.ecosystem,
                     package: dep.name,
                     installedVersion: dep.version,
                     cveId: cve.cveId,
                     cvssScore: cve.cvssScore,
-                    fixedVersion: tightestFixedVersion(ecosystem: dep.ecosystem, installedVersion: dep.version, entry: cve),
+                    fixedVersion: unfixed ? "" : tightestFixedVersion(ecosystem: dep.ecosystem, installedVersion: dep.version, entry: cve),
                     summary: cve.summary,
                     lockfile: dep.lockfile,
                     epss: cve.epss,
-                    epssDate: cve.epss == nil ? nil : map.epssDate
+                    epssDate: cve.epss == nil ? nil : map.epssDate,
+                    kev: cve.kev,
+                    unfixed: unfixed
                 ))
             }
         }
@@ -932,14 +973,17 @@ enum PackageCveScanLanguages {
                 continue
             }
             let e = out[i]
-            let nearer = e.fixedVersion.isEmpty
-                || (!f.fixedVersion.isEmpty && compareVersions(ecosystem: f.ecosystem, f.fixedVersion, e.fixedVersion) < 0)
+            // A fixed row beats a "no fix yet" row of the same CVE (the person can act on it).
+            let nearer = (e.unfixed && !f.unfixed)
+                || (!e.unfixed && !f.unfixed && (e.fixedVersion.isEmpty
+                    || (!f.fixedVersion.isEmpty && compareVersions(ecosystem: f.ecosystem, f.fixedVersion, e.fixedVersion) < 0)))
             out[i] = Finding(
                 ecosystem: e.ecosystem, package: e.package, installedVersion: e.installedVersion, cveId: e.cveId,
                 cvssScore: max(e.cvssScore, f.cvssScore),
                 fixedVersion: nearer ? f.fixedVersion : e.fixedVersion,
                 summary: e.summary, lockfile: e.lockfile,
-                epss: e.epss ?? f.epss, epssDate: e.epss != nil ? e.epssDate : f.epssDate)
+                epss: e.epss ?? f.epss, epssDate: e.epss != nil ? e.epssDate : f.epssDate,
+                kev: e.kev || f.kev, unfixed: nearer ? false : e.unfixed)
         }
         return out
     }
@@ -950,7 +994,8 @@ enum PackageCveScanLanguages {
         findings.sorted {
             if $0.lockfile != $1.lockfile { return $0.lockfile < $1.lockfile }
             return PackageCveEpss.precedes(cvssA: $0.cvssScore, epssA: $0.epss, idA: $0.id,
-                                           cvssB: $1.cvssScore, epssB: $1.epss, idB: $1.id)
+                                           cvssB: $1.cvssScore, epssB: $1.epss, idB: $1.id,
+                                           kevA: $0.kev, kevB: $1.kev)
         }
     }
 }

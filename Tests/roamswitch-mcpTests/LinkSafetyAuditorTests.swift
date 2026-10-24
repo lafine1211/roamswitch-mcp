@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.5 (build 184). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.6 (build 185). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -242,5 +242,84 @@ final class LinkSafetyAuditorTests: XCTestCase {
         for url in ["https://www.paypal.com/", "https://support.google.com/", "https://mail.google.com/", "https://purchase-help.example.com/", "https://www.apple.com/"] {
             XCTAssertFalse(auditor.analyzeURL(url).riskFactors.contains { $0.kind == .brandComboSquat }, url)
         }
+    }
+
+    // MARK: - The threat feed
+
+    private func auditor(listing domains: Set<String>) -> LinkSafetyAuditor {
+        LinkSafetyAuditor(threatFeedLookup: { host in
+            LinkSafetyAuditor.threatFeedText(domains.joined(separator: "\n"), contains: host)
+        })
+    }
+
+    func testAHostOnTheFeedIsDangerousAndTheGuardWouldBlockIt() {
+        let a = auditor(listing: ["phish-example.test"])
+        for url in ["https://phish-example.test/", "https://login.phish-example.test/a?b=1", "PHISH-EXAMPLE.TEST", "https://phish-example.test./x"] {
+            let report = a.analyzeURL(url)
+            XCTAssertEqual(report.riskLevel, .dangerous, url)
+            XCTAssertEqual(report.verdict, .block, url)
+            XCTAssertLessThanOrEqual(report.score, 40, url)
+            XCTAssertTrue(report.riskFactors.contains { $0.kind == .threatFeed && $0.isSevere }, url)
+        }
+    }
+
+    func testAHostNotOnTheFeedIsJudgedExactlyAsWithoutAFeed() {
+        let withFeed = auditor(listing: ["phish-example.test"])
+        let withoutFeed = auditor(listing: [])
+        for url in ["https://example.org/", "https://notphish-example.test/", "https://phish-example.test.example.org/", "http://example.org/login", "https://paypa1-secure-login.example.com/verify"] {
+            let a = withFeed.analyzeURL(url), b = withoutFeed.analyzeURL(url)
+            XCTAssertEqual(a.score, b.score, url)
+            XCTAssertEqual(a.riskLevel, b.riskLevel, url)
+            XCTAssertEqual(a.verdict, b.verdict, url)
+            XCTAssertEqual(a.riskFactors.count, b.riskFactors.count, url)
+            XCTAssertFalse(a.riskFactors.contains { $0.kind == .threatFeed }, url)
+        }
+    }
+
+    func testABareSuffixOrASiblingOnTheFeedNeverFlagsANeighbour() {
+        let a = auditor(listing: ["evil.example.com", "com"])
+        XCTAssertFalse(a.analyzeURL("https://example.com/").riskFactors.contains { $0.kind == .threatFeed })
+        XCTAssertFalse(a.analyzeURL("https://www.example.com/").riskFactors.contains { $0.kind == .threatFeed })
+        XCTAssertFalse(a.analyzeURL("https://www.example.org/").riskFactors.contains { $0.kind == .threatFeed })
+        XCTAssertTrue(a.analyzeURL("https://a.evil.example.com/").riskFactors.contains { $0.kind == .threatFeed })
+    }
+
+    func testARawIPIsNotLookedUpInTheDomainFeed() {
+        let a = LinkSafetyAuditor(threatFeedLookup: { _ in true })
+        XCTAssertFalse(a.analyzeURL("https://10.0.0.1/").riskFactors.contains { $0.kind == .threatFeed })
+        XCTAssertTrue(a.analyzeURL("https://example.org/").riskFactors.contains { $0.kind == .threatFeed })
+    }
+
+    func testFeedTextParsingMatchesTheFilterEngine() {
+        let text = "# header\nevil.example\n0.0.0.0 hosts-style.example # c\n\nupper.example.\ncom\nco.uk\nlast.example"
+        var set = Set<String>()
+        for raw in text.split(separator: "\n") {
+            let line = raw.split(separator: "#", maxSplits: 1).first.map(String.init)?.trimmingCharacters(in: .whitespaces) ?? ""
+            if line.isEmpty { continue }
+            var host = (line.split(separator: " ").last.map(String.init) ?? line).lowercased()
+            while host.hasSuffix(".") { host.removeLast() }
+            set.insert(host)
+        }
+        for host in ["evil.example", "a.evil.example", "EVIL.example.", "hosts-style.example", "x.hosts-style.example", "upper.example", "last.example", "x.last.example", "st.example",
+                     "example", "com", "foo.com", "foo.co.uk", "co.uk", "other.example", "evil.example.org"] {
+            XCTAssertEqual(LinkSafetyAuditor.threatFeedText(text, contains: host),
+                           LinkFilterEngine.matches(LinkFilterEngine.normalizedHost(host), in: set), host)
+        }
+        XCTAssertFalse(LinkSafetyAuditor.threatFeedText(text, contains: ""))
+    }
+
+    func testTheFileLookupReadsAFeedFileAndTheDefaultAuditorUsesTheMacsOwnFeed() throws {
+        // A feed file the app has installed or bundled is found; a name nobody lists is not.
+        XCTAssertFalse(LinkSafetyAuditor.localThreatFeedContains("not-listed-anywhere-\(UUID().uuidString.lowercased()).example"))
+        XCTAssertFalse(LinkSafetyAuditor.threatFeedPaths().isEmpty)
+        XCTAssertTrue(LinkSafetyAuditor.threatFeedPaths().contains { $0.hasSuffix("RoamSwitch/threatfeed/feed.txt") })
+    }
+
+    func testTheFeedFindingIsTranslatedLikeEveryOtherFactor() {
+        let report = auditor(listing: ["phish-example.test"]).analyzeURL("https://phish-example.test/")
+        let factor = report.riskFactors.first { $0.kind == .threatFeed }
+        XCTAssertNotNil(factor)
+        XCTAssertFalse(factor?.title.isEmpty ?? true)
+        XCTAssertGreaterThan(factor?.detail.count ?? 0, 20)
     }
 }

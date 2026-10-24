@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.5 (build 184).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.6 (build 185).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -299,7 +299,9 @@ public enum ContainmentIncidentTimeline {
     public static func fileState() -> FileState { queue.sync { loadAllWithState().state } }
 
     /// A damaged file is renamed to `.bak` (never overwritten, never deleted) before anything new is written.
-    private static func setAsideIfDamaged(defaults: UserDefaults = .standard) {
+    private static func setAsideIfDamaged(defaults: UserDefaults? = nil) {
+        // The app's domain: the activity log reads the mark there, whichever process set the file aside (the MCP server records too).
+        let defaults = defaults ?? AppLanguage.sharedDefaults
         let url = storeURL
         let (_, state) = loadAllWithState()
         guard state == .unreadable else { return }

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.5 (build 184).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.6 (build 185).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -74,7 +74,7 @@ enum NmapNSE {
         } catch {
             return false
         }
-        process.waitUntilExit()
+        process.waitUntilExitWithoutRunLoop()
         return process.terminationStatus == 0
     }
 
@@ -134,7 +134,7 @@ enum NmapNSE {
             }
             Thread.sleep(forTimeInterval: 0.1)
         }
-        process.waitUntilExit()
+        process.waitUntilExitWithoutRunLoop()
         while !readThread.isFinished {
             Thread.sleep(forTimeInterval: 0.02)
         }

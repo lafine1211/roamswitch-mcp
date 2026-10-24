@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.5 (build 184). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.6 (build 185). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -103,7 +103,7 @@ final class DetectionCoverageTests: XCTestCase {
         let ids = DetectionCoverage.entries.map(\.technique)
         XCTAssertEqual(ids.count, Set(ids).count, "no technique is listed twice")
         // The names the task asked to be covered are all present, none rounded up to more than the code supports.
-        for required in ["T1562.001", "T1562.004", "T1562.006", "T1070.002", "T1070.003", "T1553.001", "T1574.004", "T1574.006",
+        for required in ["T1685", "T1686", "T1685.006", "T1070.003", "T1553.001", "T1574.004", "T1574.006",
                          "T1036", "T1059.002", "T1055", "T1027.010", "T1543.001", "T1543.004", "T1547.015", "T1555.001", "T1548.003",
                          // the guards that had no technique until the vocabulary check was added
                          "T1110.001", "T1046", "T1486", "T1557.002", "T1200", "T1091", "T1204.002", "T1204.004", "T1195.001",
@@ -114,7 +114,7 @@ final class DetectionCoverageTests: XCTestCase {
 
     func testTechniquesWithNoMatchingCodeStayNone() {
         // These were searched for and not found; promoting one needs code and a new test, not a text edit.
-        for id in ["T1562.004", "T1562.006", "T1070.002", "T1070.003", "T1574.004", "T1036", "T1055", "T1547.015"] {
+        for id in ["T1686", "T1685.006", "T1070.003", "T1574.004", "T1036", "T1055", "T1547.015"] {
             let entry = DetectionCoverage.entries.first { $0.technique == id }
             XCTAssertEqual(entry?.coverage, DetectionCoverage.Coverage.none, id)
         }
@@ -128,7 +128,7 @@ final class DetectionCoverageTests: XCTestCase {
         XCTAssertEqual(DetectionCoverage.liveState(of: entry("T1553.001"), guardStates: ["execRecorder": "off"]), .off)
         XCTAssertEqual(DetectionCoverage.liveState(of: entry("T1543.001"), guardStates: ["execRecorder": "on", "persistenceMonitor": "off"]), .partial)
         XCTAssertEqual(DetectionCoverage.liveState(of: entry("T1543.001"), guardStates: ["execRecorder": "on"]), .unknown, "a guard missing from the vocabulary is unknown")
-        XCTAssertEqual(DetectionCoverage.liveState(of: entry("T1562.001"), guardStates: [:]), .unknown, "a feature has no toggle to read")
+        XCTAssertEqual(DetectionCoverage.liveState(of: entry("T1685"), guardStates: [:]), .unknown, "a feature has no toggle to read")
         XCTAssertEqual(DetectionCoverage.liveState(of: entry("T1055"), guardStates: [:]), .notApplicable, "nothing covers it")
     }
 
@@ -158,7 +158,7 @@ final class DetectionCoverageTests: XCTestCase {
         XCTAssertGreaterThan(expectedOff, 0)
         XCTAssertEqual(off.summary.coveredButOff, expectedOff)
         // A technique covered only by a feature is unknown, not off, so it never counts as covered-but-off.
-        XCTAssertEqual(try XCTUnwrap(off.techniques.first { $0.id == "T1562.001" }).liveState, "unknown")
+        XCTAssertEqual(try XCTUnwrap(off.techniques.first { $0.id == "T1685" }).liveState, "unknown")
 
         let allOn = DetectionCoverage.payload(guards: guardVocabulary().map { MCPGuardEntryPayload(key: $0.key, enabledInSettings: true, usingDefault: false) })
         XCTAssertEqual(allOn.summary.coveredButOff, 0)
@@ -185,7 +185,7 @@ final class DetectionCoverageTests: XCTestCase {
         XCTAssertEqual(try t("T1553.001").liveState, "on")
         XCTAssertEqual(try t("T1553.001").coveredBy, ["execRecorder", "exec.quarantine_stripped_then_exec", "gatekeeper_app_verification"])
         XCTAssertEqual(try t("T1543.001").liveState, "partial")
-        XCTAssertEqual(try t("T1562.001").liveState, "unknown")
+        XCTAssertEqual(try t("T1685").liveState, "unknown")
         XCTAssertEqual(try t("T1055").liveState, "not_applicable")
         XCTAssertEqual(try t("T1055").coverage, "none")
     }
@@ -240,12 +240,30 @@ final class DetectionCoverageNavigatorLayerTests: XCTestCase {
         }
     }
 
+    /// ATT&CK v19 revoked four of the ids this table used to carry (checked against MITRE's STIX data for v20, the
+    /// version the layer names). They must not come back, and the layer must show every technique it lists: the
+    /// Navigator hides a technique whose platforms are not in the filter (T1091 and T1557.001 are Windows only,
+    /// T1610 is Containers only in v20).
+    func testNoRevokedIdAndTheVersionAndPlatformsOfTheLayer() throws {
+        let l = try layer()
+        XCTAssertEqual((l["versions"] as? [String: String])?["attack"], "20")
+        let ids = DetectionCoverage.entries.map(\.technique)
+        for old in ["T1562.001", "T1562.004", "T1562.006", "T1562.012", "T1070.002"] {
+            XCTAssertFalse(ids.contains(old), "\(old) was revoked in ATT&CK v19")
+        }
+        XCTAssertTrue(ids.contains("T1685") && ids.contains("T1686") && ids.contains("T1685.006"))
+        let platforms = try XCTUnwrap((l["filters"] as? [String: Any])?["platforms"] as? [String])
+        for needed in ["macOS", "Windows", "Containers"] {
+            XCTAssertTrue(platforms.contains(needed), "\(needed): a technique tagged only with it would be hidden by the filter")
+        }
+    }
+
     func testColoursFollowTheCoverage() throws {
         let techniques = try XCTUnwrap(try layer()["techniques"] as? [[String: Any]])
         func color(_ id: String) -> String? { techniques.first { $0["techniqueID"] as? String == id }?["color"] as? String }
-        // T1543.001 detects, T1562.001 partial, T1055 none.
+        // T1543.001 detects, T1685 partial, T1055 none.
         XCTAssertEqual(color("T1543.001"), "#3fb950")
-        XCTAssertEqual(color("T1562.001"), "#e3b341")
+        XCTAssertEqual(color("T1685"), "#e3b341")
         XCTAssertEqual(color("T1055"), "#f85149")
         for t in techniques {
             let coverage = DetectionCoverage.entries.first { $0.technique == t["techniqueID"] as? String }?.coverage
