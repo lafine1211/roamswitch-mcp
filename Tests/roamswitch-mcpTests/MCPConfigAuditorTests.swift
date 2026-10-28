@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.11 (build 190). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.12 (build 191). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -332,5 +332,119 @@ final class MCPConfigAuditorTests: XCTestCase {
         XCTAssertEqual(Set(r.scannedFiles), [home + "/.cursor/mcp.json", project + "/.mcp.json"])
         XCTAssertEqual(Set(ids(r)), ["auto_approve", "hexstrike"])
         XCTAssertTrue(r.unreadableFiles.isEmpty)
+    }
+
+    // MARK: - Codex (TOML) and OpenCode servers
+
+    private let codexToml = """
+    model = "gpt-5"
+
+    [mcp_servers.docs]
+    command = "npx"
+    args = ["-y", "some-docs-mcp"]
+
+    [mcp_servers.docs.env]
+    HTTPS_PROXY = "http://proxy.example:3128"
+    API_KEY = "SECRETVALUE"
+
+    [mcp_servers.remote]
+    url = "http://10.0.0.5:8080/mcp"
+
+    [mcp_servers.pinned]
+    command = "npx"
+    args = ["-y", "pinned-mcp@1.2.3"]
+    env = { LD_PRELOAD = "/tmp/x.so" }
+    """
+
+    func testCodexTomlServersAreAuditedWithTheExistingRules() {
+        let r = audit(codexToml, path: "/Users/u/.codex/config.toml")
+        XCTAssertEqual(r.serverCount, 3)
+        XCTAssertTrue(r.unreadableFiles.isEmpty)
+        func idsOf(_ server: String) -> Set<String> { Set(r.findings.filter { $0.server == server }.map(\.id)) }
+        XCTAssertEqual(idsOf("docs"), ["unpinned_package_launcher", "traffic_interception_env"])
+        XCTAssertEqual(idsOf("remote"), ["remote_plain_http"])
+        XCTAssertEqual(idsOf("pinned"), ["code_loading_env"])
+        XCTAssertTrue(r.findings.first { $0.id == "traffic_interception_env" }?.detail.contains("proxy.example") ?? false)
+        let everything = r.findings.map { $0.detail + $0.message }.joined()
+        XCTAssertFalse(everything.contains("SECRETVALUE"))
+        XCTAssertFalse(everything.contains("/tmp/x.so"))
+    }
+
+    func testACodexTomlThatIsNotTomlIsUnreadableAndMalformedInputDoesNotCrash() {
+        for text in ["[mcp_servers.x\ncommand = ", "a = = 1", String(repeating: "[", count: 4000), "\u{0}\u{1}"] {
+            let r = audit(text, path: "/Users/u/.codex/config.toml")
+            XCTAssertEqual(r.unreadableFiles, ["/Users/u/.codex/config.toml"], text)
+            XCTAssertTrue(r.findings.isEmpty)
+        }
+        XCTAssertEqual(audit("model = \"x\"", path: "/p/.codex/config.toml").serverCount, 0)
+    }
+
+    private let openCodeJson = """
+    {
+      // OpenCode allows comments here
+      "$schema": "https://opencode.ai/config.json",
+      "mcp": {
+        "files": { "type": "local", "command": ["npx", "-y", "some-files-mcp"], "environment": { "HTTPS_PROXY": "http://proxy.example:3128", "TOKEN": "SECRETVALUE" }, "enabled": true },
+        "lan": { "type": "remote", "url": "http://192.168.1.9/mcp" },
+        "tls": { "type": "remote", "url": "https://example.com/mcp" },
+        "shell": { "type": "local", "command": ["bash", "-c", "echo hi"], },
+      },
+    }
+    """
+
+    func testOpenCodeServersAreMappedToTheSameShapeAndAudited() {
+        for path in ["/Users/u/.config/opencode/opencode.json", "/p/opencode.json", "/p/opencode.jsonc"] {
+            let r = audit(openCodeJson, path: path)
+            XCTAssertEqual(r.serverCount, 4, path)
+            XCTAssertTrue(r.unreadableFiles.isEmpty, path)
+            func idsOf(_ server: String) -> Set<String> { Set(r.findings.filter { $0.server == server }.map(\.id)) }
+            XCTAssertEqual(idsOf("files"), ["unpinned_package_launcher", "traffic_interception_env"], path)
+            XCTAssertEqual(idsOf("lan"), ["remote_plain_http"], path)
+            XCTAssertEqual(idsOf("tls"), [], path)
+            XCTAssertEqual(idsOf("shell"), ["shell_wrapper"], path)
+            XCTAssertEqual(r.findings.first { $0.id == "unpinned_package_launcher" }?.detail, "npx fetches unpinned some-files-mcp (auto-confirmed)")
+            XCTAssertFalse(r.findings.map { $0.detail + $0.message }.joined().contains("SECRETVALUE"))
+        }
+        // Other JSON config files stay strict: comments are not accepted there.
+        XCTAssertEqual(audit(openCodeJson, path: "/Users/u/.cursor/mcp.json").unreadableFiles.count, 1)
+    }
+
+    func testRunReadsCodexAndOpenCodeFilesAndTheSnapshotIncludesTheirServers() throws {
+        let home = NSTemporaryDirectory() + "mcpcfg-\(UUID().uuidString)"
+        let project = home + "/proj"
+        defer { try? FileManager.default.removeItem(atPath: home) }
+        func write(_ path: String, _ text: String) throws {
+            try FileManager.default.createDirectory(atPath: (path as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
+            try text.write(toFile: path, atomically: true, encoding: .utf8)
+        }
+        try write(home + "/.codex/config.toml", codexToml)
+        try write(home + "/.config/opencode/opencode.jsonc", openCodeJson)
+        try write(project + "/.codex/config.toml", "[mcp_servers.p]\ncommand = \"uvx\"\nargs = [\"proj-mcp\"]\n")
+        try write(project + "/opencode.json", #"{"mcp":{"q":{"type":"local","command":["node","server.js"]}}}"#)
+        let r = MCPConfigAuditor.run(home: home, projectFolders: [project])
+        XCTAssertEqual(Set(r.scannedFiles), [home + "/.codex/config.toml", home + "/.config/opencode/opencode.jsonc",
+                                            project + "/.codex/config.toml", project + "/opencode.json"])
+        XCTAssertEqual(r.serverCount, 3 + 4 + 1 + 1)
+        let snapshot = MCPConfigAuditor.serverSnapshot(home: home, projectFolders: [project])
+        XCTAssertEqual(Set(snapshot[home + "/.codex/config.toml"]?.keys ?? [:].keys), ["docs", "remote", "pinned"])
+        XCTAssertEqual(Set(snapshot[home + "/.config/opencode/opencode.jsonc"]?.keys ?? [:].keys), ["files", "lan", "tls", "shell"])
+        XCTAssertEqual(Set(snapshot[project + "/.codex/config.toml"]?.keys ?? [:].keys), ["p"])
+        XCTAssertEqual(Set(snapshot[project + "/opencode.json"]?.keys ?? [:].keys), ["q"])
+        // A changed argument changes the digest and names the field; the digest holds no argument text.
+        try write(project + "/.codex/config.toml", "[mcp_servers.p]\ncommand = \"uvx\"\nargs = [\"other-mcp\"]\n")
+        let after = MCPConfigAuditor.serverSnapshot(home: home, projectFolders: [project])
+        XCTAssertNotEqual(snapshot[project + "/.codex/config.toml"]?["p"]?.sha256, after[project + "/.codex/config.toml"]?["p"]?.sha256)
+        XCTAssertNotEqual(snapshot[project + "/.codex/config.toml"]?["p"]?.fields?["args"], after[project + "/.codex/config.toml"]?["p"]?.fields?["args"])
+        XCTAssertEqual(snapshot[project + "/.codex/config.toml"]?["p"]?.fields?["command"], after[project + "/.codex/config.toml"]?["p"]?.fields?["command"])
+    }
+
+    func testNaNAndInfinityInAConfigDoNotBreakTheSnapshot() throws {
+        let home = NSTemporaryDirectory() + "mcpcfg-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(atPath: home) }
+        let path = home + "/.config/opencode/opencode.json"
+        try FileManager.default.createDirectory(atPath: (path as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
+        try #"{"mcp":{"x":{"type":"local","command":["node"],"timeout":Infinity,"other":NaN}}}"#.write(toFile: path, atomically: true, encoding: .utf8)
+        let snapshot = MCPConfigAuditor.serverSnapshot(home: home, projectFolders: [])
+        XCTAssertNil(snapshot[path], "an entry that cannot be written out is skipped, never a crash")
     }
 }

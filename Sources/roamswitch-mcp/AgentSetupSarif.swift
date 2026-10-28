@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.11 (build 190).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.12 (build 191).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -118,7 +118,7 @@ extension AgentSetupAuditor {
         "workflow_pwn_request": "Workflow checks out pull-request code where secrets exist",
         "workflow_expression_injection": "Workflow pastes untrusted text into a script",
         "workflow_unpinned_action": "Workflow uses a third-party action that is not pinned to a commit",
-        "agent_settings_hook": "Claude Code settings run a hook command on agent events",
+        "agent_settings_hook": "Agent settings or plugin files (Claude Code, Gemini CLI, Codex, Cursor, OpenCode) run a hook command on agent events",
         "agent_settings_bypass": "Claude Code settings skip every permission prompt",
         "agent_settings_broad_allow": "Claude Code settings allow any shell command without asking",
         "agent_settings_endpoint_override": "Claude Code settings send API traffic to another host",

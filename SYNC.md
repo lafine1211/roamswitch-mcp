@@ -64,6 +64,7 @@ All files live in `Sources/roamswitch-mcp/`.
 | `NpmAuditSignatures.swift` | `RoamSwitch/NpmAuditSignatures.swift` |
 | `TyposquatGuard.swift` | `RoamSwitch/TyposquatGuard.swift` |
 | `MCPConfigAuditor.swift` | `RoamSwitch/MCPConfigAuditor.swift` |
+| `TOMLSubset.swift` | `RoamSwitch/TOMLSubset.swift` |
 | `AgentSetupAuditor.swift` | `RoamSwitch/AgentSetupAuditor.swift` |
 | `AgentSetupBaseline.swift` | `RoamSwitch/AgentSetupBaseline.swift` |
 | `PromptInjectionSignals.swift` | `RoamSwitch/PromptInjectionSignals.swift` |
@@ -156,6 +157,7 @@ via `@testable import RoamSwitch`. Only `main.swift` (the stdin→stdout pump) i
 | `LocalAIRuntimeTests.swift` | `RoamSwitchTests/LocalAIRuntimeTests.swift` |
 | `GuardReaderHealthTests.swift` | `RoamSwitchTests/GuardReaderHealthTests.swift` |
 | `StrictJSONTests.swift` | `RoamSwitchTests/StrictJSONTests.swift` |
+| `TOMLSubsetTests.swift` | `RoamSwitchTests/TOMLSubsetTests.swift` |
 | `AgentSetupAuditorTests.swift` | `RoamSwitchTests/AgentSetupAuditorTests.swift` |
 | `KnownAttackServersTests.swift` | `RoamSwitchTests/KnownAttackServersTests.swift` |
 | `AgentCredentialFileCheckTests.swift` | `RoamSwitchTests/AgentCredentialFileCheckTests.swift` |

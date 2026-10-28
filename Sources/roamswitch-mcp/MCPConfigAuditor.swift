@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.11 (build 190).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.12 (build 191).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -7,8 +7,9 @@
 import Foundation
 
 /// Static audit of the MCP client configuration files on this Mac (Claude Desktop,
-/// Claude Code, Cursor, Windsurf, VS Code, Cline, Gemini CLI, plus `.mcp.json` in the
-/// project folders registered in RoamSwitch).
+/// Claude Code, Cursor, Windsurf, VS Code, Cline, Gemini CLI, Codex (`config.toml`), OpenCode
+/// (`opencode.json`), plus `.mcp.json`, `.codex/config.toml` and `opencode.json` in the project
+/// folders registered in RoamSwitch).
 ///
 /// Why: an MCP server is a door through which a model runs tools, so a bad entry in one
 /// of these files is a standing way to execute code. HexStrike AI (an MCP backend that
@@ -73,6 +74,9 @@ enum MCPConfigAuditor {
             "\(home)/Library/Application Support/Code/User/mcp.json",
             "\(home)/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
             "\(home)/.gemini/settings.json",
+            "\(home)/.codex/config.toml",
+            "\(home)/.config/opencode/opencode.json",
+            "\(home)/.config/opencode/opencode.jsonc",
         ]
     }
 
@@ -82,7 +86,8 @@ enum MCPConfigAuditor {
     }
 
     static func projectConfigPaths(folders: [String]) -> [String] {
-        folders.flatMap { ["\($0)/.mcp.json", "\($0)/.cursor/mcp.json", "\($0)/.vscode/mcp.json"] }
+        folders.flatMap { ["\($0)/.mcp.json", "\($0)/.cursor/mcp.json", "\($0)/.vscode/mcp.json", "\($0)/.codex/config.toml",
+                           "\($0)/opencode.json", "\($0)/opencode.jsonc"] }
     }
 
     // MARK: - Run
@@ -118,7 +123,7 @@ enum MCPConfigAuditor {
             guard let attrs = try? fm.attributesOfItem(atPath: path),
                   let size = attrs[.size] as? NSNumber, size.intValue <= maxFileBytes,
                   let data = fm.contents(atPath: path),
-                  let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { continue }
+                  let root = parseRoot(path: path, data: data) else { continue }
             var entries: [String: AgentSetupBaseline.Entry] = [:]
             for (name, config) in servers(in: root).prefix(maxServersPerFile) {
                 if let entry = AgentSetupBaseline.serverEntry(config) { entries[name] = entry }
@@ -133,7 +138,7 @@ enum MCPConfigAuditor {
     static func audit(files: [FileInput]) -> Result {
         var result = Result()
         for file in files {
-            guard let root = (try? JSONSerialization.jsonObject(with: file.data)) as? [String: Any] else {
+            guard let root = parseRoot(path: file.path, data: file.data) else {
                 result.unreadableFiles.append(file.path)
                 continue
             }
@@ -170,8 +175,30 @@ enum MCPConfigAuditor {
         return result
     }
 
-    /// Every server object in a file: top-level `mcpServers` (or VS Code's `servers`) and,
-    /// for `~/.claude.json`, the per-project `projects.<path>.mcpServers`.
+    /// The top-level object of a config file: TOML for Codex's `config.toml`, JSON for the rest. OpenCode's
+    /// `opencode.json` and `opencode.jsonc` may carry comments and trailing commas. nil: not readable as such.
+    static func parseRoot(path: String, data: Data) -> [String: Any]? {
+        let name = (path as NSString).lastPathComponent.lowercased()
+        if (name as NSString).pathExtension == "toml" { return TOMLSubset.parse(data) }
+        let options: JSONSerialization.ReadingOptions = name == "opencode.json" || name == "opencode.jsonc" ? [.json5Allowed] : []
+        return (try? JSONSerialization.jsonObject(with: data, options: options)) as? [String: Any]
+    }
+
+    /// OpenCode writes a local server as `{"type": "local", "command": ["npx", "-y", "pkg"], "environment": {…}}`: the
+    /// command and its arguments in one array, and the variables under `environment`. The checks read `command`, `args`
+    /// and `env`, so the entry is rewritten into that shape. A remote server (`"type": "remote", "url": …`) needs nothing.
+    private static func openCodeServer(_ config: [String: Any]) -> [String: Any] {
+        var out = config
+        if let parts = (config["command"] as? [Any])?.compactMap({ $0 as? String }) {
+            out["command"] = parts.first ?? ""
+            out["args"] = Array(parts.dropFirst())
+        }
+        if out["env"] == nil, let environment = config["environment"] as? [String: Any] { out["env"] = environment }
+        return out
+    }
+
+    /// Every server object in a file: top-level `mcpServers` (or VS Code's `servers`), Codex's `mcp_servers` tables,
+    /// OpenCode's `mcp` object and, for `~/.claude.json`, the per-project `projects.<path>.mcpServers`.
     private static func servers(in root: [String: Any]) -> [(String, [String: Any])] {
         var out: [(String, [String: Any])] = []
         func collect(_ object: Any?, prefix: String = "") {
@@ -182,6 +209,12 @@ enum MCPConfigAuditor {
         }
         collect(root["mcpServers"])
         collect(root["servers"])
+        collect(root["mcp_servers"])
+        if let openCode = root["mcp"] as? [String: Any] {
+            for (name, value) in openCode.sorted(by: { $0.key < $1.key }) {
+                if let config = value as? [String: Any] { out.append((name, openCodeServer(config))) }
+            }
+        }
         if let projects = root["projects"] as? [String: Any] {
             for (projectPath, value) in projects.sorted(by: { $0.key < $1.key }) {
                 collect((value as? [String: Any])?["mcpServers"], prefix: "[\((projectPath as NSString).lastPathComponent)] ")

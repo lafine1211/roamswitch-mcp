@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.11 (build 190).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.12 (build 191).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -336,6 +336,8 @@ public struct MCPNpmAuditSignaturesResultPayload: Codable, Equatable {
 public struct MCPExposedPortsPayload: Codable, Equatable {
     public let isFirewallShielded: Bool
     public let ports: [MCPPortPayload]
+    /// isFirewallShielded は RoamSwitch の保護レベル(全受信ブロック)の状態で、macOS自体のファイアウォール設定ではない。
+    public var note: String = loc("isFirewallShieldedは、RoamSwitchの保護レベルが全受信ブロックかどうかを示します。macOS自体のファイアウォールの設定値ではありません。")
 }
 
 public struct MCPSecretFindingPayload: Codable, Equatable {

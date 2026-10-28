@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.11 (build 190).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.12 (build 191).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -188,13 +188,38 @@ enum AgentSetupAuditor {
 
     static func projectTasksFile(folder: String) -> String { "\(folder)/.vscode/tasks.json" }
 
-    /// Claude Code settings: the user's own, and the ones a repository can carry.
+    /// Files that can register hooks (commands an agent runs on its own events) or steer permissions: Claude Code,
+    /// Gemini CLI, Codex (`hooks.json` and the TOML `config.toml`) and Cursor. The user's own, and the ones a
+    /// repository can carry.
+    private static let settingsRelativePaths = [
+        ".claude/settings.json", ".claude/settings.local.json", ".gemini/settings.json",
+        ".codex/hooks.json", ".codex/config.toml", ".cursor/hooks.json",
+    ]
+
     static func homeSettingsFiles(home: String) -> [String] {
-        ["\(home)/.claude/settings.json", "\(home)/.claude/settings.local.json"]
+        settingsRelativePaths.map { "\(home)/\($0)" }
     }
 
     static func projectSettingsFiles(folder: String) -> [String] {
-        [".claude/settings.json", ".claude/settings.local.json"].map { "\(folder)/\($0)" }
+        settingsRelativePaths.map { "\(folder)/\($0)" }
+    }
+
+    /// OpenCode loads every plugin file of these folders at start-up. A `.config/opencode` folder or a project's
+    /// `.opencode` folder, files directly inside it only.
+    static let openCodePluginExtensions: Set<String> = ["js", "mjs", "cjs", "ts"]
+
+    static func openCodeConfigFiles(home: String) -> [String] {
+        ["\(home)/.config/opencode/opencode.json", "\(home)/.config/opencode/opencode.jsonc"]
+    }
+
+    static func openCodeProjectConfigFiles(folder: String) -> [String] {
+        ["\(folder)/opencode.json", "\(folder)/opencode.jsonc"]
+    }
+
+    static func openCodePluginFolders(home: String) -> [String] { ["\(home)/.config/opencode/plugins"] }
+
+    static func openCodeProjectPluginFolders(folder: String) -> [String] {
+        ["\(folder)/.opencode/plugins", "\(folder)/.opencode/plugin"]
     }
 
     static func projectWorkflowFolder(folder: String) -> String { "\(folder)/.github/workflows" }
@@ -290,10 +315,22 @@ enum AgentSetupAuditor {
             }
         }
 
-        // Claude Code settings: permissions, hooks and the sandbox switch.
-        let settingsCandidates = homeSettingsFiles(home: home) + folders.flatMap { projectSettingsFiles(folder: $0) }
-        for path in homeSettingsFiles(home: home) { read(path, inSkill: false, role: .settings) }
-        for folder in folders { for path in projectSettingsFiles(folder: folder) { read(path, inSkill: false, role: .settings, inProject: true) } }
+        // Settings of the agents: permissions, hooks and the sandbox switch. OpenCode's config (plugin list, formatter
+        // commands) and the plugin files it loads by itself count here too, for the hook rule and for change detection.
+        func pluginFiles(in folder: String) -> [String] {
+            ((try? fm.contentsOfDirectory(atPath: folder)) ?? []).sorted()
+                .filter { !$0.hasPrefix(".") && openCodePluginExtensions.contains(($0 as NSString).pathExtension.lowercased()) }
+                .map { "\(folder)/\($0)" }
+        }
+        let homeSettings = homeSettingsFiles(home: home) + openCodeConfigFiles(home: home)
+            + openCodePluginFolders(home: home).flatMap { pluginFiles(in: $0) }
+        let projectSettings: [(folder: String, path: String)] = folders.flatMap { folder in
+            (projectSettingsFiles(folder: folder) + openCodeProjectConfigFiles(folder: folder)
+                + openCodeProjectPluginFolders(folder: folder).flatMap { pluginFiles(in: $0) }).map { (folder, $0) }
+        }
+        let settingsCandidates = homeSettings + projectSettings.map(\.path)
+        for path in homeSettings { read(path, inSkill: false, role: .settings) }
+        for entry in projectSettings { read(entry.path, inSkill: false, role: .settings, inProject: true) }
 
         // OpenClaw configuration and state directory.
         var openClaw: FileInput?
@@ -328,7 +365,7 @@ enum AgentSetupAuditor {
         var settingsSnapshot: [String: AgentSetupBaseline.SettingsEntry] = [:]
         for path in settingsCandidates {
             if let input = inputs.first(where: { $0.path == path && $0.role == .settings }) {
-                settingsSnapshot[path] = settingsFacts(input.data).map(settingsEntry) ?? AgentSetupBaseline.SettingsEntry(unreadable: true)
+                settingsSnapshot[path] = settingsFacts(input.data, path: path).map(settingsEntry) ?? AgentSetupBaseline.SettingsEntry(unreadable: true)
             } else if fm.fileExists(atPath: path) {
                 settingsSnapshot[path] = AgentSetupBaseline.SettingsEntry(unreadable: true)
             }
@@ -641,10 +678,33 @@ enum AgentSetupAuditor {
         var baseURL: String?
     }
 
-    /// nil when the file is not a JSON object. An empty file has no settings.
-    static func settingsFacts(_ data: Data) -> SettingsFacts? {
+    /// nil when the file cannot be read as what its name says: a JSON object (comments and trailing commas are
+    /// accepted), TOML for `.toml`, or the text of an OpenCode plugin file. An empty file has no settings.
+    ///
+    /// Hooks come in three shapes. Nested, as Claude Code, Gemini CLI and Codex write them: `{"hooks": {"SessionStart":
+    /// [{"matcher": "*", "hooks": [{"type": "command", "command": "…"}]}]}}`. Flat, as Cursor writes them:
+    /// `{"hooks": {"sessionStart": [{"command": "…"}]}}`. And OpenCode's, which has no hook table: every plugin file,
+    /// every `plugin` entry of `opencode.json` and every `formatter.<name>.command` runs by itself.
+    static func settingsFacts(_ data: Data, path: String = "") -> SettingsFacts? {
+        let name = (path as NSString).lastPathComponent.lowercased()
+        let ext = (name as NSString).pathExtension
+        if openCodePluginExtensions.contains(ext) {
+            // The plugin file is the hook: its text is what runs. It is only matched against the exec patterns.
+            guard !data.prefix(8192).contains(0), let text = String(data: data, encoding: .utf8) else { return nil }
+            var facts = SettingsFacts()
+            if !text.allSatisfy({ $0.isWhitespace }) { facts.hooks.append(("plugin", name, text)) }
+            return facts
+        }
         if data.allSatisfy({ $0 == 0x20 || $0 == 0x0A || $0 == 0x0D || $0 == 0x09 }) { return SettingsFacts() }
-        guard let root = (try? JSONSerialization.jsonObject(with: data, options: [.json5Allowed])) as? [String: Any] else { return nil }
+        let root: [String: Any]
+        if ext == "toml" {
+            // Only the hooks of a Codex `config.toml` are read here; its MCP servers belong to `MCPConfigAuditor`.
+            guard let parsed = TOMLSubset.parse(data) else { return nil }
+            root = parsed
+        } else {
+            guard let parsed = (try? JSONSerialization.jsonObject(with: data, options: [.json5Allowed])) as? [String: Any] else { return nil }
+            root = parsed
+        }
         var facts = SettingsFacts()
         if let events = root["hooks"] as? [String: Any] {
             for (event, value) in events.sorted(by: { $0.key < $1.key }) {
@@ -654,6 +714,21 @@ enum AgentSetupAuditor {
                     for case let hook as [String: Any] in (group["hooks"] as? [Any]) ?? [group] {
                         if let command = hook["command"] as? String, !command.isEmpty { facts.hooks.append((event, matcher, command)) }
                     }
+                }
+            }
+        }
+        if ext == "toml" { return facts }
+        if name == "opencode.json" || name == "opencode.jsonc" {
+            for entry in (root["plugin"] as? [Any]) ?? [] {
+                // A plugin is a package name or a path, or `[name, options]`.
+                let text = (entry as? String) ?? ((entry as? [Any])?.first as? String)
+                if let text, !text.isEmpty { facts.hooks.append(("plugin", "", text)) }
+            }
+            if let formatters = root["formatter"] as? [String: Any] {
+                for (formatter, value) in formatters.sorted(by: { $0.key < $1.key }) {
+                    guard let command = (value as? [String: Any])?["command"] as? [Any] else { continue }
+                    let text = command.compactMap { $0 as? String }.joined(separator: " ")
+                    if !text.isEmpty { facts.hooks.append(("formatter", formatter, text)) }
                 }
             }
         }
@@ -702,7 +777,7 @@ enum AgentSetupAuditor {
     /// A hook in the user's own file is not flagged by itself: the baseline reports it when it appears.
     /// Rule and command text is never copied into the result. nil: not parseable.
     static func auditSettingsFile(_ file: FileInput) -> [Finding]? {
-        guard let facts = settingsFacts(file.data) else { return nil }
+        guard let facts = settingsFacts(file.data, path: file.path) else { return nil }
         var findings: [Finding] = []
         func add(_ id: String, _ severity: String, _ detail: String) {
             findings.append(Finding(id: id, severity: severity, area: "settings", file: file.path, detail: detail, message: message(id)))
@@ -728,7 +803,7 @@ enum AgentSetupAuditor {
             if let risky {
                 add("agent_settings_hook", "high", "\(sanitized(risky.event, limit: 30)) hook \(risky.rule)" + (facts.hooks.count > 1 ? " (\(facts.hooks.count) hook commands in the file)" : ""))
             } else if file.inProject {
-                add("agent_settings_hook", "medium", "\(facts.hooks.count) hook command\(facts.hooks.count == 1 ? "" : "s") in a project file, run on Claude Code events")
+                add("agent_settings_hook", "medium", "\(facts.hooks.count) hook command\(facts.hooks.count == 1 ? "" : "s") in a project file, run on AI agent events (Claude Code, Gemini CLI, Codex, Cursor, OpenCode)")
             }
         }
         if let base = facts.baseURL, let host = URL(string: base)?.host?.lowercased(), host != "api.anthropic.com" {
@@ -1491,7 +1566,7 @@ enum AgentSetupAuditor {
         case "workflow_pwn_request": return loc("ワークフローが、プルリクエストのコードをシークレットのある環境で実行します")
         case "workflow_expression_injection": return loc("ワークフローが、他人の書いた文字列をそのままスクリプトに入れています")
         case "workflow_unpinned_action": return loc("ワークフローが、コミットで固定していないアクションを使っています")
-        case "agent_settings_hook": return loc("Claude Code の設定に、イベントのたびに実行されるフックがあります")
+        case "agent_settings_hook": return loc("Claude Code・Gemini CLI・Codex・Cursor・OpenCode の設定に、イベントのたびに実行されるフックがあります")
         case "agent_settings_bypass": return loc("Claude Code の設定が、確認なしですべてを実行する状態です")
         case "agent_settings_broad_allow": return loc("Claude Code の設定が、どんなコマンドも確認なしで許可しています")
         case "agent_settings_endpoint_override": return loc("Claude Code の設定が、API の接続先を別のホストに変えています")
@@ -1573,7 +1648,7 @@ enum AgentSetupAuditor {
         case "workflow_unpinned_action":
             return loc("外部の作者のアクションを、作者が付け替えられるタグやブランチで指定しています。後から中身を差し替えられても気づけません。40桁のコミット SHA で固定してください。")
         case "agent_settings_hook":
-            return loc("Claude Code の設定に、ツールの実行前後やセッションの開始などのたびに自動で実行されるコマンド（フック）があります。プロジェクトの設定に入っていると、そのリポジトリを開いて信頼しただけで動きます。コマンドの中身を読み、覚えがなければ削除してください。")
+            return loc("Claude Code・Gemini CLI・Codex・Cursor・OpenCode の設定に、ツールの実行前後やセッションの開始などのたびに自動で実行されるコマンド（フック）があります。OpenCode ではプラグインのファイルも同じ扱いです。プロジェクトの設定に入っていると、そのリポジトリを開いて信頼しただけで動きます。コマンドの中身を読み、覚えがなければ削除してください。")
         case "agent_settings_bypass":
             return loc("Claude Code の権限モードが bypassPermissions（または、その警告を出さない設定）になっています。すべての操作が確認なしで実行されるため、悪意のある指示が紛れ込んでも止められません。意図して設定したものでなければ、defaultMode を default に戻してください。")
         case "agent_settings_broad_allow":

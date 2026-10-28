@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.11 (build 190).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.12 (build 191).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -125,7 +125,9 @@ enum AgentSetupBaseline {
     /// Digest of an MCP server definition: the whole object, and each top-level key on its own.
     static func serverEntry(_ config: [String: Any]) -> Entry? {
         func canonical(_ value: Any) -> Data? {
-            try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys, .fragmentsAllowed])
+            // NaN and Infinity (accepted in JSON5 and TOML files) would raise an exception when written out.
+            guard JSONSerialization.isValidJSONObject([value]) else { return nil }
+            return try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys, .fragmentsAllowed])
         }
         guard let whole = canonical(config) else { return nil }
         var fields: [String: String] = [:]
@@ -195,7 +197,7 @@ enum AgentSetupBaseline {
         var changes: [Change] = []
         for path in Set(oldSettings.keys).union(currentSettings.keys).sorted() {
             // A file of a folder that is no longer registered is not a deleted file. The home folder covers its own
-            // `.claude` settings only, not the projects that happen to lie under it.
+            // settings and hook files only, not the projects that happen to lie under it.
             if currentSettings[path] == nil, !isSettingsCandidate(path, scopes: current.scopes) { continue }
             let now = currentSettings[path] ?? SettingsEntry()
             if now.unreadable { continue }
@@ -231,7 +233,10 @@ enum AgentSetupBaseline {
 
     /// A settings file this snapshot looked for: one of the home folder's own, or one inside a registered project folder.
     private static func isSettingsCandidate(_ path: String, scopes: [String]) -> Bool {
-        if let home = scopes.first, path == home + "/.claude/settings.json" || path == home + "/.claude/settings.local.json" { return true }
+        if let home = scopes.first {
+            if AgentSetupAuditor.homeSettingsFiles(home: home).contains(path) || AgentSetupAuditor.openCodeConfigFiles(home: home).contains(path) { return true }
+            if AgentSetupAuditor.openCodePluginFolders(home: home).contains(where: { path.hasPrefix($0 + "/") }) { return true }
+        }
         return scopes.dropFirst().contains { path.hasPrefix($0.hasSuffix("/") ? $0 : $0 + "/") }
     }
 

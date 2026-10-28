@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.11 (build 190).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.12 (build 191).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -185,12 +185,16 @@ typealias ExecReadTransport = (ExecMCPMailbox.Request) -> ExecMCPMailbox.Respons
 enum MCPExecRecorderTools {
     static let proRequiredMessage = "この機能はPro版限定です。RoamSwitchでPro版を有効化してください。"
 
-    static func caveats() -> [String] {
-        [
+    static func caveats(scanTruncated: Bool = false) -> [String] {
+        var out = [
             loc("記録はmacOS標準のesloggerによる事後の観測で、実行のブロックはできません。ヘルパー起動前のプロセスや、記録を有効にする前のイベントは含まれません。"),
             loc("コマンドライン引数には機密情報が含まれる場合があります(環境変数は、DYLD_INSERT_LIBRARIES一つを除いて記録されません)。"),
             loc("時刻は記録時のもので、署名区分は platform=Apple / developer=Team ID付き / adhoc=アドホック / unsigned=署名なし です。"),
         ]
+        if scanTruncated {
+            out.append(loc("走査が上限に達して途中で打ち切られました。結果が0件でも「なかった」とは言えません。期間(since)や署名区分などで範囲を絞って、もう一度検索してください。"))
+        }
+        return out
     }
 
     static func recorderState(defaults: UserDefaults, now: Date = Date()) -> MCPExecRecorderStatePayload {
@@ -300,14 +304,15 @@ enum MCPExecRecorderTools {
                                         maskedTextMatch: true)
         let response = transport(ExecMCPMailbox.Request(op: "search", search: request))
         let reply = (response?.ok == true) ? response?.search : nil
+        let scanTruncated = (reply?.truncatedScan ?? false) || (reply?.truncatedReply ?? false)
         return MCPExecSearchPayload(
             recorder: recorderState(defaults: defaults, now: now),
             logReadable: reply?.readable ?? false,
             matched: reply?.events.count ?? 0,
-            scanTruncated: (reply?.truncatedScan ?? false) || (reply?.truncatedReply ?? false),
+            scanTruncated: scanTruncated,
             events: (reply?.events ?? []).map(eventPayload),
             unavailableReason: reply == nil ? unavailableText(code: response?.error) : nil,
-            caveats: caveats()
+            caveats: caveats(scanTruncated: scanTruncated)
         )
     }
 
