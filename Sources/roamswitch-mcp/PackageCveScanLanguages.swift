@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.8 (build 187).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.9 (build 188).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -475,6 +475,12 @@ enum PackageCveScanLanguages {
             self.cveId = cveId; self.package = package; self.cvssScore = cvssScore; self.ranges = ranges
             self.summary = summary; self.epss = epss; self.kev = kev; self.unfixed = unfixed
         }
+
+        /// The same entry, marked as listed by CISA (from the daily KEV list, see `KevCatalog`).
+        func withKev() -> CveEntry {
+            CveEntry(cveId: cveId, package: package, cvssScore: cvssScore, ranges: ranges, summary: summary,
+                     epss: epss, kev: true, unfixed: unfixed)
+        }
     }
 
     struct CveMap: Decodable {
@@ -538,9 +544,9 @@ enum PackageCveScanLanguages {
         if let data = try? Data(contentsOf: updatedCVEMapURL(fileKey: fileKey)),
            let updated = try? decoder.decode(CveMap.self, from: data),
            updated.mapVersion >= bundled.mapVersion {
-            return updated
+            return updated.applyingKev(KevCatalog.loadInstalled())
         }
-        return bundled
+        return bundled.applyingKev(KevCatalog.loadInstalled())
     }
 
     /// Loads all 7 ecosystem maps, keyed by their `ecosystem` display name

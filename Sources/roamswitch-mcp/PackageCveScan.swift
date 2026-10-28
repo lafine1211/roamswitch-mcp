@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.8 (build 187).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.9 (build 188).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -321,6 +321,18 @@ enum PackageCveScan {
             epss = PackageCveEpss.validated(try? c.decodeIfPresent(Double.self, forKey: .epss))
             kev = (try? c.decodeIfPresent(Bool.self, forKey: .kev)) ?? false
         }
+
+        init(cveId: String, package: String, cvssScore: Double, ranges: [CveRange], summary: String,
+             confidence: String, epss: Double?, kev: Bool) {
+            self.cveId = cveId; self.package = package; self.cvssScore = cvssScore; self.ranges = ranges
+            self.summary = summary; self.confidence = confidence; self.epss = epss; self.kev = kev
+        }
+
+        /// The same entry, marked as listed by CISA (from the daily KEV list, see `KevCatalog`).
+        func withKev() -> CveEntry {
+            CveEntry(cveId: cveId, package: package, cvssScore: cvssScore, ranges: ranges, summary: summary,
+                     confidence: confidence, epss: epss, kev: true)
+        }
     }
 
     struct CveMap: Decodable {
@@ -372,9 +384,9 @@ enum PackageCveScan {
         if let data = try? Data(contentsOf: updatedCVEMapURL),
            let updated = try? decoder.decode(CveMap.self, from: data),
            updated.mapVersion >= bundled.mapVersion {
-            return updated
+            return updated.applyingKev(KevCatalog.loadInstalled())
         }
-        return bundled
+        return bundled.applyingKev(KevCatalog.loadInstalled())
     }
 
     /// Returns every map entry whose package name matches and whose range

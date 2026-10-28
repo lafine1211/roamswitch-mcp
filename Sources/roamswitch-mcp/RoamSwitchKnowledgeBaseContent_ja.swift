@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.8 (build 187).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.9 (build 188).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -242,7 +242,6 @@ extension RoamSwitchKnowledgeBase {
                 • 即時の検知: Web・メール保護（feat_webmail_download_guard）の監視対象フォルダに保存・変更されたWebファイルに、同じ静的検査の中で適用します。Linux版のようなアクセス前の阻止はできず、すべて事後の検知です（EndpointSecurityは使いません）。
                 • 開発用Webフォルダ: `~/Sites`、`/Library/WebServer/Documents`、`~/Herd`、`~/Library/Application Support/Herd`、`/Applications/MAMP/htdocs`、`~/Library/Application Support/Local`、`~/Local Sites`、パッケージCVE照合の対象フォルダ、Web・メール保護の監視対象フォルダを、1日1回と手動で検査します。1日1回の検査は `node_modules`（依存パッケージ）と `.git` に入りません（監視中のフォルダでの即時検知と、フォルダを指定した手動の検査では `node_modules` も調べます）。`tests` `fixtures` などのテスト用フォルダにはルールを適用しません。
                 • PHPのセッションフォルダ: 同じ検査で、PHPのセッションフォルダ（HomebrewとMAMPとHerdのphp.iniにある `session.save_path`。指定がなければ `/tmp`、`/private/var/tmp`、一時フォルダ。MAMPの `tmp/php`）の中の、`sess_` で始まるファイルを読みます。フォルダの中は掘らず、`sess_` 以外のファイルは開きません。upload_progress の値にPHPコードを混ぜたセッションファイルは critical、セッションの値にPHPの開始タグがあるものは high です。critical は隔離Vaultへ移し、high は通知だけです。
-                • PHPの設定の点検: 設定の「PHPの設定を点検」ボタンで、PHPの版と設定とセッションファイルを読んで調べます。読むだけで、通信せず、ファイルも変更しません。詳しくは feat_php_check を参照。
                 • ドメインの点検: 設定の「ドメインの点検」で、書いたドメイン（最大20個）の SPF、DMARC、MTA-STS、登録の有効期限を調べ、参考として CAA と DNSSEC の有無も示します。既定では何も調べず、ドメインを書いてボタンを押したときだけ動きます。この Mac の `dig` がリゾルバーへ TXT・CAA・DS・MX を問い合わせ、`curl` がそのTLDの登録局の RDAP サーバー（先に IANA の公開リストを読みます。ドメイン名は含みません）へ、MX と `_mta-sts` の TXT があるドメインではそのドメイン自身の mta-sts ホストへ問い合わせます。結果は画面に出るだけで、保存も定期実行もしません。
                 • 隔離: 既定では critical の検知だけが、他の脅威と同じ流れ（隔離Vaultへ移動、「隔離ファイルを管理」で復元・削除）の対象です。high は通知とフック、設定画面の一覧だけで、ファイルには触れません（設定で「critical と high を隔離」「隔離しない」にも変えられます）。medium と low は報告のみで、通知履歴に残ります。「除外して復元」したファイルは、Webルールでは再び検知されません（ClamAVの除外とは別の一覧です）。
                 • 検知後のフック: `~/Library/Application Support/RoamSwitch/hooks/post-detection` に実行ファイルを置くと、検知のたびに JSON を標準入力で渡して実行します（所有者が自分か root、グループ・他人が書き込めない、親フォルダも同様、が条件。30秒で打ち切り）。
@@ -251,22 +250,6 @@ extension RoamSwitchKnowledgeBase {
                 • 限界: 64MBまでのファイルは全体を、それより大きいファイルは先頭と末尾の4MBずつを調べ（画像は先頭と末尾だけ）、固定の語句の並びで見るため、変数名の組み立てなどで分割された文字列は追えません。
                 """,
                 recommendation: "開発用のWebフォルダがあるMacでは、Proを有効にして既定のまま使ってください。誤検知と思われるファイルは、隔離Vaultから復元すれば再び検知されません。"
-            ),
-            LocalizedEntry(
-                id: "feat_php_check",
-                title: "PHPの設定の点検（設定のボタン）",
-                summary: "この Mac の PHP が、PHP 本体の重大な脆弱性（CVE-2026-109618、CVE-2026-109619）と、まだ修正版のない CVE-2026-115560 の影響を受けるかを点検し、セッションファイルにコードが注入されていないかを調べます。読むだけで、ファイルは変更せず、通信もしません。",
-                details: """
-                • 開く場所: 設定の「Web・メール保護 監視対象フォルダ」にある「Webシェル等の検知ルール」の中の「PHPの設定を点検」ボタンです。押したときだけ動き、定期実行も保存もしません。結果は画面に出るだけで、ファイルは変更せず、管理者権限も要りません。
-                • 読むもの: HomebrewとMAMPとHerdとPATHにある php、php-fpm、frankenphp の版。php.ini と conf.d とFPMのプール設定にある session.upload_progress.enabled、PHP 8.5 の fatal_error_backtraces、memory_limit。Apache の mod_php の設定。PHPのセッションフォルダにある sess_ ファイル。通信はしません。PHPの実行ファイルは、版を表示させるときだけ起動します（`php -n -v`、FrankenPHP は `frankenphp version`。5秒で打ち切り）。スクリプトは実行しません。
-                • 版の判定: 2026年10月21日に公表された重大な脆弱性2件（CVE-2026-109618、CVE-2026-109619）の修正版 8.2.35、8.3.36、8.4.27、8.5.12 と比べます。修正版より前は high、PHPプロジェクトの修正版がない 8.1 以前も high、修正版は info、判定できない系列は medium です。同じ版の実行ファイルは1項目にまとめます。
-                • 設定の判定: session.upload_progress.enabled は、設定がなければ既定でオンです。オンなら medium（FPMのプールが自分の値を持つときは、プールごとに見ます）。fatal_error_backtraces は PHP 8.5 があるときだけ見て、オンで版が修正版より前なら high、それ以外は medium です。mod_php は最も影響を受けやすい動かし方なので medium、PHP-FPM と FrankenPHP があることは info です。memory_limit は値を info で示すだけです。-1 は応急処置とされていますが、勧めてはいません。
-                • CVE-2026-115560（2026年10月23日公表。修正は次の定期リリースで、今は修正版がありません）: 3つがそろったときだけ high です。設定の session.serialize_handler が php_binary か php_serialize、Webのコードが ini_set() でそれを切り替えている、session.upload_progress.enabled が有効、の3つです。Webのコードは、Homebrewの var/www、MAMPの htdocs、/Library/WebServer/Documents、~/Sites、~/Herd にある PHP ファイル（.php .phtml .inc。Composer の vendor を含む）を読みます。node_modules と .git には入らず、リンクはたどりません。一部だけのときは info で、そろっている条件を示します。
-                • セッションファイル: セッションフォルダの直下にある sess_ で始まるファイルだけを読み、サブフォルダには入りません。upload_progress の印とPHPコードが一緒に入っているもの（コードの注入）は critical、セッションの値にPHPの開始タグがあるものは high です。この点検はファイルを動かしません。critical の隔離は、毎日と手動のWebルールの検査（feat_web_rules）が行います。「除外して復元」したファイルは調べません。読めないフォルダは「セッションフォルダを読めません」として info で示します。
-                • 結果の読み方: 先頭に、high か critical があれば「要対応です（重大度が高い項目が N 件）」、なければ「対応が必要な項目はありません」と出ます。次に、調べた数（PHPの実行ファイル、設定ファイル、セッションファイル、フォルダ）が出ます。項目は [critical] [high] [medium] [info] の順で、説明、対処、根拠のパスが付きます。PHPが見つからないときは「PHPは見つかりませんでした」だけです。
-                • 判定の範囲: この3件の勧告だけです。ほかの PHP の脆弱性や、WordPress などのアプリの脆弱性は判定しません。
-                """,
-                recommendation: "版が修正版より前なら、PHPを更新してください。更新が完全な対処です。更新できない間は、session.upload_progress.enabled を使っていなければ 0 にして、PHPを再起動します。これは暫定策で、更新の代わりにはなりません。"
             ),
             LocalizedEntry(
                 id: "feat_event_forwarding",
@@ -795,8 +778,8 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",
-                title: "Macセキュリティ総合診断（22項目・スコア & 改善手順）",
-                summary: "システム堅牢性・ネットワーク防御・認証とアクセス制御・ポート露出・マルウェア対策・物理デバイス防御の6分野22項目を検査し、100点満点のスコア・ランクと改善手順を表示します。無料版で利用できます。",
+                title: "Macセキュリティ総合診断（23項目・スコア & 改善手順）",
+                summary: "システム堅牢性・ネットワーク防御・認証とアクセス制御・ポート露出・マルウェア対策・物理デバイス防御の6分野23項目を検査し、100点満点のスコア・ランクと改善手順を表示します。無料版で利用できます。",
                 details: """
                 • システム堅牢性: 1. FileVault、2. SIP（システム完全性保護）、3. Gatekeeper、4. 自動セキュリティアップデート、5. Apple XProtect、6. バックアップ（Time Machineの最終バックアップが7日以内か。復元できるかは確認しません）。
                 • ネットワーク防御: 7. macOS ファイアウォール、8. ステルスモード、9. Wi-Fi 暗号化強度、10. ARP スプーフィング監視、11. ゲートウェイ ARP 固定、12. プロキシ自動検出 (WPAD / PAC)。
@@ -806,6 +789,7 @@ extension RoamSwitchKnowledgeBase {
                 • 物理ポート・デバイス防御: 20. 不正USB / BadUSB 物理ポートガード、21. macOS アクセサリ接続保護。
                 • 対象外の扱い: 信頼ネットワークでのファイアウォール・ステルス、リモートログイン無効時のSSH、ヘルパー未接続時のSudo監査は、N/Aとしてスコア計算から除外します。
                 • 22. 追加された信頼する証明書(認証局)(`trust_anchors`、ネットワーク防御): `security dump-trust-settings` を、ユーザーのドメインと管理者のドメインについて読みます。信頼の設定は、人・管理者・プロファイルが設定したときだけ付くので、一覧に出る証明書は、誰かが追加したものです。Apple 自身のルート証明書は数えず、信頼の結果が「deny」(信頼しない)の証明書も数えません。追加された証明書の名前が傍受ツールに見えるとき(mitm、proxy、charles、fiddler、burp、portswigger、zscaler、netskope、squid、inspection、sslsplit)は不合格にして、その名前を示します(最大3件)。それ以外の追加された証明書(会社のルート証明書、mkcert など)は、情報として示して合格にします(自分で設定したものなら問題ありません)。コマンドを読めないときは「確認できませんでした」にします。理由: 暗号化された通信(パスワードや API キーを含む)を読むプロキシは、Mac にその認証局を信頼させる必要があるからです。見えないもの: アプリが自分で持っている証明書、証明書をいつ追加したか。新しく入っても、その時には通知しません。検知の範囲: T1553.004(一部)。何も変更せず、何も送りません。
+                • 23. 悪用されやすい脆弱性 (入っているソフトウェア)(`package_cve_exposure`、システム堅牢性): Homebrewで入れたパッケージと、PHPを調べます。パッケージは、`brew list --versions` で読んだものを、アップデーターが配る署名つきの既知CVEデータ(Homebrew向け)と、毎日届くCISAのKEV一覧に突き合わせます。CISAが悪用を確認した(KEV)脆弱性、またはEPSS 90%以上の脆弱性が、影響を受ける版のまま残っていると不合格にして、パッケージ名とCVE番号を示します(状態欄は最大3件)。リスク受容の期限内のものは数えません。PHPは、Homebrew、MAMP、Herd、PATHにある実行ファイルの版と、php.ini・FPM・Apacheの設定を読みます。修正前の版(重大な脆弱性2件、CVE-2026-109618とCVE-2026-109619。修正版は8.2.35、8.3.36、8.4.27、8.5.12で、8.1以前に修正版はありません)か、CVE-2026-115560の条件(設定がphp_binaryかphp_serialize、アプリのコードがini_set()で切り替える、upload_progressが有効、の3つがそろったもの。修正版はまだありません)があると不合格にします。mod_phpやupload_progressの有効など、重大度が中以下の指摘は不合格にしません。データに載っているHomebrewのphpは、データ側で数え、二重には数えません。PHPの実行ファイルは、版を表示させるときだけ起動します。通信はしません。結果は30分間保ち、20秒で終わらないときは「確認できませんでした」にします。Homebrewのパッケージもphpもないときは対象外にして点数に入れません。データがないときも「確認できませんでした」にします。見えないのは、Homebrew以外で入れたPHP以外のソフト、データに行がない脆弱性、最新のKEV一覧より後にKEVへ入ったものです(詳細欄にデータの版とKEVの日付を示します)。PHPのセッションファイルは、この項目ではなく、Webシェル等の検知ルールの検査が読みます。状態欄には、入っているパッケージのうち、データに載っている個数を示します。
                 • ランク: 100点 = S、85〜99点 = A、70〜84点 = B、70点未満 = C。MCPツール `get_security_report` でも取得できます。
                 """,
                 recommendation: "定期的に「総合診断レポート」を開き、⚠️ の項目を改善手順に沿って対応して、ランクA以上を維持してください。"
@@ -1474,11 +1458,11 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "faq_free_vs_pro",
                 title: "無料版とPro永続版の違い",
-                summary: "無料版でもネットワークに応じた自動保護切替や22項目の総合診断など、基本的な防御と各種の手動診断ツールを無期限で利用できます。Pro版では自動隔離・リアルタイム防御・自律巡回の警告などがアンロックされます。",
+                summary: "無料版でもネットワークに応じた自動保護切替や23項目の総合診断など、基本的な防御と各種の手動診断ツールを無期限で利用できます。Pro版では自動隔離・リアルタイム防御・自律巡回の警告などがアンロックされます。",
                 details: """
                 【無料版】
                 • Wi-Fi・ネットワークに応じたpfパケットフィルタの3段階自動切替、共有サービス・AirDropの自動停止と復元
-                • Macセキュリティ総合診断（22項目）、XProtect稼働確認とファイル・アプリの安全性診断
+                • Macセキュリティ総合診断（23項目）、XProtect稼働確認とファイル・アプリの安全性診断
                 • 外部公開ポート・USBデバイスの一覧表示
                 • リンク安全性診断、機密情報・APIキー漏洩の手動監査、クリップボード保護
                 • パッケージCVE照合、実証型脆弱性診断、Macセキュリティログ監査、通知履歴

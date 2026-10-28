@@ -56,6 +56,10 @@ All files live in `Sources/roamswitch-mcp/`.
 | `PackageCveMapData.swift` | `RoamSwitch/PackageCveMapData.swift` |
 | `PackageCveScanLanguages.swift` | `RoamSwitch/PackageCveScanLanguages.swift` |
 | `PackageCveMapLanguagesData.swift` | `RoamSwitch/PackageCveMapLanguagesData.swift` |
+| `KevCatalog.swift` | `RoamSwitch/KevCatalog.swift` |
+| `PackageCveExposure.swift` | `RoamSwitch/PackageCveExposure.swift` |
+| `PhpEnvironment.swift` | `RoamSwitch/PhpEnvironment.swift` |
+| `PhpEnvironmentAudit.swift` | `RoamSwitch/PhpEnvironmentAudit.swift` |
 | `PackageCveScriptScan.swift` | `RoamSwitch/PackageCveScriptScan.swift` |
 | `NpmAuditSignatures.swift` | `RoamSwitch/NpmAuditSignatures.swift` |
 | `TyposquatGuard.swift` | `RoamSwitch/TyposquatGuard.swift` |

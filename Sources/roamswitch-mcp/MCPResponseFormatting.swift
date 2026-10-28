@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.8 (build 187).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.9 (build 188).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -986,7 +986,7 @@ public enum MCPResponseFormatting {
 
     // MARK: verify_security_findings
 
-    /// 1回に指定できる checkId の上限(超過分は無視して注意書きを付ける)。全22項目より十分大きく、
+    /// 1回に指定できる checkId の上限(超過分は無視して注意書きを付ける)。全23項目より十分大きく、
     /// 巨大な引数でレスポンスが膨らまないための歯止め。
     public static let maxVerifyCheckIds = 50
     /// 未知の checkId をそのまま返すときの最大文字数(入力はエージェント由来で信頼できない)。
@@ -1675,6 +1675,7 @@ enum VerifyFindingDiscipline {
         case "browser_phishing_protection": return loc("Safariを使わず、別のブラウザだけで閲覧している場合、Safariの詐欺Webサイト警告の設定は日常の保護に影響しません。")
         case "usb_zero_trust": return loc("この判定は、RoamSwitchの設定値です。外部のUSB機器を使わない据え置きのMacでは、物理ポートからの攻撃のリスクは小さいです。")
         case "accessory_connection_protection": return loc("この設定が扱うのは、Macがロックされている間の新しいアクセサリの接続だけです。使用中の接続は対象外です。")
+        case "package_cve_exposure": return loc("入っているだけで、サーバーとして動かしていない、または外部の入力を処理しないパッケージなら、実際に悪用される可能性は小さくなります。")
         case "backup_recency": return loc("Time Machine以外の方法(別のバックアップアプリなど)でバックアップしている場合、この判定は実態と違います。RoamSwitchが読めるのはTime Machineの記録だけです。")
         case "proxy_autodiscovery": return loc("会社や学校が管理するMacで、プロキシ自動検出を管理者が意図して設定している場合は、この状態は設定どおりです。")
         case "trust_anchors": return loc("会社が配布した証明書や、開発用の証明書(mkcert など)を意図して信頼している場合は、この状態は設定どおりです。")
@@ -1703,6 +1704,7 @@ enum VerifyFindingDiscipline {
         case "browser_phishing_protection": return loc("Safariで知らない相手のリンクを開くことがあるなら、上がります。")
         case "usb_zero_trust": return loc("共有スペースや外出先で、他人がMacに触れられるなら、上がります。")
         case "accessory_connection_protection": return loc("席を離れたMacに他人が触れられる場所で使うなら、上がります。")
+        case "package_cve_exposure": return loc("そのパッケージを、インターネットから届くサービス(Webサーバー、PHP、Node.jsなど)として動かしているなら、重大になります。brew upgradeで修正版にすれば、解消します。")
         case "backup_recency": return loc("ランサムウェアに暗号化されたら取り戻せない大事なファイルがあるなら、重大になります。大事なデータがすべて別の場所に世代管理つきで保存されているなら、下がります。")
         case "proxy_autodiscovery": return loc("カフェやホテルなど、他人が管理するネットワークをよく使うなら、重大になります。自宅や職場の管理されたネットワークだけなら、下がります。")
         case "trust_anchors": return loc("ログインやAPIキーを含む通信を、カフェなど他人が管理するネットワークで行うなら、重大になります。信頼している証明書をすべて把握しているなら、下がります。")

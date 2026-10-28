@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.8 (build 187).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.9 (build 188).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -261,11 +261,13 @@ final class SecurityHealthChecker {
     private let runner: CommandRunner
     private let sshConfigSource: SSHDConfigSource
     private let backupSource: BackupSource
+    private let packageCveSource: PackageCveSource
 
-    init(runner: @escaping CommandRunner = SystemCommand.run, sshConfigSource: SSHDConfigSource = FileSSHDConfigSource(), backupSource: BackupSource = SystemBackupSource()) {
+    init(runner: @escaping CommandRunner = SystemCommand.run, sshConfigSource: SSHDConfigSource = FileSSHDConfigSource(), backupSource: BackupSource = SystemBackupSource(), packageCveSource: PackageCveSource = SystemPackageCveSource.shared) {
         self.runner = runner
         self.sshConfigSource = sshConfigSource
         self.backupSource = backupSource
+        self.packageCveSource = packageCveSource
     }
 
     func checkHealth() -> SecurityHealthStatus {
@@ -389,9 +391,9 @@ final class SecurityHealthChecker {
             category: loc("システム堅牢性"),
             title: loc("自動セキュリティアップデート"),
             isPassed: health.isAutoUpdateEnabled,
-            statusText: !measuredFlag("auto_security_updates") ? unmeasuredStatus : (health.isAutoUpdateEnabled ? loc("有効 (最新パッチ自動適用)") : loc("無効 (推奨設定外)")),
-            detail: loc("緊急セキュリティ対応（RSR）やシステム脆弱性パッチを自動的にバックグラウンドでダウンロード・適用します。"),
-            recommendation: health.isAutoUpdateEnabled ? loc("設定は万全です。") : loc("システム設定 > 一般 > ソフトウェアアップデートから自動更新を有効にしてください。"),
+            statusText: !measuredFlag("auto_security_updates") ? unmeasuredStatus : (health.isAutoUpdateEnabled ? loc("有効 (更新を自動で確認)") : loc("無効 (推奨設定外)")),
+            detail: loc("ソフトウェアアップデートの自動チェックがオンかを確認します。更新を自動でインストールする設定は確認しません。"),
+            recommendation: health.isAutoUpdateEnabled ? loc("更新の自動確認はオンです。未適用の更新がないかは、システム設定 > 一般 > ソフトウェアアップデートで確かめられます。") : loc("システム設定 > 一般 > ソフトウェアアップデートで、アップデートの自動確認を有効にしてください。"),
             settingsURL: "x-apple.systempreferences:com.apple.Software-Update-Settings.extension",
             isApplicable: measuredFlag("auto_security_updates"),
             checkId: "auto_security_updates",
@@ -414,6 +416,7 @@ final class SecurityHealthChecker {
         ))
 
         items.append(backupRecencyItem(now: Date()))
+        items.append(packageCveExposureItem(now: Date()))
 
         // MARK: - 2. Network Defense (ネットワーク防御)
         // A network explicitly set to "信頼 (オープン)" is *meant* to have
@@ -788,6 +791,78 @@ final class SecurityHealthChecker {
             cisControlID: "11.2",
             nistCsfCategories: ["PR.DS-11"],
             inconclusiveReason: inconclusiveReason
+        )
+    }
+
+    // MARK: - Package CVE exposure
+
+    /// `package_cve_exposure`: Homebrew packages with a vulnerability that CISA lists as exploited (KEV) or that has
+    /// an EPSS of 90% or more, in a version the local data says is affected, and PHP whose version or settings need
+    /// action (see `PackageCveExposure`). Nothing is sent anywhere. Other software that did not come from Homebrew
+    /// is not looked at, and the item says so.
+    func packageCveExposureItem(now: Date) -> SecurityAuditItem {
+        let r = packageCveSource.result(now: now)
+        var detail = loc("Homebrewで入れたパッケージを、手元の既知CVEデータと突き合わせます。CISAが悪用を確認した(KEV)脆弱性、またはEPSS 90%以上の脆弱性が、修正前の版のまま残っていると不合格です。通信はしません。Homebrew以外で入れたPHPは、版数と設定を調べ、修正前の版か攻撃の条件がそろった設定なら不合格です。他のソフトは、Homebrewで入れたものだけが対象です。")
+        let statusText: String
+        let recommendation: String
+        switch r.outcome {
+        case .exposed(let hits, let count, _):
+            let named = hits.prefix(PackageCveExposure.namedInStatus).map(\.shownName)
+                .joined(separator: ", ") + (count > PackageCveExposure.namedInStatus ? ", ..." : "")
+            statusText = String(format: loc("⚠️ 悪用されやすい未修正の脆弱性が%d件 (%@)"), count, named)
+            var lines = hits.prefix(PackageCveExposure.listedInDetail).map { h -> String in
+                var line = h.label ?? "\(h.package) \(h.installedVersion)"
+                if h.label == nil, !h.fixedVersion.isEmpty { line += " -> \(h.fixedVersion)" }
+                if h.label == nil, !h.cveId.isEmpty { line += "  \(h.cveId)" }
+                if h.kev { line += "  \(PackageCveEpss.kevLabel)" }
+                else if let label = PackageCveEpss.label(epss: h.epss, date: nil) { line += "  \(label)" }
+                if let note = h.note { line += "\n    " + note }
+                return line.trimmingCharacters(in: .whitespaces)
+            }
+            if count > PackageCveExposure.listedInDetail { lines.append("...") }
+            detail += "\n" + lines.joined(separator: "\n")
+            recommendation = loc("該当するソフトウェアを更新してください。Homebrewで入れたものは、ターミナルで brew upgrade を実行します。")
+        case .clear(let packages, let covered):
+            statusText = String(format: loc("該当なし (全%d個のうち、データのある%d個を確認)"), packages, covered)
+            recommendation = loc("データのあるHomebrewのパッケージに、悪用されやすい未修正の脆弱性は見つかりませんでした。")
+        case .clearPhpOnly:
+            statusText = loc("該当なし (PHPの版数と設定を確認)")
+            recommendation = loc("PHPに、悪用されやすい未修正の脆弱性は見つかりませんでした。")
+        case .onlyAccepted(let accepted):
+            statusText = String(format: loc("リスク受容の期限内 (%d件)"), accepted)
+            recommendation = loc("リスクを受け入れた脆弱性だけが残っています。期限が切れると、再び不合格になります。")
+        case .brewMissing:
+            statusText = loc("対象外 (Homebrewが見つかりません)")
+            recommendation = loc("対象がないため、点数に入れません。")
+        case .noPackages:
+            statusText = loc("対象外 (Homebrewのパッケージがありません)")
+            recommendation = loc("対象がないため、点数に入れません。")
+        case .brewFailed, .timedOut:
+            statusText = loc("状態を確認できませんでした")
+            recommendation = loc("brew list が動くことを確かめて、もう一度診断してください。")
+        case .noMapData:
+            statusText = loc("状態を確認できませんでした")
+            recommendation = loc("Homebrew向けの脆弱性データがまだ入っていません。データが入ってから、もう一度診断してください。")
+        case .noCoverage:
+            statusText = loc("状態を確認できませんでした")
+            recommendation = loc("入っているパッケージに当てはまる脆弱性データがありません。データが増えてから、もう一度診断してください。")
+        }
+        if !r.mapVersion.isEmpty {
+            detail += "\n" + String(format: loc("脆弱性データの版は%@(KEVは%@時点)です。"), r.mapVersion, r.kevDate ?? "-")
+        }
+        return SecurityAuditItem(
+            category: loc("システム堅牢性"),
+            title: loc("悪用されやすい脆弱性 (入っているソフトウェア)"),
+            isPassed: r.outcome.passes,
+            statusText: statusText,
+            detail: detail,
+            recommendation: recommendation,
+            settingsURL: nil,
+            isApplicable: !r.outcome.isNotApplicable,
+            checkId: "package_cve_exposure",
+            cisControlID: "7.1",
+            nistCsfCategories: ["ID.RA-01"],
+            inconclusiveReason: r.outcome.unmeasuredReason
         )
     }
 

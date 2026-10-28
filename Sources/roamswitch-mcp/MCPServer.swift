@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.8 (build 187).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.9 (build 188).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -1318,7 +1318,7 @@ enum MCPServer {
     private static let baseToolDefinitions: [[String: Any]] = [
         [
             "name": "get_security_report",
-            "description": "Runs RoamSwitch's full local Mac security audit (FileVault, SIP, Gatekeeper, auto-update, XProtect, firewall, Wi-Fi encryption, ARP spoofing, exposed ports) and returns a scored report with per-item pass/fail status and localized recommendations for anything failing. An item may carry an optional language-independent `inconclusiveReason` (helper_unavailable / gateway_unknown / no_baseline / location_unavailable / tool_failed / not_verifiable): then its isPassed/statusText is NOT a confirmed result (the check could not be measured reliably), even if it looks healthy; the same reasons verify_security_findings reports as inconclusive. Use this to answer 'is my Mac secure right now'. It contacts no external host; to read the default gateway's MAC address it may send one ICMP ping to the gateway on the LAN.",
+            "description": "Runs RoamSwitch's full local Mac security audit (FileVault, SIP, Gatekeeper, auto-update, XProtect, firewall, Wi-Fi encryption, ARP spoofing, exposed ports, and Homebrew packages with a CISA-KEV or EPSS>=0.9 vulnerability in an affected version, `package_cve_exposure`, judged from local data with no network) and returns a scored report with per-item pass/fail status and localized recommendations for anything failing. An item may carry an optional language-independent `inconclusiveReason` (helper_unavailable / gateway_unknown / no_baseline / location_unavailable / tool_failed / not_verifiable): then its isPassed/statusText is NOT a confirmed result (the check could not be measured reliably), even if it looks healthy; the same reasons verify_security_findings reports as inconclusive. Use this to answer 'is my Mac secure right now'. It contacts no external host; to read the default gateway's MAC address it may send one ICMP ping to the gateway on the LAN.",
             "inputSchema": ["type": "object", "properties": [String: Any]()],
         ],
         [

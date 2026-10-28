@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.8 (build 187).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.9 (build 188).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -244,7 +244,6 @@ extension RoamSwitchKnowledgeBase {
                 • 即时检测：对 Web 与邮件防护（feat_webmail_download_guard）所监视文件夹中保存或更改的 Web 文件，在同一次静态检查中应用。与 Linux 版不同，无法在访问前阻止，全部为事后检测（不使用 EndpointSecurity）。
                 • 开发用 Web 文件夹：`~/Sites`、`/Library/WebServer/Documents`、`~/Herd`、`~/Library/Application Support/Herd`、`/Applications/MAMP/htdocs`、`~/Library/Application Support/Local`、`~/Local Sites`、软件包 CVE 核对的目标文件夹，以及 Web 与邮件防护的监视文件夹，每天扫描一次，也可手动扫描。每天一次的扫描不会进入 `node_modules`（依赖包）和 `.git`（监视文件夹的即时检测，以及手动指定文件夹的扫描会检查 `node_modules`）。`tests`、`fixtures` 等测试用文件夹不适用规则。
                 • PHP 会话文件夹：同一次检查会读取 PHP 会话文件夹（Homebrew、MAMP、Herd 的 php.ini 中的 `session.save_path`；未指定时为 `/tmp`、`/private/var/tmp` 和临时文件夹；MAMP 的 `tmp/php`）中以 `sess_` 开头的文件。只列出文件夹内容，不深入子文件夹，也不会打开不以 `sess_` 开头的文件。在 upload_progress 的值中混入 PHP 代码的会话文件为 critical，会话值中带有 PHP 起始标签的为 high。critical 会移入隔离库，high 只通知。
-                • PHP 设置检查：设置中的“检查 PHP 设置”按钮会读取 PHP 的版本、设置和会话文件。只读取，不进行网络通信，也不更改任何文件。详见 feat_php_check。
                 • 域名检查：设置中的「检查域名」会检查所输入域名（最多 20 个）的 SPF、DMARC、MTA-STS 和注册到期日，并参考性地显示 CAA 和 DNSSEC。默认不查询任何内容，只有输入域名并按下按钮时才会运行。这台 Mac 的 `dig` 向解析器查询 TXT、CAA、DS 和 MX 记录，`curl` 向该 TLD 注册局的 RDAP 服务器查询（先读取 IANA 的公开列表，其中不含域名），对有 MX 和 `_mta-sts` TXT 记录的域名还会向该域名自己的 mta-sts 主机查询。结果只显示在屏幕上，不保存，也不定期运行。
                 • 隔离：默认只有 critical 的检测会走与其他威胁相同的流程（移入隔离库，可在「管理隔离文件」中恢复或删除）。high 只有通知、钩子和设置中的列表，不会动文件（也可改为「隔离 critical 和 high」或「不隔离」）。medium 和 low 仅报告，保留在通知历史中。被「排除并恢复」的文件，Web 规则不会再次检测（与 ClamAV 的排除是不同的列表）。
                 • 检测后钩子：把可执行文件放在 `~/Library/Application Support/RoamSwitch/hooks/post-detection`，每次检测都会运行它，并通过标准输入传入 JSON（要求所有者为自己或 root，组和其他人不可写，其上级文件夹也一样；30 秒后中止）。
@@ -252,22 +251,6 @@ extension RoamSwitchKnowledgeBase {
                 • 局限：最大 64MB 的文件会完整检查（更大的文件检查开头和结尾各 4MB，图片只检查两端），且按固定的词语序列匹配，因此无法追踪通过拼接变量名等方式拆分的字符串。
                 """,
                 recommendation: "如果 Mac 上有开发用的 Web 文件夹，请启用 Pro 并保持默认设置。认为是误报的文件，从隔离库恢复后不会再被检测。"
-            ),
-            LocalizedEntry(
-                id: "feat_php_check",
-                title: "PHP 设置检查（设置中的按钮）",
-                summary: "检查这台 Mac 上的 PHP 是否受 PHP 核心严重漏洞（CVE-2026-109618、CVE-2026-109619）以及尚无修复版本的 CVE-2026-115560 影响，并检查会话文件中是否被注入了代码。只读取，不更改任何文件，也不会进行网络通信。",
-                details: """
-                • 位置：设置中“网页与邮件保护监控文件夹”下“Web Shell 等检测规则”里的“检查 PHP 设置”按钮。只在按下时运行，不会定期运行，也不保存。结果只显示在屏幕上，不更改任何文件，也不需要管理员权限。
-                • 读取的内容：Homebrew、MAMP、Herd 和 PATH 中的 php、php-fpm、frankenphp 的版本；php.ini、conf.d 和 FPM 池配置中的 session.upload_progress.enabled、PHP 8.5 的 fatal_error_backtraces 以及 memory_limit；Apache 的 mod_php 设置；PHP 会话文件夹中的 sess_ 文件。不会进行网络通信。PHP 可执行文件只在显示版本时启动（`php -n -v`，FrankenPHP 为 `frankenphp version`，5 秒后中止）。不会运行任何脚本。
-                • 版本判定：与 2026 年 10 月 21 日公布的两个严重漏洞（CVE-2026-109618、CVE-2026-109619）的修复版本 8.2.35、8.3.36、8.4.27、8.5.12 比较。早于修复版本为 high；PHP 官方没有修复的 8.1 及更早版本同样为 high；修复版本为 info；无法判定的系列为 medium。版本相同的可执行文件合并为一项。
-                • 设置判定：session.upload_progress.enabled 在未设置时默认开启。开启为 medium（FPM 池有自己的值时，逐个池判断）。fatal_error_backtraces 只在存在 PHP 8.5 时检查：开启且版本早于修复版本为 high，否则为 medium。mod_php 是最容易受影响的运行方式，为 medium；存在 PHP-FPM 或 FrankenPHP 为 info。memory_limit 仅以 info 显示其值。-1 被称为权宜之计，但不推荐。
-                • CVE-2026-115560（2026 年 10 月 23 日公布；将在下一个常规版本中修复，目前没有修复版本）：只有同时满足三个条件时才为 high：配置中的 session.serialize_handler 为 php_binary 或 php_serialize，Web 代码用 ini_set() 切换它，且 session.upload_progress.enabled 已开启。Web 代码指 Homebrew 的 var/www、MAMP 的 htdocs、/Library/WebServer/Documents、~/Sites、~/Herd 中的 PHP 文件（.php .phtml .inc，包括 Composer 的 vendor）。不进入 node_modules 和 .git，也不跟随链接。只满足一部分时为 info，并显示已满足的条件。
-                • 会话文件：只读取会话文件夹正下方以 sess_ 开头的文件，不进入子文件夹。同时含有 upload_progress 标记和 PHP 代码的文件（代码注入）为 critical，会话值中含有 PHP 起始标签的为 high。本检查不会移动文件。critical 的隔离由每日和手动的 Web 规则扫描（feat_web_rules）完成。已用“排除并还原”还原的文件不会被检查。无法读取的文件夹以 info 显示为“无法读取会话文件夹”。
-                • 结果的读法：有 high 或 critical 项目时，开头显示“需要处理（高危项目 N 项）”，否则显示“没有需要处理的项目”。接着显示检查的数量（PHP 可执行文件、配置文件、会话文件、文件夹）。项目按 [critical] [high] [medium] [info] 的顺序排列，附有说明、处理方法和依据的路径。找不到 PHP 时只显示“未找到 PHP”。
-                • 判定范围：只有这三项公告。不判定其他 PHP 漏洞，也不判定 WordPress 等应用程序的漏洞。
-                """,
-                recommendation: "如果版本早于修复版本，请更新 PHP。更新才是完整的解决办法。暂时无法更新时，如果不使用 session.upload_progress.enabled，请将其设为 0 并重启 PHP。这只是权宜之计，不能代替更新。"
             ),
             LocalizedEntry(
                 id: "feat_event_forwarding",
@@ -796,8 +779,8 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",
-                title: "Mac 安全综合诊断（22 个项目·评分 & 改进步骤）",
-                summary: "检查系统健壮性、网络防御、身份验证与访问控制、端口暴露、恶意软件防护、物理设备防御 6 个领域共 22 个项目，并显示 100 分制的评分、等级和改进步骤。免费版即可使用。",
+                title: "Mac 安全综合诊断（23 个项目·评分 & 改进步骤）",
+                summary: "检查系统健壮性、网络防御、身份验证与访问控制、端口暴露、恶意软件防护、物理设备防御 6 个领域共 23 个项目，并显示 100 分制的评分、等级和改进步骤。免费版即可使用。",
                 details: """
                 • 系统健壮性：1. FileVault，2. SIP（系统完整性保护），3. Gatekeeper，4. 自动安全更新，5. Apple XProtect，6. 备份（Time Machine 最近一次备份在 7 天内；不检查能否还原）。
                 • 网络防御：7. macOS 防火墙，8. 隐身模式，9. Wi-Fi 加密强度，10. ARP 欺骗监视，11. 网关 ARP 固定，12. 代理自动发现 (WPAD / PAC)。
@@ -807,6 +790,7 @@ extension RoamSwitchKnowledgeBase {
                 • 物理端口与设备防御：20. 非法 USB / BadUSB 物理端口防护，21. macOS 配件连接保护。
                 • 不适用项的处理：受信任网络上的防火墙和隐身模式、远程登录禁用时的 SSH、辅助程序未连接时的 Sudo 审计将标记为 N/A，并从评分计算中排除。
                 • 22. 新增的受信任证书（证书颁发机构）（`trust_anchors`，网络防御）：针对用户域和管理员域读取 `security dump-trust-settings`。只有当人、管理员或描述文件设置过时，证书才会带有信任设置，所以列出的证书都是有人添加的；Apple 自带的根证书不计入，信任结果为“deny”（不信任）的证书也不计入。如果新增证书的名称看起来像拦截工具（mitm、proxy、charles、fiddler、burp、portswigger、zscaler、netskope、squid、inspection、sslsplit），该项不合格并列出名称（最多 3 个）。其他新增证书（公司根证书、mkcert 等）作为信息显示，该项合格（如果是你自己设置的就没有问题）。无法读取该命令时，该项为“无法确认”。原因：读取加密通信（包括密码和 API 密钥）的代理，需要 Mac 信任它的证书颁发机构。看不到的内容：应用自带的证书，以及证书是何时添加的；新增的证书出现时也不会通知。检测覆盖：T1553.004（部分）。不会更改任何内容，也不会发送任何内容。
+                • 23. 易被利用的漏洞 (已安装的软件)（`package_cve_exposure`，系统健壮性）：检查 Homebrew 软件包和 PHP。将通过 `brew list --versions` 读取的 Homebrew 软件包，与更新程序下发的带签名的已知 CVE 数据（Homebrew 用）以及每天下发的 CISA KEV 列表比对。若 CISA 确认已被利用（KEV）的漏洞，或 EPSS 达到 90% 以上的漏洞，仍留在受影响的版本中，则判为不合格，并显示软件包名和 CVE 编号（状态栏最多 3 个）。风险接受未到期的项目不计入。对于 PHP，读取 Homebrew、MAMP、Herd 和 PATH 中可执行文件的版本，以及 php.ini、FPM 和 Apache 的设置。版本早于修复版本（两个严重漏洞 CVE-2026-109618 和 CVE-2026-109619，修复版本为 8.2.35、8.3.36、8.4.27、8.5.12；8.1 及更早版本没有修复版本），或满足 CVE-2026-115560 的条件（设置为 php_binary 或 php_serialize、应用代码用 ini_set() 切换、upload_progress 已启用，三者同时具备；目前没有修复版本）时判为不合格。mod_php 或启用 upload_progress 等中等及以下的提示不会判为不合格。数据中收录的 Homebrew php 按数据统计，不会重复计算。PHP 可执行文件仅在显示版本时启动。不进行网络通信。结果保留 30 分钟，20 秒内未完成则显示“无法确认”。没有 Homebrew 软件包也没有 PHP 时判为不适用，不计入分数。没有数据时同样显示“无法确认”。无法看到的内容包括：非 Homebrew 安装的 PHP 以外的软件、数据中没有对应条目的漏洞，以及在最新 KEV 列表之后才列入 KEV 的 CVE（详情栏会显示数据版本和 KEV 日期）。PHP 的会话文件由 Web shell 检测规则的扫描读取，不在本项目中。状态栏会显示已安装软件包中数据收录的数量。
                 • 等级：100 分 = S，85～99 分 = A，70～84 分 = B，低于 70 分 = C。也可通过 MCP 工具 `get_security_report` 获取。
                 """,
                 recommendation: "请定期打开「综合诊断报告」，按照改进步骤处理带 ⚠️ 的项目，保持 A 级以上。"
@@ -1475,11 +1459,11 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "faq_free_vs_pro",
                 title: "免费版与 Pro 永久版的区别",
-                summary: "免费版也可以无限期使用根据网络自动切换保护、22 个项目的综合诊断等基础防御功能以及各类手动诊断工具。Pro 版将解锁自动隔离、实时防御、自主巡查警告等功能。",
+                summary: "免费版也可以无限期使用根据网络自动切换保护、23 个项目的综合诊断等基础防御功能以及各类手动诊断工具。Pro 版将解锁自动隔离、实时防御、自主巡查警告等功能。",
                 details: """
                 【免费版】
                 • 根据 Wi-Fi 和网络自动切换三级 pf 数据包过滤，自动停止与恢复共享服务和 AirDrop
-                • Mac 安全综合诊断（22 个项目）、XProtect 运行状态确认与文件/应用安全性诊断
+                • Mac 安全综合诊断（23 个项目）、XProtect 运行状态确认与文件/应用安全性诊断
                 • 外部公开端口和 USB 设备列表显示
                 • 链接安全性诊断、机密信息与 API 密钥泄露手动审计、剪贴板保护
                 • 软件包 CVE 照合、实证型漏洞验证、Mac 安全日志审计、通知历史

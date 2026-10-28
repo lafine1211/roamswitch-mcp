@@ -49,7 +49,8 @@ CORE=(ProcessWait AppLanguage TrustedNetwork GatewayFingerprint WiFiSecurityMoni
       RansomwareSnapshotStatusReader MCPExecRecorderTools AgentSetupAuditor AgentSetupBaseline SSHGuardStatusReader PromptInjectionSignals AgentSetupSarif DetectionCoverage \
       BackupRecency PackageCveEpss VulnerabilityAcceptance DependencySourceScan \
       ProxyAutoDiscoveryCheck AgentCredentialFileCheck \
-      DecoyPlacement FeedUpdateStatus LinkGuardEnforcement)
+      DecoyPlacement FeedUpdateStatus LinkGuardEnforcement \
+      KevCatalog PackageCveExposure PhpEnvironment PhpEnvironmentAudit)
 
 # Sources that live in the app's Shared/ folder (also compiled into the helper).
 SHARED=(RansomwareSnapshotLogic ExecEventModel ExecLogStore ExecProcessTree ExecReadAPI \

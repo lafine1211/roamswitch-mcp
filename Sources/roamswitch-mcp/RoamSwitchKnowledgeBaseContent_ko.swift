@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.8 (build 187).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.9 (build 188).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -244,7 +244,6 @@ extension RoamSwitchKnowledgeBase {
                 • 즉시 탐지: 웹·메일 보호(feat_webmail_download_guard)의 감시 폴더에 저장·변경된 웹 파일에, 같은 정적 검사 안에서 적용합니다. Linux 버전처럼 접근 전에 막을 수는 없고 모두 사후 탐지입니다(EndpointSecurity는 사용하지 않습니다).
                 • 개발용 웹 폴더: `~/Sites`, `/Library/WebServer/Documents`, `~/Herd`, `~/Library/Application Support/Herd`, `/Applications/MAMP/htdocs`, `~/Library/Application Support/Local`, `~/Local Sites`, 패키지 CVE 대조 대상 폴더, 웹·메일 보호의 감시 폴더를 하루 한 번과 수동으로 검사합니다. 하루 한 번의 검사는 `node_modules`(의존 패키지)와 `.git`에 들어가지 않습니다(감시 중인 폴더의 즉시 탐지와, 폴더를 지정한 수동 검사에서는 `node_modules`도 검사합니다). `tests`, `fixtures` 같은 테스트용 폴더에는 규칙을 적용하지 않습니다.
                 • PHP 세션 폴더: 같은 검사에서 PHP 세션 폴더(Homebrew, MAMP, Herd의 php.ini에 있는 `session.save_path`. 지정이 없으면 `/tmp`, `/private/var/tmp`, 임시 폴더. MAMP의 `tmp/php`)에 있는 `sess_`로 시작하는 파일을 읽습니다. 폴더 안은 파고들지 않으며, `sess_`로 시작하지 않는 파일은 열지 않습니다. upload_progress 값에 PHP 코드를 섞은 세션 파일은 critical, 세션 값에 PHP 시작 태그가 있는 것은 high입니다. critical은 격리 보관소로 옮기고, high는 알림만 합니다.
-                • PHP 설정 점검: 설정의 "PHP 설정 점검" 버튼이 PHP의 버전, 설정, 세션 파일을 읽어서 점검합니다. 읽기만 하며 통신하지 않고 파일도 변경하지 않습니다. 자세한 내용은 feat_php_check를 참조하세요.
                 • 도메인 점검: 설정의 "도메인 점검"은 입력한 도메인(최대 20개)의 SPF, DMARC, MTA-STS, 등록 만료일을 확인하고 참고로 CAA와 DNSSEC 여부도 보여 줍니다. 기본값으로는 아무것도 조회하지 않으며, 도메인을 입력하고 버튼을 눌렀을 때만 동작합니다. 이 Mac의 `dig`가 리졸버에 TXT, CAA, DS, MX를 조회하고, `curl`이 해당 TLD 등록 기관의 RDAP 서버(먼저 IANA의 공개 목록을 읽으며 도메인 이름은 들어 있지 않습니다)와, MX와 `_mta-sts` TXT가 있는 도메인은 그 도메인 자신의 mta-sts 호스트에 조회합니다. 결과는 화면에만 표시되며 저장하거나 정기 실행하지 않습니다.
                 • 격리: 기본적으로 critical 탐지만 다른 위협과 같은 흐름(격리 보관소로 이동, "격리된 파일 관리"에서 복원·삭제)의 대상입니다. high는 알림과 훅, 설정 화면의 목록만 있고 파일은 건드리지 않습니다(설정에서 "critical과 high 격리" 또는 "격리하지 않음"으로 바꿀 수도 있습니다). medium과 low는 보고만 하며 알림 기록에 남습니다. "제외하고 복원"한 파일은 웹 규칙에서 다시 탐지되지 않습니다(ClamAV 제외와는 별도 목록입니다).
                 • 탐지 후 훅: `~/Library/Application Support/RoamSwitch/hooks/post-detection`에 실행 파일을 두면 탐지할 때마다 JSON을 표준 입력으로 넘겨 실행합니다(소유자가 본인이나 root, 그룹·다른 사용자가 쓸 수 없음, 상위 폴더도 같음이 조건. 30초 후 중단).
@@ -252,22 +251,6 @@ extension RoamSwitchKnowledgeBase {
                 • 한계: 64MB까지의 파일은 전체를, 그보다 큰 파일은 처음과 끝의 4MB씩을 검사하며(이미지는 처음과 끝만) 고정된 단어의 나열로 판단하므로, 변수 이름 조립 등으로 쪼개진 문자열은 따라가지 못합니다.
                 """,
                 recommendation: "개발용 웹 폴더가 있는 Mac이라면 Pro를 켜고 기본 설정 그대로 쓰세요. 오탐으로 보이는 파일은 격리 보관소에서 복원하면 다시 탐지되지 않습니다."
-            ),
-            LocalizedEntry(
-                id: "feat_php_check",
-                title: "PHP 설정 점검 (설정의 버튼)",
-                summary: "이 Mac의 PHP가 PHP 코어의 심각한 취약점(CVE-2026-109618, CVE-2026-109619)과 아직 수정 버전이 없는 CVE-2026-115560의 영향을 받는지, 세션 파일에 코드가 주입되지 않았는지 점검합니다. 읽기만 하며 파일을 변경하지 않고 네트워크로도 보내지 않습니다.",
-                details: """
-                • 위치: 설정의 "웹·메일 보호 감시 대상 폴더"에 있는 "웹 셸 등 탐지 규칙" 안의 "PHP 설정 점검" 버튼입니다. 누를 때만 실행되며 정기 실행도 저장도 하지 않습니다. 결과는 화면에만 표시되고 파일은 변경하지 않으며 관리자 권한도 필요 없습니다.
-                • 읽는 것: Homebrew, MAMP, Herd, PATH에 있는 php, php-fpm, frankenphp의 버전. php.ini, conf.d, FPM 풀 설정의 session.upload_progress.enabled, PHP 8.5의 fatal_error_backtraces, memory_limit. Apache의 mod_php 설정. PHP 세션 폴더의 sess_ 파일. 통신은 하지 않습니다. PHP 실행 파일은 버전을 표시할 때만 실행합니다(`php -n -v`, FrankenPHP는 `frankenphp version`, 5초 후 중단). 스크립트는 실행하지 않습니다.
-                • 버전 판정: 2026년 10월 21일에 공표된 심각한 취약점 2건(CVE-2026-109618, CVE-2026-109619)의 수정 버전 8.2.35, 8.3.36, 8.4.27, 8.5.12와 비교합니다. 수정 버전보다 앞서면 high, PHP 프로젝트의 수정이 없는 8.1 이하도 high, 수정 버전은 info, 판정할 수 없는 계열은 medium입니다. 같은 버전의 실행 파일은 한 항목으로 묶습니다.
-                • 설정 판정: session.upload_progress.enabled는 지정이 없으면 기본값이 켜짐입니다. 켜져 있으면 medium(FPM 풀이 자체 값을 가지면 풀마다 봅니다). fatal_error_backtraces는 PHP 8.5가 있을 때만 보며, 켜져 있고 버전이 수정 버전보다 앞서면 high, 그렇지 않으면 medium입니다. mod_php는 가장 영향을 받기 쉬운 실행 방식이라 medium, PHP-FPM과 FrankenPHP가 있다는 것은 info입니다. memory_limit은 값을 info로 보여 줄 뿐입니다. -1은 임시 조치로 알려져 있지만 권장하지 않습니다.
-                • CVE-2026-115560(2026년 10월 23일 공표, 수정은 다음 정기 릴리스이며 지금은 수정 버전이 없습니다): 세 가지가 모두 갖춰졌을 때만 high입니다. 설정의 session.serialize_handler가 php_binary 또는 php_serialize이고, 웹 코드가 ini_set()으로 이를 전환하며, session.upload_progress.enabled가 켜져 있는 경우입니다. 웹 코드는 Homebrew의 var/www, MAMP의 htdocs, /Library/WebServer/Documents, ~/Sites, ~/Herd에 있는 PHP 파일(.php .phtml .inc, Composer의 vendor 포함)입니다. node_modules와 .git에는 들어가지 않고 링크도 따라가지 않습니다. 일부만 해당할 때는 info로 갖춰진 조건을 보여 줍니다.
-                • 세션 파일: 세션 폴더 바로 아래에서 sess_로 시작하는 파일만 읽고 하위 폴더에는 들어가지 않습니다. upload_progress 표식과 PHP 코드가 함께 있는 파일(코드 주입)은 critical, 세션 값에 PHP 시작 태그가 있는 파일은 high입니다. 이 점검은 파일을 옮기지 않습니다. critical의 격리는 매일 및 수동 웹 규칙 검사(feat_web_rules)가 합니다. "제외하고 복원"한 파일은 검사하지 않습니다. 읽을 수 없는 폴더는 "세션 폴더를 읽을 수 없습니다"로 info에 표시합니다.
-                • 결과 읽는 법: high 또는 critical 항목이 있으면 맨 위에 "조치가 필요합니다 (심각도가 높은 항목 N건)", 없으면 "조치가 필요한 항목은 없습니다"이 표시됩니다. 이어서 점검한 수(PHP 실행 파일, 설정 파일, 세션 파일, 폴더)가 나옵니다. 항목은 [critical] [high] [medium] [info] 순서이며 설명, 대처, 근거 경로가 붙습니다. PHP를 찾지 못하면 "PHP를 찾지 못했습니다"만 표시됩니다.
-                • 판정 범위: 이 세 가지 권고만 판정합니다. 다른 PHP 취약점이나 WordPress 같은 앱의 취약점은 판정하지 않습니다.
-                """,
-                recommendation: "버전이 수정 버전보다 앞서면 PHP를 업데이트하세요. 업데이트가 완전한 대처입니다. 업데이트할 수 없는 동안에는 session.upload_progress.enabled를 쓰지 않으면 0으로 바꾸고 PHP를 다시 시작하세요. 임시 조치이며 업데이트를 대신하지 않습니다."
             ),
             LocalizedEntry(
                 id: "feat_event_forwarding",
@@ -796,8 +779,8 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",
-                title: "Mac 보안 진단 (22개 항목, 점수와 개선 단계)",
-                summary: "시스템 강화, 네트워크 방어, 인증 및 접근 제어, 포트 노출, 악성코드 보호, 물리적 기기 방어 등 6개 영역 22개 항목을 검사하여 0~100점의 점수, 등급, 실패 항목별 개선 단계를 보여줍니다. 무료 버전에서도 사용할 수 있습니다.",
+                title: "Mac 보안 진단 (23개 항목, 점수와 개선 단계)",
+                summary: "시스템 강화, 네트워크 방어, 인증 및 접근 제어, 포트 노출, 악성코드 보호, 물리적 기기 방어 등 6개 영역 23개 항목을 검사하여 0~100점의 점수, 등급, 실패 항목별 개선 단계를 보여줍니다. 무료 버전에서도 사용할 수 있습니다.",
                 details: """
                 • 시스템 강화: 1. FileVault, 2. SIP(시스템 무결성 보호), 3. Gatekeeper, 4. 자동 보안 업데이트, 5. Apple XProtect, 6. 백업(Time Machine의 가장 최근 백업이 7일 이내인지, 복원 가능 여부는 확인하지 않음).
                 • 네트워크 방어: 7. macOS 방화벽, 8. 스텔스 모드, 9. Wi-Fi 암호화 강도, 10. ARP 스푸핑 모니터, 11. 게이트웨이 ARP 고정, 12. 프록시 자동 검색 (WPAD / PAC).
@@ -807,6 +790,7 @@ extension RoamSwitchKnowledgeBase {
                 • 물리적 포트 및 기기: 20. 무단 USB / BadUSB 물리 포트 가드, 21. macOS 액세서리 연결 보호.
                 • 해당 없음 처리: 신뢰 네트워크에서의 방화벽과 스텔스 모드, 원격 로그인이 꺼져 있을 때의 SSH, 헬퍼 연결 전의 sudo 감사는 점수 계산에서 제외됩니다.
                 • 22. 추가된 신뢰 인증서(인증 기관)(`trust_anchors`, 네트워크 방어): 사용자 도메인과 관리자 도메인에 대해 `security dump-trust-settings`를 읽습니다. 신뢰 설정은 사람, 관리자 또는 프로파일이 설정한 경우에만 붙으므로, 목록에 나오는 인증서는 누군가 추가한 것입니다. Apple 자체의 루트 인증서는 세지 않으며, 신뢰 결과가 'deny'(신뢰하지 않음)인 인증서도 세지 않습니다. 추가된 인증서의 이름이 가로채기 도구처럼 보이면(mitm, proxy, charles, fiddler, burp, portswigger, zscaler, netskope, squid, inspection, sslsplit) 불합격으로 처리하고 그 이름을 표시합니다(최대 3개). 그 밖의 추가된 인증서(회사 루트 인증서, mkcert 등)는 정보로 표시하고 합격으로 처리합니다(직접 설정한 것이라면 문제없습니다). 명령을 읽을 수 없으면 '확인할 수 없음'으로 처리합니다. 이유: 암호화된 통신(비밀번호와 API 키 포함)을 읽는 프록시는 Mac이 그 인증 기관을 신뢰해야 하기 때문입니다. 볼 수 없는 것: 앱이 자체적으로 가진 인증서, 인증서를 언제 추가했는지. 새로 들어와도 그 시점에 알리지 않습니다. 탐지 범위: T1553.004(일부). 아무것도 변경하지 않고 아무것도 보내지 않습니다.
+                • 23. 악용되기 쉬운 취약점 (설치된 소프트웨어)(`package_cve_exposure`, 시스템 강화): Homebrew 패키지와 PHP를 점검합니다. `brew list --versions`로 읽은 Homebrew 패키지를, 업데이터가 배포하는 서명된 알려진 CVE 데이터(Homebrew용)와 매일 도착하는 CISA의 KEV 목록과 대조합니다. CISA가 악용을 확인한(KEV) 취약점이나 EPSS 90% 이상인 취약점이 영향받는 버전에 남아 있으면 불합격으로 하고, 패키지 이름과 CVE 번호를 보여 줍니다(상태란에는 최대 3건). 위험 수용 기간이 끝나지 않은 것은 세지 않습니다. PHP는 Homebrew, MAMP, Herd, PATH에 있는 실행 파일의 버전과 php.ini, FPM, Apache의 설정을 읽습니다. 수정 이전 버전(중대한 취약점 2건 CVE-2026-109618과 CVE-2026-109619. 수정 버전은 8.2.35, 8.3.36, 8.4.27, 8.5.12이며 8.1 이하에는 수정 버전이 없습니다)이거나 CVE-2026-115560의 조건(설정이 php_binary 또는 php_serialize, 앱 코드가 ini_set()으로 전환, upload_progress 활성화의 세 가지가 모두 갖춰진 경우. 아직 수정 버전이 없습니다)이 있으면 불합격으로 합니다. mod_php나 upload_progress 활성화처럼 중요도가 중간 이하인 지적은 불합격으로 하지 않습니다. 데이터에 있는 Homebrew의 php는 데이터 쪽에서 세며 중복해서 세지 않습니다. PHP 실행 파일은 버전을 표시할 때만 실행합니다. 네트워크 통신은 하지 않습니다. 결과는 30분간 유지하며, 20초 안에 끝나지 않으면 '확인할 수 없음'으로 표시합니다. Homebrew 패키지도 PHP도 없으면 해당 없음으로 하여 점수에 넣지 않습니다. 데이터가 없을 때도 '확인할 수 없음'으로 표시합니다. 볼 수 없는 것은 Homebrew로 설치하지 않은 PHP 이외의 소프트웨어, 데이터에 항목이 없는 취약점, 최신 KEV 목록 이후에 KEV에 오른 CVE입니다(자세히 란에 데이터 버전과 KEV 날짜를 표시합니다). PHP의 세션 파일은 이 항목이 아니라 웹셸 등 탐지 규칙 검사가 읽습니다. 상태란에는 설치된 패키지 중 데이터에 있는 개수를 표시합니다.
                 • 등급: 100점은 S, 85~99점은 A, 70~84점은 B, 70점 미만은 C입니다. MCP 도구 `get_security_report`로도 확인할 수 있습니다.
                 """,
                 recommendation: "정기적으로 진단 보고서를 열어 ⚠️로 표시된 항목을 제시된 개선 단계에 따라 처리하고 A 등급 이상을 유지하세요."
@@ -1475,11 +1459,11 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "faq_free_vs_pro",
                 title: "무료 버전과 Pro 평생 버전의 차이",
-                summary: "무료 버전에는 네트워크 기반 자동 보호 전환, 22개 항목 보안 진단, 다양한 수동 검사 도구가 시간 제한 없이 포함되어 있습니다. Pro는 자동 봉쇄, 실시간 방어, 순찰 경고를 추가로 제공합니다.",
+                summary: "무료 버전에는 네트워크 기반 자동 보호 전환, 23개 항목 보안 진단, 다양한 수동 검사 도구가 시간 제한 없이 포함되어 있습니다. Pro는 자동 봉쇄, 실시간 방어, 순찰 경고를 추가로 제공합니다.",
                 details: """
                 【무료 버전】
                 • 네트워크별 3단계 PF 패킷 필터 자동 전환, 공유 서비스와 AirDrop 자동 정지 및 복원
-                • Mac 보안 진단(22개 항목), XProtect 상태, 파일/앱 안전성 진단
+                • Mac 보안 진단(23개 항목), XProtect 상태, 파일/앱 안전성 진단
                 • 노출된 포트와 USB 기기 목록
                 • 링크 안전성 진단, 수동 기밀/API 키 유출 감사, 클립보드 보호
                 • 패키지 CVE 검사, 실증형 취약점 검증, Mac 보안 로그 감사, 알림 기록

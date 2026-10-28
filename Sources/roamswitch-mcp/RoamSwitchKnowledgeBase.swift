@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.8 (build 187).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.9 (build 188).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -420,7 +420,6 @@ public struct RoamSwitchKnowledgeBase: Sendable {
             EntryMeta(id: "feat_bluetooth_guard", topic: t, tags: ["bluetooth", "blueutil", "ble", "blueborne", "pro", "homebrew", "lockdown"]),
             EntryMeta(id: "feat_webmail_download_guard", topic: t, tags: ["download", "mail", "fsevents", "quarantine", "clamav", "malware", "static-signature", "eicar", "pro"]),
             EntryMeta(id: "feat_web_rules", topic: t, tags: ["webshell", "web-shell", "php", "javascript", "jsp", "asp", "htaccess", "injector", "rules", "feed", "hook", "post-detection", "rules.d", "static-signature", "quarantine", "development", "sites", "herd", "mamp", "session", "upload-progress", "php-fpm", "pro", "receive-only"]),
-            EntryMeta(id: "feat_php_check", topic: t, tags: ["php", "php-fpm", "mod_php", "frankenphp", "homebrew", "mamp", "herd", "session", "sess_", "upload_progress", "fatal_error_backtraces", "serialize_handler", "php-check", "CVE-2026-109618", "CVE-2026-109619", "CVE-2026-115560", "web shell", "read-only", "zerotelemetry"]),
             EntryMeta(id: "feat_event_forwarding", topic: t, tags: ["siem", "syslog", "cef", "rfc5424", "webhook", "hmac", "forwarding", "json-lines", "tls", "queue", "export", "soc", "pro", "opt-in", "zero-telemetry"]),
             EntryMeta(id: "feat_ai_model_guard", topic: t, tags: ["ai", "model", "pickle", "safetensors", "gguf", "pytorch", "huggingface", "malware", "pro"]),
             EntryMeta(id: "feat_quarantine_manager", topic: t, tags: ["quarantine", "vault", "restore", "delete", "exclusion", "clamav", "false_positive", "mcp"]),
@@ -454,7 +453,7 @@ public struct RoamSwitchKnowledgeBase: Sendable {
             EntryMeta(id: "feat_typosquat_guard", topic: t, tags: ["npm", "pnpm", "typosquatting", "package.json", "levenshtein", "supply-chain", "mcp", "pro"]),
             EntryMeta(id: "feat_sensor_pairing", topic: t, tags: ["sensor", "pairing-code", "tcp", "ed25519", "lan", "trust", "audit", "pro"]),
             EntryMeta(id: "feat_port_scan_guard", topic: t, tags: ["port-scan", "reconnaissance", "nmap", "masscan", "pf", "auto-block", "pro"]),
-            EntryMeta(id: "feat_security_health_checker", topic: t, tags: ["audit", "score", "filevault", "sip", "gatekeeper", "firewall", "xprotect", "ssh", "sudo", "accessory", "21-items", "free"]),
+            EntryMeta(id: "feat_security_health_checker", topic: t, tags: ["audit", "score", "filevault", "sip", "gatekeeper", "firewall", "xprotect", "ssh", "sudo", "accessory", "21-items", "cve", "kev", "epss", "homebrew", "php", "mod_php", "upload_progress", "free"]),
             EntryMeta(id: "feat_autonomous_sentinel", topic: t, tags: ["autonomous", "sentinel", "background", "freshclam", "clamav", "scheduled-scan", "pro"]),
             EntryMeta(id: "feat_simulation_self_test", topic: t, tags: ["simulation", "self-test", "test", "ransomware", "airgap", "docker", "eicar"]),
             EntryMeta(id: "feat_privileged_helper", topic: t, tags: ["helper", "xpc", "root", "pfctl", "privilege", "security", "smappservice", "launchdaemon"]),

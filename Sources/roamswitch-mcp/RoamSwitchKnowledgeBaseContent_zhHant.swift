@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.8 (build 187).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.9 (build 188).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -244,7 +244,6 @@ extension RoamSwitchKnowledgeBase {
                 • 即時偵測：對 Web 與郵件防護（feat_webmail_download_guard）所監視資料夾中儲存或變更的 Web 檔案，在同一次靜態檢查中套用。與 Linux 版不同，無法在存取前阻止，全部為事後偵測（不使用 EndpointSecurity）。
                 • 開發用 Web 資料夾：`~/Sites`、`/Library/WebServer/Documents`、`~/Herd`、`~/Library/Application Support/Herd`、`/Applications/MAMP/htdocs`、`~/Library/Application Support/Local`、`~/Local Sites`、套件 CVE 比對的目標資料夾，以及 Web 與郵件防護的監視資料夾，每天掃描一次，也可手動掃描。每天一次的掃描不會進入 `node_modules`（相依套件）和 `.git`（監視資料夾的即時偵測，以及手動指定資料夾的掃描會檢查 `node_modules`）。`tests`、`fixtures` 等測試用資料夾不套用規則。
                 • PHP 工作階段資料夾：同一次檢查會讀取 PHP 工作階段資料夾（Homebrew、MAMP、Herd 的 php.ini 中的 `session.save_path`；未指定時為 `/tmp`、`/private/var/tmp` 和暫存資料夾；MAMP 的 `tmp/php`）中以 `sess_` 開頭的檔案。只列出資料夾內容，不深入子資料夾，也不會開啟不以 `sess_` 開頭的檔案。在 upload_progress 的值中混入 PHP 程式碼的工作階段檔案為 critical，工作階段值中帶有 PHP 起始標籤的為 high。critical 會移入隔離庫，high 只通知。
-                • PHP 設定檢查：設定中的「檢查 PHP 設定」按鈕會讀取 PHP 的版本、設定和工作階段檔案。只讀取，不進行網路通訊，也不變更任何檔案。詳見 feat_php_check。
                 • 網域檢查：設定中的「檢查網域」會檢查所輸入網域（最多 20 個）的 SPF、DMARC、MTA-STS 與註冊到期日，並以參考方式顯示 CAA 與 DNSSEC。預設不查詢任何內容，只有輸入網域並按下按鈕時才會執行。這台 Mac 的 `dig` 向解析器查詢 TXT、CAA、DS 與 MX 記錄，`curl` 向該 TLD 註冊局的 RDAP 伺服器查詢（先讀取 IANA 的公開清單，其中不含網域名稱），對有 MX 與 `_mta-sts` TXT 記錄的網域還會向該網域自己的 mta-sts 主機查詢。結果只顯示在畫面上，不儲存，也不定期執行。
                 • 隔離：預設只有 critical 的偵測會走與其他威脅相同的流程（移入隔離庫，可在「管理隔離檔案」中還原或刪除）。high 只有通知、掛鉤和設定中的清單，不會動檔案（也可改為「隔離 critical 和 high」或「不隔離」）。medium 和 low 僅回報，保留在通知記錄中。被「排除並還原」的檔案，Web 規則不會再次偵測（與 ClamAV 的排除是不同的清單）。
                 • 偵測後掛鉤：把可執行檔放在 `~/Library/Application Support/RoamSwitch/hooks/post-detection`，每次偵測都會執行它，並透過標準輸入傳入 JSON（要求擁有者為自己或 root，群組和其他人不可寫，其上層資料夾也一樣；30 秒後中止）。
@@ -252,22 +251,6 @@ extension RoamSwitchKnowledgeBase {
                 • 限制：最大 64MB 的檔案會完整檢查（更大的檔案檢查開頭與結尾各 4MB，圖片只檢查兩端），且依固定的詞語序列比對，因此無法追蹤透過組合變數名稱等方式拆開的字串。
                 """,
                 recommendation: "如果 Mac 上有開發用的 Web 資料夾，請啟用 Pro 並保持預設設定。認為是誤判的檔案，從隔離庫還原後不會再被偵測。"
-            ),
-            LocalizedEntry(
-                id: "feat_php_check",
-                title: "PHP 設定檢查（設定中的按鈕）",
-                summary: "檢查這台 Mac 上的 PHP 是否受 PHP 核心嚴重漏洞（CVE-2026-109618、CVE-2026-109619）以及尚無修正版本的 CVE-2026-115560 影響，並檢查工作階段檔案中是否被注入了程式碼。只讀取，不變更任何檔案，也不會進行網路通訊。",
-                details: """
-                • 位置：設定中「網頁與郵件保護監控資料夾」下「Web Shell 等偵測規則」裡的「檢查 PHP 設定」按鈕。只在按下時執行，不會定期執行，也不儲存。結果只顯示在畫面上，不變更任何檔案，也不需要管理員權限。
-                • 讀取的內容：Homebrew、MAMP、Herd 和 PATH 中的 php、php-fpm、frankenphp 的版本；php.ini、conf.d 和 FPM 池設定中的 session.upload_progress.enabled、PHP 8.5 的 fatal_error_backtraces 以及 memory_limit；Apache 的 mod_php 設定；PHP 工作階段資料夾中的 sess_ 檔案。不會進行網路通訊。PHP 執行檔只在顯示版本時啟動（`php -n -v`，FrankenPHP 為 `frankenphp version`，5 秒後中止）。不會執行任何腳本。
-                • 版本判定：與 2026 年 10 月 21 日公布的兩個嚴重漏洞（CVE-2026-109618、CVE-2026-109619）的修正版本 8.2.35、8.3.36、8.4.27、8.5.12 比較。早於修正版本為 high；PHP 官方沒有修正的 8.1 及更早版本同樣為 high；修正版本為 info；無法判定的系列為 medium。版本相同的執行檔合併為一項。
-                • 設定判定：session.upload_progress.enabled 在未設定時預設開啟。開啟為 medium（FPM 池有自己的值時，逐個池判斷）。fatal_error_backtraces 只在存在 PHP 8.5 時檢查：開啟且版本早於修正版本為 high，否則為 medium。mod_php 是最容易受影響的執行方式，為 medium；存在 PHP-FPM 或 FrankenPHP 為 info。memory_limit 僅以 info 顯示其值。-1 被稱為權宜之計，但不建議。
-                • CVE-2026-115560（2026 年 10 月 23 日公布；將在下一個例行版本中修正，目前沒有修正版本）：只有同時滿足三個條件時才為 high：設定中的 session.serialize_handler 為 php_binary 或 php_serialize，Web 程式碼以 ini_set() 切換它，且 session.upload_progress.enabled 已開啟。Web 程式碼指 Homebrew 的 var/www、MAMP 的 htdocs、/Library/WebServer/Documents、~/Sites、~/Herd 中的 PHP 檔案（.php .phtml .inc，包含 Composer 的 vendor）。不進入 node_modules 和 .git，也不跟隨連結。只滿足一部分時為 info，並顯示已滿足的條件。
-                • 工作階段檔案：只讀取工作階段資料夾正下方以 sess_ 開頭的檔案，不進入子資料夾。同時含有 upload_progress 標記與 PHP 程式碼的檔案（程式碼注入）為 critical，工作階段值中含有 PHP 起始標籤的為 high。本檢查不會移動檔案。critical 的隔離由每日與手動的 Web 規則掃描（feat_web_rules）完成。已用「排除並還原」還原的檔案不會被檢查。無法讀取的資料夾以 info 顯示為「無法讀取工作階段資料夾」。
-                • 結果的讀法：有 high 或 critical 項目時，開頭顯示「需要處理（高風險項目 N 項）」，否則顯示「沒有需要處理的項目」。接著顯示檢查的數量（PHP 執行檔、設定檔、工作階段檔案、資料夾）。項目依 [critical] [high] [medium] [info] 的順序排列，附有說明、處理方式與依據的路徑。找不到 PHP 時只顯示「未找到 PHP」。
-                • 判定範圍：只有這三項公告。不判定其他 PHP 漏洞，也不判定 WordPress 等應用程式的漏洞。
-                """,
-                recommendation: "如果版本早於修正版本，請更新 PHP。更新才是完整的解決辦法。暫時無法更新時，如果不使用 session.upload_progress.enabled，請將其設為 0 並重新啟動 PHP。這只是權宜之計，不能取代更新。"
             ),
             LocalizedEntry(
                 id: "feat_event_forwarding",
@@ -796,8 +779,8 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",
-                title: "Mac 安全稽核（22 個項目、分數與修正步驟）",
-                summary: "檢查六大領域（系統強化、網路防禦、驗證與存取控制、連接埠曝露、惡意軟體防護、實體裝置防護）共 22 個項目，並顯示 0 到 100 分的分數、等級，以及每個未通過項目的修正步驟。免費版即可使用。",
+                title: "Mac 安全稽核（23 個項目、分數與修正步驟）",
+                summary: "檢查六大領域（系統強化、網路防禦、驗證與存取控制、連接埠曝露、惡意軟體防護、實體裝置防護）共 23 個項目，並顯示 0 到 100 分的分數、等級，以及每個未通過項目的修正步驟。免費版即可使用。",
                 details: """
                 • 系統強化：1. FileVault、2. SIP（系統完整性保護）、3. Gatekeeper、4. 自動安全更新、5. Apple XProtect、6. 備份（Time Machine 最近一次備份在 7 天內；不檢查能否還原）。
                 • 網路防禦：7. macOS 防火牆、8. 隱形模式、9. Wi-Fi 加密強度、10. ARP 詐騙監控、11. 閘道 ARP 固定、12. 代理伺服器自動探索 (WPAD / PAC)。
@@ -807,6 +790,7 @@ extension RoamSwitchKnowledgeBase {
                 • 實體連接埠與裝置：20. 非法 USB / BadUSB 實體連接埠防護、21. macOS 配件連線保護。
                 • 不適用項目：受信任網路上的防火牆與隱形模式、遠端登入關閉時的 SSH 檢查，以及輔助工具連線前的 sudo 稽核，都會排除在分數計算之外。
                 • 22. 新增的受信任憑證（憑證授權單位）（`trust_anchors`，網路防禦）：針對使用者網域與管理員網域讀取 `security dump-trust-settings`。只有當人、管理員或描述檔設定過時，憑證才會帶有信任設定，所以列出的憑證都是有人新增的；Apple 自帶的根憑證不計入，信任結果為「deny」（不信任）的憑證也不計入。如果新增憑證的名稱看起來像攔截工具（mitm、proxy、charles、fiddler、burp、portswigger、zscaler、netskope、squid、inspection、sslsplit），該項不合格並列出名稱（最多 3 個）。其他新增憑證（公司根憑證、mkcert 等）作為資訊顯示，該項合格（若是你自己設定的就沒有問題）。無法讀取該指令時，該項為「無法確認」。原因：讀取加密通訊（包括密碼與 API 金鑰）的代理，需要 Mac 信任它的憑證授權單位。看不到的內容：應用程式自帶的憑證，以及憑證是何時新增的；新增的憑證出現時也不會通知。偵測涵蓋：T1553.004（部分）。不會變更任何內容，也不會傳送任何內容。
+                • 23. 容易被利用的弱點 (已安裝的軟體)（`package_cve_exposure`，系統強化）：檢查 Homebrew 套件與 PHP。將透過 `brew list --versions` 讀取的 Homebrew 套件，與更新程式下發的已簽章已知 CVE 資料（Homebrew 用）以及每天下發的 CISA KEV 清單比對。若 CISA 確認已被利用（KEV）的弱點，或 EPSS 達 90% 以上的弱點，仍留在受影響的版本中，則判為不合格，並顯示套件名稱與 CVE 編號（狀態欄最多 3 個）。風險接受尚未到期的項目不計入。對於 PHP，讀取 Homebrew、MAMP、Herd 與 PATH 中執行檔的版本，以及 php.ini、FPM 與 Apache 的設定。版本早於修補版本（兩個嚴重弱點 CVE-2026-109618 與 CVE-2026-109619，修補版本為 8.2.35、8.3.36、8.4.27、8.5.12；8.1 及更早版本沒有修補版本），或符合 CVE-2026-115560 的條件（設定為 php_binary 或 php_serialize、應用程式碼以 ini_set() 切換、upload_progress 已啟用，三者同時具備；目前沒有修補版本）時判為不合格。mod_php 或啟用 upload_progress 等中等以下的提示不會判為不合格。資料中收錄的 Homebrew php 依資料計算，不會重複計算。PHP 執行檔僅在顯示版本時啟動。不進行網路通訊。結果保留 30 分鐘，20 秒內未完成則顯示「無法確認」。沒有 Homebrew 套件也沒有 PHP 時判為不適用，不計入分數。沒有資料時同樣顯示「無法確認」。看不到的內容包括：非 Homebrew 安裝的 PHP 以外的軟體、資料中沒有對應項目的弱點，以及在最新 KEV 清單之後才列入 KEV 的 CVE（詳細欄會顯示資料版本與 KEV 日期）。PHP 的工作階段檔案由 Web shell 偵測規則的掃描讀取，不在本項目中。狀態欄會顯示已安裝套件中資料收錄的數量。
                 • 等級：100 分為 S、85 至 99 分為 A、70 至 84 分為 B、低於 70 分為 C。也可透過 MCP 工具 `get_security_report` 取得。
                 """,
                 recommendation: "定期開啟稽核報告，依照顯示的修正步驟處理標示 ⚠️ 的項目，並維持在 A 級以上。"
@@ -1475,11 +1459,11 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "faq_free_vs_pro",
                 title: "免費版與 Pro 永久版的差異",
-                summary: "免費版即包含依網路自動切換保護、22 項安全稽核，以及一系列手動檢查工具，且沒有時間限制。Pro 版則解鎖自動圍堵、即時防禦與巡邏警告。",
+                summary: "免費版即包含依網路自動切換保護、23 項安全稽核，以及一系列手動檢查工具，且沒有時間限制。Pro 版則解鎖自動圍堵、即時防禦與巡邏警告。",
                 details: """
                 【免費版】
                 • 依網路自動切換 3 個等級的 PF 封包過濾器，共享服務與 AirDrop 會自動停止並恢復
-                • Mac 安全稽核（22 個項目）、XProtect 狀態，以及檔案／應用程式安全性檢查
+                • Mac 安全稽核（23 個項目）、XProtect 狀態，以及檔案／應用程式安全性檢查
                 • 顯示公開連接埠與 USB 裝置清單
                 • 連結安全性診斷、手動機密資訊／API 金鑰洩露稽核、剪貼簿保護
                 • 套件 CVE 掃描、實證型漏洞驗證、Mac 安全日誌審計、通知歷史
