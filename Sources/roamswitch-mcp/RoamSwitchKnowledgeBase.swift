@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.10 (build 189).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.11 (build 190).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -496,6 +496,7 @@ public struct RoamSwitchKnowledgeBase: Sendable {
             EntryMeta(id: "alert_airgap_failed", topic: t, tags: ["alert", "airgap", "failed", "helper", "danger"]),
             EntryMeta(id: "alert_helper_disconnected", topic: t, tags: ["alert", "helper", "xpc", "error", "troubleshooting"]),
             EntryMeta(id: "alert_score_drop", topic: t, tags: ["alert", "score", "audit", "health", "recommendation"]),
+            EntryMeta(id: "alert_exposed_software", topic: t, tags: ["alert", "vulnerability", "cve", "kev", "epss", "homebrew", "php", "audit"]),
         ]
     }
 

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.10 (build 189).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.11 (build 190).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -1065,6 +1065,19 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: """
                 1. Apri il rapporto di audit dal menu (oppure usa lo strumento MCP `get_security_report`).
                 2. Risolvi i punti contrassegnati con ⚠️ seguendo i passaggi di correzione mostrati.
+                """
+            ),
+            LocalizedEntry(
+                id: "alert_exposed_software",
+                title: "⚠️ Vulnerabilità non corrette probabilmente sfruttate",
+                summary: "Inviato quando il punto di audit «Vulnerabilità probabilmente sfruttate (software installato)» torna a fallire, e di nuovo dopo un giorno finché continua a fallire (Pro; gli utenti Free lo trovano nella cronologia delle notifiche).",
+                details: """
+                • Causa: un pacchetto installato con Homebrew o PHP ha ancora, in una versione interessata, una vulnerabilità che la CISA ha confermato come sfruttata (KEV) o con EPSS pari o superiore al 90 %.
+                • Intervallo: controllo ogni ora. Inviato quando compare una nuova vulnerabilità e una volta al giorno finché restano le stesse.
+                """,
+                recommendation: """
+                1. Controlla i nomi della notifica in «Vulnerabilità probabilmente sfruttate (software installato)» nel rapporto di audit (menu, oppure strumento MCP `get_security_report`).
+                2. Aggiorna i pacchetti Homebrew eseguendo `brew upgrade` nel Terminale. Reinstalla il PHP che non proviene da Homebrew.
                 """
             ),
         ]

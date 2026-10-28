@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.10 (build 189).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.11 (build 190).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -1065,6 +1065,19 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: """
                 1. Ouvrez le rapport d'audit depuis le menu (ou utilisez l'outil MCP `get_security_report`).
                 2. Traitez les points marqués ⚠️ en suivant les étapes de correction affichées.
+                """
+            ),
+            LocalizedEntry(
+                id: "alert_exposed_software",
+                title: "⚠️ Vulnérabilités non corrigées facilement exploitables",
+                summary: "Envoyée lorsque le point d'audit « Vulnérabilités probablement exploitées (logiciels installés) » échoue à nouveau, puis de nouveau après un jour tant qu'il échoue (Pro ; les utilisateurs Free la retrouvent dans l'historique des notifications).",
+                details: """
+                • Cause : un paquet installé avec Homebrew ou PHP contient encore, dans une version concernée, une vulnérabilité que la CISA a confirmée comme exploitée (KEV) ou dont l'EPSS est de 90 % ou plus.
+                • Intervalle : vérification toutes les heures. Envoyée quand une nouvelle vulnérabilité apparaît, puis une fois par jour tant que les mêmes subsistent.
+                """,
+                recommendation: """
+                1. Vérifiez les noms de la notification sous « Vulnérabilités probablement exploitées (logiciels installés) » dans le rapport d'audit (menu, ou outil MCP `get_security_report`).
+                2. Mettez à jour les paquets Homebrew en exécutant `brew upgrade` dans le Terminal. Réinstallez le PHP qui ne vient pas de Homebrew.
                 """
             ),
         ]

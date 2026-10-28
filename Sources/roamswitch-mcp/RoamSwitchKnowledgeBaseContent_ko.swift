@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.10 (build 189).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.11 (build 190).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -1065,6 +1065,19 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: """
                 1. 메뉴에서 진단 보고서를 열거나(또는 MCP 도구 `get_security_report` 사용).
                 2. 표시된 개선 단계에 따라 ⚠️로 표시된 항목을 처리하세요.
+                """
+            ),
+            LocalizedEntry(
+                id: "alert_exposed_software",
+                title: "⚠️ 악용되기 쉬운 미수정 취약점",
+                summary: "진단 항목 「악용되기 쉬운 취약점 (설치된 소프트웨어)」이 새로 실패했을 때, 그리고 같은 상태가 하루 동안 이어졌을 때 보내는 알림입니다(알림은 Pro, Free는 알림 기록에 남습니다).",
+                details: """
+                • 원인: Homebrew로 설치한 패키지나 PHP에, CISA가 악용을 확인한(KEV) 취약점 또는 EPSS 90% 이상인 취약점이 영향을 받는 버전 그대로 남아 있습니다.
+                • 확인 간격: 1시간마다. 새 취약점이 추가되었을 때와, 같은 상태가 이어질 때(하루 한 번) 보냅니다.
+                """,
+                recommendation: """
+                1. 알림에 표시된 이름을 진단 보고서(메뉴 또는 MCP 도구 `get_security_report`)의 「악용되기 쉬운 취약점 (설치된 소프트웨어)」에서 확인하세요.
+                2. Homebrew로 설치한 것은 터미널에서 `brew upgrade`를 실행하세요. Homebrew 밖에서 설치한 PHP는 다시 설치하세요.
                 """
             ),
         ]

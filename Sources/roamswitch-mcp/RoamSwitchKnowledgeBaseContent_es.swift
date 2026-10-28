@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.10 (build 189).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.11 (build 190).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -1065,6 +1065,19 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: """
                 1. Abre el informe de auditoría desde el menú (o usa la herramienta MCP `get_security_report`).
                 2. Resuelve los puntos marcados con ⚠️ siguiendo los pasos de corrección mostrados.
+                """
+            ),
+            LocalizedEntry(
+                id: "alert_exposed_software",
+                title: "⚠️ Vulnerabilidades sin corregir con alta probabilidad de explotación",
+                summary: "Enviada cuando el punto de auditoría «Vulnerabilidades con alta probabilidad de explotación (software instalado)» vuelve a fallar, y de nuevo tras un día mientras siga fallando (Pro; los usuarios Free la ven en el historial de notificaciones).",
+                details: """
+                • Causa: un paquete instalado con Homebrew o PHP sigue teniendo, en una versión afectada, una vulnerabilidad que la CISA ha confirmado como explotada (KEV) o cuyo EPSS es del 90 % o más.
+                • Intervalo: comprobación cada hora. Se envía cuando aparece una vulnerabilidad nueva y una vez al día mientras sigan las mismas.
+                """,
+                recommendation: """
+                1. Comprueba los nombres del aviso en «Vulnerabilidades con alta probabilidad de explotación (software instalado)» del informe de auditoría (menú, o herramienta MCP `get_security_report`).
+                2. Actualiza los paquetes de Homebrew ejecutando `brew upgrade` en Terminal. Reinstala el PHP que no proceda de Homebrew.
                 """
             ),
         ]

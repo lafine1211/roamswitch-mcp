@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.10 (build 189).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.11 (build 190).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -1065,6 +1065,19 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: """
                 1. 请通过菜单中的「📊 打开综合诊断报告…」（或 MCP 的 `get_security_report`）查看内容。
                 2. 请按照显示的改进步骤，依次处理带有 ⚠️ 的项目。
+                """
+            ),
+            LocalizedEntry(
+                id: "alert_exposed_software",
+                title: "⚠️ 易被利用且尚未修复的漏洞",
+                summary: "诊断项目「易被利用的漏洞 (已安装的软件)」新变为不合格时，以及相同状态持续满一天时发出的通知（通知为 Pro；Free 版会留在通知历史中）。",
+                details: """
+                • 触发原因：通过 Homebrew 安装的软件包或 PHP 中，仍有 CISA 已确认被利用 (KEV) 的漏洞，或 EPSS 达 90% 以上的漏洞，且版本在受影响范围内。
+                • 检查间隔：每小时一次。出现新漏洞时，以及相同漏洞持续存在时（每天一次）发出。
+                """,
+                recommendation: """
+                1. 请在综合诊断报告（菜单，或 MCP 的 `get_security_report`）的「易被利用的漏洞 (已安装的软件)」中确认通知里的名称。
+                2. 通过 Homebrew 安装的软件，请在终端运行 `brew upgrade` 更新。不是通过 Homebrew 安装的 PHP，请重新安装。
                 """
             ),
         ]

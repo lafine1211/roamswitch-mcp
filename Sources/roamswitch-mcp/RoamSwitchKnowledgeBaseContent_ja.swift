@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.10 (build 189).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.11 (build 190).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -1064,6 +1064,19 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: """
                 1. メニューの「📊 総合診断レポートを開く…」（またはMCPの `get_security_report`）で内容を確認してください。
                 2. ⚠️ が付いた項目を、表示される改善手順に沿って順番に対応してください。
+                """
+            ),
+            LocalizedEntry(
+                id: "alert_exposed_software",
+                title: "⚠️ 悪用されやすい未修正の脆弱性",
+                summary: "診断項目「悪用されやすい脆弱性 (入っているソフトウェア)」が新たに不合格になったとき、また同じ状態が続いて1日たったときの通知です（通知はPro。Freeは通知履歴に残ります）。",
+                details: """
+                • 発生原因: Homebrewで入れたパッケージやPHPに、CISAが悪用を確認した(KEV)脆弱性、またはEPSS 90%以上の脆弱性が、影響を受ける版のまま残っています。
+                • 確認の間隔: 1時間ごと。新しい脆弱性が加わったときと、同じ状態が続くとき(1日1回)に出します。
+                """,
+                recommendation: """
+                1. 通知に出た名前を、メニューの「📊 総合診断レポートを開く…」（またはMCPの `get_security_report`）の「悪用されやすい脆弱性 (入っているソフトウェア)」で確認してください。
+                2. Homebrewで入れたものは、ターミナルで `brew upgrade` を実行してください。Homebrewの外に入れたPHPは、入れ直してください。
                 """
             ),
         ]

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.10 (build 189).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.11 (build 190).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -1064,6 +1064,19 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: """
                 1. Open the audit report from the menu (or use the MCP tool `get_security_report`).
                 2. Work through the items marked ⚠️ using the fix steps shown.
+                """
+            ),
+            LocalizedEntry(
+                id: "alert_exposed_software",
+                title: "⚠️ Unfixed Vulnerabilities Likely to Be Exploited",
+                summary: "Sent when the audit item “Likely-Exploited Vulnerabilities (Installed Software)” newly fails, and again after a day while it keeps failing (Pro; Free users find it in the notification history).",
+                details: """
+                • Cause: a Homebrew package or PHP still has a vulnerability that CISA has confirmed as exploited (KEV), or whose EPSS is 90% or higher, in an affected version.
+                • Interval: checked hourly. Sent when a new vulnerability appears, and once a day while the same ones remain.
+                """,
+                recommendation: """
+                1. Check the names in the notice under “Likely-Exploited Vulnerabilities (Installed Software)” in the audit report (menu, or the MCP tool `get_security_report`).
+                2. Update Homebrew packages by running `brew upgrade` in Terminal. Reinstall PHP that did not come from Homebrew.
                 """
             ),
         ]

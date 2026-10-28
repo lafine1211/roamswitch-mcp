@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.10 (build 189).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.11 (build 190).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -1065,6 +1065,19 @@ extension RoamSwitchKnowledgeBase {
                 recommendation: """
                 1. Öffnen Sie den Prüfbericht über das Menü (oder nutzen Sie das MCP-Tool `get_security_report`).
                 2. Arbeiten Sie die mit ⚠️ markierten Punkte anhand der angezeigten Korrekturschritte ab.
+                """
+            ),
+            LocalizedEntry(
+                id: "alert_exposed_software",
+                title: "⚠️ Ungepatchte, leicht ausnutzbare Schwachstellen",
+                summary: "Wird gesendet, wenn der Prüfpunkt „Leicht ausnutzbare Schwachstellen (installierte Software)“ neu fehlschlägt, und nach einem Tag erneut, solange er fehlschlägt (Pro; Free-Nutzer finden sie im Benachrichtigungsverlauf).",
+                details: """
+                • Ursache: Ein mit Homebrew installiertes Paket oder PHP enthält in einer betroffenen Version noch eine Schwachstelle, die laut CISA ausgenutzt wird (KEV) oder deren EPSS bei 90 % oder höher liegt.
+                • Intervall: stündliche Prüfung. Gesendet, wenn eine neue Schwachstelle hinzukommt, und einmal täglich, solange dieselben bestehen.
+                """,
+                recommendation: """
+                1. Prüfen Sie die Namen aus der Meldung im Prüfbericht (Menü oder MCP-Tool `get_security_report`) unter „Leicht ausnutzbare Schwachstellen (installierte Software)“.
+                2. Aktualisieren Sie Homebrew-Pakete mit `brew upgrade` im Terminal. PHP, das nicht von Homebrew stammt, installieren Sie neu.
                 """
             ),
         ]
