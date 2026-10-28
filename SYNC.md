@@ -68,6 +68,7 @@ All files live in `Sources/roamswitch-mcp/`.
 | `AgentSetupBaseline.swift` | `RoamSwitch/AgentSetupBaseline.swift` |
 | `PromptInjectionSignals.swift` | `RoamSwitch/PromptInjectionSignals.swift` |
 | `AgentSetupSarif.swift` | `RoamSwitch/AgentSetupSarif.swift` |
+| `ActiveVulnScanSarif.swift` | `RoamSwitch/ActiveVulnScanSarif.swift` |
 | `DetectionCoverage.swift` | `RoamSwitch/DetectionCoverage.swift` |
 | `BackupRecency.swift` | `RoamSwitch/BackupRecency.swift` |
 | `PackageCveEpss.swift` | `RoamSwitch/PackageCveEpss.swift` |
@@ -148,6 +149,9 @@ via `@testable import RoamSwitch`. Only `main.swift` (the stdin→stdout pump) i
 | `MCPConfigAuditorTests.swift` | `RoamSwitchTests/MCPConfigAuditorTests.swift` |
 | `PromptInjectionSignalsTests.swift` | `RoamSwitchTests/PromptInjectionSignalsTests.swift` |
 | `AgentSetupSarifTests.swift` | `RoamSwitchTests/AgentSetupSarifTests.swift` |
+| `ActiveVulnScanSarifTests.swift` | `RoamSwitchTests/ActiveVulnScanSarifTests.swift` |
+| `SarifRuleIdStabilityTests.swift` | `RoamSwitchTests/SarifRuleIdStabilityTests.swift` |
+| `IncidentReconciliationTests.swift` | `RoamSwitchTests/IncidentReconciliationTests.swift` |
 | `DetectionCoverageTests.swift` | `RoamSwitchTests/DetectionCoverageTests.swift` |
 | `LocalAIRuntimeTests.swift` | `RoamSwitchTests/LocalAIRuntimeTests.swift` |
 | `GuardReaderHealthTests.swift` | `RoamSwitchTests/GuardReaderHealthTests.swift` |

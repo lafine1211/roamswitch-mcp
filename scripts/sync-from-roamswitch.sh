@@ -46,7 +46,7 @@ CORE=(ProcessWait AppLanguage TrustedNetwork GatewayFingerprint WiFiSecurityMoni
       BrowserCredentialWatchStatusReader \
       PortAnomalyStatusReader RuntimeThreatStatusReader NotificationHistory \
       ContainmentIncidentTimeline NetworkHistoryGuard MCPSensorAuditStatusReader \
-      RansomwareSnapshotStatusReader MCPExecRecorderTools AgentSetupAuditor AgentSetupBaseline SSHGuardStatusReader PromptInjectionSignals AgentSetupSarif DetectionCoverage \
+      RansomwareSnapshotStatusReader MCPExecRecorderTools AgentSetupAuditor AgentSetupBaseline SSHGuardStatusReader PromptInjectionSignals AgentSetupSarif ActiveVulnScanSarif DetectionCoverage \
       BackupRecency PackageCveEpss VulnerabilityAcceptance DependencySourceScan \
       ProxyAutoDiscoveryCheck AgentCredentialFileCheck \
       DecoyPlacement FeedUpdateStatus LinkGuardEnforcement \
@@ -64,7 +64,7 @@ SHARED=(RansomwareSnapshotLogic ExecEventModel ExecLogStore ExecProcessTree Exec
 TESTS=(LinkSafetyAuditorTests CryptoSecretDetectionTests MCPKnowledgeBaseTests MCPProtocolTests \
        MCPResponseFormattingTests ARPSpoofMonitorTests MCPServerRobustnessTests ParserRobustnessTests \
        TyposquatGuardTests RansomwareRecoveryMCPTests RoamSwitchMCPSkillsContentTests \
-       ActiveVulnScanTests MCPConfigAuditorTests AgentSetupAuditorTests KnownAttackServersTests PromptInjectionSignalsTests AgentSetupSarifTests DetectionCoverageTests LocalAIRuntimeTests GuardReaderHealthTests StrictJSONTests \
+       ActiveVulnScanTests MCPConfigAuditorTests AgentSetupAuditorTests KnownAttackServersTests PromptInjectionSignalsTests AgentSetupSarifTests ActiveVulnScanSarifTests SarifRuleIdStabilityTests IncidentReconciliationTests DetectionCoverageTests LocalAIRuntimeTests GuardReaderHealthTests StrictJSONTests \
        AgentCredentialFileCheckTests BackupRecencyTests DependencySourceScanTests PackageCveEpssTests \
        ProbeCatalogTests MCPToolAnnotationsTests \
        FrontendBundleScanTests ForensicChainTests TrustAnchorCheckTests ReflectedXssProbeTests)
