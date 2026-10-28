@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.9 (build 188).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.10 (build 189).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -291,7 +291,7 @@ public struct MCPTyposquatScanResultPayload: Codable, Equatable {
 }
 
 public struct MCPDependencySourceFindingPayload: Codable, Equatable {
-    /// `pip_extra_index_url` or `npm_scope_not_pinned`.
+    /// `pip_extra_index_url`, `npm_scope_not_pinned` or `release_age_gate_missing`.
     public let kind: String
     public let file: String
     /// 1-based line (pip); absent for npm.
@@ -302,6 +302,12 @@ public struct MCPDependencySourceFindingPayload: Codable, Equatable {
     public let scope: String?
     /// npm: how many packages of the scope the lockfile resolves from `host`; 0 for pip.
     public let packageCount: Int
+    /// `release_age_gate_missing` only: "npm", "pnpm", "yarn", "bun" or "uv" (`host` is empty then).
+    public var manager: String? = nil
+    /// `release_age_gate_missing` only: the setting that would turn the wait on, for that manager.
+    public var setting: String? = nil
+    /// `release_age_gate_missing` only, and only when true: a setting exists and is switched off (0, false).
+    public var explicitlyDisabled: Bool? = nil
 }
 
 /// Result payload for `run_dependency_source_scan` — settings that allow dependency confusion, found by reading
@@ -803,10 +809,43 @@ public struct MCPEvidenceRefPayload: Codable, Equatable {
     public let sha256: String?
 }
 
+/// One reconciled incident: the timeline records that belong together, summarised. Built by
+/// `MCPResponseFormatting.reconcileIncidents`; `events` stays the record of truth.
+public struct MCPReconciledIncidentPayload: Codable, Equatable {
+    /// The `rootEventID` the records share when they have one, else the id of the oldest record.
+    public let incidentId: String
+    public let firstTimestamp: String
+    public let lastTimestamp: String
+    public let eventCount: Int
+    /// Ids of the records, oldest first. Look them up in `events`.
+    public let eventIds: [String]
+    /// Distinct `source` values, in the order they first appear.
+    public let sources: [String]
+    /// More than one guard recorded something for this incident.
+    public let crossSource: Bool
+    /// From the oldest record that names a process.
+    public let processName: String?
+    public let processID: Int32?
+    /// The highest severity among the records.
+    public let severity: String
+    /// "open" when any detection is unresolved; otherwise the status of the last detection. "recorded" when the
+    /// incident holds only evidence captures or expired risk acceptances (nothing to resolve).
+    public let status: String
+    public let attackTechniques: [String]
+    /// Evidence bundles saved for the records (at most 8), no content.
+    public var evidenceRefs: [MCPEvidenceRefPayload]? = nil
+    /// The summary of the oldest record with the highest severity.
+    public let summary: String
+}
+
 public struct MCPIncidentTimelinePayload: Codable, Equatable {
     public let unresolvedCount: Int
     public let events: [MCPIncidentTimelineEventPayload]
     public let caveats: [String]
+    /// The records grouped into incidents by `rootEventID` and by the same process within 15 minutes, newest first.
+    /// A grouping aid: `events` is the record of truth.
+    public var incidents: [MCPReconciledIncidentPayload] = []
+    public var openIncidentCount: Int = 0
     /// `ok`, `missing` (no incident was ever recorded) or `unreadable` (the file exists but cannot be read: an empty
     /// `events` list then does NOT mean there were no incidents).
     public var recordFile: String? = nil
@@ -1405,6 +1444,138 @@ public enum MCPResponseFormatting {
         }
     }
 
+    /// "open" while a record has neither a resolution nor a resolve time.
+    /// Sources whose records are never resolved and are not detections: an evidence bundle that was saved, and a
+    /// risk acceptance that ran out. They do not keep an incident open. (The Linux edition's list also holds Fleet.)
+    static func isNonDetection(_ source: ContainmentIncidentSource) -> Bool {
+        source == .forensicCapture || source == .vulnerabilityAcceptance
+    }
+
+    static func incidentStatus(of event: ContainmentIncidentEvent) -> String {
+        if let resolution = event.resolution { return resolution.rawValue }
+        return event.resolvedAt != nil ? "released" : "open"
+    }
+
+    /// Records of one process further apart than this are not taken as one incident on the process alone.
+    static let incidentProcessGap: TimeInterval = 15 * 60
+    static let maxIncidentEvidenceRefs = 8
+
+    static func severityRank(_ severity: String) -> Int {
+        switch severity.lowercased() {
+        case "critical": return 5
+        case "high": return 4
+        case "medium", "warning": return 3
+        case "low": return 2
+        case "info": return 1
+        default: return 0
+        }
+    }
+
+    /// Groups timeline records into incidents. Two records belong together when (a) they share a `rootEventID`, or one
+    /// is the root or the parent of the other, or (b) they carry the same process id and name and the next record of
+    /// that process is at most 15 minutes after the previous one. The grouping is transitive. A record with neither
+    /// link is an incident of its own. It is an aid for reading the timeline, not a statement that two records are one
+    /// attack: PIDs are reused and one process can be involved in unrelated events.
+    public static func reconcileIncidents(events: [ContainmentIncidentEvent]) -> [MCPReconciledIncidentPayload] {
+        let sorted = events.enumerated().sorted { a, b in
+            a.element.timestamp != b.element.timestamp ? a.element.timestamp < b.element.timestamp : a.offset < b.offset
+        }.map(\.element)
+        guard !sorted.isEmpty else { return [] }
+
+        var parent = Array(0..<sorted.count)
+        func find(_ i: Int) -> Int {
+            var root = i
+            while parent[root] != root { root = parent[root] }
+            var node = i
+            while parent[node] != root { let next = parent[node]; parent[node] = root; node = next }
+            return root
+        }
+        func union(_ a: Int, _ b: Int) {
+            let ra = find(a), rb = find(b)
+            if ra != rb { parent[max(ra, rb)] = min(ra, rb) }
+        }
+
+        // (a) links recorded by the guards themselves.
+        var indexOfID: [UUID: Int] = [:]
+        for (i, e) in sorted.enumerated() { indexOfID[e.id] = i }
+        var firstWithRoot: [UUID: Int] = [:]
+        for (i, e) in sorted.enumerated() {
+            if let root = e.rootEventID {
+                if let rootIndex = indexOfID[root] { union(i, rootIndex) }
+                if let seen = firstWithRoot[root] { union(i, seen) } else { firstWithRoot[root] = i }
+            }
+            if let p = e.parentEventID, let parentIndex = indexOfID[p] { union(i, parentIndex) }
+        }
+
+        // (b) the same process, close in time.
+        var byProcess: [String: [Int]] = [:]
+        for (i, e) in sorted.enumerated() {
+            guard let pid = e.processID, pid > 0 else { continue }
+            byProcess["\(pid)|\(e.processName ?? "")", default: []].append(i)
+        }
+        for indexes in byProcess.values {
+            for (a, b) in zip(indexes, indexes.dropFirst()) where sorted[b].timestamp.timeIntervalSince(sorted[a].timestamp) <= incidentProcessGap {
+                union(a, b)
+            }
+        }
+
+        var members: [Int: [Int]] = [:]
+        for i in sorted.indices { members[find(i), default: []].append(i) }
+
+        let iso = ISO8601DateFormatter()
+        let referencedAsRoot = Set(sorted.compactMap(\.rootEventID))
+        var incidents: [(last: Date, payload: MCPReconciledIncidentPayload)] = []
+        for indexes in members.values {
+            let group = indexes.map { sorted[$0] }   // oldest first: indexes are ascending and `sorted` is by time
+            let incidentID = group.lazy.compactMap { $0.rootEventID ?? (referencedAsRoot.contains($0.id) ? $0.id : nil) }.first ?? group[0].id
+
+            var sources: [String] = []
+            for e in group where !sources.contains(e.source.rawValue) { sources.append(e.source.rawValue) }
+
+            let top = group.map { severityRank($0.severity) }.max() ?? 0
+            let topEvent = group.first { severityRank($0.severity) == top } ?? group[0]
+
+            let detections = group.filter { !isNonDetection($0.source) }
+            let status: String
+            if detections.isEmpty { status = "recorded" }
+            else if detections.contains(where: { incidentStatus(of: $0) == "open" }) { status = "open" }
+            else { status = incidentStatus(of: detections[detections.count - 1]) }
+
+            var techniques: [String] = []
+            for e in group { if let t = e.attackTechnique, !techniques.contains(t) { techniques.append(t) } }
+
+            var refs: [MCPEvidenceRefPayload] = []
+            for e in group {
+                for r in e.evidenceRefs {
+                    let p = MCPEvidenceRefPayload(bundle: r.bundle, artifact: r.artifact, sha256: r.sha256)
+                    if !refs.contains(p), refs.count < maxIncidentEvidenceRefs { refs.append(p) }
+                }
+            }
+
+            let named = group.first { $0.processName != nil }
+            let payload = MCPReconciledIncidentPayload(
+                incidentId: incidentID.uuidString,
+                firstTimestamp: iso.string(from: group[0].timestamp),
+                lastTimestamp: iso.string(from: group[group.count - 1].timestamp),
+                eventCount: group.count,
+                eventIds: group.map { $0.id.uuidString },
+                sources: sources,
+                crossSource: sources.count > 1,
+                processName: named?.processName,
+                processID: named?.processID,
+                severity: topEvent.severity,
+                status: status,
+                attackTechniques: techniques,
+                evidenceRefs: refs.isEmpty ? nil : refs,
+                summary: topEvent.summary
+            )
+            incidents.append((group[group.count - 1].timestamp, payload))
+        }
+        return incidents.sorted { a, b in
+            a.last != b.last ? a.last > b.last : a.payload.incidentId < b.payload.incidentId
+        }.map(\.payload)
+    }
+
     public static func makeIncidentTimelinePayload(events: [ContainmentIncidentEvent], fileState: ContainmentIncidentTimeline.FileState = .ok) -> MCPIncidentTimelinePayload {
         let iso = ISO8601DateFormatter()
         var payloads: [MCPIncidentTimelineEventPayload] = []
@@ -1439,7 +1610,8 @@ public enum MCPResponseFormatting {
             ))
         }
         var caveats: [String] = [
-            loc("summary は検知時点に記録された文言をそのまま返します。後から表示言語を変更しても、過去の記録には反映されません。")
+            loc("summary は検知時点に記録された文言をそのまま返します。後から表示言語を変更しても、過去の記録には反映されません。"),
+            loc("事象(incidents)は rootEventID と、同じプロセスの15分以内の間隔による自動的なまとめです。同じ攻撃だという証明ではありません。個々の events が正本です。")
         ]
         if fileState == .unreadable {
             caveats.append(loc("インシデントの記録ファイルを読めませんでした。events が空でも、インシデントがなかったとは限りません。壊れたファイルは、次の記録の前に .bak として退避されます。"))
@@ -1450,7 +1622,9 @@ public enum MCPResponseFormatting {
         case .missing: fileName = "missing"
         case .unreadable: fileName = "unreadable"
         }
-        return MCPIncidentTimelinePayload(unresolvedCount: unresolved, events: payloads, caveats: caveats, recordFile: fileName)
+        let incidents = reconcileIncidents(events: events)
+        return MCPIncidentTimelinePayload(unresolvedCount: unresolved, events: payloads, caveats: caveats, incidents: incidents,
+                                          openIncidentCount: incidents.filter { $0.status == "open" }.count, recordFile: fileName)
     }
 
     // MARK: get_network_history

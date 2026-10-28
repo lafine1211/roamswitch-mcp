@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.9 (build 188).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.10 (build 189).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -60,13 +60,16 @@ enum ProbeCatalog {
 
     /// The generic web checks (`ActiveVulnScan` Phase 3) and the nmap layer (Phase 4). Request counts are the
     /// most a run sends to one port: CORS 1, traversal 3, open redirect 8, SSRF 12 (eight parameter names at `/`
-    /// plus `url` at four paths).
+    /// plus `url` at four paths), reflected XSS 13.
+    /// These ids are SARIF rule ids too (`ActiveVulnScan.sarifLog`): add, never rename or remove (`docs/sarif_rule_id_policy.md`).
     static let webChecks: [String: Declaration] = [
         "webvuln-cors": Declaration(sideEffects: [.iocInLogs], evidenceKind: .confirmed),
         "webvuln-traversal": Declaration(sideEffects: [.iocInLogs], evidenceKind: .confirmed),
         "webvuln-redirect": Declaration(sideEffects: [.iocInLogs, .manyRequests], evidenceKind: .confirmed),
         "webvuln-ssrf": Declaration(sideEffects: [.iocInLogs, .temporaryListener, .manyRequests], evidenceKind: .confirmed),
         "webvuln-unauth-admin": Declaration(sideEffects: [.iocInLogs, .manyRequests], evidenceKind: .confirmed),
+        // One request for `/` plus at most `ReflectedXssProbe.maxCandidates` parameter requests; the marker holds `<`, `>` and quotes.
+        "webvuln-xss": Declaration(sideEffects: [.iocInLogs, .manyRequests], evidenceKind: .confirmed),
         nmapNSEProbeName: Declaration(sideEffects: [.manyRequests], evidenceKind: .externalToolReport),
     ]
 

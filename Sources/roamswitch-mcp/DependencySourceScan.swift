@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.9 (build 188).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.10 (build 189).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -18,6 +18,22 @@ import Foundation
 ///    folder) maps that scope to that registry with `@acme:registry=`. Without the mapping, an install
 ///    that has no lockfile entry for the name asks the default registry.
 ///
+///  * `release_age_gate_missing`: a lockfile of npm, pnpm, yarn Berry, bun or uv, and no setting that makes the
+///    package manager skip versions published only moments ago. Most malicious versions of a popular package are
+///    caught and withdrawn within days, so a short wait (a few days) before a new version may be installed
+///    removes most of that exposure. This is NOT a finding that a bad package is present: it says a defence is
+///    absent. The setting read is `min-release-age` (days) or `before` in `.npmrc` for npm; `minimumReleaseAge`
+///    (minutes) in `pnpm-workspace.yaml` or pnpm's global `config.yaml`, or `minimum-release-age` in `.npmrc`,
+///    for pnpm; `npmMinimalAgeGate` in `.yarnrc.yml` for yarn; `[install] minimumReleaseAge` (seconds) in
+///    `bunfig.toml` for bun; `exclude-newer` in `uv.toml` or `[tool.uv]` of `pyproject.toml` for uv. Project
+///    files are read from the lockfile's folder up to the watched folder, then the user's files in the home
+///    folder (`~/.npmrc`, `~/.yarnrc.yml`, `~/.bunfig.toml`, `~/.config/uv/uv.toml`, pnpm's `config.yaml`).
+///    pnpm 11 and later wait a day by default (`packageManager` in `package.json`), so a project that names
+///    pnpm 11 or later is reported only when the wait is set to 0. NOT read: environment variables
+///    (`NPM_CONFIG_*`, `PNPM_CONFIG_*`, `UV_EXCLUDE_NEWER`), command-line flags, system-wide files, and the
+///    CI configuration. A project that sets the wait only there is reported as missing. The wait itself is
+///    not judged: any value above zero counts.
+///
 /// What this is not: it never asks a registry whether a name is free to claim, so it does not know that an
 /// attack is possible, only that the setting allows one. It sends no network request and executes nothing.
 /// Not evaluated: unscoped npm packages from a private registry (no `.npmrc` key can pin them), yarn Berry
@@ -28,6 +44,7 @@ enum DependencySourceScan {
     enum Kind: String, Codable, Equatable {
         case pipExtraIndexUrl = "pip_extra_index_url"
         case npmScopeNotPinned = "npm_scope_not_pinned"
+        case releaseAgeGateMissing = "release_age_gate_missing"
     }
 
     struct Finding: Identifiable, Equatable {
@@ -42,8 +59,12 @@ enum DependencySourceScan {
         let scope: String?
         /// npm: how many packages of the scope the lockfile resolves from `host`. 0 for pip.
         let packageCount: Int
+        /// `release_age_gate_missing` only: "npm", "pnpm", "yarn", "bun" or "uv". `host` is empty for this kind.
+        var manager: String? = nil
+        /// `release_age_gate_missing` only: a setting exists and is switched off (0, `false`), as opposed to absent.
+        var explicitlyDisabled = false
 
-        var id: String { "\(kind.rawValue)|\(file)|\(line ?? 0)|\(scope ?? "")|\(host)" }
+        var id: String { "\(kind.rawValue)|\(file)|\(line ?? 0)|\(scope ?? "")|\(host)|\(manager ?? "")" }
         var fileName: String { (file as NSString).lastPathComponent }
         var projectDisplay: String { ((file as NSString).deletingLastPathComponent as NSString).abbreviatingWithTildeInPath }
     }
@@ -262,6 +283,186 @@ enum DependencySourceScan {
             .map { Finding(kind: .npmScopeNotPinned, file: file, line: nil, host: $0.host, scope: $0.scope, packageCount: $0.names.count) }
     }
 
+    // MARK: - Release age gate
+
+    /// What one configuration source says about the wait.
+    enum GateSetting: Int, Comparable {
+        case absent = 0, disabled = 1, active = 2
+        static func < (a: GateSetting, b: GateSetting) -> Bool { a.rawValue < b.rawValue }
+    }
+
+    /// The value of a setting: switched off (`0`, `0d`, `false`, `null`), absent (empty), or on. A value that
+    /// holds an environment variable (`${AGE}`) cannot be known and counts as on, like an unknown registry URL.
+    static func gateValue(_ raw: String) -> GateSetting {
+        var value = raw
+        if let hash = value.range(of: " #") { value = String(value[..<hash.lowerBound]) }
+        value = value.trimmingCharacters(in: CharacterSet(charactersIn: " \t\"'"))
+        if value.isEmpty { return .absent }
+        let lower = value.lowercased()
+        if lower == "false" || lower == "null" || lower == "~" { return .disabled }
+        if lower.range(of: #"^0+(\.0+)?[a-z]*$"#, options: .regularExpression) != nil { return .disabled }
+        return .active
+    }
+
+    private static func strongest(_ values: [GateSetting]) -> GateSetting { values.max() ?? .absent }
+
+    /// `key=value` lines of an `.npmrc` (`#` and `;` start a comment line). `keys` are matched exactly, with `_`
+    /// and `-` taken as the same character.
+    static func npmrcGate(_ text: String, keys: [String]) -> GateSetting {
+        let wanted = Set(keys.map { $0.replacingOccurrences(of: "_", with: "-").lowercased() })
+        var found: [GateSetting] = []
+        for raw in text.split(whereSeparator: \.isNewline) {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            guard !line.hasPrefix("#"), !line.hasPrefix(";"), let eq = line.firstIndex(of: "=") else { continue }
+            let key = line[..<eq].trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "_", with: "-").lowercased()
+            guard wanted.contains(key) else { continue }
+            found.append(gateValue(String(line[line.index(after: eq)...])))
+        }
+        return strongest(found)
+    }
+
+    /// A top-level `key: value` line of a YAML file (`pnpm-workspace.yaml`, `.yarnrc.yml`, pnpm's `config.yaml`).
+    /// Indented lines belong to another key and are skipped.
+    static func yamlTopLevelGate(_ text: String, key: String) -> GateSetting {
+        var found: [GateSetting] = []
+        for raw in text.split(whereSeparator: \.isNewline) {
+            guard let first = raw.first, first != " ", first != "\t", first != "#", first != "-" else { continue }
+            guard let colon = raw.firstIndex(of: ":") else { continue }
+            let name = raw[..<colon].trimmingCharacters(in: CharacterSet(charactersIn: " \"'"))
+            guard name == key else { continue }
+            found.append(gateValue(String(raw[raw.index(after: colon)...])))
+        }
+        return strongest(found)
+    }
+
+    /// `key = value` under `[table]` of a TOML file, or the dotted form `table.key = value` at the top level.
+    /// `table` nil: the top level (`uv.toml`).
+    static func tomlGate(_ text: String, table: String?, key: String) -> GateSetting {
+        var current: String? = nil
+        var found: [GateSetting] = []
+        for raw in text.split(whereSeparator: \.isNewline) {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            if line.isEmpty || line.hasPrefix("#") { continue }
+            if line.hasPrefix("[") {
+                if line.hasPrefix("[["), let end = line.range(of: "]]") { current = String(line.dropFirst(2)[..<end.lowerBound]); continue }
+                guard let end = line.firstIndex(of: "]") else { continue }
+                current = String(line[line.index(after: line.startIndex)..<end]).trimmingCharacters(in: .whitespaces)
+                continue
+            }
+            guard let eq = line.firstIndex(of: "=") else { continue }
+            let name = line[..<eq].trimmingCharacters(in: CharacterSet(charactersIn: " \"'"))
+            let inTarget = (current == table)
+            let dotted = table.map { "\($0).\(key)" }
+            guard (inTarget && name == key) || (current == nil && dotted != nil && name == dotted) else { continue }
+            found.append(gateValue(String(line[line.index(after: eq)...])))
+        }
+        return strongest(found)
+    }
+
+    /// The major version of the `pnpm@X` named by `package.json`'s `packageManager` field, nil if it names another
+    /// tool or none.
+    static func pnpmMajor(packageJSON text: String) -> Int? {
+        guard let data = text.data(using: .utf8),
+              let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let manager = root["packageManager"] as? String, manager.hasPrefix("pnpm@") else { return nil }
+        return Int(manager.dropFirst("pnpm@".count).prefix { $0.isNumber })
+    }
+
+    /// The setting that turns the wait on, as the person would write it, per manager.
+    static func gateSettingName(manager: String) -> String {
+        switch manager {
+        case "npm": return "min-release-age (.npmrc)"
+        case "pnpm": return "minimumReleaseAge (pnpm-workspace.yaml)"
+        case "yarn": return "npmMinimalAgeGate (.yarnrc.yml)"
+        case "bun": return "install.minimumReleaseAge (bunfig.toml)"
+        case "uv": return "exclude-newer (uv.toml / pyproject.toml)"
+        default: return manager
+        }
+    }
+
+    /// Lockfile name -> package manager. A yarn.lock is Berry (the only yarn with the setting) when it holds `__metadata:`.
+    static func gateManager(lockfile name: String, lockfileText: String?) -> String? {
+        switch name {
+        case "package-lock.json", "npm-shrinkwrap.json": return "npm"
+        case "pnpm-lock.yaml": return "pnpm"
+        case "yarn.lock": return (lockfileText?.contains("__metadata:") == true) ? "yarn" : nil
+        case "bun.lock", "bun.lockb": return "bun"
+        case "uv.lock": return "uv"
+        default: return nil
+        }
+    }
+
+    /// Folders from `directory` up to `root`, as `pinnedScopes` walks them.
+    private static func foldersUp(from directory: String, root: String) -> [String] {
+        var dirs: [String] = []
+        var current = directory
+        while SafeScanFS.isWithin(current, root: root) {
+            dirs.append(current)
+            if current == root { break }
+            current = (current as NSString).deletingLastPathComponent
+        }
+        return dirs
+    }
+
+    private static func readText(_ path: String) -> String? {
+        SafeScanFS.readRegularFile(atPath: path, maxBytes: SafeScanFS.maxFileBytes).flatMap { String(data: $0, encoding: .utf8) }
+    }
+
+    /// What the files that apply to a lockfile in `directory` say about the wait: project files from `directory`
+    /// up to `root`, then the user's files under `home`.
+    static func releaseAgeSetting(manager: String, directory: String, root: String, home: String?) -> GateSetting {
+        var settings: [GateSetting] = []
+        func file(_ dir: String, _ name: String) -> String? { readText((dir as NSString).appendingPathComponent(name)) }
+        for dir in foldersUp(from: directory, root: root) {
+            switch manager {
+            case "npm":
+                if let t = file(dir, ".npmrc") { settings.append(npmrcGate(t, keys: ["min-release-age", "before"])) }
+            case "pnpm":
+                if let t = file(dir, "pnpm-workspace.yaml") { settings.append(yamlTopLevelGate(t, key: "minimumReleaseAge")) }
+                if let t = file(dir, ".npmrc") { settings.append(npmrcGate(t, keys: ["minimum-release-age", "minimumReleaseAge"])) }
+            case "yarn":
+                if let t = file(dir, ".yarnrc.yml") { settings.append(yamlTopLevelGate(t, key: "npmMinimalAgeGate")) }
+            case "bun":
+                if let t = file(dir, "bunfig.toml") { settings.append(tomlGate(t, table: "install", key: "minimumReleaseAge")) }
+            case "uv":
+                if let t = file(dir, "uv.toml") { settings.append(tomlGate(t, table: nil, key: "exclude-newer")) }
+                if let t = file(dir, "pyproject.toml") { settings.append(tomlGate(t, table: "tool.uv", key: "exclude-newer")) }
+            default: break
+            }
+        }
+        if let home {
+            switch manager {
+            case "npm":
+                if let t = file(home, ".npmrc") { settings.append(npmrcGate(t, keys: ["min-release-age", "before"])) }
+            case "pnpm":
+                if let t = file(home, ".npmrc") { settings.append(npmrcGate(t, keys: ["minimum-release-age", "minimumReleaseAge"])) }
+                for path in ["Library/Preferences/pnpm/config.yaml", ".config/pnpm/config.yaml"] {
+                    if let t = file(home, path) { settings.append(yamlTopLevelGate(t, key: "minimumReleaseAge")) }
+                }
+            case "yarn":
+                if let t = file(home, ".yarnrc.yml") { settings.append(yamlTopLevelGate(t, key: "npmMinimalAgeGate")) }
+            case "bun":
+                if let t = file(home, ".bunfig.toml") { settings.append(tomlGate(t, table: "install", key: "minimumReleaseAge")) }
+            case "uv":
+                if let t = file(home, ".config/uv/uv.toml") { settings.append(tomlGate(t, table: nil, key: "exclude-newer")) }
+            default: break
+            }
+        }
+        return strongest(settings)
+    }
+
+    /// The finding for one lockfile, nil when the wait is set (or the manager waits by default).
+    static func releaseAgeFinding(manager: String, lockfile: String, root: String, home: String?) -> Finding? {
+        let directory = (lockfile as NSString).deletingLastPathComponent
+        let setting = releaseAgeSetting(manager: manager, directory: directory, root: root, home: home)
+        if setting == .active { return nil }
+        if manager == "pnpm", setting != .disabled,
+           let major = readText((directory as NSString).appendingPathComponent("package.json")).flatMap(pnpmMajor(packageJSON:)),
+           major >= 11 { return nil }
+        return Finding(kind: .releaseAgeGateMissing, file: lockfile, line: nil, host: "", scope: nil, packageCount: 0,
+                       manager: manager, explicitlyDisabled: setting == .disabled)
+    }
+
     // MARK: - Walking
 
     private static let skipDirNames: Set<String> =
@@ -313,6 +514,13 @@ enum DependencySourceScan {
                 continue
             }
             let name = entry.name
+            // bun and uv lockfiles are not read (bun.lockb is binary); the manager is known from the name.
+            if name == "bun.lock" || name == "bun.lockb" || name == "uv.lock",
+               let manager = gateManager(lockfile: name, lockfileText: nil),
+               let finding = releaseAgeFinding(manager: manager, lockfile: entry.path, root: scopeRoot, home: home) {
+                out.append(finding)
+                continue
+            }
             let isPip = isRequirementsFile(name) || name == "pip.conf" || name == "pyproject.toml" || name == "uv.toml"
             guard isPip || npmLockfiles.contains(name),
                   let data = SafeScanFS.readRegularFile(atPath: entry.path, maxBytes: SafeScanFS.maxLockfileBytes),
@@ -331,6 +539,10 @@ enum DependencySourceScan {
                 case "yarn.lock": entries = resolvedEntries(yarnLock: text)
                 case "pnpm-lock.yaml": entries = resolvedEntries(pnpmLock: text)
                 default: entries = resolvedEntries(packageLock: text)
+                }
+                if let manager = gateManager(lockfile: name, lockfileText: text),
+                   let finding = releaseAgeFinding(manager: manager, lockfile: entry.path, root: scopeRoot, home: home) {
+                    out.append(finding)
                 }
                 let pinned = pinnedScopes(forLockfileIn: (entry.path as NSString).deletingLastPathComponent, root: scopeRoot, home: home, cache: &npmrcCache)
                 out.append(contentsOf: npmFindings(entries: entries, pinned: pinned, file: entry.path))

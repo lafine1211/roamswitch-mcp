@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.9 (build 188).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.10 (build 189).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -103,6 +103,7 @@ enum AgentSetupAuditor {
         }
     }
 
+    // These ids are SARIF rule ids: add, never rename or remove (docs/sarif_rule_id_policy.md, SarifRuleIdStabilityTests).
     static let findingIDs = [
         "hidden_tag_characters", "invisible_characters", "override_instruction", "remote_script_exec",
         "encoded_payload_exec", "credential_access", "credential_exfil_shape", "exfil_endpoint",
