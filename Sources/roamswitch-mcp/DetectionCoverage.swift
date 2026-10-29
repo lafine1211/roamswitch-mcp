@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.13 (build 192).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.14 (build 193).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -236,6 +236,12 @@ enum DetectionCoverage {
         Entry(technique: "T1505.003", name: "Server Software Component: Web Shell", coverage: .partial,
               sources: [guardSource("webRulesFolderScan"), guardSource("webMailDownloadGuard"), guardSource("execRecorder"), rule("exec.shell_from_service")],
               blindSpot: "Local web roots, project folders, the download folders and the PHP session folders (listed one level deep, `sess_` files only). A web shell written anywhere else is not examined, there is no view of a remote server, and a file larger than the read limit is checked at its start only. A web shell that runs code inside the web server process without starting a program is not seen. The exec recorder (opt-in) notifies a shell started by a service process (httpd, nginx, php-fpm, java, tomcat, gunicorn, uwsgi, node) running as a service account such as _www, or one added in the RoamSwitch.ExecRule.ServiceUsers setting; a shell under any other account (your own development server, apachectl, cron) is not flagged."),
+        // T1048. Shared/ExecAgentExfil.swift and Shared/ExecCorrelationRules.swift rules 16 and 17: a transfer program
+        // (curl -d/-T, scp, rsync, rclone, aws s3 cp, nc, ...) started below an AI coding agent that names a sensitive
+        // file or carries a secret, or that sends within five minutes of a command below the same agent reading one.
+        Entry(technique: "T1048", name: "Exfiltration Over Alternative Protocol", coverage: .partial,
+              sources: [guardSource("execRecorder"), rule("exec.agent_sensitive_send"), rule("exec.agent_sensitive_then_send")],
+              blindSpot: "Only commands an AI coding agent (claude, codex, gemini, opencode, aider, goose, cursor-agent, openclaw, qwen, crush) starts as child processes are seen, and an agent whose process name is node is not recognized. The agent's own file reads, what it sends to its model provider, git push, and a script runtime that opens its own socket (python -c, node -e) are not seen. Arguments that are split or encoded can evade the file and secret tests. Exfiltration by anything that is not an AI agent is not covered."),
         // T1566.002. RoamSwitch/LinkGuardManager.swift: outbound connections to hosts in the phishing and scam feed are
         // blocked or paused for an answer (hosts sinkhole, plus the content-filter extension when it is active).
         Entry(technique: "T1566.002", name: "Phishing: Spearphishing Link", coverage: .partial,
