@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.15 (build 194).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.16 (build 195).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -797,6 +797,7 @@ extension RoamSwitchKnowledgeBase {
                 • 22. 新增的受信任憑證（憑證授權單位）（`trust_anchors`，網路防禦）：針對使用者網域與管理員網域讀取 `security dump-trust-settings`。只有當人、管理員或描述檔設定過時，憑證才會帶有信任設定，所以列出的憑證都是有人新增的；Apple 自帶的根憑證不計入，信任結果為「deny」（不信任）的憑證也不計入。如果新增憑證的名稱看起來像攔截工具（mitm、proxy、charles、fiddler、burp、portswigger、zscaler、netskope、squid、inspection、sslsplit），該項不合格並列出名稱（最多 3 個）。其他新增憑證（公司根憑證、mkcert 等）作為資訊顯示，該項合格（若是你自己設定的就沒有問題）。無法讀取該指令時，該項為「無法確認」。原因：讀取加密通訊（包括密碼與 API 金鑰）的代理，需要 Mac 信任它的憑證授權單位。看不到的內容：應用程式自帶的憑證，以及憑證是何時新增的；新增的憑證出現時也不會通知。偵測涵蓋：T1553.004（部分）。不會變更任何內容，也不會傳送任何內容。
                 • 23. 容易被利用的弱點 (已安裝的軟體)（`package_cve_exposure`，系統強化）：檢查 Homebrew 套件與 PHP。將透過 `brew list --versions` 讀取的 Homebrew 套件，與更新程式下發的已簽章已知 CVE 資料（Homebrew 用）以及每天下發的 CISA KEV 清單比對。若 CISA 確認已被利用（KEV）的弱點，或 EPSS 達 90% 以上的弱點，仍留在受影響的版本中，則判為不合格，並顯示套件名稱與 CVE 編號（狀態欄最多 3 個）。風險接受尚未到期的項目不計入。對於 PHP，讀取 Homebrew、MAMP、Herd 與 PATH 中執行檔的版本，以及 php.ini、FPM 與 Apache 的設定。版本早於修補版本（兩個嚴重弱點 CVE-2026-109618 與 CVE-2026-109619，修補版本為 8.2.35、8.3.36、8.4.27、8.5.12；8.1 及更早版本沒有修補版本），或符合 CVE-2026-115560 的條件（設定為 php_binary 或 php_serialize、應用程式碼以 ini_set() 切換、upload_progress 已啟用，三者同時具備；目前沒有修補版本）時判為不合格。mod_php 或啟用 upload_progress 等中等以下的提示不會判為不合格。資料中收錄的 Homebrew php 依資料計算，不會重複計算。PHP 執行檔僅在顯示版本時啟動。不進行網路通訊。結果保留 30 分鐘，20 秒內未完成則顯示「無法確認」。沒有 Homebrew 套件也沒有 PHP 時判為不適用，不計入分數。沒有資料時同樣顯示「無法確認」。看不到的內容包括：非 Homebrew 安裝的 PHP 以外的軟體、資料中沒有對應項目的弱點，以及在最新 KEV 清單之後才列入 KEV 的 CVE（詳細欄會顯示資料版本與 KEV 日期）。PHP 的工作階段檔案由 Web shell 偵測規則的掃描讀取，不在本項目中。狀態欄會顯示已安裝套件中資料收錄的數量。
                 • 等級：100 分為 S、85 至 99 分為 A、70 至 84 分為 B、低於 70 分為 C。也可透過 MCP 工具 `get_security_report` 取得。
+                • 保護的運作狀態：依防護項目（36 項）列出已開啟的保護是否真正在運作的視窗。可從選單（Mac 安全綜合診斷 > 🛡️ 保護的運作狀態…）開啟，也可用綜合診斷報告頂端卡片（摘要和未運作的保護）上的「顯示所有保護…」開啟。狀態共五種：已生效、部分生效、未生效、關閉、僅限 Pro。未運作的保護會顯示原因代碼（如 `pro_not_active`、`helper_not_connected`、`system_extension_not_approved`）以及說明原因與解決方法的句子；依原因，還會出現「認證 Pro 版…」「核准輔助程式…」「開啟系統設定…」按鈕。每 15 秒以及按下「重新確認」時重新讀取。在沒有 Pro 的 Mac 上，僅因預設值而開啟的 Pro 功能顯示為「僅限 Pro」，不計為故障。有保護未運作時，選單頂端還會出現一行「⚠️ 有保護未生效(N 項)。查看原因…」。判定使用與選單標記、通知和 MCP 的 `get_guard_status` 相同的資料。偵測資料的更新停止時（`state_stale`）不發通知，只顯示在選單和這個視窗中。
                 """,
                 recommendation: "定期開啟稽核報告，依照顯示的修正步驟處理標示 ⚠️ 的項目，並維持在 A 級以上。"
             ),
