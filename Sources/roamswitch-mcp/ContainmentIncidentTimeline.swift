@@ -257,6 +257,10 @@ public enum ContainmentIncidentTimeline {
     /// forwarder (`EventForwarder`); it stays `nil` in the targets that only read this file's data.
     public static var recordObserver: ((ContainmentIncidentEvent) -> Void)?
 
+    /// Called after the stored records changed: a record was added, or one was marked resolved. `recordObserver` belongs
+    /// to the forwarder, so `DevicePostureTrust` listens here instead. It runs on the calling thread and must return quickly.
+    public static var changeHook: (() -> Void)?
+
     /// What reading the timeline file found. A file that is damaged or cannot be read used to look the same as a file
     /// that has no incidents, and the next record wrote over it (audit D-L1).
     public enum FileState: Equatable {
@@ -361,6 +365,7 @@ public enum ContainmentIncidentTimeline {
             saveAll(events)
         }
         recordObserver?(event)
+        changeHook?()
         return event.id
     }
 
@@ -406,6 +411,7 @@ public enum ContainmentIncidentTimeline {
             events[idx].resolution = resolution
             saveAll(events)
         }
+        changeHook?()
     }
 
     /// Marks one specific event resolved. Used for records that describe a
@@ -420,6 +426,7 @@ public enum ContainmentIncidentTimeline {
             events[idx].resolution = resolution
             saveAll(events)
         }
+        changeHook?()
     }
 
     public static func loadRecent(limit: Int = 50) -> [ContainmentIncidentEvent] {

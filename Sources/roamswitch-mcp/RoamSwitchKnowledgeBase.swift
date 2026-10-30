@@ -406,7 +406,7 @@ public struct RoamSwitchKnowledgeBase: Sendable {
     private static func featureCatalog() -> [EntryMeta] {
         let t = "feature"
         return [
-            EntryMeta(id: "feat_network_autoswitch", topic: t, tags: ["network", "firewall", "pf", "packet filter", "lockdown", "stealth", "airdrop", "ssh", "smb", "trusted", "balanced", "free"]),
+            EntryMeta(id: "feat_network_autoswitch", topic: t, tags: ["network", "firewall", "pf", "packet filter", "lockdown", "stealth", "airdrop", "ssh", "smb", "trusted", "balanced", "device-posture", "compromise", "free"]),
             EntryMeta(id: "feat_network_history_guard", topic: t, tags: ["ssid", "evil-twin", "gateway", "mac", "network-history", "wifi", "impersonation", "levenshtein", "pro"]),
             EntryMeta(id: "feat_arp_spoof_guard", topic: t, tags: ["arp", "spoofing", "mitm", "eavesdropping", "gateway", "mac", "airgap", "pro", "notify-first", "default-on-pro"]),
             EntryMeta(id: "feat_gateway_arp_lock", topic: t, tags: ["arp", "ndp", "mitm", "gateway", "tofu", "neighbor-cache", "untrusted-network", "pro", "preventive"]),
@@ -453,6 +453,7 @@ public struct RoamSwitchKnowledgeBase: Sendable {
             EntryMeta(id: "feat_typosquat_guard", topic: t, tags: ["npm", "pnpm", "typosquatting", "package.json", "levenshtein", "supply-chain", "mcp", "pro"]),
             EntryMeta(id: "feat_sensor_pairing", topic: t, tags: ["sensor", "pairing-code", "tcp", "ed25519", "lan", "trust", "audit", "pro"]),
             EntryMeta(id: "feat_port_scan_guard", topic: t, tags: ["port-scan", "reconnaissance", "nmap", "masscan", "pf", "auto-block", "pro"]),
+            EntryMeta(id: "feat_ssh_guard", topic: t, tags: ["ssh", "brute-force", "pf", "auto-block", "unified-log", "t1110", "allowlist", "allowed-sources", "pro"]),
             EntryMeta(id: "feat_security_health_checker", topic: t, tags: ["audit", "score", "filevault", "sip", "gatekeeper", "firewall", "xprotect", "ssh", "sudo", "accessory", "21-items", "cve", "kev", "epss", "homebrew", "php", "mod_php", "upload_progress", "free"]),
             EntryMeta(id: "feat_autonomous_sentinel", topic: t, tags: ["autonomous", "sentinel", "background", "freshclam", "clamav", "scheduled-scan", "pro"]),
             EntryMeta(id: "feat_simulation_self_test", topic: t, tags: ["simulation", "self-test", "test", "ransomware", "airgap", "docker", "eicar"]),

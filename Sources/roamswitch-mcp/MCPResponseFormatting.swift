@@ -881,6 +881,8 @@ public struct MCPNetworkHistoryPayload: Codable, Equatable {
 public enum MCPResponseFormatting {
     private static let trustedNetworksKey = "RoamSwitch.trustedNetworks"
     private static let manualOverrideKey = "RoamSwitch.manualOverrideLevel"
+    /// Written by `DevicePostureTrust` (app) so the headless tools report the level the app really applies.
+    static let postureLowersTrustKey = "RoamSwitch.DevicePosture.LowersTrust"
     private static let awaySecurityLevelKey = "RoamSwitch.awaySecurityLevel"
 
     static let portAnomalyGuardKey = "RoamSwitch.PortAnomalyGuardEnabled"
@@ -1203,6 +1205,8 @@ public enum MCPResponseFormatting {
            let data = defaults.data(forKey: trustedNetworksKey),
            let networks = try? JSONDecoder().decode([TrustedNetwork].self, from: data),
            let matched = networks.first(where: { $0.macAddress.caseInsensitiveCompare(gatewayMAC) == .orderedSame }) {
+            // `DevicePostureTrust` holds a network registered as 信頼(オープン) at 標準保護 while this Mac shows signs of compromise.
+            if matched.securityLevel == .open, defaults.bool(forKey: postureLowersTrustKey) { return .balanced }
             return matched.securityLevel
         }
 
