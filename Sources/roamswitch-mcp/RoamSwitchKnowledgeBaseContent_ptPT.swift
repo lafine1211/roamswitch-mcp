@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.14 (build 193).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.15 (build 194).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -685,6 +685,7 @@ extension RoamSwitchKnowledgeBase {
                 • Sem qualquer ligação de rede, e nada é executado — um inventário puramente estático.
                 • Diferença em relação ao estado revisto: ao premir «Marcar o estado atual como revisto», regista-se o estado atual dos pacotes (os comandos dos scripts só como hashes, e se um pacote inclui código compilado). A partir da listagem seguinte, são mostrados os pacotes que entretanto ganharam código executado na instalação: um script adicionado, um script cujo comando mudou, código compilado adicionado (`binding.gyp`, `.node`, `.so`, `.dylib`, `.dll` ou um executável) e um pacote novo que traz algum destes elementos. Os scripts e pacotes que já não existem não são mostrados. Só uma pessoa pode marcar o estado como revisto; nem a listagem nem a ferramenta MCP o fazem (o resultado MCP inclui `drift` e `baselineAcceptedAt`). O registo fica em `~/Library/Application Support/RoamSwitch/package_install_baseline.json` (modo 0600).
                 • Ferramenta MCP: `run_package_lifecycle_script_scan` (argumento `watchedFolders`, apenas Pro).
+                • Verificação automática (Pro, ativada por predefinição): sem usar a janela nem o MCP, a app verifica por si própria as pastas de projeto registadas quando package.json, um lockfile ou node_modules/.package-lock.json muda e volta a sossegar, logo após o arranque e uma vez por dia. Procura aumento do código executado na instalação e nomes de dependências parecidos com pacotes conhecidos, e notifica-o (sem rede, nada é executado). Uma pasta sem estado confirmado não é comparada; é avisado uma única vez para a rever e registar. Só uma pessoa pode marcar um estado como confirmado; a verificação automática nunca altera esse registo. Um item do menu desativa-a.
                 """,
                 recommendation: "Para qualquer script assinalado com ⚠️, verifique se o pacote realmente precisa dele — preste especial atenção aos scripts postinstall de pacotes pouco conhecidos."
             ),
@@ -725,6 +726,7 @@ extension RoamSwitchKnowledgeBase {
                 • Como a lista se mantém atualizada: a lista de nomes de pacotes populares com que compara é distribuída pelo `PackageCveMapUpdater` através do mesmo manifesto (obtido aproximadamente uma vez por semana), apenas de receção e assinado com Ed25519 dos mapas de CVE (uma semente incorporada em tempo de compilação mais uma substituição de dois níveis, preferindo a que tiver o `mapVersion` mais recente). A lista pode ser atualizada sem esperar por uma nova versão da aplicação.
                 • Informação de referência, não um veredito — uma lista de permissões conhecida suprime alguns pacotes legítimos semelhantes (por exemplo, preact), mas não é exaustiva.
                 • Como abrir: separador «📦 Verificação de CVE de pacotes» → «Deteção de typosquatting (Pro)», visando as mesmas pastas de projeto que o separador «Dependências». MCP: `run_typosquat_scan` (argumento `watchedFolders`, apenas Pro).
+                • Verificação automática (Pro, ativada por predefinição): sem usar a janela nem o MCP, a app verifica por si própria as pastas de projeto registadas quando package.json, um lockfile ou node_modules/.package-lock.json muda e volta a sossegar, logo após o arranque e uma vez por dia. Procura aumento do código executado na instalação e nomes de dependências parecidos com pacotes conhecidos, e notifica-o (sem rede, nada é executado). Uma pasta sem estado confirmado não é comparada; é avisado uma única vez para a rever e registar. Só uma pessoa pode marcar um estado como confirmado; a verificação automática nunca altera esse registo. Um item do menu desativa-a.
                 """,
                 recommendation: "Volte a verificar qualquer dependência assinalada com ⚠️ para um erro de digitação real — preste especial atenção a nomes de pacotes pouco familiares."
             ),

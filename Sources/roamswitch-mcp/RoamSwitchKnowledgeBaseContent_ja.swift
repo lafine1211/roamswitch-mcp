@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.14 (build 193).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.15 (build 194).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -684,6 +684,7 @@ extension RoamSwitchKnowledgeBase {
                 • ネットワーク接続は一切行わず、スクリプトを実行することもありません。純粋な静的一覧表示です。
                 • 確認済みの状態との差分: 「今の状態を確認済みにする」を押すと、そのときのパッケージの状態（スクリプトの内容はハッシュだけ、コンパイル済みコードの有無）を記録します。次の一覧取得から、それ以降にインストール時に動くコードが増えたパッケージを示します: スクリプトの追加、スクリプトの内容の変更、コンパイル済みコードの追加（`binding.gyp`、`.node`・`.so`・`.dylib`・`.dll`、実行ファイル）、これらを持つ新しいパッケージ。消えたスクリプトやパッケージは示しません。確認済みにできるのは人だけで、一覧取得も MCP ツールも確認済みにしません（MCP の結果には `drift` と `baselineAcceptedAt` が付きます）。記録は `~/Library/Application Support/RoamSwitch/package_install_baseline.json`（権限 0600）です。
                 • MCPツール: `run_package_lifecycle_script_scan`（`watchedFolders`引数、Pro限定）。
+                • 自動確認(Pro、既定オン): 画面やMCPを使わなくても、登録したプロジェクトフォルダーの package.json・ロックファイル・node_modules/.package-lock.json が書き換わって静かになったとき、起動の直後、1日1回に、インストール時に動くコードの増加と、依存名の有名なパッケージへの類似を自動で調べて通知します(通信も実行もしません)。確認済みの状態がないフォルダーは、比べずに「確認して記録してください」と1度だけ知らせます。確認済みにできるのは人だけで、自動確認は記録を動かしません。メニューの項目で止められます。
                 """,
                 recommendation: "⚠️マークの付いたスクリプトは、そのパッケージが本当に必要とする処理かを個別に確認してください。見慣れないパッケージのpostinstallは特に注意が必要です。"
             ),
@@ -724,6 +725,7 @@ extension RoamSwitchKnowledgeBase {
                 • 更新の仕組み: 判定に使う人気パッケージ名リストは、`PackageCveMapUpdater`が既存のCVEマップ群と同じ「週に1回・受信専用・Ed25519署名検証済み」マニフェスト経由で配信する(build-time埋め込みシード + 更新分の二段構え、mapVersion比較で新しい方を採用)。アプリのリリースを待たずにリストを更新できる。
                 • 参考情報であり断定ではありません。正規の類似パッケージ(preact等)は既知の許可リストで一部除外していますが完全ではありません。
                 • 開き方: 「📦 パッケージCVE照合」→「タイポスクワッティング検知 (Pro)」タブ。「依存関係」タブと同じプロジェクトフォルダを対象にします。MCP: `run_typosquat_scan`(`watchedFolders`引数、Pro限定)。
+                • 自動確認(Pro、既定オン): 画面やMCPを使わなくても、登録したプロジェクトフォルダーの package.json・ロックファイル・node_modules/.package-lock.json が書き換わって静かになったとき、起動の直後、1日1回に、インストール時に動くコードの増加と、依存名の有名なパッケージへの類似を自動で調べて通知します(通信も実行もしません)。確認済みの状態がないフォルダーは、比べずに「確認して記録してください」と1度だけ知らせます。確認済みにできるのは人だけで、自動確認は記録を動かしません。メニューの項目で止められます。
                 """,
                 recommendation: "⚠️の付いた依存関係は、実際にタイプミスでないか個別に確認してください。見慣れないパッケージ名は特に注意が必要です。"
             ),

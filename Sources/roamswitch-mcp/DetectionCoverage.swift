@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.14 (build 193).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.15 (build 194).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -226,8 +226,8 @@ enum DetectionCoverage {
         // npm-shrinkwrap.json in the registered project folders are hashed; a change is re-flagged until a person
         // re-trusts it.
         Entry(technique: "T1195.001", name: "Supply Chain Compromise: Compromise Software Dependencies and Development Tools", coverage: .partial,
-              sources: [guardSource("lockfileTamperGuard")],
-              blindSpot: "Notices that a lockfile changed, not whether the dependency it now pins is malicious. Only the npm-family lockfiles of registered project folders are hashed."),
+              sources: [guardSource("lockfileTamperGuard"), guardSource("npmSupplyWatch")],
+              blindSpot: "Notices that a lockfile changed, that install-time code (a script or compiled code) was added since the state you accepted, and that a dependency name looks like a popular package, not whether a dependency is malicious. Only npm projects in registered folders are looked at, a project with no accepted state is not compared (you are told once), and other ecosystems have no such watch."),
         // T1505.003. RoamSwitch/WebRuleFolderScanner.swift (local web roots, project folders and PHP session folders, once a day and on demand)
         // and RoamSwitch/WebMailDownloadGuard.swift (the same web rules on the download folders, live), through
         // StaticSignatureScanner. Shared/ExecCorrelationRules.swift rule 15: a shell, or a python/perl/ruby/node one-liner,

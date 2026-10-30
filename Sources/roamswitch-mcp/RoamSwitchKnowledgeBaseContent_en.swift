@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.14 (build 193).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.15 (build 194).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -684,6 +684,7 @@ extension RoamSwitchKnowledgeBase {
                 • No network connection at all, and nothing is ever executed — a purely static inventory.
                 • Difference from the reviewed state: press “Mark the current state as reviewed” to record the packages as they are now (script commands as hashes only, and whether a package carries compiled code). From the next listing on, packages that gained install-time code since then are shown: a script added, a script whose command changed, compiled code added (`binding.gyp`, `.node`, `.so`, `.dylib`, `.dll` or an executable), and a new package that brings either. Scripts and packages that are gone are not shown. Only a person can mark the state as reviewed; neither the listing nor the MCP tool does (the MCP result carries `drift` and `baselineAcceptedAt`). The record is `~/Library/Application Support/RoamSwitch/package_install_baseline.json` (mode 0600).
                 • MCP tool: `run_package_lifecycle_script_scan` (`watchedFolders` argument, Pro only).
+                • Automatic check (Pro, on by default): without using the window or MCP, it checks the registered project folders by itself when package.json, a lockfile or node_modules/.package-lock.json changes and goes quiet, shortly after startup, and once a day. It looks for growth in code that runs at install time and for dependency names that resemble well-known packages, and notifies you (no network, nothing is executed). A folder with no confirmed state is not compared; you are told once to review and record it. Only a person can mark a state as confirmed; the automatic check never moves that record. A menu item turns it off.
                 """,
                 recommendation: "For any script flagged ⚠️, check whether the package genuinely needs it — pay particular attention to postinstall scripts from unfamiliar packages."
             ),
@@ -724,6 +725,7 @@ extension RoamSwitchKnowledgeBase {
                 • How the list stays current: the popular-package-name list checked against is distributed by `PackageCveMapUpdater` via the same receive-only, Ed25519-signed manifest (fetched about once a week) as the CVE maps (a build-time embedded seed plus a two-tier override, preferring whichever has the newer `mapVersion`). The list can be refreshed without waiting for an app release.
                 • Reference information, not a verdict — a known allowlist suppresses some legitimate look-alike packages (e.g. preact), but it isn't exhaustive.
                 • How to open: "📦 Package CVE Scan" → "Typosquat Detection (Pro)" tab, targeting the same project folders as the "Dependencies" tab. MCP: `run_typosquat_scan` (`watchedFolders` argument, Pro only).
+                • Automatic check (Pro, on by default): without using the window or MCP, it checks the registered project folders by itself when package.json, a lockfile or node_modules/.package-lock.json changes and goes quiet, shortly after startup, and once a day. It looks for growth in code that runs at install time and for dependency names that resemble well-known packages, and notifies you (no network, nothing is executed). A folder with no confirmed state is not compared; you are told once to review and record it. Only a person can mark a state as confirmed; the automatic check never moves that record. A menu item turns it off.
                 """,
                 recommendation: "Double-check any ⚠️-flagged dependency for an actual typo — pay particular attention to unfamiliar package names."
             ),

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.14 (build 193).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.15 (build 194).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -685,6 +685,7 @@ extension RoamSwitchKnowledgeBase {
                 • Nessuna connessione di rete e non viene mai eseguito nulla — un elenco puramente statico.
                 • Differenza rispetto allo stato verificato: «Segna lo stato attuale come verificato» registra lo stato attuale dei pacchetti (i comandi degli script solo come hash, e se un pacchetto contiene codice compilato). Dall'elenco successivo vengono mostrati i pacchetti che da allora hanno ottenuto codice eseguito durante l'installazione: uno script aggiunto, uno script il cui comando è cambiato, codice compilato aggiunto (`binding.gyp`, `.node`, `.so`, `.dylib`, `.dll` o un eseguibile) e un nuovo pacchetto che porta uno di questi elementi. Gli script e i pacchetti scomparsi non vengono mostrati. Solo una persona può segnare lo stato come verificato; né l'elenco né lo strumento MCP lo fanno (il risultato MCP contiene `drift` e `baselineAcceptedAt`). La registrazione si trova in `~/Library/Application Support/RoamSwitch/package_install_baseline.json` (modalità 0600).
                 • Strumento MCP: `run_package_lifecycle_script_scan` (argomento `watchedFolders`, solo Pro).
+                • Controllo automatico (Pro, attivo per impostazione predefinita): senza usare la finestra o MCP, l'app controlla da sola le cartelle di progetto registrate quando package.json, un lockfile o node_modules/.package-lock.json cambia e torna tranquillo, poco dopo l'avvio e una volta al giorno. Cerca un aumento del codice eseguito all'installazione e nomi di dipendenze simili a pacchetti noti, e ti avvisa (nessuna rete, nulla viene eseguito). Una cartella senza stato confermato non viene confrontata; ricevi un solo avviso per verificarla e registrarla. Solo una persona può segnare uno stato come confermato; il controllo automatico non modifica mai quel registro. Una voce di menu lo disattiva.
                 """,
                 recommendation: "Per ogni script contrassegnato con ⚠️, verifica se il pacchetto ne ha davvero bisogno — presta particolare attenzione agli script postinstall di pacchetti poco noti."
             ),
@@ -725,6 +726,7 @@ extension RoamSwitchKnowledgeBase {
                 • Come l'elenco resta aggiornato: l'elenco dei nomi di pacchetti popolari con cui viene confrontato è distribuito da `PackageCveMapUpdater` tramite lo stesso manifest (recuperato circa una volta a settimana), di sola ricezione e firmato Ed25519 delle mappe CVE (un seed incorporato in fase di build più una sostituzione a due livelli, preferendo quella con `mapVersion` più recente). L'elenco può essere aggiornato senza attendere una nuova release dell'app.
                 • Informazione di riferimento, non un verdetto — una whitelist nota sopprime alcuni pacchetti legittimi simili (ad es. preact), ma non è esaustiva.
                 • Come aprirlo: scheda «📦 Verifica CVE dei pacchetti» → «Rilevamento typosquatting (Pro)», rivolta alle stesse cartelle di progetto della scheda «Dipendenze». MCP: `run_typosquat_scan` (argomento `watchedFolders`, solo Pro).
+                • Controllo automatico (Pro, attivo per impostazione predefinita): senza usare la finestra o MCP, l'app controlla da sola le cartelle di progetto registrate quando package.json, un lockfile o node_modules/.package-lock.json cambia e torna tranquillo, poco dopo l'avvio e una volta al giorno. Cerca un aumento del codice eseguito all'installazione e nomi di dipendenze simili a pacchetti noti, e ti avvisa (nessuna rete, nulla viene eseguito). Una cartella senza stato confermato non viene confrontata; ricevi un solo avviso per verificarla e registrarla. Solo una persona può segnare uno stato come confermato; il controllo automatico non modifica mai quel registro. Una voce di menu lo disattiva.
                 """,
                 recommendation: "Ricontrolla ogni dipendenza contrassegnata con ⚠️ per un effettivo errore di battitura — presta particolare attenzione ai nomi di pacchetti sconosciuti."
             ),

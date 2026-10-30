@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.14 (build 193).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.15 (build 194).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -287,6 +287,9 @@ public enum GuardReaderHealthStore {
         // FSEvents is a trigger here and the timer is the backstop, so a watch that cannot start is `partial`, not `off`.
         "criticalPathFim": GuardSources(sources: ["criticalPathFimHelper"], auxiliary: ["criticalPathFimFSEvents"], idleIsHealthy: false),
         "lockfileTamperGuard": GuardSources(sources: ["lockfileTamperScan"], auxiliary: ["lockfileTamperFSEvents"], idleIsHealthy: false),
+        // The automatic npm check: the scan is what runs (it says when no project folder is registered); FSEvents only brings
+        // it forward, and the daily look is the backstop, so a stream that cannot start is `partial`.
+        "npmSupplyWatch": GuardSources(sources: ["npmSupplyWatchScan"], auxiliary: ["npmSupplyWatchStream"], idleIsHealthy: false),
         // FSEvents is the only input of these: a watch that cannot start means the guard sees nothing.
         "ransomwareEntropyGuard": GuardSources(sources: ["ransomwareEntropyFSEvents"], auxiliary: [], idleIsHealthy: false),
         // The plist watch is FSEvents; the start-up script poll (shell rc, periodic, hooks) is a narrower input.
@@ -509,6 +512,7 @@ extension GuardReaderHealthStore {
         "dockerEventGuard": Requirements(pro: true, helper: .none),
         "criticalPathFim": Requirements(pro: true, helper: .required),               // the helper computes the hashes
         "lockfileTamperGuard": Requirements(pro: true, helper: .none),
+        "npmSupplyWatch": Requirements(pro: true, helper: .none),                    // the comparison and the notice are Pro
         "persistenceMonitor": Requirements(pro: true, helper: .none),
         "gatewayARPLock": Requirements(pro: true, helper: .required),                // the helper sets the static entry
         "scheduledLogAudit": Requirements(pro: true, helper: .none),

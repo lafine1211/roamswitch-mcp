@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.14 (build 193).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.15 (build 194).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -685,6 +685,7 @@ extension RoamSwitchKnowledgeBase {
                 • 完全不進行任何網路連線，也絕不執行指令碼——純粹的靜態清單展示。
                 • 與已確認狀態的差異：按下「將目前狀態標記為已確認」，會記錄此刻各套件的狀態（腳本內容只記錄雜湊，以及是否帶有已編譯的程式碼）。從下一次取得清單起，會顯示此後增加了安裝時執行的程式碼的套件：新增腳本、腳本內容改變、新增已編譯的程式碼（`binding.gyp`、`.node`、`.so`、`.dylib`、`.dll`、可執行檔），以及帶有其中任一項的新套件。已消失的腳本和套件不會顯示。只有人才能標記為已確認，取得清單和 MCP 工具都不會這樣做（MCP 的結果帶有 `drift` 和 `baselineAcceptedAt`）。記錄存放在 `~/Library/Application Support/RoamSwitch/package_install_baseline.json`（權限 0600）。
                 • MCP 工具：`run_package_lifecycle_script_scan`（`watchedFolders` 參數，僅限 Pro）。
+                • 自動檢查(Pro,預設開啟):即使不使用視窗或 MCP,也會在已登記專案資料夾中的 package.json、鎖定檔或 node_modules/.package-lock.json 變更並安靜下來後、啟動後不久以及每天一次,自動檢查安裝時執行的程式碼是否增加,以及相依套件名稱是否與知名套件相似,並發出通知(不連網,也不執行任何內容)。沒有已確認狀態的資料夾不會比較,只會提示一次「請確認並記錄」。只有人可以將狀態標記為已確認,自動檢查不會更動該記錄。可透過選單項目關閉。
                 """,
                 recommendation: "對標有 ⚠️ 的指令碼，請逐一確認該套件是否確實需要執行此操作。對不熟悉套件的 postinstall 指令碼請格外留意。"
             ),
@@ -725,6 +726,7 @@ extension RoamSwitchKnowledgeBase {
                 • 清單保持更新的方式：用於比對的熱門套件名稱清單由 `PackageCveMapUpdater` 透過與 CVE 對應表相同的約每週一次、僅接收、Ed25519 簽章驗證的清單進行分發（建置時內嵌種子加兩層覆蓋，優先採用 `mapVersion` 較新的一方）。無需等待應用程式發布即可更新該清單。
                 • 這是參考資訊，並非定論——已知的許可清單會部分排除一些正規的相似套件（如 preact），但並不完整。
                 • 開啟方式：「📦 套件 CVE 比對」→「打字仿冒偵測 (Pro)」分頁，針對與「相依性」分頁相同的專案資料夾。MCP：`run_typosquat_scan`（`watchedFolders` 參數，僅限 Pro）。
+                • 自動檢查(Pro,預設開啟):即使不使用視窗或 MCP,也會在已登記專案資料夾中的 package.json、鎖定檔或 node_modules/.package-lock.json 變更並安靜下來後、啟動後不久以及每天一次,自動檢查安裝時執行的程式碼是否增加,以及相依套件名稱是否與知名套件相似,並發出通知(不連網,也不執行任何內容)。沒有已確認狀態的資料夾不會比較,只會提示一次「請確認並記錄」。只有人可以將狀態標記為已確認,自動檢查不會更動該記錄。可透過選單項目關閉。
                 """,
                 recommendation: "請對任何標記 ⚠️ 的相依性逐一核實是否確實是拼寫錯誤——尤其要留意陌生的套件名稱。"
             ),

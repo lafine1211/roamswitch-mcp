@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.14 (build 193).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.15 (build 194).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -685,6 +685,7 @@ extension RoamSwitchKnowledgeBase {
                 • Sin ninguna conexión de red, y nunca se ejecuta nada — un inventario puramente estático.
                 • Diferencia con el estado revisado: al pulsar «Marcar el estado actual como revisado» se registra el estado actual de los paquetes (los comandos de los scripts solo como hashes, y si un paquete incluye código compilado). Desde la siguiente lista se muestran los paquetes que desde entonces han ganado código que se ejecuta al instalar: un script añadido, un script cuyo comando ha cambiado, código compilado añadido (`binding.gyp`, `.node`, `.so`, `.dylib`, `.dll` o un ejecutable) y un paquete nuevo que trae alguna de esas cosas. Los scripts y paquetes que ya no están no se muestran. Solo una persona puede marcar el estado como revisado; ni la lista ni la herramienta MCP lo hacen (el resultado MCP incluye `drift` y `baselineAcceptedAt`). El registro está en `~/Library/Application Support/RoamSwitch/package_install_baseline.json` (modo 0600).
                 • Herramienta MCP: `run_package_lifecycle_script_scan` (argumento `watchedFolders`, solo Pro).
+                • Comprobación automática (Pro, activada por defecto): sin usar la ventana ni MCP, la app comprueba por sí misma las carpetas de proyecto registradas cuando package.json, un lockfile o node_modules/.package-lock.json cambia y se calma, poco después del inicio y una vez al día. Busca un aumento del código que se ejecuta al instalar y nombres de dependencias parecidos a paquetes conocidos, y le avisa (sin red, sin ejecutar nada). Una carpeta sin estado confirmado no se compara; se le avisa una sola vez de que la revise y la registre. Solo una persona puede marcar un estado como confirmado; la comprobación automática nunca modifica ese registro. Un elemento del menú la desactiva.
                 """,
                 recommendation: "Para cualquier script marcado con ⚠️, compruebe si el paquete realmente lo necesita — preste especial atención a los scripts postinstall de paquetes poco conocidos."
             ),
@@ -725,6 +726,7 @@ extension RoamSwitchKnowledgeBase {
                 • Cómo se mantiene actualizada la lista: la lista de nombres de paquetes populares con la que se compara la distribuye `PackageCveMapUpdater` mediante el mismo manifiesto (obtenido aproximadamente una vez por semana), de solo recepción y firmado con Ed25519 que los mapas de CVE (una semilla incorporada en tiempo de compilación más una sustitución de dos niveles, prefiriendo la que tenga el `mapVersion` más reciente). La lista puede actualizarse sin esperar a una versión de la aplicación.
                 • Información de referencia, no un veredicto — una lista blanca conocida suprime algunos paquetes legítimos similares (por ejemplo, preact), pero no es exhaustiva.
                 • Cómo abrirlo: pestaña «📦 Cotejo de CVE de paquetes» → «Detección de typosquatting (Pro)», dirigida a las mismas carpetas de proyecto que la pestaña «Dependencias». MCP: `run_typosquat_scan` (argumento `watchedFolders`, solo Pro).
+                • Comprobación automática (Pro, activada por defecto): sin usar la ventana ni MCP, la app comprueba por sí misma las carpetas de proyecto registradas cuando package.json, un lockfile o node_modules/.package-lock.json cambia y se calma, poco después del inicio y una vez al día. Busca un aumento del código que se ejecuta al instalar y nombres de dependencias parecidos a paquetes conocidos, y le avisa (sin red, sin ejecutar nada). Una carpeta sin estado confirmado no se compara; se le avisa una sola vez de que la revise y la registre. Solo una persona puede marcar un estado como confirmado; la comprobación automática nunca modifica ese registro. Un elemento del menú la desactiva.
                 """,
                 recommendation: "Vuelva a comprobar cualquier dependencia marcada con ⚠️ para ver si se trata realmente de un error tipográfico — preste especial atención a los nombres de paquetes desconocidos."
             ),

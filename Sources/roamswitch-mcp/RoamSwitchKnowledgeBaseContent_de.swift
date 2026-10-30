@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.14 (build 193).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.15 (build 194).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -685,6 +685,7 @@ extension RoamSwitchKnowledgeBase {
                 • Keinerlei Netzwerkverbindung, und es wird nie etwas ausgeführt — eine rein statische Übersicht.
                 • Abweichung vom geprüften Stand: Mit „Aktuellen Stand als geprüft markieren“ wird der aktuelle Stand der Pakete festgehalten (Skriptbefehle nur als Hashes, dazu ob ein Paket kompilierten Code enthält). Ab der nächsten Auflistung werden Pakete gezeigt, die seitdem Code für die Installation hinzubekommen haben: ein hinzugefügtes Skript, ein Skript mit geändertem Befehl, hinzugekommener kompilierter Code (`binding.gyp`, `.node`, `.so`, `.dylib`, `.dll` oder eine ausführbare Datei) und ein neues Paket, das eines davon mitbringt. Entfallene Skripte und Pakete werden nicht gezeigt. Nur eine Person kann den Stand als geprüft markieren; weder die Auflistung noch das MCP-Tool tut das (das MCP-Ergebnis enthält `drift` und `baselineAcceptedAt`). Der Eintrag liegt in `~/Library/Application Support/RoamSwitch/package_install_baseline.json` (Modus 0600).
                 • MCP-Tool: `run_package_lifecycle_script_scan` (Argument `watchedFolders`, nur Pro).
+                • Automatische Prüfung (Pro, standardmäßig an): Auch ohne Fenster oder MCP prüft die App die registrierten Projektordner selbst, wenn sich package.json, eine Lockfile oder node_modules/.package-lock.json ändert und wieder Ruhe einkehrt, kurz nach dem Start und einmal täglich. Sie sucht nach mehr Code, der bei der Installation läuft, und nach Abhängigkeitsnamen, die bekannten Paketen ähneln, und benachrichtigt Sie (kein Netzwerk, nichts wird ausgeführt). Ein Ordner ohne bestätigten Stand wird nicht verglichen; Sie erhalten einmal den Hinweis, ihn zu prüfen und festzuhalten. Nur ein Mensch kann einen Stand als bestätigt markieren; die automatische Prüfung verändert diese Aufzeichnung nie. Ein Menüeintrag schaltet sie ab.
                 """,
                 recommendation: "Prüfen Sie bei jedem ⚠️-markierten Skript, ob das Paket es wirklich benötigt — besonders bei postinstall-Skripten unbekannter Pakete."
             ),
@@ -725,6 +726,7 @@ extension RoamSwitchKnowledgeBase {
                 • Wie die Liste aktuell bleibt: Die Liste beliebter Paketnamen wird von `PackageCveMapUpdater` über dasselbe nur empfangende, Ed25519-signierte Manifest (etwa einmal pro Woche abgerufen) wie die CVE-Maps verteilt (ein eingebauter Seed zur Build-Zeit plus eine zweistufige Aktualisierung, wobei die Version mit der neueren `mapVersion` bevorzugt wird). Die Liste kann aktualisiert werden, ohne auf ein App-Release zu warten.
                 • Referenzinformation, kein Urteil — eine bekannte Positivliste unterdrückt einige legitime Doppelgänger-Pakete (z. B. preact), ist aber nicht vollständig.
                 • Öffnen: Tab „📦 Paket-CVE-Abgleich“ → „Typosquatting-Erkennung (Pro)“, bezogen auf dieselben Projektordner wie der Tab „Abhängigkeiten“. MCP: `run_typosquat_scan` (Argument `watchedFolders`, nur Pro).
+                • Automatische Prüfung (Pro, standardmäßig an): Auch ohne Fenster oder MCP prüft die App die registrierten Projektordner selbst, wenn sich package.json, eine Lockfile oder node_modules/.package-lock.json ändert und wieder Ruhe einkehrt, kurz nach dem Start und einmal täglich. Sie sucht nach mehr Code, der bei der Installation läuft, und nach Abhängigkeitsnamen, die bekannten Paketen ähneln, und benachrichtigt Sie (kein Netzwerk, nichts wird ausgeführt). Ein Ordner ohne bestätigten Stand wird nicht verglichen; Sie erhalten einmal den Hinweis, ihn zu prüfen und festzuhalten. Nur ein Mensch kann einen Stand als bestätigt markieren; die automatische Prüfung verändert diese Aufzeichnung nie. Ein Menüeintrag schaltet sie ab.
                 """,
                 recommendation: "Prüfen Sie jede mit ⚠️ markierte Abhängigkeit noch einmal auf einen tatsächlichen Tippfehler — achten Sie besonders auf unbekannte Paketnamen."
             ),

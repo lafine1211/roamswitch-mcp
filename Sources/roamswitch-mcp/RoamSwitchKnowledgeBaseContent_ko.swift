@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.14 (build 193).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.15 (build 194).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -685,6 +685,7 @@ extension RoamSwitchKnowledgeBase {
                 • 네트워크 연결을 전혀 하지 않으며, 스크립트를 실행하지도 않습니다. 순수한 정적 목록 표시입니다.
                 • 확인 완료 상태와의 차이: 「현재 상태를 확인 완료로 표시」를 누르면 그 시점의 패키지 상태(스크립트 내용은 해시만, 컴파일된 코드의 유무)를 기록합니다. 다음 목록 조회부터는 그 이후 설치 시 실행되는 코드가 늘어난 패키지를 보여 줍니다: 스크립트 추가, 스크립트 내용 변경, 컴파일된 코드 추가(`binding.gyp`, `.node`·`.so`·`.dylib`·`.dll`, 실행 파일), 이 중 하나를 가진 새 패키지. 사라진 스크립트나 패키지는 보여 주지 않습니다. 확인 완료로 표시할 수 있는 것은 사람뿐이며, 목록 조회와 MCP 도구는 표시하지 않습니다(MCP 결과에 `drift`와 `baselineAcceptedAt`이 붙습니다). 기록은 `~/Library/Application Support/RoamSwitch/package_install_baseline.json`(권한 0600)입니다.
                 • MCP 도구: `run_package_lifecycle_script_scan` (`watchedFolders` 인자, Pro 전용).
+                • 자동 확인(Pro, 기본 켜짐): 화면이나 MCP를 쓰지 않아도, 등록한 프로젝트 폴더의 package.json, 락파일, node_modules/.package-lock.json이 바뀌고 잠잠해졌을 때, 시작 직후, 하루에 한 번 설치 시 실행되는 코드의 증가와 유명한 패키지와 비슷한 의존성 이름을 자동으로 확인해 알립니다(통신도 실행도 하지 않습니다). 확인한 상태가 없는 폴더는 비교하지 않고 '확인하고 기록하세요'라고 한 번만 알립니다. 확인 완료로 기록할 수 있는 것은 사람뿐이며, 자동 확인은 그 기록을 바꾸지 않습니다. 메뉴 항목으로 끌 수 있습니다.
                 """,
                 recommendation: "⚠️ 표시가 있는 스크립트는 해당 패키지에 정말 필요한 작업인지 개별적으로 확인하세요. 낯선 패키지의 postinstall은 특히 주의가 필요합니다."
             ),
@@ -725,6 +726,7 @@ extension RoamSwitchKnowledgeBase {
                 • 목록이 최신 상태로 유지되는 방식: 비교 대상인 인기 패키지 이름 목록은 `PackageCveMapUpdater`가 CVE 맵과 동일하게 약 일주일에 한 번, 수신 전용, Ed25519 서명된 매니페스트를 통해 배포합니다(빌드 시점에 내장된 시드와 2단계 재정의 중 `mapVersion`이 더 최신인 쪽을 선택). 앱 릴리스를 기다리지 않고 목록을 갱신할 수 있습니다.
                 • 참고 정보이며 단정이 아닙니다 — 알려진 허용 목록으로 일부 정상적인 유사 패키지(예: preact)를 제외하지만 완전하지 않습니다.
                 • 여는 방법: "📦 패키지 CVE 대조" → "오타스쿼팅 탐지 (Pro)" 탭에서 "의존성" 탭과 동일한 프로젝트 폴더를 대상으로 합니다. MCP: `run_typosquat_scan`(`watchedFolders` 인자, Pro 전용).
+                • 자동 확인(Pro, 기본 켜짐): 화면이나 MCP를 쓰지 않아도, 등록한 프로젝트 폴더의 package.json, 락파일, node_modules/.package-lock.json이 바뀌고 잠잠해졌을 때, 시작 직후, 하루에 한 번 설치 시 실행되는 코드의 증가와 유명한 패키지와 비슷한 의존성 이름을 자동으로 확인해 알립니다(통신도 실행도 하지 않습니다). 확인한 상태가 없는 폴더는 비교하지 않고 '확인하고 기록하세요'라고 한 번만 알립니다. 확인 완료로 기록할 수 있는 것은 사람뿐이며, 자동 확인은 그 기록을 바꾸지 않습니다. 메뉴 항목으로 끌 수 있습니다.
                 """,
                 recommendation: "⚠️가 표시된 의존성은 실제 오타인지 개별적으로 다시 확인하세요 — 낯선 패키지 이름은 특히 주의가 필요합니다."
             ),

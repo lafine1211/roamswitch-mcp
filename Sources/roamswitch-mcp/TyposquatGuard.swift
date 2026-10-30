@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.14 (build 193).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.15 (build 194).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -161,7 +161,7 @@ enum TyposquatGuard {
     /// expected to provide, not something this project installs).
     /// The manifest is read through `SafeScanFS` (inside the scan root after
     /// link resolution, regular file, size-capped); `root` defaults to `projectDir`.
-    static func scanPackageJSON(_ projectDir: URL, against popular: [String], root: String? = nil) -> [Finding] {
+    static func scanPackageJSON(_ projectDir: URL, against popular: [String], root: String? = nil, allowed: Set<String> = []) -> [Finding] {
         guard let base = SafeScanFS.canonicalPath(projectDir.path),
               let manifest = SafeScanFS.readFile(base + "/package.json", root: root ?? base),
               let obj = try? JSONSerialization.jsonObject(with: manifest.data) as? [String: Any] else { return [] }
@@ -172,7 +172,7 @@ enum TyposquatGuard {
                 names.formUnion(deps.keys)
             }
         }
-        return names.sorted().compactMap { name in
+        return names.subtracting(allowed).sorted().compactMap { name in
             guard var finding = checkName(name, against: popular) else { return nil }
             finding.projectDir = base
             return finding
@@ -188,16 +188,16 @@ enum TyposquatGuard {
     /// (unlike that scanner): a typosquat is introduced at the moment a
     /// human adds a dependency to *some* project's own manifest, not
     /// somewhere in an already-installed transitive tree.
-    static func scanWatchedFolder(_ folder: URL, maxDepth: Int, against popular: [String], root: String? = nil) -> [Finding] {
+    static func scanWatchedFolder(_ folder: URL, maxDepth: Int, against popular: [String], root: String? = nil, allowed: Set<String> = []) -> [Finding] {
         guard let base = SafeScanFS.canonicalPath(folder.path) else { return [] }
         let scopeRoot = root ?? base
-        var out = scanPackageJSON(URL(fileURLWithPath: base), against: popular, root: scopeRoot)
+        var out = scanPackageJSON(URL(fileURLWithPath: base), against: popular, root: scopeRoot, allowed: allowed)
         guard maxDepth > 0 else { return out }
         // Symlinks leaving the scan root are skipped (`SafeScanFS`).
         for entry in SafeScanFS.children(ofDirectory: base, root: scopeRoot)
         where entry.kind == .directory && !skipDirNames.contains(entry.name) {
             out.append(contentsOf: scanWatchedFolder(
-                URL(fileURLWithPath: entry.path), maxDepth: maxDepth - 1, against: popular, root: scopeRoot
+                URL(fileURLWithPath: entry.path), maxDepth: maxDepth - 1, against: popular, root: scopeRoot, allowed: allowed
             ))
         }
         return out
@@ -205,13 +205,86 @@ enum TyposquatGuard {
 
     /// Entry point: scans every watched folder (the same list
     /// `PackageCveScanLanguages`/`PackageCveScriptScan` use) for
-    /// `package.json` typosquat candidates.
-    static func runScan(watchedFolders: [String]) -> [Finding] {
+    /// `package.json` typosquat candidates. A name the person marked as legitimate
+    /// (`allow`) is left out, here and in the automatic check.
+    static func runScan(watchedFolders: [String], allowed: Set<String>? = nil) -> [Finding] {
         let popular = popularPackageNames()
+        let allowedNames = allowed ?? loadAllowed()
         var out: [Finding] = []
         for folder in watchedFolders {
-            out.append(contentsOf: scanWatchedFolder(URL(fileURLWithPath: folder), maxDepth: 6, against: popular))
+            out.append(contentsOf: scanWatchedFolder(URL(fileURLWithPath: folder), maxDepth: 6, against: popular, allowed: allowedNames))
         }
         return out
+    }
+
+    // MARK: Names a person marked as legitimate
+
+    /// `~/Library/Application Support/RoamSwitch/typosquat_allow.json`, next to the accepted install state.
+    static var allowListURL: URL {
+        PackageCveScriptScan.installBaselineURL.deletingLastPathComponent().appendingPathComponent("typosquat_allow.json")
+    }
+
+    private struct AllowFile: Codable {
+        var version = 1
+        var names: [String] = []
+    }
+
+    /// A name an npm package can have: at most 214 characters, lowercase letters, digits and `-._~`, with an
+    /// optional `@scope/` in front. Anything else is not written to the list.
+    static func isValidPackageName(_ name: String) -> Bool {
+        func plain(_ s: Substring) -> Bool {
+            !s.isEmpty && s.unicodeScalars.allSatisfy { ("a"..."z").contains($0) || ("0"..."9").contains($0) || "-._~".unicodeScalars.contains($0) }
+        }
+        guard !name.isEmpty, name.utf8.count <= 214 else { return false }
+        if name.hasPrefix("@") {
+            let rest = name.dropFirst()
+            guard let slash = rest.firstIndex(of: "/") else { return false }
+            return plain(rest[rest.startIndex..<slash]) && plain(rest[rest.index(after: slash)...])
+        }
+        return plain(Substring(name))
+    }
+
+    /// The legitimate names in the file (empty when there is none or it cannot be read: never "everything is allowed").
+    static func loadAllowed(from url: URL = allowListURL) -> Set<String> {
+        guard let data = try? Data(contentsOf: url), data.count <= 4 * 1024 * 1024,
+              let file = try? StrictJSON.decode(AllowFile.self, from: data), file.version == 1 else { return [] }
+        return Set(file.names.filter(isValidPackageName))
+    }
+
+    private static func saveAllowed(_ names: Set<String>, to url: URL) throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let data = try encoder.encode(AllowFile(version: 1, names: names.sorted()))
+        let directory = url.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let temporary = directory.appendingPathComponent(".typosquat_allow.\(UUID().uuidString).tmp")
+        guard FileManager.default.createFile(atPath: temporary.path, contents: data, attributes: [.posixPermissions: 0o600]) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        if FileManager.default.fileExists(atPath: url.path) {
+            _ = try FileManager.default.replaceItemAt(url, withItemAt: temporary)
+        } else {
+            try FileManager.default.moveItem(at: temporary, to: url)
+        }
+    }
+
+    /// Marks `name` as a legitimate dependency. Only a person does this (a button): no scan, no MCP tool and no
+    /// automatic check calls it, so an agent cannot silence a finding. Returns whether the list changed.
+    @discardableResult
+    static func allow(_ name: String, to url: URL = allowListURL) throws -> Bool {
+        guard isValidPackageName(name) else { throw CocoaError(.fileWriteInvalidFileName) }
+        var names = loadAllowed(from: url)
+        guard names.insert(name).inserted else { return false }
+        try saveAllowed(names, to: url)
+        return true
+    }
+
+    /// Takes `name` off the list again. Returns whether it was on it.
+    @discardableResult
+    static func unallow(_ name: String, to url: URL = allowListURL) throws -> Bool {
+        var names = loadAllowed(from: url)
+        guard names.remove(name) != nil else { return false }
+        try saveAllowed(names, to: url)
+        return true
     }
 }

@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.14 (build 193). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.15 (build 194). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -98,6 +98,7 @@ final class MCPResponseFormattingTests: XCTestCase {
             MCPResponseFormatting.secretLeakAuditorKey,
             MCPResponseFormatting.airGapAutoWiFiKillKey,
             MCPResponseFormatting.linkGuardUpdatesKey,
+            MCPResponseFormatting.npmSupplyWatchKey,
         ] {
             defaults.set(false, forKey: key)
         }
@@ -110,10 +111,10 @@ final class MCPResponseFormattingTests: XCTestCase {
 
         // `webRulesFolderScan`, `webWorkerCrashWatch` and `agentSetupWatch` are not settings: the first two follow the Pro cache (they have
         // no switch), the third follows whether a state was accepted in the AI agent setup window. They are counted
-        // apart from the 31 toggles.
+        // apart from the 32 toggles.
         let toggles = payload.guards.filter { !["webRulesFolderScan", "agentSetupWatch", "webWorkerCrashWatch", "signedUpdates"].contains($0.key) }
-        XCTAssertEqual(toggles.count, 31)
-        XCTAssertEqual(Set(payload.guards.map(\.key)).count, 35, "guard keys must be unique")
+        XCTAssertEqual(toggles.count, 32)
+        XCTAssertEqual(Set(payload.guards.map(\.key)).count, 36, "guard keys must be unique")
         XCTAssertTrue(toggles.allSatisfy { !$0.enabledInSettings })
         XCTAssertEqual(payload.guards.first { $0.key == "webRulesFolderScan" }?.enabledInSettings, false, "not Pro in this test's defaults")
         XCTAssertFalse(payload.caveats.isEmpty)
@@ -140,7 +141,7 @@ final class MCPResponseFormattingTests: XCTestCase {
 
         XCTAssertEqual(enabledKeys, [
             "webMailDownloadGuard", "dnsThreatGuard", "persistenceMonitor",
-            "secretLeakClipboardAuditor", "airGapAutoWiFiKill", "linkGuard", "linkGuardFeedUpdates", "signedUpdates",
+            "secretLeakClipboardAuditor", "airGapAutoWiFiKill", "linkGuard", "linkGuardFeedUpdates", "signedUpdates", "npmSupplyWatch",
         ])
         XCTAssertTrue(payload.guards.filter { !["webRulesFolderScan", "agentSetupWatch", "webWorkerCrashWatch", "signedUpdates"].contains($0.key) }.allSatisfy { $0.usingDefault == true })
         XCTAssertEqual(payload.linkGuardMode, "block")

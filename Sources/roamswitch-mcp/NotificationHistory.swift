@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.14 (build 193).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.15 (build 194).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -60,11 +60,17 @@ public enum NotificationHistory {
     /// Records one notification and prunes anything older than `retention`.
     public static func record(title: String, body: String, defaults: UserDefaults? = nil) {
         let now = Date()
+        // One thread at a time reads, adds and saves: alerts raised together (several detectors reacting to one event)
+        // would otherwise all start from the same stored list and keep only the last one's addition.
+        recordLock.lock()
         var entries = loadRaw(defaults).filter { isWithinRetention($0, now: now) }
         entries.append(NotificationHistoryEntry(timestamp: formatter.string(from: now), title: title, body: body))
         save(entries, defaults)
+        recordLock.unlock()
         recordObserver?(title, body)
     }
+
+    private static let recordLock = NSLock()
 
     /// Returns entries within `retention`, most recent first.
     public static func load(defaults: UserDefaults? = nil) -> [NotificationHistoryEntry] {

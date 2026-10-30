@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.14 (build 193).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.15 (build 194).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -685,6 +685,7 @@ extension RoamSwitchKnowledgeBase {
                 • Aucune connexion réseau, et rien n'est jamais exécuté — un inventaire purement statique.
                 • Écart avec l'état vérifié : « Marquer l'état actuel comme vérifié » enregistre l'état actuel des paquets (commandes des scripts sous forme de hachages seulement, et présence ou non de code compilé). À partir de la liste suivante, les paquets qui ont gagné du code exécuté à l'installation depuis sont signalés : un script ajouté, un script dont la commande a changé, du code compilé ajouté (`binding.gyp`, `.node`, `.so`, `.dylib`, `.dll` ou un exécutable) et un nouveau paquet qui apporte l'un de ces éléments. Les scripts et paquets disparus ne sont pas signalés. Seule une personne peut marquer l'état comme vérifié ; ni la liste ni l'outil MCP ne le font (le résultat MCP contient `drift` et `baselineAcceptedAt`). L'enregistrement se trouve dans `~/Library/Application Support/RoamSwitch/package_install_baseline.json` (mode 0600).
                 • Outil MCP : `run_package_lifecycle_script_scan` (argument `watchedFolders`, Pro uniquement).
+                • Vérification automatique (Pro, activée par défaut) : sans utiliser la fenêtre ni MCP, l'app vérifie d'elle-même les dossiers de projet enregistrés lorsque package.json, un fichier de verrouillage ou node_modules/.package-lock.json change puis redevient calme, peu après le démarrage et une fois par jour. Elle cherche une augmentation du code exécuté à l'installation et des noms de dépendances proches de paquets connus, puis vous notifie (aucun réseau, rien n'est exécuté). Un dossier sans état confirmé n'est pas comparé ; on vous demande une seule fois de le vérifier et de l'enregistrer. Seule une personne peut marquer un état comme confirmé ; la vérification automatique ne modifie jamais cet enregistrement. Un élément du menu la désactive.
                 """,
                 recommendation: "Pour tout script marqué ⚠️, vérifiez si le paquet en a réellement besoin — soyez particulièrement attentif aux scripts postinstall de paquets peu familiers."
             ),
@@ -725,6 +726,7 @@ extension RoamSwitchKnowledgeBase {
                 • Comment la liste reste à jour : la liste des noms de paquets populaires utilisée est distribuée par `PackageCveMapUpdater` via le même manifeste (récupéré environ une fois par semaine), réception uniquement et signé Ed25519 que les cartes CVE (une graine intégrée à la compilation plus une substitution à deux niveaux, en privilégiant celle dont le `mapVersion` est le plus récent). La liste peut être actualisée sans attendre une nouvelle version de l'application.
                 • Information de référence, pas un verdict — une liste blanche connue supprime certains paquets légitimes ressemblants (par ex. preact), mais elle n'est pas exhaustive.
                 • Pour l'ouvrir : onglet « 📦 Vérification CVE des paquets » → « Détection de typosquatting (Pro) », ciblant les mêmes dossiers de projet que l'onglet « Dépendances ». MCP : `run_typosquat_scan` (argument `watchedFolders`, Pro uniquement).
+                • Vérification automatique (Pro, activée par défaut) : sans utiliser la fenêtre ni MCP, l'app vérifie d'elle-même les dossiers de projet enregistrés lorsque package.json, un fichier de verrouillage ou node_modules/.package-lock.json change puis redevient calme, peu après le démarrage et une fois par jour. Elle cherche une augmentation du code exécuté à l'installation et des noms de dépendances proches de paquets connus, puis vous notifie (aucun réseau, rien n'est exécuté). Un dossier sans état confirmé n'est pas comparé ; on vous demande une seule fois de le vérifier et de l'enregistrer. Seule une personne peut marquer un état comme confirmé ; la vérification automatique ne modifie jamais cet enregistrement. Un élément du menu la désactive.
                 """,
                 recommendation: "Vérifiez à nouveau chaque dépendance marquée ⚠️ pour une véritable faute de frappe — soyez particulièrement attentif aux noms de paquets inconnus."
             ),

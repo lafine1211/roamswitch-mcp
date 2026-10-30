@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.14 (build 193).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.15 (build 194).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -906,6 +906,7 @@ public enum MCPResponseFormatting {
     static let dockerEventGuardKey = "RoamSwitch.DockerEventGuardEnabled"             // DockerEventGuard — false
     static let criticalPathFimKey = "RoamSwitch.CriticalPathFimEnabled"               // CriticalPathFimGuard — false; Pro default-on
     static let lockfileTamperGuardKey = "RoamSwitch.LockfileTamperGuardEnabled"       // LockfileTamperGuard — false; Pro default-on
+    static let npmSupplyWatchKey = "RoamSwitch.NpmSupplyWatchEnabled"                 // NpmSupplyWatch — true (Pro; the menu item turns it off)
     static let portScanGuardKey = "RoamSwitch.PortScanGuardEnabled"                   // PortScanGuard — false; Pro default-on
     static let sshGuardKey = "RoamSwitch.SSHGuardEnabled"                             // SSHGuard — false; Pro default-on (works only while Remote Login is on)
     static let persistenceMonitorKey = "RoamSwitch.PersistenceMonitorEnabled"         // PersistenceMonitorGuard — true
@@ -1312,6 +1313,7 @@ public enum MCPResponseFormatting {
         guards.append(entry("dockerEventGuard", dockerEventGuardKey, defaultWhenUnset: false))
         guards.append(entry("criticalPathFim", criticalPathFimKey, defaultWhenUnset: false))
         guards.append(entry("lockfileTamperGuard", lockfileTamperGuardKey, defaultWhenUnset: false))
+        guards.append(entry("npmSupplyWatch", npmSupplyWatchKey, defaultWhenUnset: true))
         guards.append(entry("persistenceMonitor", persistenceMonitorKey, defaultWhenUnset: true))
         guards.append(entry("gatewayARPLock", gatewayARPLockKey, defaultWhenUnset: false))
         guards.append(entry("scheduledLogAudit", scheduledLogAuditKey, defaultWhenUnset: false))

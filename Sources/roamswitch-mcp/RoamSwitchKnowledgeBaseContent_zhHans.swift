@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.14 (build 193).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.15 (build 194).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -685,6 +685,7 @@ extension RoamSwitchKnowledgeBase {
                 • 完全不进行任何网络连接，也绝不执行脚本——纯粹的静态清单展示。
                 • 与已确认状态的差异：点击「将当前状态标记为已确认」，会记录此刻各软件包的状态（脚本内容只记录哈希，以及是否带有已编译代码）。从下一次获取列表起，会显示此后增加了安装时运行的代码的软件包：新增脚本、脚本内容发生变化、新增已编译代码（`binding.gyp`、`.node`、`.so`、`.dylib`、`.dll`、可执行文件），以及带有其中任一项的新软件包。已消失的脚本和软件包不会显示。只有人才能标记为已确认，获取列表和 MCP 工具都不会这样做（MCP 的结果带有 `drift` 和 `baselineAcceptedAt`）。记录保存在 `~/Library/Application Support/RoamSwitch/package_install_baseline.json`（权限 0600）。
                 • MCP 工具：`run_package_lifecycle_script_scan`（`watchedFolders` 参数，仅限 Pro）。
+                • 自动检查(Pro,默认开启):即使不使用窗口或 MCP,也会在已登记项目文件夹中的 package.json、锁文件或 node_modules/.package-lock.json 变化并安静下来后、启动后不久以及每天一次,自动检查安装时运行的代码是否增加,以及依赖名称是否与知名软件包相似,并发出通知(不联网,也不执行任何内容)。没有已确认状态的文件夹不会比较,只会提示一次“请确认并记录”。只有人可以将状态标记为已确认,自动检查不会改动该记录。可通过菜单项关闭。
                 """,
                 recommendation: "对标有 ⚠️ 的脚本，请逐一确认该软件包是否确实需要执行此操作。对不熟悉软件包的 postinstall 脚本请格外留意。"
             ),
@@ -725,6 +726,7 @@ extension RoamSwitchKnowledgeBase {
                 • 列表保持更新的方式：用于比对的热门包名列表由 `PackageCveMapUpdater` 通过与 CVE 映射相同的约每周一次、仅接收、Ed25519 签名验证的清单进行分发（构建时内嵌种子加两层覆盖，优先采用 `mapVersion` 较新的一方）。无需等待应用发布即可更新该列表。
                 • 这是参考信息，并非定论——已知的许可清单会部分排除一些正规的相似软件包（如 preact），但并不完整。
                 • 开启方式：「📦 软件包 CVE 比对」→「打字仿冒检测 (Pro)」标签页，针对与「依赖关系」标签页相同的项目文件夹。MCP：`run_typosquat_scan`（`watchedFolders` 参数，仅限 Pro）。
+                • 自动检查(Pro,默认开启):即使不使用窗口或 MCP,也会在已登记项目文件夹中的 package.json、锁文件或 node_modules/.package-lock.json 变化并安静下来后、启动后不久以及每天一次,自动检查安装时运行的代码是否增加,以及依赖名称是否与知名软件包相似,并发出通知(不联网,也不执行任何内容)。没有已确认状态的文件夹不会比较,只会提示一次“请确认并记录”。只有人可以将状态标记为已确认,自动检查不会改动该记录。可通过菜单项关闭。
                 """,
                 recommendation: "请对任何标记 ⚠️ 的依赖逐一核实是否确实是拼写错误——尤其要留意陌生的软件包名称。"
             ),
