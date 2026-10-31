@@ -53,6 +53,7 @@ All files live in `Sources/roamswitch-mcp/`.
 | `HoneytokenStatusReader.swift` | `RoamSwitch/HoneytokenStatusReader.swift` |
 | `BrowserCredentialWatchStatusReader.swift` | `RoamSwitch/BrowserCredentialWatchStatusReader.swift` |
 | `PackageCveScan.swift` | `RoamSwitch/PackageCveScan.swift` |
+| `NodeRuntimeScan.swift` | `RoamSwitch/NodeRuntimeScan.swift` |
 | `PackageCveMapData.swift` | `RoamSwitch/PackageCveMapData.swift` |
 | `PackageCveScanLanguages.swift` | `RoamSwitch/PackageCveScanLanguages.swift` |
 | `PackageCveMapLanguagesData.swift` | `RoamSwitch/PackageCveMapLanguagesData.swift` |
