@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.16 (build 195).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.17 (build 196).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -28,8 +28,8 @@ import Foundation
 ///    `bunfig.toml` for bun; `exclude-newer` in `uv.toml` or `[tool.uv]` of `pyproject.toml` for uv. Project
 ///    files are read from the lockfile's folder up to the watched folder, then the user's files in the home
 ///    folder (`~/.npmrc`, `~/.yarnrc.yml`, `~/.bunfig.toml`, `~/.config/uv/uv.toml`, pnpm's `config.yaml`).
-///    pnpm 11 and later wait a day by default (`packageManager` in `package.json`), so a project that names
-///    pnpm 11 or later is reported only when the wait is set to 0. NOT read: environment variables
+///    pnpm 11 and later wait a day by default, and so does Yarn Berry from 4.15.0 (`packageManager` in
+///    `package.json`), so a project that names one of them is reported only when the wait is set to 0. NOT read: environment variables
 ///    (`NPM_CONFIG_*`, `PNPM_CONFIG_*`, `UV_EXCLUDE_NEWER`), command-line flags, system-wide files, and the
 ///    CI configuration. A project that sets the wait only there is reported as missing. The wait itself is
 ///    not judged: any value above zero counts.
@@ -368,6 +368,19 @@ enum DependencySourceScan {
         return Int(manager.dropFirst("pnpm@".count).prefix { $0.isNumber })
     }
 
+    /// Whether the `yarn@X.Y.Z` named by `package.json`'s `packageManager` field waits a day by default.
+    /// Yarn Berry's `npmMinimalAgeGate` defaults to 0 up to 4.14 and to 1440 minutes from 4.15.0. nil if it
+    /// names another tool or none.
+    static func yarnWaitsByDefault(packageJSON text: String) -> Bool? {
+        guard let data = text.data(using: .utf8),
+              let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let manager = root["packageManager"] as? String, manager.hasPrefix("yarn@") else { return nil }
+        let parts = manager.dropFirst("yarn@".count).split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count >= 2, let major = Int(parts[0].prefix { $0.isNumber }),
+              let minor = Int(parts[1].prefix { $0.isNumber }) else { return nil }
+        return major > 4 || (major == 4 && minor >= 15)
+    }
+
     /// The setting that turns the wait on, as the person would write it, per manager.
     static func gateSettingName(manager: String) -> String {
         switch manager {
@@ -459,6 +472,8 @@ enum DependencySourceScan {
         if manager == "pnpm", setting != .disabled,
            let major = readText((directory as NSString).appendingPathComponent("package.json")).flatMap(pnpmMajor(packageJSON:)),
            major >= 11 { return nil }
+        if manager == "yarn", setting != .disabled,
+           readText((directory as NSString).appendingPathComponent("package.json")).flatMap(yarnWaitsByDefault(packageJSON:)) == true { return nil }
         return Finding(kind: .releaseAgeGateMissing, file: lockfile, line: nil, host: "", scope: nil, packageCount: 0,
                        manager: manager, explicitlyDisabled: setting == .disabled)
     }

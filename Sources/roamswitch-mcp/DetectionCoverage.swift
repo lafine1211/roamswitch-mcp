@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.16 (build 195).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.17 (build 196).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -271,6 +271,8 @@ enum DetectionCoverage {
         "scheduledLogAudit": "Looks for new or surging log patterns in general; not tied to one technique.",
         "webWorkerCrashWatch": "Notices web server workers (nginx, Apache, PHP-FPM) that keep crashing, from their error logs; it does not name a technique.",
         "agentSetupWatch": "Reports changes to an AI agent's instruction files, skills, MCP definitions and settings against a state the person accepted; no ATT&CK technique names that.",
+        "dependencyWatch": "Reports a CISA KEV or EPSS 0.9+ vulnerability in the lockfile dependencies of registered project folders; a known-vulnerable dependency is exposure, not a technique, and a compromised dependency is not what it looks for.",
+        "configRegressionNotice": "Reports a hardening setting that passed at the last diagnosis and fails now; it follows no single technique, and what weakened it is for the person to find out.",
     ]
 
     // MARK: Payload

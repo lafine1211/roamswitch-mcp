@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.16 (build 195).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.17 (build 196).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -445,7 +445,7 @@ public struct RoamSwitchKnowledgeBase: Sendable {
             EntryMeta(id: "feat_notification_history", topic: t, tags: ["notification", "history", "7-days", "eicar", "mcp", "free"]),
             EntryMeta(id: "feat_secret_leak_auditor", topic: t, tags: ["secret", "apikey", "clipboard", "openai", "anthropic", "github", "aws", "stripe", "clickfix", "zerotelemetry", "free"]),
             EntryMeta(id: "feat_secret_leak_audit_tool", topic: t, tags: ["secret", "apikey", "folder-scan", "audit", "zerotelemetry", "tcc", "permission", "mcp", "free"]),
-            EntryMeta(id: "feat_package_cve_scan", topic: t, tags: ["cve", "homebrew", "npm", "pypi", "crates.io", "rubygems", "packagist", "go", "maven", "zerotelemetry", "mcp", "free"]),
+            EntryMeta(id: "feat_package_cve_scan", topic: t, tags: ["cve", "homebrew", "npm", "pypi", "crates.io", "rubygems", "packagist", "go", "maven", "zerotelemetry", "mcp", "free", "dependency-watch", "kev", "epss", "automatic"]),
             EntryMeta(id: "feat_lockfile_tamper_guard", topic: t, tags: ["npm", "yarn", "pnpm", "lockfile", "fim", "sha256", "tampering", "supply-chain", "baseline", "cryptokit", "fsevents", "pro"]),
             EntryMeta(id: "feat_package_lifecycle_script_scan", topic: t, tags: ["npm", "node_modules", "package.json", "lifecycle-script", "postinstall", "preinstall", "prepare", "supply-chain", "heuristic", "mcp", "pro"]),
             EntryMeta(id: "feat_npm_audit_signatures", topic: t, tags: ["npm", "audit", "signatures", "provenance", "registry", "npmjs.com", "opt-in", "network", "mcp", "pro"]),
@@ -454,7 +454,7 @@ public struct RoamSwitchKnowledgeBase: Sendable {
             EntryMeta(id: "feat_sensor_pairing", topic: t, tags: ["sensor", "pairing-code", "tcp", "ed25519", "lan", "trust", "audit", "pro"]),
             EntryMeta(id: "feat_port_scan_guard", topic: t, tags: ["port-scan", "reconnaissance", "nmap", "masscan", "pf", "auto-block", "pro"]),
             EntryMeta(id: "feat_ssh_guard", topic: t, tags: ["ssh", "brute-force", "pf", "auto-block", "unified-log", "t1110", "allowlist", "allowed-sources", "pro"]),
-            EntryMeta(id: "feat_security_health_checker", topic: t, tags: ["audit", "score", "filevault", "sip", "gatekeeper", "firewall", "xprotect", "ssh", "sudo", "accessory", "21-items", "cve", "kev", "epss", "homebrew", "php", "mod_php", "upload_progress", "free"]),
+            EntryMeta(id: "feat_security_health_checker", topic: t, tags: ["audit", "score", "filevault", "sip", "gatekeeper", "firewall", "xprotect", "ssh", "sudo", "accessory", "21-items", "cve", "kev", "epss", "homebrew", "php", "mod_php", "upload_progress", "free", "regression", "configregressionnotice"]),
             EntryMeta(id: "feat_autonomous_sentinel", topic: t, tags: ["autonomous", "sentinel", "background", "freshclam", "clamav", "scheduled-scan", "pro"]),
             EntryMeta(id: "feat_simulation_self_test", topic: t, tags: ["simulation", "self-test", "test", "ransomware", "airgap", "docker", "eicar"]),
             EntryMeta(id: "feat_privileged_helper", topic: t, tags: ["helper", "xpc", "root", "pfctl", "privilege", "security", "smappservice", "launchdaemon"]),

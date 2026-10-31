@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.16 (build 195).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.17 (build 196).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -106,7 +106,7 @@ public enum LinkGuardMode: String, CaseIterable, Codable {
     public var displayName: String {
         switch self {
         case .off: return loc("オフ")
-        case .warn: return loc("警告して確認 (応答がなければ遮断)")
+        case .warn: return loc("確認してから通す (答えがなければ遮断)")
         case .block: return loc("明らかな詐欺サイトは自動でブロック (推奨)")
         }
     }
@@ -561,17 +561,35 @@ public final class LinkSafetyAuditor {
         str.unicodeScalars.contains { !$0.isASCII }
     }
 
+    /// 名前が日常語でもあるブランド(`line`)。それだけでは根拠にならない(`line-art.example.com`)ので、
+    /// フィッシングページが添える語(`login-line.example.net`)と一緒のときだけ数える。
+    private let ambiguousBrandKeywords: Set<String> = ["line"]
+
+    /// ブランド名の隣に、フィッシングページが置く語。
+    private let phishingPageWords: Set<String> = [
+        "security", "secure", "support", "verify", "verification", "login", "signin", "account", "update",
+        "confirm", "alert", "service", "help", "billing", "password", "unlock", "suspended", "restore", "recover",
+    ]
+
+    /// サブドメインの部分に、ブランド名が「1つの語として」あるか。語は ASCII の英字の連なりで、`.` や `-` や数字で区切る。
+    /// `online` や `pipeline` は `line` を含むだけで、ブランドではない(部分一致にしない)。
     private func detectSubdomainSpoofing(host: String) -> String? {
         let parts = host.split(separator: ".")
         guard parts.count >= 3 else { return nil }
 
         let actualDomainAndTLD = parts.suffix(2).joined(separator: ".")
-        let subdomains = parts.dropLast(2).joined(separator: ".")
+        var words = Set<String>()
+        for label in parts.dropLast(2) {
+            for word in label.split(whereSeparator: { !($0.isASCII && $0.isLetter) }) {
+                words.insert(word.lowercased())
+            }
+        }
+        let hasPhishingWord = !words.isDisjoint(with: phishingPageWords)
 
         for brand in targetBrandKeywords {
-            if subdomains.contains(brand) && !actualDomainAndTLD.contains(brand) {
-                return brand
-            }
+            guard words.contains(brand), !actualDomainAndTLD.contains(brand) else { continue }
+            if ambiguousBrandKeywords.contains(brand) && !hasPhishingWord { continue }
+            return brand
         }
         return nil
     }

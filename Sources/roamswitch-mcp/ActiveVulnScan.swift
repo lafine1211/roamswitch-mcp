@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.16 (build 195).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.17 (build 196).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -1199,6 +1199,18 @@ public enum ActiveVulnScan {
     /// Signatures whose finding is about being reachable from the network: probed only for a
     /// listener bound beyond loopback (`ListeningPortInfo.isGloballyExposed`).
     static let networkExposureOnlyIDs: Set<String> = ["ollama-exposed", "jupyter-noauth", "mlflow-noauth", "gradio-noauth"]
+
+    /// The result text. The "confirmed reachable" heading goes only on findings RoamSwitch itself confirmed; an nmap
+    /// NSE finding is nmap's own report, and with the heading every line of it (`http-title` and the like) would read as
+    /// "reachable without authentication", even for a port that listens on 127.0.0.1 only.
+    static func resultText(findings: [ActiveVulnScan.Finding]) -> String {
+        let badge = loc("実証済み: 未認証で到達可能")
+        return findings.map { finding in
+            finding.evidenceKind == .externalToolReport
+                ? "\(finding.title)\n\(finding.recommendation)"
+                : "\(badge)\n\(finding.title)\n\(finding.recommendation)"
+        }.joined(separator: "\n\n")
+    }
 
     static func runScan(ports: [ListeningPortInfo], probeLogURL: URL = probeLogURL, includeNmapNSE: Bool = true) -> ScanRunResult {
         var result = ScanRunResult()

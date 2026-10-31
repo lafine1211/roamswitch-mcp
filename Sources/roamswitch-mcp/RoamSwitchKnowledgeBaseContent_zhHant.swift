@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.16 (build 195).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.17 (build 196).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -321,7 +321,7 @@ extension RoamSwitchKnowledgeBase {
                 title: "連結保護（偵測並封鎖釣魚連線：系統延伸功能、支援 DoH、警告模式故障關閉）(Pro)",
                 summary: "根據已知詐騙網域的威脅情資與品牌仿冒偵測，無論使用何種瀏覽器或應用程式，都在裝置上封鎖與釣魚及詐騙網站的連線。以內容過濾系統延伸功能運作，在延伸功能獲得核准前，會以 /etc/hosts 黑洞作為備援。",
                 details: """
-                • 模式：「關閉」「僅警告（不攔截）」與「自動攔截明顯的釣魚網站（建議）」（預設值）。可在「惡意軟體防護」→「連結保護（釣魚連線偵測）(Pro)」中切換。
+                • 模式：「關閉」「先詢問（無回應則攔截）」與「自動攔截明顯的釣魚網站（建議）」（預設值）。可在「惡意軟體防護」→「連結保護（釣魚連線偵測）(Pro)」中切換。
                 • 攔截對象：僅限明確的情況，也就是威脅情資中收錄的網域，或是品牌名稱的 Unicode 同形異義字仿冒。子網域仿冒、高風險 TLD 等則視為警告。判定引擎與情資與 Linux 版共用。
                 • 系統延伸功能（建議）：內容過濾系統延伸功能 `RoamSwitchLinkFilter` 會在名稱解析後檢查 TCP 連線。除了作業系統解析出的主機名稱外，也會讀取 TLS ClientHello 中的 SNI，因此即使瀏覽器使用自己的 DoH / DoT 也能判定。在攔截模式下，會捨棄看不到 SNI 的 QUIC（UDP 443），讓瀏覽器回退到 TCP。首次使用須在「系統設定」中核准。
                 • JA3 指紋：對於能讀取到 SNI 的 TLS 連線，也會計算用戶端的 JA3 雜湊值，並與情資中的 JA3 清單比對（沒有 SNI 的連線絕不會單獨使用 JA3 判定）。
@@ -656,6 +656,7 @@ extension RoamSwitchKnowledgeBase {
                 • MCP 工具：`run_package_cve_scan`（Homebrew）與 `run_package_cve_scan_languages`（相依性，`watchedFolders` 參數）。
                 • 什麼都沒檢查時:沒有 Homebrew、brew 失敗或沒有套件時,視窗會顯示灰色的「什麼都沒有檢查」,而不是綠色的「未發現」(`run_package_cve_scan` 的 homebrewInventory 為 brew_missing 或 brew_failed)。CVE 資料更新失敗時,視窗與選單會顯示上次成功更新的時間與失敗原因,`get_guard_status` 的 feedUpdates 中也有。
                 • 更新停止時:如果更新程式對正在使用的資料超過一週沒有檢查(每週只取得一次的兩個 CVE 對照表為兩週;檢查失敗也算檢查過),選單會顯示一行警告,寫明該資料的名稱和最後一次檢查的時間。在 `get_guard_status` 中,signedUpdates 為 off(原因 state_stale),該資料在 feedUpdates 中為 stale: true。對象是套件 CVE 對照表和 Web 規則、連結保護自動更新開啟(Pro)時的連結名單,以及主動掃描開啟時的主動掃描 CVE 對照表。重新啟動 RoamSwitch 會立即檢查。從未檢查過的資料不算已停止,視窗會顯示尚未更新。
+                • 自動檢查（Pro，預設開啟）：無需開啟視窗或使用 MCP，在已登記專案資料夾的鎖定檔寫入平靜後、啟動不久以及每天一次，自動檢查相依套件中是否有 CISA 已確認被利用（KEV）或 EPSS 在 0.9 以上、且沒有有效期內風險接受涵蓋的漏洞，並發出通知（CVE 對照表和 KEV 清單每天更新，所以未變動的鎖定檔也可能變為受影響）。不會傳送任何資料。每次檢查最多一則通知，已通知的內容不會重複（修補後再次出現會重新通知）。沒有 CVE 對照表的生態系視為未檢查，不會通知；未登記資料夾時什麼都不做（原因 no_folders_registered）。可用選單中的「自動檢查相依套件漏洞 (Pro)」關閉，狀態顯示在 `get_guard_status` 的 dependencyWatch 中。Linux 版有相同功能（由常駐程式執行，不區分 Pro）。
                 """,
                 recommendation: "定期執行 Homebrew 掃描，在「相依性」分頁登錄開發中的專案，並儘快更新含有嚴重 CVE 的套件。"
             ),
@@ -723,6 +724,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • 範圍：僅限專案自身 package.json 的 dependencies/devDependencies/optionalDependencies（peerDependencies 不在範圍內）。node_modules（已安裝的傳遞相依性）也刻意不在範圍內——打字錯誤產生於人類將相依性加入 package.json 的那一刻。
                 • 比對邏輯：標準的 Levenshtein 距離動態規劃實作，將每個相依名稱與知名 npm 套件名稱清單比對。帶作用域的套件（`@scope/pkg`）以其基礎名稱（`pkg`）比較。長度差超過 2 的候選會被低成本預過濾跳過。閾值為：知名名稱長度 8 個字元以上時允許距離最多為 2，更短則僅允許距離 1。
+                • 去掉 js 後綴的比對：名稱以 `js` 或 `.js` 結尾的相依名稱（nodemonjs、zustand.js 等），也會在去掉該後綴後，與去掉後綴的知名套件名稱比對（加上後綴會使直接的編輯距離超過門檻）。只有被檢查的名稱需要帶後綴：真正的 `chart` 或 `core` 不會被視為 `chart.js` 或 `core-js` 的仿冒名稱。以 `-js`、`_js` 結尾的名稱（postcss-js 等）不在這第二次比對的範圍內。
                 • 清單保持更新的方式：用於比對的熱門套件名稱清單由 `PackageCveMapUpdater` 透過與 CVE 對應表相同的約每週一次、僅接收、Ed25519 簽章驗證的清單進行分發（建置時內嵌種子加兩層覆蓋，優先採用 `mapVersion` 較新的一方）。無需等待應用程式發布即可更新該清單。
                 • 這是參考資訊，並非定論——已知的許可清單會部分排除一些正規的相似套件（如 preact），但並不完整。
                 • 開啟方式：「📦 套件 CVE 比對」→「打字仿冒偵測 (Pro)」分頁，針對與「相依性」分頁相同的專案資料夾。MCP：`run_typosquat_scan`（`watchedFolders` 參數，僅限 Pro）。
@@ -798,6 +800,7 @@ extension RoamSwitchKnowledgeBase {
                 • 23. 容易被利用的弱點 (已安裝的軟體)（`package_cve_exposure`，系統強化）：檢查 Homebrew 套件與 PHP。將透過 `brew list --versions` 讀取的 Homebrew 套件，與更新程式下發的已簽章已知 CVE 資料（Homebrew 用）以及每天下發的 CISA KEV 清單比對。若 CISA 確認已被利用（KEV）的弱點，或 EPSS 達 90% 以上的弱點，仍留在受影響的版本中，則判為不合格，並顯示套件名稱與 CVE 編號（狀態欄最多 3 個）。風險接受尚未到期的項目不計入。對於 PHP，讀取 Homebrew、MAMP、Herd 與 PATH 中執行檔的版本，以及 php.ini、FPM 與 Apache 的設定。版本早於修補版本（兩個嚴重弱點 CVE-2026-109618 與 CVE-2026-109619，修補版本為 8.2.35、8.3.36、8.4.27、8.5.12；8.1 及更早版本沒有修補版本），或符合 CVE-2026-115560 的條件（設定為 php_binary 或 php_serialize、應用程式碼以 ini_set() 切換、upload_progress 已啟用，三者同時具備；目前沒有修補版本）時判為不合格。mod_php 或啟用 upload_progress 等中等以下的提示不會判為不合格。資料中收錄的 Homebrew php 依資料計算，不會重複計算。PHP 執行檔僅在顯示版本時啟動。不進行網路通訊。結果保留 30 分鐘，20 秒內未完成則顯示「無法確認」。沒有 Homebrew 套件也沒有 PHP 時判為不適用，不計入分數。沒有資料時同樣顯示「無法確認」。看不到的內容包括：非 Homebrew 安裝的 PHP 以外的軟體、資料中沒有對應項目的弱點，以及在最新 KEV 清單之後才列入 KEV 的 CVE（詳細欄會顯示資料版本與 KEV 日期）。PHP 的工作階段檔案由 Web shell 偵測規則的掃描讀取，不在本項目中。狀態欄會顯示已安裝套件中資料收錄的數量。
                 • 等級：100 分為 S、85 至 99 分為 A、70 至 84 分為 B、低於 70 分為 C。也可透過 MCP 工具 `get_security_report` 取得。
                 • 保護的運作狀態：依防護項目（36 項）列出已開啟的保護是否真正在運作的視窗。可從選單（Mac 安全綜合診斷 > 🛡️ 保護的運作狀態…）開啟，也可用綜合診斷報告頂端卡片（摘要和未運作的保護）上的「顯示所有保護…」開啟。狀態共五種：已生效、部分生效、未生效、關閉、僅限 Pro。未運作的保護會顯示原因代碼（如 `pro_not_active`、`helper_not_connected`、`system_extension_not_approved`）以及說明原因與解決方法的句子；依原因，還會出現「認證 Pro 版…」「核准輔助程式…」「開啟系統設定…」按鈕。每 15 秒以及按下「重新確認」時重新讀取。在沒有 Pro 的 Mac 上，僅因預設值而開啟的 Pro 功能顯示為「僅限 Pro」，不計為故障。有保護未運作時，選單頂端還會出現一行「⚠️ 有保護未生效(N 項)。查看原因…」。判定使用與選單標記、通知和 MCP 的 `get_guard_status` 相同的資料。偵測資料的更新停止時（`state_stale`）不發通知，只顯示在選單和這個視窗中。
+                • 設定被削弱時的通知（Pro，預設開啟）：診斷之後，上次合格（或不適用）而現在不合格的設定，用一則通知告知。涵蓋 10 項不會自行變化的設定（SSH、sudo、SIP、Gatekeeper、自動更新、XProtect、瀏覽器的釣魚防護、配件連線保護、FileVault、備份新舊）。Wi-Fi、ARP、開放連接埠這類隨時變化的內容，以及結果取決於所連網路的防火牆項目不在其內。無法測量的項目不計入。第一次診斷只做記錄，同一項目 24 小時內不重複，通知關閉期間發生的削弱在重新開啟後也不會通知。不會傳送任何資料。可用選單中的「設定被削弱時通知 (Pro)」關閉，狀態顯示在 `get_guard_status` 的 configRegressionNotice 中。Linux 版有相同功能（由常駐程式在每小時的檢查之後執行，不區分 Pro）。
                 """,
                 recommendation: "定期開啟稽核報告，依照顯示的修正步驟處理標示 ⚠️ 的項目，並維持在 A 級以上。"
             ),
@@ -854,7 +857,7 @@ extension RoamSwitchKnowledgeBase {
                 • audit_mcp_configs: MCP 伺服器的 env 中如果有讓通訊經由代理的設定（HTTP_PROXY, HTTPS_PROXY, ALL_PROXY）、讓其信任額外憑證授權單位的設定（NODE_EXTRA_CA_CERTS, SSL_CERT_FILE, SSL_CERT_DIR, REQUESTS_CA_BUNDLE, CURL_CA_BUNDLE, GIT_SSL_CAINFO）或關閉憑證驗證的設定（NODE_TLS_REJECT_UNAUTHORIZED=0），也會指出（traffic_interception_env，嚴重度 medium）。不會顯示值，代理只顯示 host。這也可能是正確的公司代理設定，提示文字中也會這樣說明。
                 • 安全性：由於沒有任何工具能變更設定或保護等級，即使 AI 遭提示注入操縱，也無法變更保護等級或隔離連接埠。
                 • 對形似指令的文字的偵測，現在還涵蓋要求列出工具、或洩漏 API 金鑰、權杖、環境變數的請求（system-prompt-leak），要求確認或回答「你有權限」的自我證明請求（authority-claim），以及要求回報「安全」「沒有威脅」「已解決」的指令（instruction-override）。類別的種類沒有增加。
-                • AI 代理設定的變更偵測:與您按下「將此狀態標記為已確認」時的基準進行比較的背景通知。僅限 Pro 版,沒有基準時不運作。狀態顯示在稽核視窗與 `get_guard_status` 的 agentSetupWatch 中(原因 no_baseline 或 pro_not_active)。
+                • AI 代理設定的變更偵測：與您按下「將此狀態標記為已確認」時的基準進行比較的背景通知。僅限 Pro 版，沒有基準時不運作。狀態顯示在稽核視窗與 `get_guard_status` 的 agentSetupWatch 中（原因 no_baseline 或 pro_not_active）；沒有基準時，稽核視窗會提示按下按鈕後才會開始。變更的檔案與內容（新增、MCP 伺服器定義變更、設定變寬鬆）用一則通知告知，同一變更不會重複。可用選單中的「AI 代理設定變更時自動通知 (Pro)」關閉（預設開啟）。已確認的狀態位於這台 Mac 的帳號中，因此以同一使用者執行的代理可以改寫。不會傳送任何資料。Linux 版有相同功能（由常駐程式執行，不區分 Pro）。
                 """,
                 recommendation: "設定方式請參見 faq_mcp_setup。您可以用日常語言提問，例如「幫我用 RoamSwitch 確認一下我的 Mac 現在安不安全」或「這則通知是什麼意思？」"
             ),
@@ -1438,7 +1441,7 @@ extension RoamSwitchKnowledgeBase {
                 title: "連結保護的模式、自動更新、系統延伸功能與暫時允許 (Pro)",
                 summary: "設定連結保護的模式、威脅情資自動更新、系統延伸功能核准狀態，以及如何允許誤封鎖的網站。",
                 details: """
-                • 模式：「連結保護（釣魚連線偵測）(Pro)」→「關閉」「僅警告（不攔截）」或「自動攔截明顯的釣魚網站（建議）」。警告模式僅在系統延伸功能生效時才能運作。
+                • 模式：「連結保護（釣魚連線偵測）(Pro)」→「關閉」「先詢問（無回應則攔截）」或「自動攔截明顯的釣魚網站（建議）」。警告模式僅在系統延伸功能生效時才能運作。
                 • 自動更新：點選「自動更新：開（僅接收）」即可關閉。關閉後仍可依靠內建資料與同形異義字偵測運作。選單中會顯示情資版本與網域數量。
                 • 強制點：「強制點：系統延伸功能（支援 DoH）」、「強制點：hosts 備援」、「正在啟用系統延伸功能…」，或系統延伸功能錯誤。等待核准期間會顯示「核准系統延伸功能（開啟「系統設定」）…」。
                 • 允許／封鎖：封鎖通知中的「本次允許（5 分鐘）」與警告面板中的「允許」都只允許該網站 5 分鐘，即使結束並重新開啟應用程式，也會準時結束。警告面板中的「封鎖」會被記住。
@@ -1643,7 +1646,7 @@ extension RoamSwitchKnowledgeBase {
                 • 會被記住的選擇：只有警告面板中的「封鎖」會被記住。「允許」只持續 5 分鐘。
                 • 暫停的連線自動被封鎖：警告模式若約 8 秒內沒有回應就會封鎖（故障關閉）。此結果不會被快取，因此重新載入頁面會再次詢問。
                 • 看不到通知：橫幅式通知樣式可能會隱藏按鈕，因此也會顯示最前端面板。若在專注模式中，請檢查通知歷史。
-                • 暫時停用：將模式切換為「僅警告（不攔截）」或「關閉」。
+                • 暫時停用：將模式切換為「關閉」。「先詢問（無回應則攔截）」仍會暫停符合的連線，因此無法停用此功能。
                 """,
                 recommendation: "若工作工具持續被封鎖，請先確認網域名稱是否有拼字錯誤或仿冒，再決定是否允許。"
             ),

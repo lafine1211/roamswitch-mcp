@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.16 (build 195). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.17 (build 196). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -128,6 +128,34 @@ final class LinkSafetyAuditorTests: XCTestCase {
         XCTAssertEqual(report.riskLevel, .dangerous)
         XCTAssertTrue(report.riskFactors.contains { $0.title.contains("ブランド名偽装") })
         XCTAssertTrue(report.riskFactors.contains { $0.title.contains("高リスクTLD") })
+    }
+
+    func testSubdomainSpoofing_notTriggeredByWordsThatOnlyContainABrand() {
+        // `line` is inside online / pipeline / airline ...; the brand check looks for the brand as a whole word.
+        for host in ["online.shop.example.com", "pipeline.build.example.org", "www.airline.example.net",
+                     "deadline.tasks.example.io", "app.lineage.example.com", "pineapple.farm.example.com"] {
+            let report = LinkSafetyAuditor.shared.analyzeURL("https://\(host)/")
+            XCTAssertFalse(report.riskFactors.contains { $0.kind == .brandSubdomainSpoofing }, host)
+        }
+    }
+
+    func testSubdomainSpoofing_ambiguousBrandNeedsAPhishingWord() {
+        for host in ["line.art.example.com", "front.line.example.org"] {
+            let report = LinkSafetyAuditor.shared.analyzeURL("https://\(host)/")
+            XCTAssertFalse(report.riskFactors.contains { $0.kind == .brandSubdomainSpoofing }, host)
+        }
+        for host in ["login-line.example.net", "line.verify.example.net", "line-support.example.com"] {
+            let report = LinkSafetyAuditor.shared.analyzeURL("https://\(host)/")
+            XCTAssertTrue(report.riskFactors.contains { $0.kind == .brandSubdomainSpoofing }, host)
+        }
+    }
+
+    func testSubdomainSpoofing_realScamShapesStillDetected() {
+        for host in ["apple.com.verify-account-id.example.net", "login-microsoft.example.net", "secure.paypal.example.org",
+                     "www.google-support.example.org", "Apple.Com.Verify.Example.Net"] {
+            let report = LinkSafetyAuditor.shared.analyzeURL("https://\(host)/")
+            XCTAssertTrue(report.riskFactors.contains { $0.kind == .brandSubdomainSpoofing }, host)
+        }
     }
 
     func testHomographPunycode_detected() {

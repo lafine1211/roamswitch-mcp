@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.16 (build 195). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.17 (build 196). Do not edit here; see SYNC.md.
 
 import XCTest
 import Network
@@ -979,6 +979,17 @@ final class ActiveVulnScanTests: XCTestCase {
         let b = String(decoding: try JSONEncoder().encode(without), as: UTF8.self)
         XCTAssertTrue(a.contains("previouslySafeAt"))
         XCTAssertFalse(b.contains("previouslySafeAt"))
+    }
+
+    /// The "confirmed reachable" heading is for RoamSwitch's own confirmations only: nmap's report carries none.
+    func testResultTextPutsTheConfirmedHeadingOnlyOnConfirmedFindings() {
+        let confirmed = ActiveVulnScan.Finding(port: 1, processName: "p", title: "open redis", description: "d", recommendation: "set a password")
+        let nmap = ActiveVulnScan.Finding(port: 1, processName: "p", title: "http-title: Welcome", description: "d", recommendation: "nmap's own result",
+                                          probeName: nil, evidenceKind: .externalToolReport)
+        let badge = loc("実証済み: 未認証で到達可能")
+        let text = ActiveVulnScan.resultText(findings: [confirmed, nmap])
+        XCTAssertEqual(text, "\(badge)\nopen redis\nset a password\n\nhttp-title: Welcome\nnmap's own result")
+        XCTAssertEqual(text.components(separatedBy: badge).count - 1, 1)
     }
 
 }

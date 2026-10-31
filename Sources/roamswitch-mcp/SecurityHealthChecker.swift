@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.16 (build 195).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.17 (build 196).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -587,6 +587,7 @@ final class SecurityHealthChecker {
         // MARK: - 4. Malware & Download Protection (マルウェア・ダウンロード保護)
         let isDownloadGuardEnabled = defaults.object(forKey: "RoamSwitch.WebMailDownloadGuardEnabled") == nil ? true : defaults.bool(forKey: "RoamSwitch.WebMailDownloadGuardEnabled")
         let clamCandidates = [
+            "/usr/local/clamav/bin/clamscan",
             "/opt/homebrew/bin/clamscan",
             "/usr/local/bin/clamscan",
             "/usr/bin/clamscan"

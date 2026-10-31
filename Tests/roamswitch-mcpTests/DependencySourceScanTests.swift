@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.16 (build 195). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.17 (build 196). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -410,6 +410,26 @@ final class DependencySourceScanTests: XCTestCase {
         XCTAssertEqual(findings.map { ($0.file as NSString).deletingLastPathComponent.components(separatedBy: "/").last ?? "" }.sorted(), ["off", "old"])
         XCTAssertEqual(findings.first { $0.file.contains("/off/") }?.explicitlyDisabled, true)
         XCTAssertEqual(findings.first { $0.file.contains("/old/") }?.explicitlyDisabled, false)
+    }
+
+    func testYarnBerry415WaitsByDefaultUnlessTheWaitIsSetToZero() throws {
+        XCTAssertEqual(Scan.yarnWaitsByDefault(packageJSON: #"{"packageManager":"yarn@4.15.0"}"#), true)
+        XCTAssertEqual(Scan.yarnWaitsByDefault(packageJSON: #"{"packageManager":"yarn@4.18.1+sha512.abc"}"#), true)
+        XCTAssertEqual(Scan.yarnWaitsByDefault(packageJSON: #"{"packageManager":"yarn@5.0.0"}"#), true)
+        XCTAssertEqual(Scan.yarnWaitsByDefault(packageJSON: #"{"packageManager":"yarn@4.14.1"}"#), false)
+        XCTAssertNil(Scan.yarnWaitsByDefault(packageJSON: #"{"packageManager":"pnpm@11.0.0"}"#))
+        XCTAssertNil(Scan.yarnWaitsByDefault(packageJSON: "{}"))
+        let root = try makeProject()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let berry = "__metadata:\n  version: 8\n"
+        try write(berry, root, "new/yarn.lock");  try write(#"{"packageManager":"yarn@4.15.0"}"#, root, "new/package.json")
+        try write(berry, root, "old/yarn.lock");  try write(#"{"packageManager":"yarn@4.14.1"}"#, root, "old/package.json")
+        try write(berry, root, "none/yarn.lock")
+        try write(berry, root, "off/yarn.lock");  try write(#"{"packageManager":"yarn@4.18.1"}"#, root, "off/package.json")
+        try write("npmMinimalAgeGate: 0\n", root, "off/.yarnrc.yml")
+        let findings = gateFindings(root)
+        XCTAssertEqual(findings.map { ($0.file as NSString).deletingLastPathComponent.components(separatedBy: "/").last ?? "" }.sorted(), ["none", "off", "old"])
+        XCTAssertEqual(findings.first { $0.file.contains("/off/") }?.explicitlyDisabled, true)
     }
 
     func testLockfilesInDependencyFoldersAreNotWalkedForTheGateEither() throws {

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.16 (build 195).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.17 (build 196).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -574,15 +574,20 @@ enum PackageCveScanLanguages {
     /// at or above one of the entry's `unfixed` introduced versions (`unfixed: true` in the result). An entry that
     /// matches a fixed range is reported as that, once.
     static func findKnownAndUnfixedCVEs(map: CveMap, package: String, installedVersion: String) -> [(entry: CveEntry, unfixed: Bool)] {
+        matching(entries: map.entries.filter { $0.package == package }, ecosystem: map.ecosystem, installedVersion: installedVersion)
+    }
+
+    /// The entries of one package (already picked out of a map, in the map's order) that affect `installedVersion`.
+    static func matching(entries: [CveEntry], ecosystem: String, installedVersion: String) -> [(entry: CveEntry, unfixed: Bool)] {
         var out: [(entry: CveEntry, unfixed: Bool)] = []
-        for entry in map.entries where entry.package == package {
+        for entry in entries {
             let byRange = entry.ranges.contains { range in
-                compareVersions(ecosystem: map.ecosystem, installedVersion, range.introduced) >= 0
-                    && compareVersions(ecosystem: map.ecosystem, installedVersion, range.fixed) < 0
+                compareVersions(ecosystem: ecosystem, installedVersion, range.introduced) >= 0
+                    && compareVersions(ecosystem: ecosystem, installedVersion, range.fixed) < 0
             }
             if byRange {
                 out.append((entry, false))
-            } else if entry.unfixed.contains(where: { compareVersions(ecosystem: map.ecosystem, installedVersion, $0) >= 0 }) {
+            } else if entry.unfixed.contains(where: { compareVersions(ecosystem: ecosystem, installedVersion, $0) >= 0 }) {
                 out.append((entry, true))
             }
         }
@@ -839,9 +844,12 @@ enum PackageCveScanLanguages {
         "pom.xml": parsePomXml,
     ]
 
+    /// The file names `scanWatchedFolder` reads (what a watch for changed dependencies listens for).
+    static var lockfileNames: Set<String> { Set(lockfileParsers.keys) }
+
     /// Directory names never descended into — dependency stores and VCS
     /// metadata that are enormous, irrelevant, or both.
-    private static let skipDirNames: Set<String> =
+    static let skipDirNames: Set<String> =
         [".git", "node_modules", "vendor", "target", ".venv", "venv", "dist", "build", ".tox"]
 
     /// Walks `folder` up to `maxDepth` levels, running the matching parser
@@ -942,9 +950,15 @@ enum PackageCveScanLanguages {
         outcome.noData = outcome.dependencies.keys.filter { maps[$0]?.entries.isEmpty ?? true }.sorted()
 
         var findings: [Finding] = []
+        // Each map is indexed by package once: a lockfile lists hundreds of dependencies and a map thousands of entries,
+        // so picking a package's entries by walking the whole map for every dependency is what made a scan take seconds.
+        var indexes: [String: [String: [CveEntry]]] = [:]
+        for (ecosystem, map) in maps where outcome.dependencies[ecosystem] != nil {
+            indexes[ecosystem] = Dictionary(grouping: map.entries, by: \.package)
+        }
         for dep in deps {
-            guard let map = maps[dep.ecosystem] else { continue }
-            for (cve, unfixed) in findKnownAndUnfixedCVEs(map: map, package: dep.name, installedVersion: dep.version) {
+            guard let map = maps[dep.ecosystem], let entries = indexes[dep.ecosystem]?[dep.name] else { continue }
+            for (cve, unfixed) in matching(entries: entries, ecosystem: map.ecosystem, installedVersion: dep.version) {
                 findings.append(Finding(
                     ecosystem: dep.ecosystem,
                     package: dep.name,
