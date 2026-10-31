@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.17 (build 196).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.18 (build 197).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -28,7 +28,20 @@ public enum NotificationHistory {
 
     /// The app's own preferences domain, read and written alike by the app and by the MCP server (a separate
     /// process whose `.standard` is another, empty domain). Tests pass a scratch suite instead.
-    private static func store(_ defaults: UserDefaults?) -> UserDefaults { defaults ?? AppLanguage.sharedDefaults }
+    private static func store(_ defaults: UserDefaults?) -> UserDefaults { defaults ?? defaultDomain(underTests: underTests) }
+
+    static func defaultDomain(underTests: Bool) -> UserDefaults { underTests ? testScratch : AppLanguage.sharedDefaults }
+
+    /// A unit-test run is hosted by the app itself, so its `.sharedDefaults` is the installed app's own domain: every
+    /// notification a test raised (clipboard, DYLD, USB ...) landed in the owner's real history. Under XCTest the
+    /// history goes to a scratch suite instead, emptied when the run starts.
+    private static let underTests = NSClassFromString("XCTestCase") != nil
+    private static let testScratch: UserDefaults = {
+        let suite = "com.tetsuharu.RoamSwitch.xctest-history"
+        let d = UserDefaults(suiteName: suite) ?? .standard
+        d.removePersistentDomain(forName: suite)
+        return d
+    }()
 
     private static func loadRaw(_ defaults: UserDefaults?) -> [NotificationHistoryEntry] {
         guard let data = store(defaults).data(forKey: key),
@@ -64,7 +77,13 @@ public enum NotificationHistory {
         // would otherwise all start from the same stored list and keep only the last one's addition.
         recordLock.lock()
         var entries = loadRaw(defaults).filter { isWithinRetention($0, now: now) }
-        entries.append(NotificationHistoryEntry(timestamp: formatter.string(from: now), title: title, body: body))
+        let stamp = formatter.string(from: now)
+        // The same notice raised twice in the same second is one entry. A different body is a different event: kept.
+        if entries.contains(where: { $0.timestamp == stamp && $0.title == title && $0.body == body }) {
+            recordLock.unlock()
+            return
+        }
+        entries.append(NotificationHistoryEntry(timestamp: stamp, title: title, body: body))
         save(entries, defaults)
         recordLock.unlock()
         recordObserver?(title, body)
