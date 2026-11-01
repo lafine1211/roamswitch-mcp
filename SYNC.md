@@ -54,6 +54,7 @@ All files live in `Sources/roamswitch-mcp/`.
 | `BrowserCredentialWatchStatusReader.swift` | `RoamSwitch/BrowserCredentialWatchStatusReader.swift` |
 | `PackageCveScan.swift` | `RoamSwitch/PackageCveScan.swift` |
 | `NodeRuntimeScan.swift` | `RoamSwitch/NodeRuntimeScan.swift` |
+| `PhpRuntimeScan.swift` | `RoamSwitch/PhpRuntimeScan.swift` |
 | `PackageCveMapData.swift` | `RoamSwitch/PackageCveMapData.swift` |
 | `PackageCveScanLanguages.swift` | `RoamSwitch/PackageCveScanLanguages.swift` |
 | `PackageCveMapLanguagesData.swift` | `RoamSwitch/PackageCveMapLanguagesData.swift` |
