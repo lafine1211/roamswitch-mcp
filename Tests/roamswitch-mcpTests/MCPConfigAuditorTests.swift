@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.20 (build 199). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.21 (build 200). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -391,6 +391,33 @@ final class MCPConfigAuditorTests: XCTestCase {
       },
     }
     """
+
+    func testOpenCodeServersNestedUnderMcpServersAreAuditedLikeTheOlderForm() {
+        // OpenCode's current schema: `mcp.servers.<name>`, with `mcp.timeout` beside it.
+        let json = """
+        {
+          "$schema": "https://opencode.ai/config.json",
+          "mcp": {
+            "timeout": { "startup": 8000 },
+            "servers": {
+              "files": { "type": "local", "command": ["npx", "-y", "some-files-mcp"], "environment": { "HTTPS_PROXY": "http://proxy.example:3128" } },
+              "lan": { "type": "remote", "url": "http://192.168.1.9/mcp" },
+            },
+          },
+        }
+        """
+        let r = audit(json, path: "/p/opencode.json")
+        XCTAssertEqual(r.serverCount, 2, "timeout and servers are not servers themselves")
+        XCTAssertTrue(r.unreadableFiles.isEmpty)
+        func idsOf(_ server: String) -> Set<String> { Set(r.findings.filter { $0.server == server }.map(\.id)) }
+        XCTAssertEqual(idsOf("files"), ["unpinned_package_launcher", "traffic_interception_env"])
+        XCTAssertEqual(idsOf("lan"), ["remote_plain_http"])
+    }
+
+    func testAnOlderOpenCodeEntryNamedServersOrTimeoutIsStillAServer() {
+        let json = #"{"mcp": {"servers": {"type": "local", "command": ["npx", "-y", "pkg"]}, "timeout": {"type": "remote", "url": "http://example.org/mcp"}}}"#
+        XCTAssertEqual(audit(json, path: "/p/opencode.json").serverCount, 2)
+    }
 
     func testOpenCodeServersAreMappedToTheSameShapeAndAudited() {
         for path in ["/Users/u/.config/opencode/opencode.json", "/p/opencode.json", "/p/opencode.jsonc"] {

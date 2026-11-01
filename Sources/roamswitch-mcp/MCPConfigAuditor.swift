@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.20 (build 199).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.21 (build 200).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -197,6 +197,29 @@ enum MCPConfigAuditor {
         return out
     }
 
+    /// The servers in OpenCode's `mcp` object. Its current schema nests them under `mcp.servers.<name>` (next to a `timeout`
+    /// object); the older form, still accepted, puts each one directly under `mcp.<name>`. An older entry that happens to be
+    /// named `servers` or `timeout` has the keys of a server (`type`, `command`, `url`) and stays a server.
+    private static func openCodeServerEntries(_ mcp: [String: Any]) -> [(String, [String: Any])] {
+        func looksLikeServer(_ object: [String: Any]) -> Bool {
+            object["type"] != nil || object["command"] != nil || object["url"] != nil
+        }
+        var out: [(String, [String: Any])] = []
+        for (name, value) in mcp.sorted(by: { $0.key < $1.key }) {
+            guard let config = value as? [String: Any] else { continue }
+            if looksLikeServer(config) {
+                out.append((name, config))
+            } else if name == "servers" {
+                for (inner, nested) in config.sorted(by: { $0.key < $1.key }) {
+                    if let nestedConfig = nested as? [String: Any] { out.append((inner, nestedConfig)) }
+                }
+            } else if name != "timeout" {
+                out.append((name, config))
+            }
+        }
+        return out
+    }
+
     /// Every server object in a file: top-level `mcpServers` (or VS Code's `servers`), Codex's `mcp_servers` tables,
     /// OpenCode's `mcp` object and, for `~/.claude.json`, the per-project `projects.<path>.mcpServers`.
     private static func servers(in root: [String: Any]) -> [(String, [String: Any])] {
@@ -211,9 +234,7 @@ enum MCPConfigAuditor {
         collect(root["servers"])
         collect(root["mcp_servers"])
         if let openCode = root["mcp"] as? [String: Any] {
-            for (name, value) in openCode.sorted(by: { $0.key < $1.key }) {
-                if let config = value as? [String: Any] { out.append((name, openCodeServer(config))) }
-            }
+            for (name, config) in openCodeServerEntries(openCode) { out.append((name, openCodeServer(config))) }
         }
         if let projects = root["projects"] as? [String: Any] {
             for (projectPath, value) in projects.sorted(by: { $0.key < $1.key }) {
