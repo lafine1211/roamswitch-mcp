@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.19 (build 198).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.20 (build 199).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -166,7 +166,10 @@ enum NodeRuntimeScan {
     }
 
     /// Paths of the running processes whose executable is named `node`.
-    static func runningNodePaths() -> [String] {
+    static func runningNodePaths() -> [String] { runningPaths(named: ["node"]) }
+
+    /// Paths of the running processes whose executable has one of these file names (`PhpRuntimeScan` asks for `php`).
+    static func runningPaths(named names: Set<String>) -> [String] {
         let bytes = proc_listallpids(nil, 0)
         guard bytes > 0 else { return [] }
         var pids = [pid_t](repeating: 0, count: Int(bytes) / MemoryLayout<pid_t>.size + 64)
@@ -178,7 +181,7 @@ enum NodeRuntimeScan {
             let n = proc_pidpath(pid, &buf, UInt32(buf.count))
             guard n > 0 else { continue }
             let path = String(cString: buf)
-            if (path as NSString).lastPathComponent == "node" { out.append(path) }
+            if names.contains((path as NSString).lastPathComponent) { out.append(path) }
         }
         return out
     }

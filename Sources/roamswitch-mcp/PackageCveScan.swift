@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.19 (build 198).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.20 (build 199).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -452,18 +452,31 @@ enum PackageCveScan {
         return .read(count: packageCount)
     }
 
-    /// The Homebrew inventory plus the Node.js binaries Homebrew does not own (the official installer, a version
-    /// manager, a tarball; see `NodeRuntimeScan`), which the same `node` rows of the map judge.
+    /// The Homebrew inventory plus the Node.js and PHP binaries Homebrew does not own (the official installer, a version
+    /// manager, MAMP, a tarball; see `NodeRuntimeScan` and `PhpRuntimeScan`), which the same `node` and `php` rows of the
+    /// map judge.
     static func enumerateHomebrewInventory() -> (packages: [InstalledPackage], state: InventoryState) {
-        addingNodeRuntimes(to: enumerateBrewOnly(), nodes: NodeRuntimeScan.discover())
+        let withNode = addingNodeRuntimes(to: enumerateBrewOnly(), nodes: NodeRuntimeScan.discover())
+        return addingPhpRuntimes(to: withNode, php: PhpRuntimeScan.discover())
     }
 
     /// Pure: the Node.js binaries join the inventory as `node <release>`. With no Homebrew at all, finding some of
     /// them still means something was looked at; a `brew` that failed stays a failure (its part was not read).
     static func addingNodeRuntimes(to brew: (packages: [InstalledPackage], state: InventoryState),
                                    nodes: [NodeRuntimeScan.Install]) -> (packages: [InstalledPackage], state: InventoryState) {
-        guard !nodes.isEmpty else { return brew }
-        let extra = nodes.map { InstalledPackage(name: "node", version: $0.version) }
+        addingRuntimes(to: brew, name: "node", versions: nodes.map(\.version))
+    }
+
+    /// Pure: the PHP binaries join the inventory as `php <release>`, under the same rules as the Node.js ones.
+    static func addingPhpRuntimes(to brew: (packages: [InstalledPackage], state: InventoryState),
+                                  php: [PhpRuntimeScan.Install]) -> (packages: [InstalledPackage], state: InventoryState) {
+        addingRuntimes(to: brew, name: "php", versions: php.map(\.version))
+    }
+
+    private static func addingRuntimes(to brew: (packages: [InstalledPackage], state: InventoryState),
+                                       name: String, versions: [String]) -> (packages: [InstalledPackage], state: InventoryState) {
+        guard !versions.isEmpty else { return brew }
+        let extra = versions.map { InstalledPackage(name: name, version: $0) }
         let state: InventoryState
         switch brew.state {
         case .brewMissing: state = .read(count: extra.count)

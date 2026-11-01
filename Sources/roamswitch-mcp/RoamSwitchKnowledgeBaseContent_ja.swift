@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.19 (build 198).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.20 (build 199).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -658,6 +658,7 @@ extension RoamSwitchKnowledgeBase {
                 • 更新が止まったとき: 使っているデータを、更新の処理が1週間(週に1回しか取得しない2つのCVE地図は2週間)確認していないと(確認に失敗した場合も、確認したものと数えます)、メニューに、そのデータの名前と最後に確認した日時を示す警告の行を出します。`get_guard_status` では signedUpdates が off(理由 state_stale)になり、そのデータは feedUpdates で stale: true になります。対象は、パッケージCVEの地図とWebルール、リンク保護の自動更新がオン(Pro)のときのリンクの一覧、アクティブスキャンがオンのときのアクティブスキャンのCVE地図です。RoamSwitchを再起動すると、すぐに確認します。一度も確認していないデータは、止まったとは数えません(画面には「まだ更新できていません」と出ます)。
                 • 自動確認（Pro、既定オン）: 画面やMCPを使わなくても、登録したプロジェクトフォルダーのロックファイルが書き換わって静かになったとき、起動の直後、1日1回に、CISAが悪用を確認した（KEV）か EPSS が 0.9 以上の脆弱性が依存にあり、有効な受容がないものを自動で調べて通知します（CVEマップとKEVは毎日更新されるため、ロックファイルが変わらなくても新しく該当することがあります）。通信はしません。通知は1回の確認につき1通で、知らせたものは繰り返しません（直って再発すれば再通知）。CVEマップがないエコシステムは確認できていないものとして何も知らせず、フォルダーを登録していないあいだは何もしません（理由 no_folders_registered）。メニューの「依存パッケージの脆弱性を自動で確認 (Pro)」で止められ、状態は `get_guard_status` の dependencyWatch に出ます。Linux版にも同じ機能があります（デーモンが行い、Proの区別はありません）。
                 • Node.js 本体: Homebrew と MacPorts が持たない Node.js(公式のインストーラ、nvm・fnm・Volta・asdf・mise・n、/opt などの tarball)も調べます。版はバイナリを実行せずに読み、Homebrew の一覧に `node <版>` として足して、同じ地図の node の行と照合します。Homebrew が無い Mac でも、見つけた分は「調べた」と数えます。
+                • PHP 本体: Homebrew と MacPorts が持たない PHP(MAMP、XAMPP、/usr/local や /opt の tarball・ソースビルド、phpbrew・asdf・phpenv・mise)も調べます。版はバイナリを実行せずに読み、Homebrew の一覧に `php <版>` として足して、同じ地図の php の行と照合します。
                 """,
                 recommendation: "定期的にHomebrewのスキャンを実行し、開発中のプロジェクトは依存関係タブに登録して、重大なCVEを含むパッケージを早めに更新してください。"
             ),

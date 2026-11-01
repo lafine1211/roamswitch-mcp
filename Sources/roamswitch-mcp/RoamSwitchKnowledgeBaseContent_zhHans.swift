@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.19 (build 198).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.20 (build 199).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -659,6 +659,7 @@ extension RoamSwitchKnowledgeBase {
                 • 更新停止时:如果更新程序对正在使用的数据超过一周没有检查(每周只获取一次的两个 CVE 映射表为两周;检查失败也算检查过),菜单会显示一行警告,写明该数据的名称和最后一次检查的时间。在 `get_guard_status` 中,signedUpdates 为 off(原因 state_stale),该数据在 feedUpdates 中为 stale: true。对象是软件包 CVE 映射表和 Web 规则、链接保护自动更新开启(Pro)时的链接名单,以及主动扫描开启时的主动扫描 CVE 映射表。重新启动 RoamSwitch 会立即检查。从未检查过的数据不算已停止,窗口会显示尚未更新。
                 • 自动检查（Pro，默认开启）：无需打开窗口或使用 MCP，在已登记项目文件夹的锁定文件写入平静后、启动不久以及每天一次，自动检查依赖中是否有 CISA 已确认被利用（KEV）或 EPSS 在 0.9 以上、且没有有效期内风险接受覆盖的漏洞，并发出通知（CVE 映射表和 KEV 列表每天更新，所以未改动的锁定文件也可能变为受影响）。不会发送任何数据。每次检查最多一条通知，已通知的内容不会重复（修复后再次出现会重新通知）。没有 CVE 映射表的生态系统视为未检查，不会通知；未登记文件夹时什么都不做（原因 no_folders_registered）。可用菜单中的“自动检查依赖漏洞 (Pro)”关闭，状态显示在 `get_guard_status` 的 dependencyWatch 中。Linux 版有相同功能（由守护进程执行，不区分 Pro）。
                 • Node.js 本体:也会检查 Homebrew 和 MacPorts 都不管理的 Node.js(官方安装程序、nvm、fnm、Volta、asdf、mise、n,以及 /opt 等位置的 tarball)。版本不运行二进制文件而直接读取,以 `node <版本>` 的形式加入 Homebrew 列表,并与同一映射中 node 的行比对。没有 Homebrew 的 Mac 上,找到的部分也算作“已检查”。
+                • PHP 本体:也会检查 Homebrew 和 MacPorts 都不管理的 PHP(MAMP、XAMPP、/usr/local 或 /opt 下的 tarball 与源码编译、phpbrew、asdf、phpenv、mise)。版本不运行二进制文件而直接读取,以 `php <版本>` 的形式加入 Homebrew 列表,并与同一映射中 php 的行比对。
                 """,
                 recommendation: "请定期运行 Homebrew 扫描，并将开发中的项目登记到依赖关系标签页，尽早更新含有严重 CVE 的软件包。"
             ),
