@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.18 (build 197).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.19 (build 198).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -142,6 +142,7 @@ extension RoamSwitchKnowledgeBase {
                 • 高風險服務：辨識常見的預設無驗證服務，例如 Redis（6379）、MongoDB（27017）、Memcached（11211）、Elasticsearch（9200）、VNC（5900），以及本機 AI 伺服器如 Ollama（11434）、LM Studio（1234）、Gradio（7860）、vLLM（8000）。
                 • 開發伺服器隔離：從「外部公開連接埠」開啟該連接埠並選擇「執行外部隔離」，將其限制為僅限 127.0.0.1（Pro）。
                 • 誤判處理：可用通知中的「允許」按鈕，或從連接埠稽核畫面永久允許。關閉此防護（或授權過期）會釋放所有由其建立的封鎖。
+                • 自動解除：連續兩次確認自動阻斷的連接埠已恢復為僅在 127.0.0.1(本機內)監聽後，會自動解除該阻斷並記入通知歷史。若再次對網路開放，會再次阻斷。手動阻斷的連接埠不會被解除。
                 • 預設值：首次啟用 Pro 時自動開啟。事件記錄可透過 MCP 工具 `get_port_anomaly_incidents` 取得。
                 """,
                 recommendation: "請將開發伺服器與本機 LLM 綁定至 `127.0.0.1`（例如 `OLLAMA_HOST=127.0.0.1 ollama serve`、`npm run dev -- -H 127.0.0.1`）。"
@@ -657,6 +658,7 @@ extension RoamSwitchKnowledgeBase {
                 • 什麼都沒檢查時:沒有 Homebrew、brew 失敗或沒有套件時,視窗會顯示灰色的「什麼都沒有檢查」,而不是綠色的「未發現」(`run_package_cve_scan` 的 homebrewInventory 為 brew_missing 或 brew_failed)。CVE 資料更新失敗時,視窗與選單會顯示上次成功更新的時間與失敗原因,`get_guard_status` 的 feedUpdates 中也有。
                 • 更新停止時:如果更新程式對正在使用的資料超過一週沒有檢查(每週只取得一次的兩個 CVE 對照表為兩週;檢查失敗也算檢查過),選單會顯示一行警告,寫明該資料的名稱和最後一次檢查的時間。在 `get_guard_status` 中,signedUpdates 為 off(原因 state_stale),該資料在 feedUpdates 中為 stale: true。對象是套件 CVE 對照表和 Web 規則、連結保護自動更新開啟(Pro)時的連結名單,以及主動掃描開啟時的主動掃描 CVE 對照表。重新啟動 RoamSwitch 會立即檢查。從未檢查過的資料不算已停止,視窗會顯示尚未更新。
                 • 自動檢查（Pro，預設開啟）：無需開啟視窗或使用 MCP，在已登記專案資料夾的鎖定檔寫入平靜後、啟動不久以及每天一次，自動檢查相依套件中是否有 CISA 已確認被利用（KEV）或 EPSS 在 0.9 以上、且沒有有效期內風險接受涵蓋的漏洞，並發出通知（CVE 對照表和 KEV 清單每天更新，所以未變動的鎖定檔也可能變為受影響）。不會傳送任何資料。每次檢查最多一則通知，已通知的內容不會重複（修補後再次出現會重新通知）。沒有 CVE 對照表的生態系視為未檢查，不會通知；未登記資料夾時什麼都不做（原因 no_folders_registered）。可用選單中的「自動檢查相依套件漏洞 (Pro)」關閉，狀態顯示在 `get_guard_status` 的 dependencyWatch 中。Linux 版有相同功能（由常駐程式執行，不區分 Pro）。
+                • Node.js 本體:也會檢查 Homebrew 與 MacPorts 都不管理的 Node.js(官方安裝程式、nvm、fnm、Volta、asdf、mise、n,以及 /opt 等位置的 tarball)。版本不執行二進位檔而直接讀取,以 `node <版本>` 的形式加入 Homebrew 清單,並與同一對照表中 node 的列比對。沒有 Homebrew 的 Mac 上,找到的部分也算作「已檢查」。
                 """,
                 recommendation: "定期執行 Homebrew 掃描，在「相依性」分頁登錄開發中的專案，並儘快更新含有嚴重 CVE 的套件。"
             ),

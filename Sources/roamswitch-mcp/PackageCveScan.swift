@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.18 (build 197).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.19 (build 198).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -452,7 +452,28 @@ enum PackageCveScan {
         return .read(count: packageCount)
     }
 
+    /// The Homebrew inventory plus the Node.js binaries Homebrew does not own (the official installer, a version
+    /// manager, a tarball; see `NodeRuntimeScan`), which the same `node` rows of the map judge.
     static func enumerateHomebrewInventory() -> (packages: [InstalledPackage], state: InventoryState) {
+        addingNodeRuntimes(to: enumerateBrewOnly(), nodes: NodeRuntimeScan.discover())
+    }
+
+    /// Pure: the Node.js binaries join the inventory as `node <release>`. With no Homebrew at all, finding some of
+    /// them still means something was looked at; a `brew` that failed stays a failure (its part was not read).
+    static func addingNodeRuntimes(to brew: (packages: [InstalledPackage], state: InventoryState),
+                                   nodes: [NodeRuntimeScan.Install]) -> (packages: [InstalledPackage], state: InventoryState) {
+        guard !nodes.isEmpty else { return brew }
+        let extra = nodes.map { InstalledPackage(name: "node", version: $0.version) }
+        let state: InventoryState
+        switch brew.state {
+        case .brewMissing: state = .read(count: extra.count)
+        case .brewFailed: state = .brewFailed
+        case .read(let count): state = .read(count: count + extra.count)
+        }
+        return (brew.packages + extra, state)
+    }
+
+    private static func enumerateBrewOnly() -> (packages: [InstalledPackage], state: InventoryState) {
         let brewPath = resolveBrewPath()
         guard let brewPath else { return ([], classifyInventory(brewPath: nil, exitStatus: nil, packageCount: 0)) }
         let process = Process()

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.18 (build 197).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.19 (build 198).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -142,6 +142,7 @@ extension RoamSwitchKnowledgeBase {
                 • 위험 서비스: 기본적으로 인증 없이 노출되는 경우가 많은 Redis(6379), MongoDB(27017), Memcached(11211), Elasticsearch(9200), VNC(5900)와 로컬 AI 서버(Ollama 11434, LM Studio 1234, Gradio 7860, vLLM 8000)를 식별합니다.
                 • 개발 서버 격리: 외부 공개 포트에서 해당 포트를 열고 "외부 격리 실행"을 선택하면 127.0.0.1로 제한할 수 있습니다(Pro).
                 • 오탐 처리: 알림의 "허용" 버튼이나 포트 진단 화면에서 영구적으로 허용할 수 있습니다. 이 기능을 끄거나 라이선스가 만료되면 생성했던 모든 차단이 해제됩니다.
+                • 자동 해제: 자동 차단된 포트가 127.0.0.1(이 기기 안)에서만 수신 대기하는 것을 2회 연속 확인하면 차단이 자동으로 해제되고 알림 기록에 남습니다. 다시 네트워크에 공개하면 다시 차단합니다. 직접 차단한 포트는 해제되지 않습니다.
                 • 기본값: Pro를 처음 활성화할 때 자동으로 켜집니다. 사고 기록은 MCP 도구 `get_port_anomaly_incidents`로 확인할 수 있습니다.
                 """,
                 recommendation: "개발 서버와 로컬 LLM은 `127.0.0.1`에 바인딩하세요(예: `OLLAMA_HOST=127.0.0.1 ollama serve`, `npm run dev -- -H 127.0.0.1`)."
@@ -657,6 +658,7 @@ extension RoamSwitchKnowledgeBase {
                 • 아무것도 조사하지 않은 경우: Homebrew가 없거나 brew가 실패했거나 패키지가 0개이면 초록색 '발견되지 않았습니다' 대신 회색 '아무것도 조사하지 않았습니다'가 표시됩니다(`run_package_cve_scan`의 homebrewInventory가 brew_missing 또는 brew_failed). CVE 데이터 업데이트가 실패하면 마지막으로 업데이트된 시각과 실패 이유를 창과 메뉴에 표시하며, `get_guard_status`의 feedUpdates에도 들어갑니다.
                 • 업데이트가 멈췄을 때: 사용 중인 데이터를 업데이트 처리가 1주일(주 1회만 가져오는 두 CVE 맵은 2주일) 동안 확인하지 않았다면(확인에 실패한 경우도 확인한 것으로 셉니다), 메뉴에 해당 데이터의 이름과 마지막으로 확인한 시각을 보여 주는 경고 줄이 나타납니다. `get_guard_status`에서는 signedUpdates가 off(이유 state_stale)가 되고, 해당 데이터는 feedUpdates에서 stale: true가 됩니다. 대상은 패키지 CVE 맵과 웹 규칙, 링크 보호의 자동 업데이트가 켜져 있을 때(Pro)의 링크 목록, 액티브 스캔이 켜져 있을 때의 액티브 스캔 CVE 맵입니다. RoamSwitch를 다시 시작하면 바로 확인합니다. 한 번도 확인하지 않은 데이터는 멈춘 것으로 세지 않으며, 창에는 아직 업데이트되지 않았다고 표시됩니다.
                 • 자동 확인(Pro, 기본값 켜짐): 창이나 MCP를 쓰지 않아도, 등록한 프로젝트 폴더의 잠금 파일에 대한 쓰기가 잠잠해진 뒤, 시작 직후, 그리고 하루에 한 번, 의존성에 CISA가 악용을 확인했거나(KEV) EPSS가 0.9 이상이며 기한 내 위험 수용이 없는 취약점이 있는지 자동으로 확인해 알립니다(CVE 맵과 KEV 목록은 매일 갱신되므로 잠금 파일이 그대로여도 새로 해당될 수 있습니다). 아무것도 전송하지 않습니다. 확인 1회당 알림은 1건이며 이미 알린 것은 반복하지 않습니다(고쳐졌다가 다시 나타나면 다시 알립니다). CVE 맵이 없는 생태계는 확인하지 못한 것으로 보고 아무것도 알리지 않으며, 폴더를 등록하지 않은 동안은 아무것도 하지 않습니다(이유 no_folders_registered). 메뉴의 '의존성 취약점을 자동으로 확인 (Pro)'로 끌 수 있고, 상태는 `get_guard_status`의 dependencyWatch에 나옵니다. Linux 에디션에도 같은 기능이 있습니다(데몬이 수행하며 Pro 구분 없음).
+                • Node.js 본체: Homebrew와 MacPorts가 가지지 않은 Node.js(공식 설치 프로그램, nvm·fnm·Volta·asdf·mise·n, /opt 등의 tarball)도 조사합니다. 버전은 바이너리를 실행하지 않고 읽어 Homebrew 목록에 `node <버전>`으로 더하고, 같은 맵의 node 행과 대조합니다. Homebrew가 없는 Mac에서도 찾아낸 것은 ‘조사함’으로 셉니다.
                 """,
                 recommendation: "정기적으로 Homebrew 검사를 실행하고, 진행 중인 프로젝트를 의존성 탭에 등록하며, 심각한 CVE가 있는 패키지는 신속히 업데이트하세요."
             ),
