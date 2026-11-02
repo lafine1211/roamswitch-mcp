@@ -1445,6 +1445,7 @@ public enum MCPResponseFormatting {
         case .vulnerabilityAcceptance: return loc("脆弱性の受容")
         case .criticalPathFim: return loc("重要ファイルの改ざん監視")
         case .forensicCapture: return loc("証拠バンドルの保存")
+        case .rmmInstallerUnofficialSource: return loc("リモートアクセスツールの非公式配布元検知")
         }
     }
 

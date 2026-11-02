@@ -1694,7 +1694,7 @@ enum MCPServer {
         ],
     ]
 
-    private static let resourceCatalog: [[String: Any]] = [
+    private static let docResourceCatalog: [[String: Any]] = [
         [
             "uri": "roamswitch://docs/features",
             "name": "RoamSwitch Features Specification",
@@ -1719,9 +1719,20 @@ enum MCPServer {
             "description": "Authoritative guidance for Free vs Pro, helper disconnection and install location, ClamAV/Homebrew and blueutil setup, network cut off by Air-Gap, false positives (quarantine, Link Guard, blocked dev servers, keyboards), EICAR test behavior, system extension approval, VPN issues, repeated log audit alerts, MCP setup, and Zero Telemetry privacy design, in the app's language.",
             "mimeType": "text/markdown",
         ],
-    ] + RoamSwitchMCPSkillsContent.catalogEntries.map { entry in
+    ]
+
+    private static let skillResourceCatalog: [[String: Any]] = RoamSwitchMCPSkillsContent.catalogEntries.map { entry in
         ["uri": entry.uri, "name": entry.name, "description": entry.description, "mimeType": "text/markdown"]
-    } + RoamSwitchThreatBriefsContent.catalogEntries.map { entry in
+    }
+
+    private static let briefResourceCatalog: [[String: Any]] = RoamSwitchThreatBriefsContent.catalogEntries.map { entry in
         ["uri": entry.uri, "name": entry.name, "description": entry.description, "mimeType": "text/yaml"]
     }
+
+    // Built from three separately-typed arrays, not one chained `+` literal:
+    // the single-expression form timed out Swift's type checker ("unable to
+    // type-check this expression in reasonable time") once the third `.map`
+    // was added.
+    private static let resourceCatalog: [[String: Any]] =
+        docResourceCatalog + skillResourceCatalog + briefResourceCatalog
 }
