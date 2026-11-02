@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.21 (build 200).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.22 (build 201).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -44,11 +44,14 @@ final class PortSecurityAuditor {
 
     func auditPort(
         portInfo: ListeningPortInfo,
-        isFirewallBlocking: Bool,
+        isFirewallBlocking firewallBlockAll: Bool,
         completion: @escaping (PortSecurityAuditResult) -> Void
     ) {
         DispatchQueue.global(qos: .userInitiated).async {
             var findings: [PortAuditFinding] = []
+            // "Block all incoming" does not hold back an app on the firewall's allow list (Docker Desktop, measured by a
+            // Sensor on the LAN), so such a port is judged as exposed.
+            let isFirewallBlocking = firewallBlockAll && !FirewallAllowList.allowsIncoming(executablePath: portInfo.executablePath)
 
             // 1. Binding Interface Exposure Audit (0.0.0.0 vs 127.0.0.1)
             if portInfo.isGloballyExposed {
