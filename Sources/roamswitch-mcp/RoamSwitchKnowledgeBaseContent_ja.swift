@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.22 (build 201).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.23 (build 202).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -232,6 +232,7 @@ extension RoamSwitchKnowledgeBase {
                 • EICARテストファイル: 業界標準の無害なテスト署名は隔離も遮断もせず、通知も出さずに通知履歴への記録のみ行います（feat_notification_history）。
                 • 初回のフォルダアクセス: macOSのアクセス許可ダイアログの前に、これがスキャン機能のための正規の許可であることを説明する案内を1度だけ表示します。
                 • Pickle形式のAIモデルの警告は feat_ai_model_guard を参照。
+                • 遠隔操作ツールの配布元チェック: ダウンロードされたファイル名がAnyDesk・ScreenConnect/ConnectWise・TeamViewer・ngrokのいずれかと一致し、かつ `com.apple.quarantine` が記録するダウンロード元のホストがその製品の公式ドメインでない場合、通知のみ行います（隔離・遮断はしません）。これらのツールは正当な業務利用があるため、名前の一致だけでは判定せず、ダウンロード元が不明な場合は何も言いません。
                 """,
                 recommendation: "ClamAVを導入した上で有効化し、ブラウザの保存先を独自フォルダにしている場合は監視対象フォルダに追加してください。"
             ),
