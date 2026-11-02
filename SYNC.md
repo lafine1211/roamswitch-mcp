@@ -48,6 +48,8 @@ All files live in `Sources/roamswitch-mcp/`.
 | `MCPProtocol.swift` | `RoamSwitch/MCPProtocol.swift` |
 | `MCPServer.swift` | `RoamSwitch/MCPServer.swift` |
 | `RoamSwitchMCPSkillsContent.swift` | `RoamSwitch/RoamSwitchMCPSkillsContent.swift` |
+| `RoamSwitchThreatBriefsContent.swift` | `RoamSwitch/RoamSwitchThreatBriefsContent.swift` |
+| `MCPToolCallLog.swift` | `RoamSwitch/MCPToolCallLog.swift` |
 | `RansomwareEntropyStatusReader.swift` | `RoamSwitch/RansomwareEntropyStatusReader.swift` |
 | `ForensicCaptureManager.swift` | `RoamSwitch/ForensicCaptureManager.swift` |
 | `HoneytokenStatusReader.swift` | `RoamSwitch/HoneytokenStatusReader.swift` |

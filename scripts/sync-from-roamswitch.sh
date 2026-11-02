@@ -38,7 +38,7 @@ CORE=(ProcessWait AppLanguage TrustedNetwork GatewayFingerprint WiFiSecurityMoni
       RoamSwitchKnowledgeBaseContent_ko RoamSwitchKnowledgeBaseContent_de \
       RoamSwitchKnowledgeBaseContent_fr RoamSwitchKnowledgeBaseContent_es \
       RoamSwitchKnowledgeBaseContent_it RoamSwitchKnowledgeBaseContent_ptPT \
-      MCPResponseFormatting MCPProtocol MCPServer RoamSwitchMCPSkillsContent \
+      MCPResponseFormatting MCPProtocol MCPServer RoamSwitchMCPSkillsContent RoamSwitchThreatBriefsContent MCPToolCallLog \
       PackageCveScan NodeRuntimeScan PhpRuntimeScan FirewallAllowList PackageCveMapData PackageCveScanLanguages PackageCveMapLanguagesData \
       PackageCveScriptScan NpmAuditSignatures TyposquatGuard MCPConfigAuditor \
       SecretLeakScanning FrontendBundleScan TrustAnchorCheck ReflectedXssProbe SecurityLogAuditor LogTemplateAnalyzer QuarantineManager CanaryStatusReader \
@@ -64,7 +64,7 @@ SHARED=(RansomwareSnapshotLogic ExecEventModel ExecLogStore ExecProcessTree Exec
 TESTS=(LinkSafetyAuditorTests CryptoSecretDetectionTests MCPKnowledgeBaseTests MCPProtocolTests \
        MCPResponseFormattingTests ARPSpoofMonitorTests MCPServerRobustnessTests ParserRobustnessTests \
        TyposquatGuardTests RansomwareRecoveryMCPTests RoamSwitchMCPSkillsContentTests \
-       ActiveVulnScanTests MCPConfigAuditorTests TOMLSubsetTests AgentSetupAuditorTests KnownAttackServersTests PromptInjectionSignalsTests AgentSetupSarifTests ActiveVulnScanSarifTests SarifRuleIdStabilityTests IncidentReconciliationTests DetectionCoverageTests LocalAIRuntimeTests GuardReaderHealthTests StrictJSONTests \
+       ActiveVulnScanTests MCPConfigAuditorTests TOMLSubsetTests AgentSetupAuditorTests KnownAttackServersTests PromptInjectionSignalsTests AgentSetupSarifTests ActiveVulnScanSarifTests SarifRuleIdStabilityTests IncidentReconciliationTests DetectionCoverageTests LocalAIRuntimeTests GuardReaderHealthTests StrictJSONTests MCPToolCallLogTests \
        AgentCredentialFileCheckTests BackupRecencyTests DependencySourceScanTests PackageCveEpssTests \
        ProbeCatalogTests MCPToolAnnotationsTests \
        FrontendBundleScanTests ForensicChainTests TrustAnchorCheckTests ReflectedXssProbeTests)
