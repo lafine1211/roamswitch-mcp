@@ -1207,7 +1207,7 @@ public enum ActiveVulnScan {
         let badge = loc("実証済み: 未認証で到達可能")
         return findings.map { finding in
             finding.evidenceKind == .externalToolReport
-                ? "\(finding.title)\n\(finding.recommendation)"
+                ? "\(finding.title)\n\(finding.description)\n\(finding.recommendation)"
                 : "\(badge)\n\(finding.title)\n\(finding.recommendation)"
         }.joined(separator: "\n\n")
     }
@@ -1454,7 +1454,7 @@ public enum ActiveVulnScan {
             let nseTimeout = min(300, 30 + 15 * Double(allPorts.count))
             let nseFindings = NmapNSE.runNSESafeScripts(host: "127.0.0.1", ports: allPorts, timeoutSeconds: nseTimeout)
             if NmapNSE.nmapAvailable() { result.probesRun.append(ProbeCatalog.nmapNSEProbeName) }
-            for finding in nseFindings {
+            for finding in nseFindings where !NmapNSE.isInformational(script: finding.script) {
                 let processName = ports.first { $0.port == finding.port }?.processName ?? ""
                 result.findings.append(Finding(
                     port: finding.port,

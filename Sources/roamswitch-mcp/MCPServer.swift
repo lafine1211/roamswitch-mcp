@@ -199,6 +199,14 @@ enum MCPServer {
                     "contents": [["uri": uri, "mimeType": "text/markdown", "text": skillContent]],
                 ])]
             }
+            // Threat-brief documents are static and English-only, same
+            // rationale as the skills above -- they bypass the localized
+            // RoamSwitchKnowledgeBase lookup too.
+            if let briefContent = RoamSwitchThreatBriefsContent.briefsByURI[uri] {
+                return [result(id: id, [
+                    "contents": [["uri": uri, "mimeType": "text/yaml", "text": briefContent]],
+                ])]
+            }
             if let content = RoamSwitchKnowledgeBase.shared.resource(for: uri, language: RoamSwitchKnowledgeBase.activeLanguageCode()) {
                 return [result(id: id, [
                     "contents": [["uri": uri, "mimeType": "text/markdown", "text": content]],
@@ -216,6 +224,7 @@ enum MCPServer {
                 return [error(id: id, code: -32602, message: "Missing tool name")]
             }
             let arguments = params["arguments"] as? [String: Any] ?? [:]
+            MCPToolCallLog.record(tool: name, arguments: arguments)
 
             switch name {
             case "get_security_report":
@@ -1712,5 +1721,7 @@ enum MCPServer {
         ],
     ] + RoamSwitchMCPSkillsContent.catalogEntries.map { entry in
         ["uri": entry.uri, "name": entry.name, "description": entry.description, "mimeType": "text/markdown"]
+    } + RoamSwitchThreatBriefsContent.catalogEntries.map { entry in
+        ["uri": entry.uri, "name": entry.name, "description": entry.description, "mimeType": "text/yaml"]
     }
 }

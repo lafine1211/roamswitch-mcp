@@ -122,7 +122,7 @@ final class ListeningPortMonitor {
     /// 補えるが、この関数自体はそれをしない。
     func scanListeningPorts(runner: CommandRunner = SystemCommand.run) throws -> [ListeningPortInfo] {
         // stdout と stderr は同時に読む(片方を読み切るまでもう片方が詰まって lsof が止まるのを避ける)。
-        guard let out = runner("/usr/sbin/lsof", ["-iTCP", "-sTCP:LISTEN", "-n", "-P"]) else {
+        guard let out = runner("/usr/sbin/lsof", ["+c", "0", "-iTCP", "-sTCP:LISTEN", "-n", "-P"]) else {
             throw ScanFailure(reason: "launch: lsof could not be started")
         }
         return try interpretLsofResult(
@@ -164,7 +164,7 @@ final class ListeningPortMonitor {
     func scanUDPListeners() -> [ListeningPortInfo] {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
-        process.arguments = ["-iUDP", "-n", "-P"]
+        process.arguments = ["+c", "0", "-iUDP", "-n", "-P"]
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = Pipe()

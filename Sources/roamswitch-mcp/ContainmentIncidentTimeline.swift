@@ -62,6 +62,14 @@ public enum ContainmentIncidentSource: String, Codable {
     /// not a detection: never mapped to an ATT&CK technique. It is recorded as a child of the detection it was saved
     /// for (`parentEventID`). Added additively, same as the cases above.
     case forensicCapture
+    /// `WebMailDownloadGuard`'s RMM-installer-source check (APT_REPORT
+    /// applicability analysis, A6): a known remote-support tool (AnyDesk,
+    /// ScreenConnect, TeamViewer, ngrok) downloaded from a source that
+    /// isn't that vendor's own domain. Always notify-only -- these tools
+    /// are legitimate business software, so this is never quarantined or
+    /// air-gapped. Always maps to T1219 (Remote Access Software). Added
+    /// additively, same as the cases above.
+    case rmmInstallerUnofficialSource
 }
 
 /// What a ransomware canary actually observed, as a stable identifier —
@@ -478,6 +486,8 @@ public enum ContainmentIncidentTimeline {
             return "T1059.004" // Unix Shell — current callers always pass this explicitly anyway
         case .networkSettingsWatch:
             return "T1557" // Adversary-in-the-Middle — current callers always pass this explicitly anyway
+        case .rmmInstallerUnofficialSource:
+            return "T1219" // Remote Access Software — current callers always pass this explicitly anyway
         case .runtimeThreat, .portAnomaly, .clickFix, .execRecorder, .vulnerabilityAcceptance, .criticalPathFim, .forensicCapture:
             // XProtect/Gatekeeper/port-anomaly summaries don't carry a
             // Falco-style rule name to pattern-match on macOS, so this

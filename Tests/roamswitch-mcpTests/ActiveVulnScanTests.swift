@@ -988,8 +988,40 @@ final class ActiveVulnScanTests: XCTestCase {
                                           probeName: nil, evidenceKind: .externalToolReport)
         let badge = loc("実証済み: 未認証で到達可能")
         let text = ActiveVulnScan.resultText(findings: [confirmed, nmap])
-        XCTAssertEqual(text, "\(badge)\nopen redis\nset a password\n\nhttp-title: Welcome\nnmap's own result")
+        XCTAssertEqual(text, "\(badge)\nopen redis\nset a password\n\nhttp-title: Welcome\nd\nnmap's own result")
         XCTAssertEqual(text.components(separatedBy: badge).count - 1, 1)
     }
 
+    /// nmap's script names that only read something out (the page title, the server's clock, the headers, the port state)
+    /// are not findings; scripts that check something still are. 2026-11-02: a scan of Docker's ports 3000 and 8000 listed
+    /// fourteen of these as "nmap NSE所見 ... 対応してください", with nothing a person could act on.
+    func testScriptsThatOnlyReadSomethingOutAreNotFindings() {
+        for script in ["http-title", "http-date", "http-headers", "http-server-header", "http-fetch", "http-referer-checker",
+                       "http-mobileversion-checker", "http-comments-displayer", "http-useragent-tester", "fcrdns", "port-states",
+                       "reverse-index", "clock-skew", "unusual-port"] {
+            XCTAssertTrue(NmapNSE.isInformational(script: script), script)
+        }
+        for script in ["http-security-headers", "http-methods", "ssl-cert", "vulners", "http-git", "http-enum"] {
+            XCTAssertFalse(NmapNSE.isInformational(script: script), script)
+        }
+        XCTAssertEqual(NmapNSE.informationalScripts.count, 20)
+    }
+
+    /// The text of an nmap finding carries nmap's own output, so the person can see what it found.
+    func testAnNmapFindingShowsItsOutput() {
+        let nmap = ActiveVulnScan.Finding(port: 8080, processName: "p", title: "nmap NSE所見: http-methods",
+                                          description: "Potentially risky methods: TRACE", recommendation: "nmap's own result",
+                                          probeName: nil, evidenceKind: .externalToolReport)
+        XCTAssertTrue(ActiveVulnScan.resultText(findings: [nmap]).contains("Potentially risky methods: TRACE"))
+    }
+
+    /// `lsof` cuts the COMMAND column at 9 characters ("com.docke"); `+c 0` keeps the whole name.
+    func testTheListeningPortScanAsksLsofForFullProcessNames() throws {
+        var seen: [String] = []
+        _ = try ListeningPortMonitor.shared.scanListeningPorts(runner: { _, args in
+            seen = args
+            return CommandOutput(status: 1, stdout: "", stderr: "")
+        })
+        XCTAssertEqual(Array(seen.prefix(2)), ["+c", "0"])
+    }
 }

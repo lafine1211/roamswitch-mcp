@@ -39,6 +39,19 @@ enum NmapNSE {
         let output: String
     }
 
+    /// Scripts that only read something out of the service (a page title, the server's clock, the headers, the
+    /// port's state). They report no problem, so they are not shown as findings: listed as "所見" with "対応してください"
+    /// they read like a warning, and the person cannot tell what to do. A script that checks something (missing
+    /// security headers, risky methods, a weak certificate, known CVEs) is not here and is still shown.
+    static let informationalScripts: Set<String> = [
+        "http-title", "http-date", "http-headers", "http-server-header", "http-fetch", "http-referer-checker",
+        "http-mobileversion-checker", "http-auth-finder", "http-comments-displayer", "http-useragent-tester",
+        "http-favicon", "http-generator", "fcrdns", "port-states", "reverse-index", "unusual-port", "clock-skew",
+        "ssl-date", "banner", "ssh-hostkey",
+    ]
+
+    static func isInformational(script: String) -> Bool { informationalScripts.contains(script) }
+
     /// Homebrew's two install prefixes (Apple Silicon / Intel) plus
     /// MacPorts — GUI apps launched via LaunchServices don't inherit the
     /// user's shell `PATH`, so this can't rely on `which`/`$PATH` the way a
