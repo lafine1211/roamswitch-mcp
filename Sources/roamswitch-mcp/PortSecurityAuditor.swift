@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.24 (build 203).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.25 (build 204).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -7,13 +7,17 @@
 import Foundation
 
 public enum PortSecurityRiskLevel: String, Equatable {
+    /// 問題がない(確認して、良い状態だったもの)。
     case safe
+    /// 参考。脅威ではない、あるいは強化の余地だけの項目。全体のリスクを上げない。
+    case info
     case warning
     case critical
 
     public var badge: String {
         switch self {
         case .safe: return "🟢 " + loc("安全")
+        case .info: return "ℹ️ " + loc("参考")
         case .warning: return "🟡 " + loc("注意")
         case .critical: return "🔴 " + loc("高リスク")
         }
@@ -42,16 +46,23 @@ public struct PortSecurityAuditResult: Identifiable, Equatable {
 final class PortSecurityAuditor {
     static let shared = PortSecurityAuditor()
 
+    /// UserDefaults(アプリと MCP サーバーが共有)に、RoamSwitch が「外部LANから隔離」したポートを保存するキー。
+    static let isolatedPortsDefaultsKey = "RoamSwitch.IsolatedDevPorts"
+
+    /// `isPortIsolated`: このポートを RoamSwitch が 127.0.0.1 専用に隔離している(`DevServerIsolator`)。
+    /// アプリのファイアウォールの許可リストにいる Docker などでも、隔離が効いていれば外からは届かない
+    /// (LAN の別の機械から接続を試して、タイムアウトになることを確かめた)ので、遮断されているものとして判定する。
     func auditPort(
         portInfo: ListeningPortInfo,
         isFirewallBlocking firewallBlockAll: Bool,
+        isPortIsolated: Bool = false,
         completion: @escaping (PortSecurityAuditResult) -> Void
     ) {
         DispatchQueue.global(qos: .userInitiated).async {
             var findings: [PortAuditFinding] = []
             // "Block all incoming" does not hold back an app on the firewall's allow list (Docker Desktop, measured by a
             // Sensor on the LAN), so such a port is judged as exposed.
-            let isFirewallBlocking = firewallBlockAll && !FirewallAllowList.allowsIncoming(executablePath: portInfo.executablePath)
+            let isFirewallBlocking = isPortIsolated || (firewallBlockAll && !FirewallAllowList.allowsIncoming(executablePath: portInfo.executablePath))
 
             // 1. Binding Interface Exposure Audit (0.0.0.0 vs 127.0.0.1)
             if portInfo.isGloballyExposed {
@@ -80,7 +91,8 @@ final class PortSecurityAuditor {
             }
 
             // 2. Known Dangerous / Unauthenticated Ports Audit
-            if let knownRisk = self.checkKnownDangerousPort(port: portInfo.port, isGlobal: portInfo.isGloballyExposed, isFirewallBlocking: isFirewallBlocking) {
+            if Self.namesTheService(portInfo),
+               let knownRisk = self.checkKnownDangerousPort(port: portInfo.port, isGlobal: portInfo.isGloballyExposed, isFirewallBlocking: isFirewallBlocking) {
                 findings.append(knownRisk)
             }
 
@@ -103,7 +115,10 @@ final class PortSecurityAuditor {
 
             // 4. Local AI runtime identification (port + response headers already read above).
             let aiRuntimes = LocalAIRuntime.identify(port: portInfo.port, headers: headers)
-            findings.append(contentsOf: self.aiRuntimeFindings(aiRuntimes, port: portInfo.port, isGlobal: portInfo.isGloballyExposed, isFirewallBlocking: isFirewallBlocking))
+            // Port 8000 without a vLLM process has no plain finding above, so its port-only "likely" match is kept.
+            var plain = LocalAIRuntime.portsWithPlainFinding
+            if !Self.namesTheService(portInfo) { plain.remove(portInfo.port) }
+            findings.append(contentsOf: self.aiRuntimeFindings(aiRuntimes, port: portInfo.port, isGlobal: portInfo.isGloballyExposed, isFirewallBlocking: isFirewallBlocking, portsWithPlainFinding: plain))
 
             // Calculate Overall Risk
             let overall: PortSecurityRiskLevel
@@ -151,6 +166,21 @@ final class PortSecurityAuditor {
         7860: "Gradio",
         8000: "vLLM",
     ]
+
+    /// Port 8000 is the default of vLLM, but also of Django, FastAPI/uvicorn, `python -m http.server`, and of many
+    /// containers' published backends, so the number alone does not say vLLM (measured 2026-11-03: Docker Desktop's
+    /// backend on 8000 was reported as "vLLM exposed"). The vLLM finding and the unprompted alert need the process
+    /// or its executable path to say so; any other listener on 8000 gets only the product's own "likely" tier (a
+    /// warning at most, see `LocalAIRuntime`).
+    static func isVLLMProcess(processName: String, executablePath: String?) -> Bool {
+        processName.lowercased().contains("vllm") || (executablePath ?? "").lowercased().contains("vllm")
+    }
+
+    /// Whether the service named for `port` in `criticalUnauthenticatedServicePorts` is shown by the process itself:
+    /// every port but 8000 is that service's own default, 8000 needs `isVLLMProcess`.
+    static func namesTheService(_ port: ListeningPortInfo) -> Bool {
+        port.port != 8000 || isVLLMProcess(processName: port.processName, executablePath: port.executablePath)
+    }
 
     /// Common local dev-server ports — the target set for `ActiveVulnScan`'s Phase 3
     /// checks (CORS misconfiguration / path traversal), which are endpoint-agnostic and
@@ -291,9 +321,10 @@ final class PortSecurityAuditor {
     /// already reports (that would be the same finding twice). `confirmed` follows the exposure risk
     /// (critical when reachable and unshielded); `likely` is at most `warning` and is skipped when the
     /// port is not reachable from the network, so a guess never outranks the plain port finding.
-    func aiRuntimeFindings(_ matches: [LocalAIRuntime.Match], port: Int, isGlobal: Bool, isFirewallBlocking: Bool) -> [PortAuditFinding] {
+    func aiRuntimeFindings(_ matches: [LocalAIRuntime.Match], port: Int, isGlobal: Bool, isFirewallBlocking: Bool,
+                           portsWithPlainFinding: Set<Int> = LocalAIRuntime.portsWithPlainFinding) -> [PortAuditFinding] {
         matches.compactMap { match in
-            if match.basis == ["port"], LocalAIRuntime.portsWithPlainFinding.contains(port) { return nil }
+            if match.basis == ["port"], portsWithPlainFinding.contains(port) { return nil }
             switch match.confidence {
             case .confirmed:
                 let risk: PortSecurityRiskLevel = isGlobal ? (isFirewallBlocking ? .warning : .critical) : .safe
@@ -385,7 +416,7 @@ final class PortSecurityAuditor {
                 if headerMap["x-content-type-options"] == nil {
                     findings.append(PortAuditFinding(
                         title: loc("MIMEスニッフィング防止ヘッダー (X-Content-Type-Options) の欠落"),
-                        riskLevel: .safe,
+                        riskLevel: .info,
                         description: loc("X-Content-Type-Options: nosniff が設定されていません。"),
                         recommendation: loc("レスポンスヘッダーに X-Content-Type-Options: nosniff を追加してください。")
                     ))

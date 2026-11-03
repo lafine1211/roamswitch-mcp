@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.24 (build 203).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.25 (build 204).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -485,6 +485,9 @@ enum MCPServer {
         let level = MCPResponseFormatting.resolveActiveSecurityLevel(gatewayMAC: GatewayFingerprint.currentGatewayMACAddress(), defaults: sharedDefaults)
         let isFirewallBlocking = level.firewallBlockAll
 
+        // アプリが「外部LANから隔離」したポート(アプリと共有の設定に保存している)。診断は、隔離が効いているものとして数える。
+        let isolatedPorts = Set(sharedDefaults.array(forKey: PortSecurityAuditor.isolatedPortsDefaultsKey) as? [Int] ?? [])
+
         var payloads: [MCPPortPayload] = []
         let lock = NSLock()
         let group = DispatchGroup()
@@ -492,7 +495,7 @@ enum MCPServer {
         for portInfo in ports {
             if portInfo.isGloballyExposed {
                 group.enter()
-                PortSecurityAuditor.shared.auditPort(portInfo: portInfo, isFirewallBlocking: isFirewallBlocking) { result in
+                PortSecurityAuditor.shared.auditPort(portInfo: portInfo, isFirewallBlocking: isFirewallBlocking, isPortIsolated: isolatedPorts.contains(portInfo.port)) { result in
                     lock.lock()
                     payloads.append(MCPResponseFormatting.makePortPayload(portInfo: portInfo, auditResult: result))
                     lock.unlock()

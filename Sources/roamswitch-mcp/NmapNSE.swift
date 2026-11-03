@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.24 (build 203).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.25 (build 204).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -41,13 +41,15 @@ enum NmapNSE {
 
     /// Scripts that only read something out of the service (a page title, the server's clock, the headers, the
     /// port's state). They report no problem, so they are not shown as findings: listed as "所見" with "対応してください"
-    /// they read like a warning, and the person cannot tell what to do. A script that checks something (missing
-    /// security headers, risky methods, a weak certificate, known CVEs) is not here and is still shown.
+    /// they read like a warning, and the person cannot tell what to do. A script that checks something (risky
+    /// methods, a weak certificate, known CVEs) is not here and is still shown. `http-security-headers` only lists the
+    /// security headers that ARE present, with their values (a `Cache-Control: s-maxage=...` line is not a problem), and
+    /// never reports a missing one, so it is here.
     static let informationalScripts: Set<String> = [
         "http-title", "http-date", "http-headers", "http-server-header", "http-fetch", "http-referer-checker",
         "http-mobileversion-checker", "http-auth-finder", "http-comments-displayer", "http-useragent-tester",
         "http-favicon", "http-generator", "fcrdns", "port-states", "reverse-index", "unusual-port", "clock-skew",
-        "ssl-date", "banner", "ssh-hostkey",
+        "ssl-date", "banner", "ssh-hostkey", "http-security-headers",
     ]
 
     static func isInformational(script: String) -> Bool { informationalScripts.contains(script) }

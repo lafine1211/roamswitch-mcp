@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.24 (build 203). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.25 (build 204). Do not edit here; see SYNC.md.
 
 import XCTest
 import Network
@@ -1001,10 +1001,11 @@ final class ActiveVulnScanTests: XCTestCase {
                        "reverse-index", "clock-skew", "unusual-port"] {
             XCTAssertTrue(NmapNSE.isInformational(script: script), script)
         }
-        for script in ["http-security-headers", "http-methods", "ssl-cert", "vulners", "http-git", "http-enum"] {
+        for script in ["http-methods", "ssl-cert", "vulners", "http-git", "http-enum"] {
             XCTAssertFalse(NmapNSE.isInformational(script: script), script)
         }
-        XCTAssertEqual(NmapNSE.informationalScripts.count, 20)
+        XCTAssertTrue(NmapNSE.isInformational(script: "http-security-headers"))
+        XCTAssertEqual(NmapNSE.informationalScripts.count, 21)
     }
 
     /// The text of an nmap finding carries nmap's own output, so the person can see what it found.
