@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.25 (build 204).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.26 (build 205).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -703,7 +703,10 @@ final class SecurityHealthChecker {
         // above) from both numerator and denominator entirely, rather than
         // counting them as passed, so they neither hurt nor artificially
         // inflate the score.
-        let applicableItems = items.filter { $0.isApplicable }
+        // A check that could not be measured reliably (`inconclusiveReason`) is left out too, even when it
+        // still has `isApplicable == true` and a pass flag (ARP with no gateway or baseline, an unreliable
+        // Wi-Fi reading): its "passed" says nothing, so it must not raise the score or the pass count.
+        let applicableItems = items.filter { $0.isApplicable && $0.inconclusiveReason == nil }
         let passedCount = applicableItems.filter { $0.isPassed }.count
         let totalCount = applicableItems.count
         // 全項目が測定不能・対象外のときも 0 除算にしない(その場合は 0 点=評価不能として最低ランクに落ちる)。
