@@ -208,24 +208,56 @@ final class TyposquatGuardTests: XCTestCase {
         XCTAssertNil(TyposquatGuard.checkName("@solana/web3.js", against: index))
     }
 
-    /// Timing on a real list: `TEST_RUNNER_TYPO_BENCH_LIST=<list.json> TEST_RUNNER_TYPO_BENCH_NAMES=<names.txt>`.
-    /// Skipped when the variables are not set.
-    func testTimingOnAGivenList() throws {
-        let env = ProcessInfo.processInfo.environment
-        guard let listPath = env["TYPO_BENCH_LIST"], let namesPath = env["TYPO_BENCH_NAMES"] else {
-            throw XCTSkip("no benchmark list given")
+    /// A list of two thousand, checked name by name with one prepared index: every name of the list is left alone, and
+    /// every one-letter variant of a list name is caught with that name as the target. The list is made here from a
+    /// fixed seed, so the test needs nothing from the machine and asserts no time (it used to be skipped unless a
+    /// list was given). `TEST_RUNNER_TYPO_BENCH_LIST=<list.json> TEST_RUNNER_TYPO_BENCH_NAMES=<names.txt>` still runs
+    /// it on a real list and prints the time; the time is reported, not judged.
+    func testALongListIsCheckedWithOneIndex() throws {
+        var seed: UInt64 = 0x9E37_79B9_7F4A_7C15
+        func next() -> UInt64 {
+            seed = seed &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+            return seed >> 33
         }
+        let letters = Array("abcdefghijklmnopqrstuvwxyz")
+        var list: [String] = []
+        var seen: Set<String> = []
+        while list.count < 2000 {
+            let length = 8 + Int(next() % 5)
+            let name = String((0..<length).map { _ in letters[Int(next() % 26)] })
+            if seen.insert(name).inserted { list.append(name) }
+        }
+        let index = TyposquatGuard.PopularIndex(list)
+        // The names of the list themselves.
+        for name in list.prefix(40) {
+            XCTAssertNil(TyposquatGuard.checkName(name, against: index), name)
+        }
+        // One letter added at the end of a list name: one edit from it, and (random names of 8 letters or more) far
+        // from every other name of the list.
+        var caught = 0
+        for name in list.prefix(40) {
+            let squat = name + "x"
+            guard !seen.contains(squat) else { continue }
+            let finding = TyposquatGuard.checkName(squat, against: index)
+            XCTAssertEqual(finding?.suspectedTarget, name, squat)
+            XCTAssertEqual(finding?.distance, 1, squat)
+            if finding != nil { caught += 1 }
+        }
+        XCTAssertEqual(caught, 40)
+
+        let env = ProcessInfo.processInfo.environment
+        guard let listPath = env["TYPO_BENCH_LIST"], let namesPath = env["TYPO_BENCH_NAMES"] else { return }
         struct List: Decodable { let packages: [String] }
-        let list = try JSONDecoder().decode(List.self, from: Data(contentsOf: URL(fileURLWithPath: listPath))).packages
+        let real = try JSONDecoder().decode(List.self, from: Data(contentsOf: URL(fileURLWithPath: listPath))).packages
         let names = try String(contentsOfFile: namesPath, encoding: .utf8).split(separator: "\n").map(String.init)
         var t0 = Date()
-        let index = TyposquatGuard.PopularIndex(list)
+        let realIndex = TyposquatGuard.PopularIndex(real)
         let build = Date().timeIntervalSince(t0)
         t0 = Date()
         var flagged = 0
-        for n in names where TyposquatGuard.checkName(n, against: index) != nil { flagged += 1 }
+        for n in names where TyposquatGuard.checkName(n, against: realIndex) != nil { flagged += 1 }
         let elapsed = Date().timeIntervalSince(t0)
-        print("TYPO_BENCH list=\(list.count) names=\(names.count) flagged=\(flagged) build_ms=\(build * 1000) us_per_check=\(elapsed * 1e6 / Double(max(names.count, 1)))")
+        print("TYPO_BENCH list=\(real.count) names=\(names.count) flagged=\(flagged) build_ms=\(build * 1000) us_per_check=\(elapsed * 1e6 / Double(max(names.count, 1)))")
     }
 
     func testAllowlistSuppressesKnownLookalikes() {

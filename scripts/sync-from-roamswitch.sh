@@ -44,7 +44,7 @@ CORE=(ProcessWait AppLanguage TrustedNetwork GatewayFingerprint WiFiSecurityMoni
       SecretLeakScanning FrontendBundleScan TrustAnchorCheck ReflectedXssProbe SecurityLogAuditor LogTemplateAnalyzer QuarantineManager CanaryStatusReader \
       RansomwareEntropyStatusReader ForensicCaptureManager HoneytokenStatusReader \
       BrowserCredentialWatchStatusReader \
-      PortAnomalyStatusReader RuntimeThreatStatusReader NotificationHistory \
+      PortAnomalyStatusReader RuntimeThreatStatusReader NotificationTextLocalization \
       ContainmentIncidentTimeline NetworkHistoryGuard MCPSensorAuditStatusReader \
       RansomwareSnapshotStatusReader MCPExecRecorderTools TOMLSubset AgentSetupAuditor AgentSetupBaseline SSHGuardStatusReader PromptInjectionSignals AgentSetupSarif ActiveVulnScanSarif DetectionCoverage \
       BackupRecency PackageCveEpss VulnerabilityAcceptance DependencySourceScan \
@@ -54,7 +54,8 @@ CORE=(ProcessWait AppLanguage TrustedNetwork GatewayFingerprint WiFiSecurityMoni
 
 # Sources that live in the app's Shared/ folder (also compiled into the helper).
 SHARED=(RansomwareSnapshotLogic ExecEventModel ExecLogStore ExecProcessTree ExecReadAPI \
-        CryptoSecretDetection SafeScanFS ExecCommandMasker LinkFilterEngine KnownAttackServers SSHGuardCore GuardReaderHealth StrictJSON WatchdogAgentState PFSystemAnchors)
+        CryptoSecretDetection SafeScanFS ExecCommandMasker LinkFilterEngine KnownAttackServers SSHGuardCore GuardReaderHealth StrictJSON WatchdogAgentState PFSystemAnchors \
+        NotificationHistory NotificationText WatchdogMessages)
 
 # App test files that only exercise types present in this repo. Their
 # `@testable import RoamSwitch` is rewritten to this package's module name.
@@ -70,6 +71,16 @@ TESTS=(LinkSafetyAuditorTests CryptoSecretDetectionTests MCPKnowledgeBaseTests M
        FrontendBundleScanTests ForensicChainTests TrustAnchorCheckTests ReflectedXssProbeTests)
 
 TDST="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/Tests/roamswitch-mcpTests"
+
+# The lists above must be the target's source set: a file the app moved (NotificationHistory went from RoamSwitch/
+# to Shared/) or added stops the sync here, before anything is copied, instead of leaving a mirror that does not build.
+WANT=$(awk '/^  RoamSwitchMCPServer:/{t=1;next} t&&/^    settings:/{exit} t&&/- path: (RoamSwitch|Shared)\/[A-Za-z0-9_]+\.swift/{print $3}' "$SRC/project.yml" | sort)
+HAVE=$( { for f in "${CORE[@]}"; do echo "RoamSwitch/$f.swift"; done; for f in "${SHARED[@]}"; do echo "Shared/$f.swift"; done; } | sort)
+if [ "$WANT" != "$HAVE" ]; then
+  echo "The CORE/SHARED lists differ from the RoamSwitchMCPServer target in $SRC/project.yml:" >&2
+  diff <(echo "$HAVE") <(echo "$WANT") >&2
+  exit 1
+fi
 
 for f in "${CORE[@]}"; do
   { printf '%s\n' "$HEADER"; cat "$SRC/RoamSwitch/$f.swift"; } > "$DST/$f.swift"
