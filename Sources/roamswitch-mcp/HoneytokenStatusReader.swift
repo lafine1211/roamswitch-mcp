@@ -21,11 +21,12 @@ enum HoneytokenStatusReader {
     }
 
     static func persistedEvents(defaults: UserDefaults = .standard) -> [PersistedHoneytokenEvent] {
-        guard let data = defaults.data(forKey: persistedEventsKey),
-              let decoded = try? JSONDecoder().decode([PersistedHoneytokenEvent].self, from: data) else {
-            return []
-        }
-        return decoded
+        persistedEventsRead(defaults: defaults).value(or: [])
+    }
+
+    /// The same, telling a stored log that cannot be read from one that is empty.
+    static func persistedEventsRead(defaults: UserDefaults = .standard) -> StoredRecordRead<[PersistedHoneytokenEvent]> {
+        StoredRecordDefaults.peek([PersistedHoneytokenEvent].self, key: persistedEventsKey, defaults: defaults)
     }
 }
 
@@ -37,4 +38,25 @@ struct PersistedHoneytokenEvent: Codable {
     let path: String
     let kind: String
     let suspectedProcess: String
+}
+
+/// `HoneytokenAccessEvent.suspectedProcess` holds a program label (`name (PID n)`, from `AlertEvidence.programLabel`)
+/// or, when nobody could be identified, a sentence. That sentence is stored as its catalog key (the source language),
+/// not in the language of the moment, and written in the reader's language when it is shown (the MCP answer keeps
+/// its `suspectedProcess` string, in the language the server answers in). Records written before this held the
+/// sentence in the language of that moment; any of the ten is recognised and rewritten the same way.
+enum HoneytokenSuspectText {
+    static let unidentifiedKey = "特定できませんでした（検知時点で該当プロセスは終了済みの可能性）"
+
+    /// What to store when the reader of the decoy was not identified.
+    static var unidentifiedStored: String { unidentifiedKey }
+
+    static func isUnidentified(_ stored: String) -> Bool {
+        stored == unidentifiedKey || AppLanguage.allCases.contains { $0 != .system && loc(unidentifiedKey, localeCode: $0.rawValue) == stored }
+    }
+
+    /// `stored` as the reader should see it: the "could not be identified" sentence in `localeCode`, a label as it is.
+    static func display(_ stored: String, localeCode: String = AppLanguage.activeLocaleCode) -> String {
+        isUnidentified(stored) ? loc(unidentifiedKey, localeCode: localeCode) : stored
+    }
 }

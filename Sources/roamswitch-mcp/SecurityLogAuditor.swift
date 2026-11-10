@@ -132,13 +132,13 @@ public struct SecurityLogReadStatus: Equatable {
             if failureReason == "launch_failed" {
                 out.append(loc("ログを読めませんでした(log コマンドを起動できませんでした)。「問題なし」という意味ではありません。"))
             } else if timedOut {
-                out.append(String(format: loc("ログを読めませんでした(%d 秒以内に読み終えられませんでした)。「問題なし」という意味ではありません。"), seconds))
+                out.append(locFormat("ログを読めませんでした(%d 秒以内に読み終えられませんでした)。「問題なし」という意味ではありません。", seconds))
             } else {
                 out.append(loc("ログを読めませんでした(log コマンドがエラーで終了しました)。「問題なし」という意味ではありません。"))
             }
         } else {
             if timedOut {
-                out.append(String(format: loc("ログの取得が %d 秒の制限で止まったため、途中までを調べました。"), seconds))
+                out.append(locFormat("ログの取得が %d 秒の制限で止まったため、途中までを調べました。", seconds))
             } else if failureReason != nil {
                 out.append(loc("ログの取得が途中でエラーになったため、途中までを調べました。"))
             }
@@ -148,13 +148,13 @@ public struct SecurityLogReadStatus: Equatable {
             }
         }
         if windowClamped {
-            out.append(String(format: loc("指定の %d 時間は範囲外のため、直近 %d 時間を調べました。"), hoursRequested, hoursQueried))
+            out.append(locFormat("指定の %d 時間は範囲外のため、直近 %d 時間を調べました。", hoursRequested, hoursQueried))
         }
         if linesLossy > 0 {
-            out.append(String(format: loc("読めない文字を含む行が %d 件ありました(文字を置き換えて調べました)。"), linesLossy))
+            out.append(locFormat("読めない文字を含む行が %d 件ありました(文字を置き換えて調べました)。", linesLossy))
         }
         if linesUnparsable > 0 {
-            out.append(String(format: loc("解析できなかった行が %d 件ありました。"), linesUnparsable))
+            out.append(locFormat("解析できなかった行が %d 件ありました。", linesUnparsable))
         }
         return out
     }

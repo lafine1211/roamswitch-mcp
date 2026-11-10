@@ -18,11 +18,12 @@ enum BrowserCredentialWatchStatusReader {
     }
 
     static func persistedEvents(defaults: UserDefaults = .standard) -> [PersistedBrowserCredentialEvent] {
-        guard let data = defaults.data(forKey: persistedEventsKey),
-              let decoded = try? JSONDecoder().decode([PersistedBrowserCredentialEvent].self, from: data) else {
-            return []
-        }
-        return decoded
+        persistedEventsRead(defaults: defaults).value(or: [])
+    }
+
+    /// The same, telling a stored log that cannot be read from one that is empty.
+    static func persistedEventsRead(defaults: UserDefaults = .standard) -> StoredRecordRead<[PersistedBrowserCredentialEvent]> {
+        StoredRecordDefaults.peek([PersistedBrowserCredentialEvent].self, key: persistedEventsKey, defaults: defaults)
     }
 }
 

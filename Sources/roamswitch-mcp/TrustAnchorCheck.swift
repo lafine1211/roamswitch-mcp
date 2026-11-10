@@ -105,7 +105,7 @@ enum TrustAnchorCheck {
                 recommendation = loc("使っていないプロキシ・解析ツールの証明書なら、キーチェーンアクセスで、その証明書の「信頼」を「システム設定を使用」に戻すか、削除してください。使っているなら、そのツールが読める通信を把握しておいてください。")
             } else {
                 isPassed = true
-                statusText = String(format: loc("追加で信頼している証明書が %d 件あります: %@(設定した覚えがあれば問題ありません)"), list.count, shown(list))
+                statusText = locFormat("追加で信頼している証明書が %d 件あります: %@(設定した覚えがあれば問題ありません)", list.count, shown(list))
                 recommendation = loc("設定した覚えがない場合は、キーチェーンアクセスで、その証明書の「信頼」の設定を確認してください。会社や開発ツール(mkcert など)が入れたものは、通常は問題ありません。")
             }
         }

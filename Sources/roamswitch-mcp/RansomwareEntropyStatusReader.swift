@@ -24,11 +24,12 @@ enum RansomwareEntropyStatusReader {
     }
 
     static func persistedAlerts(defaults: UserDefaults = .standard) -> [PersistedEntropyAlert] {
-        guard let data = defaults.data(forKey: persistedAlertsKey),
-              let decoded = try? JSONDecoder().decode([PersistedEntropyAlert].self, from: data) else {
-            return []
-        }
-        return decoded
+        persistedAlertsRead(defaults: defaults).value(or: [])
+    }
+
+    /// The same, telling a stored log that cannot be read from one that is empty.
+    static func persistedAlertsRead(defaults: UserDefaults = .standard) -> StoredRecordRead<[PersistedEntropyAlert]> {
+        StoredRecordDefaults.peek([PersistedEntropyAlert].self, key: persistedAlertsKey, defaults: defaults)
     }
 }
 

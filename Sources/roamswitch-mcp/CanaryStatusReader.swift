@@ -72,11 +72,12 @@ enum CanaryStatusReader {
     /// type's header comment) was that incidents only ever lived in the main
     /// app process's memory; they're now also written to `defaults`.
     static func persistedIncidents(defaults: UserDefaults = .standard) -> [PersistedCanaryIncident] {
-        guard let data = defaults.data(forKey: persistedIncidentsKey),
-              let decoded = try? JSONDecoder().decode([PersistedCanaryIncident].self, from: data) else {
-            return []
-        }
-        return decoded
+        persistedIncidentsRead(defaults: defaults).value(or: [])
+    }
+
+    /// The same, telling a stored log that cannot be read from one that is empty.
+    static func persistedIncidentsRead(defaults: UserDefaults = .standard) -> StoredRecordRead<[PersistedCanaryIncident]> {
+        StoredRecordDefaults.peek([PersistedCanaryIncident].self, key: persistedIncidentsKey, defaults: defaults)
     }
 }
 

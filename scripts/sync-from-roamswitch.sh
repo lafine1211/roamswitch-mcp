@@ -50,12 +50,13 @@ CORE=(ProcessWait AppLanguage TrustedNetwork GatewayFingerprint WiFiSecurityMoni
       BackupRecency PackageCveEpss VulnerabilityAcceptance DependencySourceScan \
       ProxyAutoDiscoveryCheck AgentCredentialFileCheck \
       DecoyPlacement FeedUpdateStatus LinkGuardEnforcement \
-      KevCatalog PackageCveExposure PhpEnvironment PhpEnvironmentAudit)
+      KevCatalog PackageCveExposure PhpEnvironment PhpEnvironmentAudit \
+      StoredRecordHealth)
 
 # Sources that live in the app's Shared/ folder (also compiled into the helper).
 SHARED=(RansomwareSnapshotLogic ExecEventModel ExecLogStore ExecProcessTree ExecReadAPI \
         CryptoSecretDetection SafeScanFS ExecCommandMasker LinkFilterEngine KnownAttackServers SSHGuardCore GuardReaderHealth StrictJSON WatchdogAgentState PFSystemAnchors \
-        NotificationHistory NotificationText WatchdogMessages)
+        NotificationHistory NotificationText WatchdogMessages StoredRecordRead)
 
 # App test files that only exercise types present in this repo. Their
 # `@testable import RoamSwitch` is rewritten to this package's module name.

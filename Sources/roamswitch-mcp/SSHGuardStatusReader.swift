@@ -18,6 +18,10 @@ enum SSHGuardStatusReader {
     static let sessionsKey = "RoamSwitch.SSHGuard.SessionsV1"
     static let statusKey = "RoamSwitch.SSHGuard.StatusV1"
     static let statusUpdatedKey = "RoamSwitch.SSHGuard.StatusUpdatedAt"
+    /// true while the helper answers that its own file of incidents (or of logins) cannot be read: the copy here is
+    /// then the last one the app got, not the helper's record.
+    static let incidentsUnreadableKey = "RoamSwitch.SSHGuard.IncidentsUnreadable"
+    static let sessionsUnreadableKey = "RoamSwitch.SSHGuard.SessionsUnreadable"
 
     static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
         defaults.bool(forKey: enabledKey)
@@ -25,14 +29,21 @@ enum SSHGuardStatusReader {
 
     /// Oldest first, as the helper keeps them.
     static func incidents(defaults: UserDefaults = .standard) -> [SSHGuardIncident] {
-        guard let data = defaults.data(forKey: incidentsKey) else { return [] }
-        return (try? JSONDecoder().decode([SSHGuardIncident].self, from: data)) ?? []
+        incidentsRead(defaults: defaults).value(or: [])
+    }
+
+    /// The same, telling a stored copy that cannot be read from one that is empty.
+    static func incidentsRead(defaults: UserDefaults = .standard) -> StoredRecordRead<[SSHGuardIncident]> {
+        StoredRecordDefaults.peek([SSHGuardIncident].self, key: incidentsKey, defaults: defaults)
     }
 
     /// Newest first.
     static func sessions(defaults: UserDefaults = .standard) -> [SSHSession] {
-        guard let data = defaults.data(forKey: sessionsKey) else { return [] }
-        return (try? JSONDecoder().decode([SSHSession].self, from: data)) ?? []
+        sessionsRead(defaults: defaults).value(or: [])
+    }
+
+    static func sessionsRead(defaults: UserDefaults = .standard) -> StoredRecordRead<[SSHSession]> {
+        StoredRecordDefaults.peek([SSHSession].self, key: sessionsKey, defaults: defaults)
     }
 
     /// The last status the app saw, with when it saw it; nil if the app has never reached the helper.

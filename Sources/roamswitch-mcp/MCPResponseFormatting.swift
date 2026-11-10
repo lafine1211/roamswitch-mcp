@@ -440,6 +440,29 @@ public struct MCPQuarantinedFilePayload: Codable, Equatable {
 public struct MCPQuarantineStatusPayload: Codable, Equatable {
     public let quarantineDirectory: String
     public let files: [MCPQuarantinedFilePayload]
+    /// true: the vault's record could not be read (damaged, no permission), so an empty `files` does NOT mean that
+    /// nothing is quarantined. `unreadableReason` (corrupt | permission_denied | read_failed) and `unreadableMessage`
+    /// (in the app's language) are present only then.
+    public var unreadable: Bool = false
+    public var unreadableReason: String? = nil
+    public var unreadableMessage: String? = nil
+}
+
+/// An answer that carries a stored record: `unreadable` and `unreadableMessage` say when the record could not be read.
+protocol MCPUnreadableRecordPayload {
+    var unreadable: Bool { get set }
+    var unreadableMessage: String? { get set }
+}
+
+extension MCPUnreadableRecordPayload {
+    mutating func markUnreadable(_ records: [StoredRecord]) {
+        unreadable = !records.isEmpty
+        unreadableMessage = records.isEmpty ? nil : records.map(\.message).joined(separator: "\n")
+    }
+
+    mutating func markUnreadable(_ record: StoredRecord?) {
+        markUnreadable(record.map { [$0] } ?? [])
+    }
 }
 
 public struct MCPCanaryIncidentPayload: Codable, Equatable {
@@ -458,12 +481,16 @@ public struct MCPCanaryIncidentPayload: Codable, Equatable {
 /// (`CanaryStatusReader.persistedIncidents(defaults:)`), so this is `true`
 /// whenever the guard has ever run, and `recentIncidents` carries the
 /// actual history.
-public struct MCPCanaryStatusPayload: Codable, Equatable {
+public struct MCPCanaryStatusPayload: Codable, Equatable, MCPUnreadableRecordPayload {
     public let isEnabled: Bool
     public let monitoredFilesCount: Int
     public let expectedFilesCount: Int
     public let recentIncidentsAvailable: Bool
     public let recentIncidents: [MCPCanaryIncidentPayload]
+    /// true: the stored record could not be read (damaged), so an empty list does NOT mean that nothing happened.
+    /// `unreadableMessage` (in the app's language) is present only then.
+    public var unreadable: Bool = false
+    public var unreadableMessage: String? = nil
 }
 
 /// Status for `RansomwareEntropyGuard` — general, non-canary-dependent
@@ -471,10 +498,14 @@ public struct MCPCanaryStatusPayload: Codable, Equatable {
 /// `MCPCanaryStatusPayload`: the canary guard reports fixed bait-file
 /// tamper events, this one reports Shannon-entropy burst alerts anywhere in
 /// the watched folders.
-public struct MCPRansomwareEntropyStatusPayload: Codable, Equatable {
+public struct MCPRansomwareEntropyStatusPayload: Codable, Equatable, MCPUnreadableRecordPayload {
     public let isEnabled: Bool
     public let recentAlertsAvailable: Bool
     public let recentAlerts: [MCPRansomwareEntropyAlertPayload]
+    /// true: the stored record could not be read (damaged), so an empty list does NOT mean that nothing happened.
+    /// `unreadableMessage` (in the app's language) is present only then.
+    public var unreadable: Bool = false
+    public var unreadableMessage: String? = nil
 }
 
 public struct MCPRansomwareEntropyAlertPayload: Codable, Equatable {
@@ -499,18 +530,26 @@ public struct MCPForensicEvidenceBundlesPayload: Codable, Equatable {
 /// `get_vulnerability_scan_history` MCP tool — same wire shape
 /// (`{"probes": [...]}`) as the Linux edition's equivalent tool, so a
 /// consumer reading both doesn't need platform-specific parsing.
-public struct MCPVulnerabilityScanHistoryPayload: Codable, Equatable {
+public struct MCPVulnerabilityScanHistoryPayload: Codable, Equatable, MCPUnreadableRecordPayload {
     public let probes: [ActiveVulnScan.ProbeStatus]
+    /// true: the stored record could not be read (damaged), so an empty list does NOT mean that nothing happened.
+    /// `unreadableMessage` (in the app's language) is present only then.
+    public var unreadable: Bool = false
+    public var unreadableMessage: String? = nil
 }
 
 /// Wraps `PersistedHoneytokenEvent` for the `get_honeytoken_status` MCP tool.
-public struct MCPHoneytokenStatusPayload: Codable, Equatable {
+public struct MCPHoneytokenStatusPayload: Codable, Equatable, MCPUnreadableRecordPayload {
     public let isEnabled: Bool
     public let recentEventsAvailable: Bool
     public let recentEvents: [MCPHoneytokenEventPayload]
     /// How many decoy files are really in place, and why the others are not. A guard that is on with `placed` 0 watches
     /// nothing. Absent until the app has placed once.
     public var placement: MCPDecoyPlacementPayload? = nil
+    /// true: the stored record could not be read (damaged), so an empty list does NOT mean that nothing happened.
+    /// `unreadableMessage` (in the app's language) is present only then.
+    public var unreadable: Bool = false
+    public var unreadableMessage: String? = nil
 }
 
 public struct MCPDecoyPlacementPayload: Codable, Equatable {
@@ -542,10 +581,14 @@ public struct MCPHoneytokenEventPayload: Codable, Equatable {
 
 /// Wraps `PersistedBrowserCredentialEvent` for the
 /// `get_browser_credential_watch_status` MCP tool.
-public struct MCPBrowserCredentialWatchStatusPayload: Codable, Equatable {
+public struct MCPBrowserCredentialWatchStatusPayload: Codable, Equatable, MCPUnreadableRecordPayload {
     public let isEnabled: Bool
     public let recentEventsAvailable: Bool
     public let recentEvents: [MCPBrowserCredentialEventPayload]
+    /// true: the stored record could not be read (damaged), so an empty list does NOT mean that nothing happened.
+    /// `unreadableMessage` (in the app's language) is present only then.
+    public var unreadable: Bool = false
+    public var unreadableMessage: String? = nil
 }
 
 public struct MCPBrowserCredentialEventPayload: Codable, Equatable {
@@ -561,6 +604,18 @@ public struct MCPBrowserCredentialEventPayload: Codable, Equatable {
 /// shape (`{"notifications": [...]}`).
 public struct MCPNotificationHistoryPayload: Codable, Equatable {
     public let notifications: [NotificationHistoryEntry]
+    /// true: the stored history could not be read, so an empty `notifications` does NOT mean that nothing was sent.
+    /// `unreadableMessage` (in the app's language) is present only then.
+    public var unreadable: Bool = false
+    public var unreadableMessage: String? = nil
+}
+
+/// The words for a history that could not be read (the window and the MCP answer). Here, not in the view, because the
+/// MCP server target compiles this file and not the view.
+enum NotificationHistoryText {
+    static var unreadable: String {
+        loc("通知履歴を確認できません。保存されている履歴が壊れていて読み込めませんでした。次の通知を記録するとき、壊れた履歴は消さずに別の名前で残します。")
+    }
 }
 
 public struct MCPPortAnomalyIncidentPayload: Codable, Equatable {
@@ -579,13 +634,17 @@ public struct MCPPortAnomalyIncidentPayload: Codable, Equatable {
 /// edition). The two `*Note` fields are additive rather than a
 /// restructuring — the existing flat fields are kept as-is so this stays
 /// source-compatible with anything already decoding this type.
-public struct MCPPortAnomalyIncidentsPayload: Codable, Equatable {
+public struct MCPPortAnomalyIncidentsPayload: Codable, Equatable, MCPUnreadableRecordPayload {
     public let incidentsNote: String
     public let isEnabled: Bool
     public let baselineCaptured: Bool
     public let currentPortStateNote: String
     public let autoIsolatedPorts: [Int]
     public let incidents: [MCPPortAnomalyIncidentPayload]
+    /// true: the stored record could not be read (damaged), so an empty list does NOT mean that nothing happened.
+    /// `unreadableMessage` (in the app's language) is present only then.
+    public var unreadable: Bool = false
+    public var unreadableMessage: String? = nil
 }
 
 /// One SSH login as `get_ssh_guard_incidents` reports it (an `Accepted` line of sshd's log).
@@ -623,7 +682,7 @@ public struct MCPSSHBanPayload: Codable, Equatable {
     public let remainingSecs: Int
 }
 
-public struct MCPSSHGuardPayload: Codable, Equatable {
+public struct MCPSSHGuardPayload: Codable, Equatable, MCPUnreadableRecordPayload {
     public let isEnabled: Bool
     public let attackTechnique: String
     public let incidentsNote: String
@@ -637,6 +696,10 @@ public struct MCPSSHGuardPayload: Codable, Equatable {
     public let activeBans: [MCPSSHBanPayload]
     public let sessionsNote: String
     public let recentSessions: [MCPSSHSessionPayload]
+    /// true: the stored record could not be read (damaged), so an empty list does NOT mean that nothing happened.
+    /// `unreadableMessage` (in the app's language) is present only then.
+    public var unreadable: Bool = false
+    public var unreadableMessage: String? = nil
 }
 
 /// Field-for-field mirror of `SensorAuditFinding` (`Shared/HelperProtocol.swift`),
@@ -666,6 +729,12 @@ public struct MCPSensorAuditResultPayload: Codable, Equatable {
 public struct MCPSensorAuditResultsPayload: Codable, Equatable {
     public let pairedSensorCount: Int
     public let results: [MCPSensorAuditResultPayload]
+    /// true: the helper's paired-Sensor or audit-result file exists but could not be read, so a 0 count or an empty
+    /// `results` does NOT mean that nothing is paired or recorded. `unreadableMessage` (in the app's language) and
+    /// `unreadableFiles` (paths) are present only then.
+    public var unreadable: Bool = false
+    public var unreadableMessage: String? = nil
+    public var unreadableFiles: [String]? = nil
 }
 
 public struct MCPRuntimeThreatIncidentPayload: Codable, Equatable {
@@ -779,6 +848,12 @@ public struct MCPFeedUpdatePayload: Codable, Equatable {
 
 /// One `ContainmentIncidentTimeline` entry. `source`/`actionTaken`/`status`
 /// are stable identifiers; the `...Label` fields are localized.
+/// `{"code": "...", "args": {...}}`: see `ContainmentSummaryCode`.
+public struct MCPSummaryCodePayload: Codable, Equatable {
+    public let code: String
+    public let args: [String: String]
+}
+
 public struct MCPIncidentTimelineEventPayload: Codable, Equatable {
     public let id: String
     public let timestamp: String
@@ -786,7 +861,11 @@ public struct MCPIncidentTimelineEventPayload: Codable, Equatable {
     public let source: String
     public let sourceLabel: String
     public let severity: String
+    /// In the language shown now when the record has a `summaryCode` this build knows; otherwise the text as recorded.
     public let summary: String
+    /// Added later, and left out when absent: the kind of sentence `summary` is and its values (the Linux edition's
+    /// `summary_code` shape), so a reader can write it in its own language. Records made before it have none.
+    public var summaryCode: MCPSummaryCodePayload? = nil
     public let processName: String?
     public let processID: Int32?
     public let attackTechnique: String?
@@ -865,11 +944,14 @@ public struct MCPLookalikeNetworkPairPayload: Codable, Equatable {
     public let editDistance: Int
 }
 
-public struct MCPNetworkHistoryPayload: Codable, Equatable {
+public struct MCPNetworkHistoryPayload: Codable, Equatable, MCPUnreadableRecordPayload {
     public let knownNetworkCount: Int
     public let networks: [MCPKnownNetworkPayload]
     public let lookalikePairs: [MCPLookalikeNetworkPairPayload]
     public let caveats: [String]
+    /// true: the history file could not be read, so a 0 count does NOT mean no network was seen.
+    public var unreadable: Bool = false
+    public var unreadableMessage: String? = nil
 }
 
 // MARK: - Pure formatting / decision functions
@@ -1056,9 +1138,12 @@ public enum MCPResponseFormatting {
         wifiInterfacePresent: Bool,
         wifiSSIDResolved: Bool,
         /// アプリの診断が残した前回の測定(`FindingHistory.read`)。空なら、どの結果も `no_earlier_check`。
-        history: [String: FindingHistoryEntry] = [:]
+        history: [String: FindingHistoryEntry] = [:],
+        /// The stored history is there but could not be read: every result is `no_earlier_check` because nothing was read.
+        historyUnreadable: Bool = false
     ) -> MCPVerifySecurityFindingsPayload {
         var caveats: [String] = []
+        if historyUnreadable { caveats.append(StoredRecord.findingHistory.message) }
         var itemsById: [String: SecurityAuditItem] = [:]
         for item in report.items where !item.checkId.isEmpty && itemsById[item.checkId] == nil {
             itemsById[item.checkId] = item
@@ -1446,6 +1531,7 @@ public enum MCPResponseFormatting {
         case .criticalPathFim: return loc("重要ファイルの改ざん監視")
         case .forensicCapture: return loc("証拠バンドルの保存")
         case .rmmInstallerUnofficialSource: return loc("リモートアクセスツールの非公式配布元検知")
+        case .persistence: return loc("自動起動の登録の検知")
         }
     }
 
@@ -1457,6 +1543,7 @@ public enum MCPResponseFormatting {
         case "notify_only": return loc("通知のみ（遮断は行わない）")
         case "air_gap_degraded": return loc("Air-Gapを縮退モードへ移行（新規の外部通信は遮断を継続）")
         case "baseline_accepted": return loc("基準を更新（人の操作）")
+        case "baseline_os_update": return loc("macOSの更新のあと基準に取り込み")
         default: return action
         }
     }
@@ -1584,7 +1671,7 @@ public enum MCPResponseFormatting {
                 status: status,
                 attackTechniques: techniques,
                 evidenceRefs: refs.isEmpty ? nil : refs,
-                summary: topEvent.summary
+                summary: topEvent.displaySummary
             )
             incidents.append((group[group.count - 1].timestamp, payload))
         }
@@ -1613,7 +1700,8 @@ public enum MCPResponseFormatting {
                 source: event.source.rawValue,
                 sourceLabel: containmentSourceLabel(event.source),
                 severity: event.severity,
-                summary: event.summary,
+                summary: event.displaySummary,
+                summaryCode: event.summaryCode.map { MCPSummaryCodePayload(code: $0.code, args: $0.args) },
                 processName: event.processName,
                 processID: event.processID,
                 attackTechnique: event.attackTechnique,
@@ -1627,7 +1715,7 @@ public enum MCPResponseFormatting {
             ))
         }
         var caveats: [String] = [
-            loc("summary は検知時点に記録された文言をそのまま返します。後から表示言語を変更しても、過去の記録には反映されません。"),
+            loc("summary は、summaryCode のある記録では、今の表示言語で書き直した文です。summaryCode のない記録(この機能より前の記録など)は、検知の時点の文言のままです。"),
             loc("事象(incidents)は rootEventID と、同じプロセスの15分以内の間隔による自動的なまとめです。同じ攻撃だという証明ではありません。個々の events が正本です。")
         ]
         if fileState == .unreadable {
@@ -1649,7 +1737,8 @@ public enum MCPResponseFormatting {
     static func makeNetworkHistoryPayload(
         entries: [NetworkHistoryGuard.HistorySnapshotEntry],
         lookalikes: [NetworkHistoryGuard.LookalikePair],
-        limit: Int
+        limit: Int,
+        unreadable: Bool = false
     ) -> MCPNetworkHistoryPayload {
         let iso = ISO8601DateFormatter()
         let networks: [MCPKnownNetworkPayload] = entries.prefix(max(limit, 0)).map {
@@ -1661,12 +1750,14 @@ public enum MCPResponseFormatting {
         let caveats: [String] = [
             loc("ゲートウェイのMACアドレスは出力せず、ネットワークごとの件数のみを返します。lookalikePairs は名前が酷似しているのに共通のゲートウェイ機器がない組み合わせで、なりすましアクセスポイント（Evil Twin）の可能性があります。")
         ]
-        return MCPNetworkHistoryPayload(
+        var payload = MCPNetworkHistoryPayload(
             knownNetworkCount: entries.count,
             networks: networks,
             lookalikePairs: pairs,
             caveats: caveats
         )
+        payload.markUnreadable(unreadable ? StoredRecord.networkHistory : nil)
+        return payload
     }
 
     // MARK: audit_url_safety
@@ -1728,7 +1819,7 @@ public struct MCPRansomwareSnapshotPayload: Codable, Equatable {
     public let note: String?
 }
 
-public struct MCPRansomwareRecoverySnapshotsPayload: Codable, Equatable {
+public struct MCPRansomwareRecoverySnapshotsPayload: Codable, Equatable, MCPUnreadableRecordPayload {
     /// Hours between scheduled pre-damage snapshots; 0 means they are turned off.
     public let scheduledIntervalHours: Int
     /// True while a detection snapshot is newer than the last pre-damage one: new
@@ -1741,6 +1832,9 @@ public struct MCPRansomwareRecoverySnapshotsPayload: Codable, Equatable {
     /// Present when the last attempt to take a snapshot failed (`tmutil localsnapshot`): the reason, when, and how
     /// many attempts in a row. A list that is empty or old may be because of this. Absent after a success.
     public var lastSnapshotError: MCPRansomwareSnapshotErrorPayload? = nil
+    /// true: the stored records could not be read, so an empty `snapshots` does NOT mean there is none.
+    public var unreadable: Bool = false
+    public var unreadableMessage: String? = nil
 }
 
 public struct MCPRansomwareSnapshotErrorPayload: Codable, Equatable {
@@ -1760,7 +1854,7 @@ enum MCPRansomwareRecoveryFormatting {
 
     static func payload(_ status: RansomwareSnapshotStatusReader.Status) -> MCPRansomwareRecoverySnapshotsPayload {
         let iso = ISO8601DateFormatter()
-        return MCPRansomwareRecoverySnapshotsPayload(
+        var payload = MCPRansomwareRecoverySnapshotsPayload(
             scheduledIntervalHours: status.intervalHours,
             retentionMode: status.retentionMode,
             recommendedSnapshotId: status.recommendedID,
@@ -1779,6 +1873,8 @@ enum MCPRansomwareRecoveryFormatting {
                 MCPRansomwareSnapshotErrorPayload(message: $0.message, at: iso.string(from: $0.at), consecutiveFailures: $0.consecutive)
             }
         )
+        payload.markUnreadable(status.recordsUnreadable ? StoredRecord.ransomwareSnapshots : nil)
+        return payload
     }
 }
 

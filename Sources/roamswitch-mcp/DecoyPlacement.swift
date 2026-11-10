@@ -47,7 +47,7 @@ struct DecoyPlacementRecord: Codable, Equatable {
 
     /// The sentence for the tooltip: the count, and the reason when some are missing.
     func tooltip() -> String {
-        var text = String(format: loc("おとりを %1$d 個中 %2$d 個、実際に置けています。"), expected, placed)
+        var text = locFormat("おとりを %1$d 個中 %2$d 個、実際に置けています。", expected, placed)
         if let why = shortfallText() { text += " " + String(format: loc("置けなかった理由: %@。"), why) }
         if noneWerePlaced { text += " " + loc("1つも置けていないため、このままでは何も検知できません。") }
         return text

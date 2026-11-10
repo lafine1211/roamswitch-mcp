@@ -361,7 +361,9 @@ enum AgentSetupAuditor {
         for input in inputs.filter({ $0.role == .instruction }) + (openClaw.map { [$0] } ?? []) {
             if let digest = input.sha256 { snapshot.files[input.path] = AgentSetupBaseline.Entry(sha256: digest, fields: nil) }
         }
-        snapshot.servers = MCPConfigAuditor.serverSnapshot(home: home, projectFolders: folders)
+        let servers = MCPConfigAuditor.serverSnapshotReport(home: home, projectFolders: folders)
+        snapshot.servers = servers.servers
+        for path in servers.unreadable where !result.unreadableFiles.contains(path) { result.unreadableFiles.append(path) }
         var settingsSnapshot: [String: AgentSetupBaseline.SettingsEntry] = [:]
         for path in settingsCandidates {
             if let input = inputs.first(where: { $0.path == path && $0.role == .settings }) {

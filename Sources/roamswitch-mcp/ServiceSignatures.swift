@@ -59,12 +59,14 @@ enum ProbeCatalog {
     }
 
     /// The generic web checks (`ActiveVulnScan` Phase 3) and the nmap layer (Phase 4). Request counts are the
-    /// most a run sends to one port: CORS 1, traversal 3, open redirect 8, SSRF 12 (eight parameter names at `/`
+    /// most a run sends to one port: CORS 1, traversal 4 (three payloads, then `/etc/passwd` directly on a hit), system files 1, open redirect 8, SSRF 12 (eight parameter names at `/`
     /// plus `url` at four paths), reflected XSS 13.
     /// These ids are SARIF rule ids too (`ActiveVulnScan.sarifLog`): add, never rename or remove (`docs/sarif_rule_id_policy.md`).
     static let webChecks: [String: Declaration] = [
         "webvuln-cors": Declaration(sideEffects: [.iocInLogs], evidenceKind: .confirmed),
         "webvuln-traversal": Declaration(sideEffects: [.iocInLogs], evidenceKind: .confirmed),
+        // One request: `GET /etc/passwd` (no `../`).
+        "webvuln-system-files-served": Declaration(sideEffects: [.iocInLogs], evidenceKind: .confirmed),
         "webvuln-redirect": Declaration(sideEffects: [.iocInLogs, .manyRequests], evidenceKind: .confirmed),
         "webvuln-ssrf": Declaration(sideEffects: [.iocInLogs, .temporaryListener, .manyRequests], evidenceKind: .confirmed),
         "webvuln-unauth-admin": Declaration(sideEffects: [.iocInLogs, .manyRequests], evidenceKind: .confirmed),

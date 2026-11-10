@@ -145,8 +145,12 @@ public enum ActiveVulnScan {
     /// above `ProbeRunRecord` ("deliberately NOT wired into any
     /// reporting/API/UI yet"), now no longer true.
     static func loadProbeLog(at url: URL = probeLogURL) -> [ProbeRunRecord] {
-        guard let data = try? Data(contentsOf: url) else { return [] }
-        return (try? JSONDecoder().decode([ProbeRunRecord].self, from: data)) ?? []
+        probeLogRead(at: url).value(or: [])
+    }
+
+    /// The log, or why it could not be read (an empty log is never made of a damaged file).
+    static func probeLogRead(at url: URL = probeLogURL) -> StoredRecordRead<[ProbeRunRecord]> {
+        StoredRecordFile.read([ProbeRunRecord].self, path: url.path)
     }
 
     private static func saveProbeLog(_ entries: [ProbeRunRecord], to url: URL) {
@@ -172,7 +176,9 @@ public enum ActiveVulnScan {
         let scanId = String(Int(Date().timeIntervalSince1970 * 1000), radix: 16) + "-" + String(ProcessInfo.processInfo.processIdentifier, radix: 16)
         var records = records
         for i in records.indices where records[i].scanId == nil { records[i].scanId = scanId }
-        var entries = loadProbeLog(at: url)
+        // A log that cannot be read is copied aside (`active_vuln_scan_log.json.corrupt-…`) first; nothing is saved
+        // over it when it cannot be.
+        guard var entries = StoredRecordFile.loadForUpdate([ProbeRunRecord].self, path: url.path, empty: []) else { return }
         entries.append(contentsOf: records)
         if entries.count > maxProbeLogEntries {
             entries.removeFirst(entries.count - maxProbeLogEntries)
@@ -908,21 +914,47 @@ public enum ActiveVulnScan {
     /// `root:x:0:0:` — each targets the real format of the OS it actually runs on.
     private static let passwdMarker = "root:*:0:0:"
 
-    /// Tries each payload in turn and stops at the first one that gets a reachable
-    /// response containing the passwd marker.
-    static func probePathTraversal(port: Int, timeout: TimeInterval = 2.0) -> Bool? {
+    /// The file the traversal payloads aim at, asked for directly (no `../`). A server whose root is `/`
+    /// (`python3 -m http.server -d /`) drops the `..` and hands it out from `/`: that is not a traversal but the whole
+    /// filesystem being published, its own finding (`webvuln-system-files-served`, as in the Linux edition).
+    static let systemFilePath = "/etc/passwd"
+
+    /// The traversal verdict from `fetch(path)` (the body, or nil when there was no answer). Tries each payload in turn
+    /// and stops at the first one whose answer holds the passwd marker; then asks for the file directly. If that
+    /// answers with it too, the `../` reached nothing outside the root (the root is `/`): not a traversal (`false`,
+    /// the system-files probe reports it). No answer to any payload is inconclusive (`nil`), never "safe".
+    static func traversalVerdict(fetch: (String) -> Data?) -> Bool? {
         var sawAnyResponse = false
         for payload in traversalPayloads {
-            guard let url = URL(string: "http://127.0.0.1:\(port)\(payload)") else { continue }
-            var request = URLRequest(url: url, timeoutInterval: timeout)
-            request.httpMethod = "GET"
-            guard let data = syncHTTPBody(request, timeout: timeout) else { continue }
+            guard let data = fetch(payload) else { continue }
             sawAnyResponse = true
             if String(decoding: data, as: UTF8.self).contains(passwdMarker) {
-                return true
+                let servedDirectly = fetch(systemFilePath).map { String(decoding: $0, as: UTF8.self).contains(passwdMarker) } ?? false
+                return !servedDirectly
             }
         }
         return sawAnyResponse ? false : nil
+    }
+
+    /// Whether a plain `GET /etc/passwd`, with no `../` at all, returns it. `nil` when there was no answer.
+    static func systemFilesVerdict(fetch: (String) -> Data?) -> Bool? {
+        fetch(systemFilePath).map { String(decoding: $0, as: UTF8.self).contains(passwdMarker) }
+    }
+
+    private static func fetchLocal(port: Int, path: String, timeout: TimeInterval) -> Data? {
+        guard let url = URL(string: "http://127.0.0.1:\(port)\(path)") else { return nil }
+        var request = URLRequest(url: url, timeoutInterval: timeout)
+        request.httpMethod = "GET"
+        return syncHTTPBody(request, timeout: timeout)
+    }
+
+    static func probePathTraversal(port: Int, timeout: TimeInterval = 2.0) -> Bool? {
+        traversalVerdict { fetchLocal(port: port, path: $0, timeout: timeout) }
+    }
+
+    /// One request: `GET /etc/passwd`.
+    static func probeSystemFilesServed(port: Int, timeout: TimeInterval = 2.0) -> Bool? {
+        systemFilesVerdict { fetchLocal(port: port, path: $0, timeout: timeout) }
     }
 
     /// Ephemeral-session, no-cache GET matching `PortSecurityAuditor.probeHTTPService`'s
@@ -1180,7 +1212,7 @@ public enum ActiveVulnScan {
         var names = ServiceSignatures.match(processName: port.processName, executablePath: port.executablePath)
             .map(\.id).filter { probeableSignatureIDs.contains($0) }
         if PortSecurityAuditor.isKnownDevServerPort(port.port) {
-            names += ["webvuln-cors", "webvuln-traversal", "webvuln-redirect", "webvuln-ssrf", "webvuln-unauth-admin"]
+            names += ["webvuln-cors", "webvuln-traversal", "webvuln-system-files-served", "webvuln-redirect", "webvuln-ssrf", "webvuln-unauth-admin"]
         }
         let effects = Set(names.flatMap { ProbeCatalog.declaration(forProbeName: $0)?.sideEffects ?? [] })
         return ProbeSideEffect.allCases.filter(effects.contains)
@@ -1348,6 +1380,21 @@ public enum ActiveVulnScan {
                     )
                 },
                 outcome: CheckOutcome(port: port.port, processName: port.processName, check: loc("パストラバーサル（ディレクトリトラバーサル）"))
+            )
+
+            runOne(
+                probeName: "webvuln-system-files-served",
+                probe: { probeSystemFilesServed(port: port.port) },
+                makeFinding: {
+                    Finding(
+                        port: port.port,
+                        processName: port.processName,
+                        title: loc("システムのファイルを配信 (ドキュメントルートが /)"),
+                        description: loc("../ を使わずに /etc/passwd を要求すると、その中身が返りました。このサーバーは / をドキュメントルートにしていて、読めるファイルをすべて誰にでも配信します(パストラバーサルではなく、ファイルシステム全体の公開です)。"),
+                        recommendation: loc("配信するフォルダーだけをドキュメントルートにしてください(例: python3 -m http.server は -d で配信するフォルダーを指定し、/ で起動しない)。")
+                    )
+                },
+                outcome: CheckOutcome(port: port.port, processName: port.processName, check: loc("システムのファイルを配信 (ドキュメントルートが /)"))
             )
 
             runOne(

@@ -150,7 +150,7 @@ enum ForensicCaptureManager {
         ContainmentIncidentTimeline.record(
             source: .forensicCapture,
             severity: "info",
-            summary: String(format: loc("証拠バンドルを保存しました: %@"), bundleName),
+            code: ContainmentSummaryText.evidenceBundleSaved(bundle: bundleName),
             processID: manifest.suspectedPID,
             actionTaken: "evidence_captured",
             parentEventID: trigger,

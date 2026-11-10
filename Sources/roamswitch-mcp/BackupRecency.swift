@@ -10,7 +10,7 @@ import Foundation
 /// recently? The macOS counterpart of the Linux client's `backup_recency` check.
 ///
 /// Time Machine records, per destination, the dates of its snapshots in its preferences domain
-/// (`Destinations[].SnapshotDates`). `defaults export` reads that without root or Full Disk Access, unlike
+/// (`Destinations[].SnapshotDates`), and whether it backs up by itself (`AutoBackup`). `defaults export` reads that without root or Full Disk Access, unlike
 /// `tmutil latestbackup`, which tries to mount the destination and fails when the disk is not attached.
 ///
 /// This reads a record. It does not restore anything, so it says nothing about whether a backup can
@@ -43,6 +43,11 @@ enum BackupRecency {
         case notConfigured(localSnapshots: Bool)
         /// No Time Machine destination, but another backup app is installed.
         case otherToolOnly(names: [String])
+        /// Automatic backups are off (`AutoBackup` false: "Back up automatically" off, `tmutil disable`, or the
+        /// frequency set to "Manually"). A backup made by hand once is not a backup that keeps up, so this fails
+        /// however recent it is. `days`: the newest backup's age, nil when there is none. The counterpart of the
+        /// Linux client's `Unscheduled` (a backup service with no timer or cron).
+        case unscheduled(days: Int?)
         case unreadable
     }
 
@@ -65,11 +70,13 @@ enum BackupRecency {
                 if let date = parseDate(entry), newest == nil || date > newest! { newest = date }
             }
         }
+        // `AutoBackup` false: Time Machine runs only when someone starts it. A missing key says nothing either way.
+        let automatic = (preferences["AutoBackup"] as? NSNumber).map(\.boolValue)
         // A destination without any `SnapshotDates` key: this macOS may record it elsewhere. Not a failure.
-        guard sawList else { return .unreadable }
-        guard let newest else { return .neverBackedUp }
-        let seconds = max(0, now.timeIntervalSince(newest))
-        let days = Int(seconds / 86_400)
+        guard sawList else { return automatic == false ? .unscheduled(days: nil) : .unreadable }
+        let days = newest.map { Int(max(0, now.timeIntervalSince($0)) / 86_400) }
+        if automatic == false { return .unscheduled(days: days) }
+        guard let days else { return .neverBackedUp }
         return days > staleAfterDays ? .stale(days: days) : .recent(days: days)
     }
 

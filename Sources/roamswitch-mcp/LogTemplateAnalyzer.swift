@@ -229,20 +229,11 @@ public enum LogTemplateAnalyzer {
     public static func loadBaseline(defaults: UserDefaults? = nil) -> (known: Set<String>, captured: Bool, frequencyHistory: [String: TemplateFrequencyStats], lastProcessedMessage: String?) {
         let store = defaults ?? AppLanguage.sharedDefaults
         let captured = store.bool(forKey: baselineCapturedKey)
-        let known: Set<String>
-        if let data = store.data(forKey: knownTemplatesKey),
-           let decoded = try? JSONDecoder().decode([String].self, from: data) {
-            known = Set(decoded)
-        } else {
-            known = []
-        }
-        let history: [String: TemplateFrequencyStats]
-        if let data = store.data(forKey: frequencyHistoryKey),
-           let decoded = try? JSONDecoder().decode([String: TemplateFrequencyStats].self, from: data) {
-            history = decoded
-        } else {
-            history = [:]
-        }
+        // A stored baseline that cannot be read is copied to `<key>.unreadable` (and marked) before the next save.
+        let known = Set(StoredRecordHealth.load([String].self, key: knownTemplatesKey, defaults: store,
+                                                record: .logTemplateBaseline).value(or: []))
+        let history = StoredRecordHealth.load([String: TemplateFrequencyStats].self, key: frequencyHistoryKey, defaults: store,
+                                              record: .logTemplateBaseline).value(or: [:])
         let lastProcessedMessage = store.string(forKey: lastProcessedMessageKey)
         return (known, captured, history, lastProcessedMessage)
     }

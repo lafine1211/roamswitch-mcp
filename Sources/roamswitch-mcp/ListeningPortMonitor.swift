@@ -425,3 +425,82 @@ extension ListeningPortMonitor {
         Self.markingOtherUsers(parseLsofOutput(text, proto: proto), excludingPids: ownPids)
     }
 }
+
+// MARK: - Ports launchd holds for a job (socket activation)
+
+/// The launchd jobs that have launchd itself listen for them (`Sockets` in the job's plist) and start the program
+/// when a connection comes. Remote Login is one: launchd (PID 1) holds port 22 for `com.openssh.sshd`, so the
+/// listener's owner read as the bare `launchd` and did not say what listens. The counterpart of roamswitch-linux's
+/// `name_socket_activated` (`systemd (ssh.socket)`). Used for display only; the port-anomaly baseline keeps the
+/// listener's own name and path.
+enum LaunchdSocketJobs {
+    struct Listener: Equatable {
+        let port: Int
+        let proto: String
+        let label: String
+        let disabledInPlist: Bool
+    }
+
+    static let directories = ["/System/Library/LaunchDaemons", "/Library/LaunchDaemons"]
+
+    /// The TCP/UDP listeners one job plist declares. `SockServiceName` is a service name (`ssh`) or a number;
+    /// `SockPathName` (a Unix socket) has no port and is skipped. `SockType` defaults to stream (TCP).
+    static func listeners(inPlist plist: [String: Any], servicePort: (String, String) -> Int? = servicePort) -> [Listener] {
+        guard let label = plist["Label"] as? String, let sockets = plist["Sockets"] as? [String: Any] else { return [] }
+        let disabled = plist["Disabled"] as? Bool ?? false
+        var out: [Listener] = []
+        for value in sockets.values {
+            let entries: [[String: Any]] = (value as? [[String: Any]]) ?? ((value as? [String: Any]).map { [$0] } ?? [])
+            for entry in entries where entry["SockPathName"] == nil {
+                let proto = (entry["SockType"] as? String)?.lowercased() == "dgram" ? "udp" : "tcp"
+                let service: String?
+                if let s = entry["SockServiceName"] as? String { service = s } else if let n = entry["SockServiceName"] as? Int { service = String(n) } else { service = nil }
+                guard let service else { continue }
+                guard let port = Int(service) ?? servicePort(service, proto), (1...65535).contains(port) else { continue }
+                out.append(Listener(port: port, proto: proto, label: label, disabledInPlist: disabled))
+            }
+        }
+        return out
+    }
+
+    /// `getservbyname` (the system's `/etc/services`): `ssh` → 22.
+    static func servicePort(_ name: String, _ proto: String) -> Int? {
+        guard let entry = getservbyname(name, proto) else { return nil }
+        return Int(UInt16(bigEndian: UInt16(truncatingIfNeeded: entry.pointee.s_port)))
+    }
+
+    /// The job for `port`: one whose plist does not disable it wins (an enabled override is not visible without
+    /// root, so a plist marked `Disabled`, as Remote Login's is, still counts when nothing else claims the port).
+    static func label(forPort port: Int, proto: String, in listeners: [Listener]) -> String? {
+        let matching = listeners.filter { $0.port == port && $0.proto == proto }
+        return (matching.first { !$0.disabledInPlist } ?? matching.sorted { $0.label < $1.label }.first)?.label
+    }
+
+    private static let lock = NSLock()
+    private static var cached: [Listener]?
+
+    /// Every job plist in `directories`, read once per process (the directories change only with an install).
+    static func installed() -> [Listener] {
+        lock.lock()
+        defer { lock.unlock() }
+        if let cached { return cached }
+        var all: [Listener] = []
+        let fm = FileManager.default
+        for dir in directories {
+            for name in ((try? fm.contentsOfDirectory(atPath: dir)) ?? []).sorted() where name.hasSuffix(".plist") {
+                guard let data = fm.contents(atPath: dir + "/" + name),
+                      let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else { continue }
+                all += listeners(inPlist: plist)
+            }
+        }
+        cached = all
+        return all
+    }
+
+    /// `launchd (com.openssh.sshd)` for a port launchd (PID 1) holds for a job; nil when the listener is not launchd's
+    /// or no job declares the port.
+    static func ownerName(processName: String, pid: Int, port: Int, proto: String, listeners: () -> [Listener] = installed) -> String? {
+        guard pid == 1, processName == "launchd" else { return nil }
+        return label(forPort: port, proto: proto, in: listeners()).map { "launchd (\($0))" }
+    }
+}

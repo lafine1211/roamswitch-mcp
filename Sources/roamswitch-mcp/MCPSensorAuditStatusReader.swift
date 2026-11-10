@@ -22,24 +22,39 @@ import Foundation
 /// secret.
 enum MCPSensorAuditStatusReader {
     private static let stateDir = "/Library/Application Support/RoamSwitch"
-    private static let trustedSensorsFile = stateDir + "/trusted_sensors.json"
-    private static let auditResultsFile = stateDir + "/sensor_audit_results.json"
+    static let trustedSensorsFile = stateDir + "/trusted_sensors.json"
+    static let auditResultsFile = stateDir + "/sensor_audit_results.json"
 
     static func pairedSensorCount() -> Int {
-        guard let data = FileManager.default.contents(atPath: trustedSensorsFile),
-              let decoded = try? JSONDecoder().decode([PersistedTrustedSensor].self, from: data) else {
-            return 0
-        }
-        return decoded.count
+        pairedSensors().list.count
     }
 
     /// Newest-last, same order `SensorPairingManager` appends in.
     static func auditResults() -> [PersistedSensorAuditResult] {
-        guard let data = FileManager.default.contents(atPath: auditResultsFile),
-              let decoded = try? JSONDecoder().decode([PersistedSensorAuditResult].self, from: data) else {
-            return []
+        auditResultsRead().list
+    }
+
+    /// The paired Sensors, and `unreadable` when the file is there but could not be read or parsed (the count is
+    /// then not "0 paired").
+    static func pairedSensors(path: String = trustedSensorsFile) -> (list: [PersistedTrustedSensor], unreadable: Bool) {
+        read([PersistedTrustedSensor].self, path: path)
+    }
+
+    static func auditResultsRead(path: String = auditResultsFile) -> (list: [PersistedSensorAuditResult], unreadable: Bool) {
+        read([PersistedSensorAuditResult].self, path: path)
+    }
+
+    /// A file that is not there is an empty list (nothing paired or pulled yet); one that exists but cannot be read
+    /// (no permission, damaged) is `unreadable`.
+    private static func read<T: Decodable>(_ type: [T].Type, path: String) -> (list: [T], unreadable: Bool) {
+        let data: Data
+        do {
+            data = try Data(contentsOf: URL(fileURLWithPath: path))
+        } catch {
+            return ([], QuarantineManager.classifyReadError(error) != nil)
         }
-        return decoded
+        guard let decoded = try? JSONDecoder().decode(type, from: data) else { return ([], true) }
+        return (decoded, false)
     }
 }
 

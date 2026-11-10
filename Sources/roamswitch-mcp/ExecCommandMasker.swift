@@ -5,6 +5,7 @@
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
 // ─────────────────────────────────────────────────────────────────────────────
 import Foundation
+import CryptoKit
 
 // Secret masking for exec-recorder command lines, shared by two callers that
 // must agree on what counts as a secret:
@@ -381,7 +382,7 @@ public enum ExecCommandMasker {
     /// BIP39 phrases. The whole span becomes `marker` (no prefix/length hint, unlike the
     /// output-side `SecretLeakScanning.redact`: nothing of a secret may stay searchable).
     public static func maskText(_ s: String, marker: String) -> String {
-        var result = maskStructural(s, marker: marker)
+        var result = maskStructural(collapseSSHPublicKeys(s), marker: marker)
         // Cheap guard: no known token format is shorter than 12 characters.
         guard result.count >= 12 else { return result }
         let template = NSRegularExpression.escapedTemplate(for: marker)
@@ -397,17 +398,81 @@ public enum ExecCommandMasker {
     // MARK: - Generic high-entropy tokens
 
     private static let highEntropyCandidate = try? NSRegularExpression(pattern: "(?<![A-Za-z0-9_+=-])[A-Za-z0-9_+=-]{32,}(?![A-Za-z0-9_+=-])")
+    /// The same, in the standard base64 alphabet with `/` (an AWS secret key, a base64 secret). Without it, a `/` cut
+    /// such a value into pieces too short to mask. `-` and `_` are left out, so `--path=/Users/...` is not a candidate.
+    private static let slashedCandidate = try? NSRegularExpression(pattern: "(?<![A-Za-z0-9_+/=-])[A-Za-z0-9+/]{32,}={0,2}(?![A-Za-z0-9_+/=-])")
+    private static let fingerprintPrefix = "SHA256:"
 
     /// Fallback for token formats not listed above: a long unbroken run of base64/URL-safe
     /// characters that mixes upper case, lower case and digits and has the entropy of a random
     /// string. Pure hex (hashes, cdhash, UUIDs) and identifier-like words stay readable.
     public static func maskHighEntropy(_ s: String, marker: String) -> String {
-        guard s.count >= 32, let highEntropyCandidate else { return s }
+        let s = collapseSSHPublicKeys(s)
+        guard s.count >= 32, let highEntropyCandidate, let slashedCandidate else { return s }
+        let range = NSRange(s.startIndex..<s.endIndex, in: s)
+        // Key fingerprints (`collapseSSHPublicKeys`) are public and stay readable, slashes and all.
+        let fingerprints = fingerprintPattern?.matches(in: s, options: [], range: range).map(\.range) ?? []
+        func isFingerprint(_ r: NSRange) -> Bool { fingerprints.contains { NSIntersectionRange($0, r).length > 0 } }
+        var spans: [NSRange] = []
+        for match in slashedCandidate.matches(in: s, options: [], range: range) {
+            guard let r = Range(match.range, in: s) else { continue }
+            let t = String(s[r])
+            // A path or URL (`com/owner/Repo2026/releases/download`) has segments that are plain lower-case words.
+            let segments = t.split(separator: "/")
+            guard t.contains("/"), !t.hasPrefix("/"), !t.hasSuffix("/"), !t.contains("//"), !isFingerprint(match.range),
+                  !segments.contains(where: { $0.count >= 3 && $0.allSatisfy { $0.isASCII && $0.isLowercase } }),
+                  looksRandom(t) else { continue }
+            spans.append(match.range)
+        }
+        for match in highEntropyCandidate.matches(in: s, options: [], range: range) {
+            guard !spans.contains(where: { NSIntersectionRange($0, match.range).length > 0 }),
+                  !isFingerprint(match.range), let r = Range(match.range, in: s), looksRandom(String(s[r])) else { continue }
+            spans.append(match.range)
+        }
+        var result = s
+        for span in spans.sorted(by: { $0.location > $1.location }) {
+            guard let r = Range(span, in: result) else { continue }
+            result.replaceSubrange(r, with: marker)
+        }
+        return result
+    }
+
+    /// A key fingerprint written by `collapseSSHPublicKeys` (public, and what the reader compares with `ssh-keygen -l`).
+    private static let fingerprintPattern = try? NSRegularExpression(pattern: "SHA256:[A-Za-z0-9+/]{43}")
+
+    // MARK: - SSH public keys
+
+    private static let sshKeyBlob = try? NSRegularExpression(pattern: "(?<![A-Za-z0-9+/=])AAAA[A-Za-z0-9+/]{40,}={0,3}(?![A-Za-z0-9+/=])")
+
+    /// The key type and the `ssh-keygen -l` fingerprint (`SHA256:` and unpadded base64) of an OpenSSH public key blob,
+    /// or nil when `blob` does not decode to one.
+    public static func sshPublicKeyFingerprint(blob: String) -> (type: String, fingerprint: String)? {
+        var b64 = blob.trimmingCharacters(in: CharacterSet(charactersIn: "="))
+        while b64.count % 4 != 0 { b64 += "=" }
+        guard let data = Data(base64Encoded: b64), data.count > 4 else { return nil }
+        let bytes = [UInt8](data)
+        let n = Int(bytes[0]) << 24 | Int(bytes[1]) << 16 | Int(bytes[2]) << 8 | Int(bytes[3])
+        guard (7...64).contains(n), bytes.count >= 4 + n,
+              let type = String(bytes: bytes[4..<(4 + n)], encoding: .ascii),
+              type.hasPrefix("ssh-") || type.hasPrefix("ecdsa-sha2-") || type.hasPrefix("sk-"),
+              type.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "-" || $0 == "@" || $0 == "." }) else { return nil }
+        let digest = Data(SHA256.hash(data: data)).base64EncodedString().trimmingCharacters(in: CharacterSet(charactersIn: "="))
+        return (type, fingerprintPrefix + digest)
+    }
+
+    /// An OpenSSH public key (`ssh-ed25519 AAAAC3Nz...`) in a command line becomes its fingerprint
+    /// (`ssh-ed25519 SHA256:...`). A public key is not a secret, but its base64 used to be masked in pieces (wherever a
+    /// `/` split it) and to fill the line until it was cut. The fingerprint is short, the same every time, and what
+    /// `ssh-keygen -lf` prints for the key, so the reader can tell which key it was. Text that only looks like a key
+    /// blob (it does not decode to one) is left to the other rules.
+    public static func collapseSSHPublicKeys(_ s: String) -> String {
+        guard s.count >= 44, s.contains("AAAA"), let sshKeyBlob else { return s }
         let range = NSRange(s.startIndex..<s.endIndex, in: s)
         var result = s
-        for match in highEntropyCandidate.matches(in: s, options: [], range: range).reversed() {
-            guard let r = Range(match.range, in: result), looksRandom(String(result[r])) else { continue }
-            result.replaceSubrange(r, with: marker)
+        for match in sshKeyBlob.matches(in: s, options: [], range: range).reversed() {
+            guard let r = Range(match.range, in: result),
+                  let key = sshPublicKeyFingerprint(blob: String(result[r])) else { continue }
+            result.replaceSubrange(r, with: key.fingerprint)
         }
         return result
     }

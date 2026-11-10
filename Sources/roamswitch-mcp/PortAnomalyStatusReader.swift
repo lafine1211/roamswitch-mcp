@@ -28,11 +28,12 @@ enum PortAnomalyStatusReader {
     }
 
     static func persistedIncidents(defaults: UserDefaults = .standard) -> [PersistedPortAnomalyIncident] {
-        guard let data = defaults.data(forKey: persistedIncidentsKey),
-              let decoded = try? JSONDecoder().decode([PersistedPortAnomalyIncident].self, from: data) else {
-            return []
-        }
-        return decoded
+        persistedIncidentsRead(defaults: defaults).value(or: [])
+    }
+
+    /// The same, telling a stored log that cannot be read from one that is empty.
+    static func persistedIncidentsRead(defaults: UserDefaults = .standard) -> StoredRecordRead<[PersistedPortAnomalyIncident]> {
+        StoredRecordDefaults.peek([PersistedPortAnomalyIncident].self, key: persistedIncidentsKey, defaults: defaults)
     }
 }
 
