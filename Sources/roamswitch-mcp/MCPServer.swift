@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.27 (build 206).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.29 (build 208).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -465,13 +465,15 @@ enum MCPServer {
         }
         let requested = parsed.ids
         let audit = collectSecurityAudit()
+        let history = FindingHistory.readState(defaults: sharedDefaults)
         let payload = MCPResponseFormatting.makeVerifyPayload(
             report: audit.report,
             requestedCheckIds: requested,
             wifiInterfacePresent: audit.wifiInterfacePresent,
             wifiSSIDResolved: audit.wifiSSIDResolved,
             // 読むだけ。履歴を書くのはアプリの診断だけで、この呼び出しは何も書かない。
-            history: FindingHistory.read(defaults: sharedDefaults)
+            history: history.checks,
+            historyUnreadable: history.unreadable
         )
         return textContentResult(payload, untrusted: true, injectionScope: .keys(["detail", "statusText"]))
     }
@@ -547,7 +549,7 @@ enum MCPServer {
         // https://dev.to/raknaos/my-wait-for-it-wrapper-reported-success-for-a-port-that-never-opened-ga3).
         let message = scan.inconclusive.isEmpty
             ? loc("スキャンが完了しました。")
-            : String(format: loc("スキャンが完了しました（%d件は接続できず未確認）。"), scan.inconclusive.count)
+            : locFormat("スキャンが完了しました（%d件は接続できず未確認）。", scan.inconclusive.count)
 
         // `format: "sarif"` returns the same run as a SARIF 2.1.0 log; anything else is the JSON below. A check that
         // could not connect is reported as a notification and `complete: false`, never as a clean result.
@@ -954,11 +956,16 @@ enum MCPServer {
 
     /// SENDS NO NETWORK REQUESTS AT ALL — reads only a local metadata file.
     private static func callGetQuarantineStatus() -> [String: Any] {
-        let qm = QuarantineManager.shared
+        textContentResult(quarantineStatusPayload(QuarantineManager.shared))
+    }
+
+    /// An unreadable record is said as such (`unreadable`), never as an empty vault.
+    static func quarantineStatusPayload(_ qm: QuarantineManager) -> MCPQuarantineStatusPayload {
         let iso = ISO8601DateFormatter()
-        let payload = MCPQuarantineStatusPayload(
+        let listing = qm.listing()
+        return MCPQuarantineStatusPayload(
             quarantineDirectory: qm.quarantineDirectory,
-            files: qm.listQuarantinedFiles().map {
+            files: listing.files.map {
                 MCPQuarantinedFilePayload(
                     originalPath: $0.originalPath,
                     quarantinedPath: $0.quarantinedPath,
@@ -966,14 +973,25 @@ enum MCPServer {
                     quarantinedAt: iso.string(from: $0.quarantinedAt),
                     fileSize: $0.fileSize
                 )
-            }
+            },
+            unreadable: listing.unreadable != nil,
+            unreadableReason: listing.unreadable?.rawValue,
+            unreadableMessage: listing.unreadable?.text
         )
-        return textContentResult(payload)
     }
 
     /// SENDS NO NETWORK REQUESTS AT ALL — reads local UserDefaults only.
     private static func callGetNotificationHistory() -> [String: Any] {
-        textContentResult(MCPNotificationHistoryPayload(notifications: NotificationHistory.load()))
+        // In the language the app uses now, with the same keys as before (`timestamp`, `title`, `body`).
+        textContentResult(notificationHistoryPayload(NotificationHistory.loadWithState()))
+    }
+
+    static func notificationHistoryPayload(_ read: (entries: [NotificationHistoryEntry], unreadable: Bool)) -> MCPNotificationHistoryPayload {
+        MCPNotificationHistoryPayload(
+            notifications: read.entries.map(\.inCurrentLanguage),
+            unreadable: read.unreadable,
+            unreadableMessage: read.unreadable ? NotificationHistoryText.unreadable : nil
+        )
     }
 
     /// SENDS NO NETWORK REQUESTS AT ALL — reads local UserDefaults + disk
@@ -993,9 +1011,10 @@ enum MCPServer {
 
     private static func callGetCanaryStatus() -> [String: Any] {
         let status = CanaryStatusReader.currentStatus(defaults: sharedDefaults)
-        let incidents = CanaryStatusReader.persistedIncidents(defaults: sharedDefaults)
+        let read = CanaryStatusReader.persistedIncidentsRead(defaults: sharedDefaults)
+        let incidents = read.value(or: [])
         let iso = ISO8601DateFormatter()
-        let payload = MCPCanaryStatusPayload(
+        var payload = MCPCanaryStatusPayload(
             isEnabled: status.isEnabled,
             monitoredFilesCount: status.monitoredFilesCount,
             expectedFilesCount: status.expectedFilesCount,
@@ -1010,6 +1029,7 @@ enum MCPServer {
                 )
             }
         )
+        payload.markUnreadable(read.isUnreadable ? StoredRecord.canaryIncidents : nil)
         return textContentResult(payload)
     }
 
@@ -1019,44 +1039,51 @@ enum MCPServer {
     }
 
     private static func callGetVulnerabilityScanHistory() -> [String: Any] {
-        let payload = MCPVulnerabilityScanHistoryPayload(probes: ActiveVulnScan.probeStatusSummary())
+        var payload = MCPVulnerabilityScanHistoryPayload(probes: ActiveVulnScan.probeStatusSummary())
+        payload.markUnreadable(ActiveVulnScan.probeLogRead().isUnreadable ? StoredRecord.probeLog : nil)
         return textContentResult(payload)
     }
 
     private static func callGetBrowserCredentialWatchStatus() -> [String: Any] {
         let isEnabled = BrowserCredentialWatchStatusReader.isEnabled(defaults: sharedDefaults)
-        let events = BrowserCredentialWatchStatusReader.persistedEvents(defaults: sharedDefaults)
+        let read = BrowserCredentialWatchStatusReader.persistedEventsRead(defaults: sharedDefaults)
+        let events = read.value(or: [])
         let iso = ISO8601DateFormatter()
-        let payload = MCPBrowserCredentialWatchStatusPayload(
+        var payload = MCPBrowserCredentialWatchStatusPayload(
             isEnabled: isEnabled,
             recentEventsAvailable: !events.isEmpty,
             recentEvents: events.map {
                 MCPBrowserCredentialEventPayload(timestamp: iso.string(from: $0.timestamp), path: $0.path, suspectedProcess: $0.suspectedProcess)
             }
         )
+        payload.markUnreadable(read.isUnreadable ? StoredRecord.browserCredentialEvents : nil)
         return textContentResult(payload)
     }
 
     private static func callGetHoneytokenStatus() -> [String: Any] {
         let isEnabled = HoneytokenStatusReader.isEnabled(defaults: sharedDefaults)
-        let events = HoneytokenStatusReader.persistedEvents(defaults: sharedDefaults)
+        let read = HoneytokenStatusReader.persistedEventsRead(defaults: sharedDefaults)
+        let events = read.value(or: [])
         let iso = ISO8601DateFormatter()
-        let payload = MCPHoneytokenStatusPayload(
+        var payload = MCPHoneytokenStatusPayload(
             isEnabled: isEnabled,
             recentEventsAvailable: !events.isEmpty,
             recentEvents: events.map {
-                MCPHoneytokenEventPayload(timestamp: iso.string(from: $0.timestamp), path: $0.path, kind: $0.kind, suspectedProcess: $0.suspectedProcess)
+                MCPHoneytokenEventPayload(timestamp: iso.string(from: $0.timestamp), path: $0.path, kind: $0.kind,
+                                          suspectedProcess: HoneytokenSuspectText.display($0.suspectedProcess))
             },
             placement: DecoyPlacementStore.read(key: DecoyPlacementStore.honeytokenKey, defaults: sharedDefaults).map(MCPDecoyPlacementPayload.init)
         )
+        payload.markUnreadable(read.isUnreadable ? StoredRecord.honeytokenEvents : nil)
         return textContentResult(payload)
     }
 
     private static func callGetRansomwareEntropyGuardStatus() -> [String: Any] {
         let isEnabled = RansomwareEntropyStatusReader.isEnabled(defaults: sharedDefaults)
-        let alerts = RansomwareEntropyStatusReader.persistedAlerts(defaults: sharedDefaults)
+        let read = RansomwareEntropyStatusReader.persistedAlertsRead(defaults: sharedDefaults)
+        let alerts = read.value(or: [])
         let iso = ISO8601DateFormatter()
-        let payload = MCPRansomwareEntropyStatusPayload(
+        var payload = MCPRansomwareEntropyStatusPayload(
             isEnabled: isEnabled,
             recentAlertsAvailable: !alerts.isEmpty,
             recentAlerts: alerts.map {
@@ -1068,6 +1095,7 @@ enum MCPServer {
                 )
             }
         )
+        payload.markUnreadable(read.isUnreadable ? StoredRecord.entropyAlerts : nil)
         return textContentResult(payload)
     }
 
@@ -1080,10 +1108,23 @@ enum MCPServer {
     /// itself, it only reports whatever results have already been pulled
     /// back.
     private static func callGetSensorAuditResults() -> [String: Any] {
-        let results = MCPSensorAuditStatusReader.auditResults()
-        let payload = MCPSensorAuditResultsPayload(
-            pairedSensorCount: MCPSensorAuditStatusReader.pairedSensorCount(),
-            results: results.map {
+        textContentResult(sensorAuditResultsPayload(
+            paired: MCPSensorAuditStatusReader.pairedSensors(),
+            results: MCPSensorAuditStatusReader.auditResultsRead()
+        ))
+    }
+
+    static func sensorAuditResultsPayload(
+        paired: (list: [PersistedTrustedSensor], unreadable: Bool),
+        results: (list: [PersistedSensorAuditResult], unreadable: Bool),
+        lang: String = AppLanguage.activeLocaleCode
+    ) -> MCPSensorAuditResultsPayload {
+        var unreadableFiles: [String] = []
+        if paired.unreadable { unreadableFiles.append(MCPSensorAuditStatusReader.trustedSensorsFile) }
+        if results.unreadable { unreadableFiles.append(MCPSensorAuditStatusReader.auditResultsFile) }
+        return MCPSensorAuditResultsPayload(
+            pairedSensorCount: paired.list.count,
+            results: results.list.map {
                 MCPSensorAuditResultPayload(
                     requestId: $0.id,
                     sensorName: $0.sensorName,
@@ -1091,13 +1132,22 @@ enum MCPServer {
                     status: $0.status,
                     pullAttempts: $0.pullAttempts,
                     findings: $0.findings.map {
-                        MCPSensorAuditFindingPayload(port: $0.port, title: $0.title, recommendation: $0.recommendation)
+                        // In the app's language, like the rest of this payload: the Sensor wrote these texts in
+                        // English, and their keys (when it sent them) give them back in every language.
+                        let texts = SensorFindingTexts.display(
+                            title: $0.title, description: "", recommendation: $0.recommendation, keys: $0.textKeys,
+                            lang: lang
+                        )
+                        return MCPSensorAuditFindingPayload(port: $0.port, title: texts.title, recommendation: texts.recommendation)
                     },
                     failureReason: $0.failureReason
                 )
-            }
+            },
+            unreadable: !unreadableFiles.isEmpty,
+            unreadableMessage: unreadableFiles.isEmpty ? nil
+                : loc("Sensorのペアリングまたは監査結果の記録ファイルを読み込めませんでした(権限がないか、壊れています)。件数が0でも、ペアリングや結果がないとは限りません。", localeCode: lang),
+            unreadableFiles: unreadableFiles.isEmpty ? nil : unreadableFiles
         )
-        return textContentResult(payload)
     }
 
     /// SENDS NO NETWORK REQUESTS AT ALL — reads local UserDefaults state
@@ -1110,9 +1160,10 @@ enum MCPServer {
     /// the app's real preferences.
     static func callGetPortAnomalyIncidents(defaults: UserDefaults = sharedDefaults) -> [String: Any] {
         let status = PortAnomalyStatusReader.currentStatus(defaults: defaults)
-        let incidents = PortAnomalyStatusReader.persistedIncidents(defaults: defaults)
+        let read = PortAnomalyStatusReader.persistedIncidentsRead(defaults: defaults)
+        let incidents = read.value(or: [])
         let iso = ISO8601DateFormatter()
-        let payload = MCPPortAnomalyIncidentsPayload(
+        var payload = MCPPortAnomalyIncidentsPayload(
             incidentsNote: "Timestamped log of past auto-block decisions, newest first, capped at 50. This is the only field in this response that represents a timeline of events.",
             isEnabled: status.isEnabled,
             baselineCaptured: status.baselineCaptured,
@@ -1128,6 +1179,7 @@ enum MCPServer {
                 )
             }
         )
+        payload.markUnreadable(read.isUnreadable ? StoredRecord.portAnomalyIncidents : nil)
         return textContentResult(payload)
     }
 
@@ -1142,11 +1194,13 @@ enum MCPServer {
                                  keyType: s.keyType, fingerprint: s.fingerprint, active: s.active)
         }
         let snapshot = SSHGuardStatusReader.status(defaults: defaults)
-        let payload = MCPSSHGuardPayload(
+        let incidentsRead = SSHGuardStatusReader.incidentsRead(defaults: defaults)
+        let sessionsRead = SSHGuardStatusReader.sessionsRead(defaults: defaults)
+        var payload = MCPSSHGuardPayload(
             isEnabled: SSHGuardStatusReader.isEnabled(defaults: defaults),
             attackTechnique: "T1110",
             incidentsNote: "Timestamped records, newest first, at most 200. `banned` = the source was banned from NEW connections to the SSH ports for banSecs (established sessions are never cut); `detected` = the limit was reached but nothing was banned (see note); `successAfterFailures` = a login succeeded from a source that had been failing, so a guess may have worked. A source is an IPv4 address or an IPv6 /64. usersTried are account names the source tried (sanitized, up to 5), chosen by the other side.",
-            incidents: SSHGuardStatusReader.incidents(defaults: defaults).reversed().map { i in
+            incidents: incidentsRead.value(or: []).reversed().map { i in
                 MCPSSHGuardIncidentPayload(
                     timestamp: iso.string(from: i.timestamp), kind: i.kind.rawValue, source: i.source,
                     failureCount: i.failureCount, windowSecs: Int(i.windowSecs), banSecs: i.banSecs.map { Int($0) },
@@ -1163,8 +1217,13 @@ enum MCPServer {
                 MCPSSHBanPayload(source: $0.source, expiresAt: iso.string(from: $0.expiresAt), remainingSecs: Int($0.remainingSecs))
             },
             sessionsNote: "SSH logins (sshd `Accepted` lines) the guard recorded, newest first, at most 50: who logged in from where, by which method and key fingerprint. `active` is whether the connection was still open at the last status snapshot. A login is not an attack by itself.",
-            recentSessions: SSHGuardStatusReader.sessions(defaults: defaults).map(session)
+            recentSessions: sessionsRead.value(or: []).map(session)
         )
+        // The helper's own file that cannot be read (told to the app over XPC), or the app's copy that cannot be read.
+        var unreadable: [StoredRecord] = []
+        if incidentsRead.isUnreadable || defaults.bool(forKey: SSHGuardStatusReader.incidentsUnreadableKey) { unreadable.append(.sshGuardIncidents) }
+        if sessionsRead.isUnreadable || defaults.bool(forKey: SSHGuardStatusReader.sessionsUnreadableKey) { unreadable.append(.sshGuardSessions) }
+        payload.markUnreadable(unreadable)
         return textContentResult(payload, untrusted: true, injectionScope: .keys(["user", "usersTried", "method", "fingerprint", "keyType", "source"]))
     }
 
@@ -1234,11 +1293,12 @@ enum MCPServer {
     private static func callGetNetworkHistory(arguments: [String: Any]) -> [String: Any] {
         let requested = (arguments["limit"] as? Int) ?? 50
         let limit = min(max(requested, 1), 200)
-        let snapshot = NetworkHistoryGuard.readSnapshot()
+        let snapshot = NetworkHistoryGuard.readSnapshotState()
         let payload = MCPResponseFormatting.makeNetworkHistoryPayload(
             entries: snapshot.entries,
             lookalikes: snapshot.lookalikes,
-            limit: limit
+            limit: limit,
+            unreadable: snapshot.unreadable
         )
         return textContentResult(payload, untrusted: true, injectionScope: .keys(["ssid", "similarTo"]))
     }
@@ -1501,12 +1561,12 @@ enum MCPServer {
         ],
         [
             "name": "get_quarantine_status",
-            "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only a local metadata file. Returns the malware quarantine vault's contents: each quarantined file's original path, the threat name ClamAV detected, when it was quarantined, and its size. Files are moved here (never deleted) by the Web/Mail download guard and on-demand ClamAV scans.",
+            "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only a local metadata file. Returns the malware quarantine vault's contents: each quarantined file's original path, the threat name ClamAV detected, when it was quarantined, and its size. Files are moved here (never deleted) by the Web/Mail download guard and on-demand ClamAV scans. When the vault's record cannot be read (damaged, no permission) the answer carries unreadable: true with unreadableReason (corrupt | permission_denied | read_failed) and unreadableMessage: an empty files list then does NOT mean nothing is quarantined.",
             "inputSchema": ["type": "object", "properties": [String: Any]()],
         ],
         [
             "name": "get_notification_history",
-            "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only local UserDefaults state. Returns every notification RoamSwitch has sent over the past 7 days (timestamp, title, body), most recent first — real-time threat alerts (sendThreatAlert, e.g. the ClickFix clipboard guard, secret-leak detection, canary/port-anomaly/runtime-threat incidents) and Link Guard connection events. Use this to review what fired while the user wasn't watching, instead of relying on them to transcribe a live banner.",
+            "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only local UserDefaults state. Returns every notification RoamSwitch has sent over the past 7 days (timestamp, title, body), most recent first — real-time threat alerts (sendThreatAlert, e.g. the ClickFix clipboard guard, secret-leak detection, canary/port-anomaly/runtime-threat incidents) Link Guard connection events, protection-level switches and the watchdog's automatic-restart notices. Titles and bodies are in the language the app is set to now (entries recorded before that was kept stay in the language they were recorded in). Use this to review what fired while the user wasn't watching, instead of relying on them to transcribe a live banner. When the stored history cannot be read the answer carries unreadable: true and unreadableMessage: an empty notifications list then does NOT mean nothing fired.",
             "inputSchema": ["type": "object", "properties": [String: Any]()],
         ],
         [
@@ -1618,7 +1678,7 @@ enum MCPServer {
         ],
         [
             "name": "get_sensor_audit_results",
-            "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only local files. Returns results from active audits this Mac has requested from a paired RoamSwitch Sensor (a separate product — software installed on the operator's own hardware on the same LAN, not a dedicated appliance — that performs external, active reachability verification against this Mac — a genuinely outside-in view, unlike every other tool in this file which inspects this Mac from the inside). Each result has a status (pending / completed / failed), how many pull attempts have been made (results are fetched asynchronously, up to 5 tries 5 minutes apart), when it was requested, and — once completed — the findings (port, title, recommendation) the Sensor found reachable/exposed from its vantage point. A `failed` result carries `failureReason`: `not_paired`/`invalid_signature` means the Sensor explicitly rejected the pull (most often this Mac was unpaired from the Sensor's side after the request was sent — re-pairing is needed, not a retry), `not_found` means the Sensor no longer has the request, `timed_out` means every pull attempt returned pending. `stale_timestamp` means this Mac's and the Sensor's clocks differ by more than 5 minutes, `replayed_nonce` means the Sensor saw the signed request as a replay, and `legacy_signature_refused` means the Sensor no longer accepts legacy signatures (these come from the Sensor's v2 signature checks). `pairedSensorCount` is how many Sensors are currently paired; 0 means Sensor pairing has never been set up. Use this to build an external-exposure picture as input to remediation planning, alongside get_exposed_ports (this Mac's own view of its listening ports) — the two are complementary, not redundant: this tool reflects what a real device on the LAN could actually reach, not just what this Mac believes it's listening on.",
+            "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only local files. Returns results from active audits this Mac has requested from a paired RoamSwitch Sensor (a separate product — software installed on the operator's own hardware on the same LAN, not a dedicated appliance — that performs external, active reachability verification against this Mac — a genuinely outside-in view, unlike every other tool in this file which inspects this Mac from the inside). Each result has a status (pending / completed / failed), how many pull attempts have been made (results are fetched asynchronously, up to 5 tries 5 minutes apart), when it was requested, and — once completed — the findings (port, title, recommendation) the Sensor found reachable/exposed from its vantage point. A `failed` result carries `failureReason`: `not_paired`/`invalid_signature` means the Sensor explicitly rejected the pull (most often this Mac was unpaired from the Sensor's side after the request was sent — re-pairing is needed, not a retry), `not_found` means the Sensor no longer has the request, `timed_out` means every pull attempt returned pending. `stale_timestamp` means this Mac's and the Sensor's clocks differ by more than 5 minutes, `replayed_nonce` means the Sensor saw the signed request as a replay, and `legacy_signature_refused` means the Sensor no longer accepts legacy signatures (these come from the Sensor's v2 signature checks). `pairedSensorCount` is how many Sensors are currently paired; 0 means Sensor pairing has never been set up. Use this to build an external-exposure picture as input to remediation planning, alongside get_exposed_ports (this Mac's own view of its listening ports) — the two are complementary, not redundant: this tool reflects what a real device on the LAN could actually reach, not just what this Mac believes it's listening on. When a stored file exists but cannot be read (no permission, damaged) the answer carries unreadable: true, unreadableMessage and unreadableFiles: a 0 count or an empty results list then does NOT mean nothing is paired or recorded.",
             "inputSchema": ["type": "object", "properties": [String: Any]()],
         ],
         [

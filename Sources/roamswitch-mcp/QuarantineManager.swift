@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.27 (build 206).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.29 (build 208).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -17,6 +17,35 @@ public struct QuarantinedFile: Identifiable, Equatable {
     public let threatName: String
     public let quarantinedAt: Date
     public let fileSize: Int64
+}
+
+/// Why the vault's record (`.metadata.json`) could not be read. The list is then empty because nothing was read,
+/// not because nothing is quarantined, so no reader may call it "0 files".
+public enum QuarantineUnreadableReason: String, Equatable {
+    /// The file is there but is not a list of records (damaged, cut short, edited by hand).
+    case corrupt
+    /// This process may not read the file or its folder.
+    case permissionDenied = "permission_denied"
+    /// Reading failed for another reason (an I/O error, a folder where the file should be).
+    case readFailed = "read_failed"
+
+    /// The sentence the window, the menu's tooltip and the MCP answer show, in the app's language.
+    var text: String {
+        switch self {
+        case .corrupt:
+            return loc("隔離中のファイルを確認できません。隔離の記録ファイル(.metadata.json)が壊れています。次に隔離するとき、壊れた記録は消さずに別の名前で残します。")
+        case .permissionDenied:
+            return loc("隔離中のファイルを確認できません。隔離の記録ファイル(.metadata.json)を読む権限がありません。")
+        case .readFailed:
+            return loc("隔離中のファイルを確認できません。隔離の記録ファイル(.metadata.json)を読み込めませんでした。")
+        }
+    }
+}
+
+/// The vault as read now: the files, or why they could not be read (`files` is then empty).
+public struct QuarantineListing: Equatable {
+    public let files: [QuarantinedFile]
+    public let unreadable: QuarantineUnreadableReason?
 }
 
 final class QuarantineManager {
@@ -96,7 +125,10 @@ final class QuarantineManager {
     /// not a failure — there's nothing left to move.
     @discardableResult
     func recordQuarantinedFiles(fromFoundLines lines: [String]) -> Set<String> {
-        var entries = loadMetadata()
+        // nil: the record could not be read nor moved aside. The files are still moved and neutralized below, but
+        // nothing is saved, so the earlier records are not written over.
+        let loaded = loadMetadataForUpdate()
+        var entries = loaded ?? []
         let fileManager = FileManager.default
         let qDir = ensureQuarantineDirectory()
         var quarantinedPaths: Set<String> = []
@@ -166,14 +198,25 @@ final class QuarantineManager {
                 originalPermissions: originalPermissions
             ))
         }
-        saveMetadata(entries)
+        if loaded != nil { saveMetadata(entries) }
         return quarantinedPaths
     }
 
     func listQuarantinedFiles() -> [QuarantinedFile] {
-        let entries = loadMetadata()
+        listing().files
+    }
+
+    /// The quarantined files, or why the record of them could not be read. A record that is not there yet
+    /// (nothing was ever quarantined) is an empty, readable vault.
+    func listing() -> QuarantineListing {
+        let entries: [MetadataEntry]
+        switch readMetadata() {
+        case .missing: entries = []
+        case .entries(let list): entries = list
+        case .unreadable(let reason): return QuarantineListing(files: [], unreadable: reason)
+        }
         let fileManager = FileManager.default
-        return entries.compactMap { entry in
+        let files: [QuarantinedFile] = entries.compactMap { entry in
             let quarantinedPath = quarantineDirectory + "/" + entry.quarantinedFileName
             guard fileManager.fileExists(atPath: quarantinedPath) else { return nil }
             let size = (try? fileManager.attributesOfItem(atPath: quarantinedPath)[.size] as? Int64) ?? 0
@@ -187,6 +230,7 @@ final class QuarantineManager {
             )
         }
         .sorted { $0.quarantinedAt > $1.quarantinedAt }
+        return QuarantineListing(files: files, unreadable: nil)
     }
 
     /// Moves a quarantined file back to its original location. Fails if
@@ -229,12 +273,71 @@ final class QuarantineManager {
 
     // MARK: - Metadata persistence
 
-    private func loadMetadata() -> [MetadataEntry] {
-        guard let data = FileManager.default.contents(atPath: metadataPath),
-              let entries = try? JSONDecoder().decode([MetadataEntry].self, from: data) else {
-            return []
+    private enum MetadataRead {
+        case missing
+        case entries([MetadataEntry])
+        case unreadable(QuarantineUnreadableReason)
+    }
+
+    /// `FileManager.contents(atPath:)` returns nil both for a file that is not there and for one that cannot be
+    /// read, and a failed decode used to be `[]` as well: a damaged or unreadable record read as "no files".
+    private func readMetadata() -> MetadataRead {
+        let data: Data
+        do {
+            data = try Data(contentsOf: URL(fileURLWithPath: metadataPath))
+        } catch {
+            return Self.classifyReadError(error).map { .unreadable($0) } ?? .missing
         }
-        return entries
+        guard let entries = try? JSONDecoder().decode([MetadataEntry].self, from: data) else {
+            return .unreadable(.corrupt)
+        }
+        return .entries(entries)
+    }
+
+    /// nil: the file (or its folder) is not there. Otherwise why it could not be read.
+    static func classifyReadError(_ error: Error) -> QuarantineUnreadableReason? {
+        let ns = error as NSError
+        let posix = (ns.userInfo[NSUnderlyingErrorKey] as? NSError).flatMap { $0.domain == NSPOSIXErrorDomain ? $0.code : nil }
+            ?? (ns.domain == NSPOSIXErrorDomain ? ns.code : nil)
+        if ns.domain == NSCocoaErrorDomain, ns.code == NSFileReadNoSuchFileError || ns.code == NSFileNoSuchFileError { return nil }
+        if posix == Int(ENOENT) || posix == Int(ENOTDIR) { return nil }
+        if ns.domain == NSCocoaErrorDomain, ns.code == NSFileReadNoPermissionError { return .permissionDenied }
+        if posix == Int(EACCES) || posix == Int(EPERM) { return .permissionDenied }
+        return .readFailed
+    }
+
+    /// The records for a read-modify-write. A record that cannot be read is moved aside
+    /// (`.metadata.json.corrupt-<time>-<n>`) and never written over; `nil` when it could not be moved either, and the
+    /// caller then must not save (the next save would replace every earlier record with the new ones only).
+    private func loadMetadataForUpdate() -> [MetadataEntry]? {
+        switch readMetadata() {
+        case .missing: return []
+        case .entries(let list): return list
+        case .unreadable(let reason):
+            let stamp: String = {
+                let f = DateFormatter()
+                f.locale = Locale(identifier: "en_US_POSIX")
+                f.dateFormat = "yyyyMMdd_HHmmss"
+                return f.string(from: Date())
+            }()
+            let aside = quarantineDirectory + "/.metadata.json.corrupt-\(stamp)-\(UInt32.random(in: 0...UInt32.max))"
+            do {
+                try FileManager.default.moveItem(atPath: metadataPath, toPath: aside)
+                NSLog("RoamSwitch QuarantineManager: the quarantine record was unreadable (\(reason.rawValue)); kept as \(aside)")
+                // The newest three are kept.
+                StoredRecordFile.pruneCopies(dir: quarantineDirectory, prefix: ".metadata.json.corrupt-")
+                return []
+            } catch {
+                NSLog("RoamSwitch QuarantineManager: the quarantine record was unreadable (\(reason.rawValue)) and could not be moved aside: \(error.localizedDescription); not saving")
+                return nil
+            }
+        }
+    }
+
+    /// Lookups only (never saved back): an unreadable record has nothing to find.
+    private func loadMetadata() -> [MetadataEntry] {
+        if case .entries(let list) = readMetadata() { return list }
+        return []
     }
 
     private func saveMetadata(_ entries: [MetadataEntry]) {
@@ -245,7 +348,7 @@ final class QuarantineManager {
 
     private func removeMetadata(for file: QuarantinedFile) {
         let fileName = (file.quarantinedPath as NSString).lastPathComponent
-        var entries = loadMetadata()
+        guard var entries = loadMetadataForUpdate() else { return }
         if let idx = entries.firstIndex(where: { $0.quarantinedFileName == fileName && $0.originalPath == file.originalPath }) {
             entries.remove(at: idx)
         } else {

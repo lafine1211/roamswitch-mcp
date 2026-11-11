@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.27 (build 206).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.29 (build 208).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -142,9 +142,17 @@ public enum FindingHistory {
 
     /// 壊れている・版が違う・無いときは空の履歴。履歴は結果に文脈を足すだけなので、結果を壊してはならない。
     public static func read(defaults: UserDefaults) -> [String: FindingHistoryEntry] {
-        guard let data = defaults.data(forKey: defaultsKey),
-              let file = try? JSONDecoder().decode(File.self, from: data), file.version == version else { return [:] }
-        return file.checks
+        readState(defaults: defaults).checks
+    }
+
+    /// `read`, and whether a stored history is there but cannot be read (damaged). A history of another version is
+    /// not "unreadable": it is the empty history its version change means.
+    public static func readState(defaults: UserDefaults) -> (checks: [String: FindingHistoryEntry], unreadable: Bool) {
+        switch StoredRecordDefaults.peek(File.self, key: defaultsKey, defaults: defaults) {
+        case .missing: return ([:], false)
+        case .unreadable: return ([:], true)
+        case .loaded(let file): return (file.version == version ? file.checks : [:], false)
+        }
     }
 
     /// 1回の診断の、判定できた結果を履歴に足す(純関数)。変わったら true。
@@ -166,7 +174,13 @@ public enum FindingHistory {
     /// アプリが、診断のあとに呼ぶ。MCP サーバーは呼ばない(読み取り専用)。
     public static func note(report: ComprehensiveSecurityReport, defaults: UserDefaults, now: Double = Date().timeIntervalSince1970) {
         lock.lock(); defer { lock.unlock() }
-        var history = read(defaults: defaults)
+        let state = readState(defaults: defaults)
+        if state.unreadable {
+            // Kept as `<key>.unreadable` before this diagnosis starts the history again.
+            StoredRecordDefaults.keepCopy(key: defaultsKey, defaults: defaults)
+            StoredRecordHealth.set(.findingHistory, unreadable: true)
+        }
+        var history = state.checks
         guard apply(report: report, to: &history, now: now) else { return }
         if let data = try? JSONEncoder().encode(File(checks: history)) { defaults.set(data, forKey: defaultsKey) }
     }
@@ -567,7 +581,7 @@ final class SecurityHealthChecker {
             // この項目は判定できない(遮断中の文言は一覧の有無と無関係に正しいが、合否の根拠にはならない)。
             portStatusStr = portListNotMeasuredYet ? loc("まだ測定していません") : loc("測定できませんでした (lsof の実行に失敗)")
         } else {
-            portStatusStr = activeSecurityLevel.firewallBlockAll ? loc("🛡️ ファイアウォール遮断中 (安全)") : (exposedCount == 0 ? loc("公開ポートなし (安全)") : String(format: loc("⚠️ %d個のポートが露出中"), exposedCount))
+            portStatusStr = activeSecurityLevel.firewallBlockAll ? loc("🛡️ ファイアウォール遮断中 (安全)") : (exposedCount == 0 ? loc("公開ポートなし (安全)") : locFormat("⚠️ %d個のポートが露出中", exposedCount))
         }
         items.append(SecurityAuditItem(
             category: loc("サービス・ポート露出"),
@@ -755,9 +769,9 @@ final class SecurityHealthChecker {
         switch outcome {
         case .recent(let days):
             isPassed = true
-            statusText = days == 0 ? loc("直近のバックアップあり (24時間以内)") : String(format: loc("直近のバックアップあり (%d日前)"), days)
+            statusText = days == 0 ? loc("直近のバックアップあり (24時間以内)") : locFormat("直近のバックアップあり (%d日前)", days)
         case .stale(let days):
-            statusText = String(format: loc("⚠️ %d日間バックアップされていません"), days)
+            statusText = locFormat("⚠️ %d日間バックアップされていません", days)
         case .neverBackedUp:
             statusText = loc("⚠️ バックアップ先はあるが、記録されたバックアップがありません")
         case .notConfigured(let localSnapshots):
@@ -765,6 +779,10 @@ final class SecurityHealthChecker {
             if localSnapshots {
                 detail += "\n" + loc("ローカルスナップショットは同じディスクの中にあります。ディスクの故障や紛失には役立たず、マルウェアに消されることもあるため、バックアップとは数えません。")
             }
+        case .unscheduled(let days):
+            statusText = days.map { locFormat("⚠️ 自動バックアップがオフです (最後のバックアップは%d日前)", $0) }
+                ?? loc("⚠️ 自動バックアップがオフで、記録されたバックアップもありません")
+            detail += "\n" + loc("Time Machineの「自動的にバックアップ」がオフです。手で1回実行したバックアップは、そのあとの変更を含みません。")
         case .otherToolOnly(let names):
             isApplicable = false
             inconclusiveReason = "not_verifiable"
@@ -779,6 +797,8 @@ final class SecurityHealthChecker {
             recommendation = loc("設定は万全です。")
         } else if case .otherToolOnly = outcome {
             recommendation = loc("そのバックアップアプリで、最後に実行した日時を確認してください。")
+        } else if case .unscheduled = outcome {
+            recommendation = loc("システム設定 > 一般 > Time Machine の「オプション」で、バックアップの頻度を「自動」(1時間ごと・1日ごと・1週間ごと)にしてください。")
         } else {
             recommendation = loc("システム設定 > 一般 > Time Machine でバックアップ先を確認し、バックアップを実行してください。")
         }
@@ -813,7 +833,7 @@ final class SecurityHealthChecker {
         case .exposed(let hits, let count, _):
             let named = hits.prefix(PackageCveExposure.namedInStatus).map(\.shownName)
                 .joined(separator: ", ") + (count > PackageCveExposure.namedInStatus ? ", ..." : "")
-            statusText = String(format: loc("⚠️ 悪用されやすい未修正の脆弱性が%d件 (%@)"), count, named)
+            statusText = locFormat("⚠️ 悪用されやすい未修正の脆弱性が%d件 (%@)", count, named)
             var lines = hits.prefix(PackageCveExposure.listedInDetail).map { h -> String in
                 var line = h.label ?? "\(h.package) \(h.installedVersion)"
                 if h.label == nil, !h.fixedVersion.isEmpty { line += " -> \(h.fixedVersion)" }
@@ -827,7 +847,7 @@ final class SecurityHealthChecker {
             detail += "\n" + lines.joined(separator: "\n")
             recommendation = loc("該当するソフトウェアを更新してください。Homebrewで入れたものは、ターミナルで brew upgrade を実行します。")
         case .clear(let packages, let covered):
-            statusText = String(format: loc("該当なし (全%d個のうち、データのある%d個を確認)"), packages, covered)
+            statusText = locFormat("該当なし (全%d個のうち、データのある%d個を確認)", packages, covered)
             recommendation = loc("データのあるHomebrewのパッケージに、悪用されやすい未修正の脆弱性は見つかりませんでした。")
         case .clearPhpOnly:
             statusText = loc("該当なし (PHPの版数と設定を確認)")

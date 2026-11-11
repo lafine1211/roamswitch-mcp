@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.27 (build 206).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.29 (build 208).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -361,7 +361,9 @@ enum AgentSetupAuditor {
         for input in inputs.filter({ $0.role == .instruction }) + (openClaw.map { [$0] } ?? []) {
             if let digest = input.sha256 { snapshot.files[input.path] = AgentSetupBaseline.Entry(sha256: digest, fields: nil) }
         }
-        snapshot.servers = MCPConfigAuditor.serverSnapshot(home: home, projectFolders: folders)
+        let servers = MCPConfigAuditor.serverSnapshotReport(home: home, projectFolders: folders)
+        snapshot.servers = servers.servers
+        for path in servers.unreadable where !result.unreadableFiles.contains(path) { result.unreadableFiles.append(path) }
         var settingsSnapshot: [String: AgentSetupBaseline.SettingsEntry] = [:]
         for path in settingsCandidates {
             if let input = inputs.first(where: { $0.path == path && $0.role == .settings }) {

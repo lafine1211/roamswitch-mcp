@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.27 (build 206).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.29 (build 208).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -71,13 +71,16 @@ public struct ExecEventRecord: Codable, Equatable {
     /// a secret the way arbitrary env values can be. No other environment
     /// variable is ever read, and the full `env` array is never kept.
     public var dyldInsertLibraries: String?
+    /// The controlling terminal of the new process (`/dev/ttys003`), "" when EndpointSecurity reported none, nil when
+    /// the event did not say (older records).
+    public var tty: String?
 
     public init(
         seq: UInt64 = 0, time: Double, kind: String, pid: Int32, ppid: Int32, uid: UInt32? = nil,
         path: String, args: [String]? = nil, cwd: String? = nil, priorPath: String? = nil,
         signingID: String? = nil, teamID: String? = nil, cdhash: String? = nil,
         isPlatform: Bool? = nil, csFlags: UInt32? = nil, exitStatus: Int32? = nil,
-        dyldInsertLibraries: String? = nil
+        dyldInsertLibraries: String? = nil, tty: String? = nil
     ) {
         self.seq = seq
         self.time = time
@@ -96,6 +99,7 @@ public struct ExecEventRecord: Codable, Equatable {
         self.csFlags = csFlags
         self.exitStatus = exitStatus
         self.dyldInsertLibraries = dyldInsertLibraries
+        self.tty = tty
     }
 
     public var signatureClass: ExecSignatureClass {
@@ -141,6 +145,10 @@ public struct ExecAlert: Codable, Equatable {
     /// this is the one piece of its underlying data that is. nil for rules
     /// that don't have one, and for alerts written by older builds.
     public var userFact: String?
+    /// The same rule, program and parent as an alert raised less than five minutes before
+    /// (`ExecCorrelationEngine.cooldownSecs`). Kept in the alert file and the incident timeline, never notified on its
+    /// own. nil (not a repeat) in alerts written by older builds, which dropped repeats instead.
+    public var repeated: Bool?
 
     public init(
         alertSeq: UInt64 = 0, id: String = UUID().uuidString, time: Double, ruleID: String, technique: String,
@@ -574,6 +582,7 @@ public struct ESLineSplitter {
 ///   event.exec.target                      the NEW process (same fields as above)
 ///   event.exec.args                        [String]
 ///   event.exec.cwd.path
+///   event.exec.target.tty                  es_file_t (its path) or null: no controlling terminal
 ///   event.fork.child                       the child process (same fields)
 ///   event.exit.stat                        Int
 ///
@@ -624,11 +633,12 @@ public enum ESLoggerParser {
             }
             let cwd = (exec["cwd"] as? [String: Any]).flatMap { str($0["path"], max: maxPathChars) }
             let dyldInsertLibraries = dyldInsertLibrariesValue(from: exec["env"])
+            let tty = ttyValue(target)
             return .record(ExecEventRecord(
                 seq: seq, time: time, kind: "exec", pid: pid, ppid: t.ppid ?? acting.ppid ?? 0,
                 uid: t.uid ?? acting.uid, path: path, args: args, cwd: cwd, priorPath: acting.path,
                 signingID: t.signingID, teamID: t.teamID, cdhash: t.cdhash, isPlatform: t.isPlatform, csFlags: t.csFlags,
-                dyldInsertLibraries: dyldInsertLibraries
+                dyldInsertLibraries: dyldInsertLibraries, tty: tty
             ))
         }
         if let fork = event["fork"] as? [String: Any] {
@@ -682,6 +692,15 @@ public enum ESLoggerParser {
         r.isPlatform = p["is_platform_binary"] as? Bool
         r.csFlags = int(p["cs_flags"]).flatMap { UInt32(exactly: $0) }
         return r
+    }
+
+    /// `process.tty` of an EndpointSecurity process: an `es_file_t` (its `path`) or JSON null when the process has no
+    /// controlling terminal. "" for null, nil when the key is missing or holds something else.
+    static func ttyValue(_ p: [String: Any]) -> String? {
+        guard let v = p["tty"] else { return nil }
+        if v is NSNull { return "" }
+        if let f = v as? [String: Any] { return str(f["path"], max: 256) }
+        return nil
     }
 
     static func str(_ v: Any?, max: Int, allowEmpty: Bool = false) -> String? {

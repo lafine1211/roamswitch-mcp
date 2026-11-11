@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.27 (build 206).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.29 (build 208).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -150,7 +150,7 @@ enum ForensicCaptureManager {
         ContainmentIncidentTimeline.record(
             source: .forensicCapture,
             severity: "info",
-            summary: String(format: loc("証拠バンドルを保存しました: %@"), bundleName),
+            code: ContainmentSummaryText.evidenceBundleSaved(bundle: bundleName),
             processID: manifest.suspectedPID,
             actionTaken: "evidence_captured",
             parentEventID: trigger,

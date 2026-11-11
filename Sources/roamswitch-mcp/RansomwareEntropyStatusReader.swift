@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.27 (build 206).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.29 (build 208).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -24,11 +24,12 @@ enum RansomwareEntropyStatusReader {
     }
 
     static func persistedAlerts(defaults: UserDefaults = .standard) -> [PersistedEntropyAlert] {
-        guard let data = defaults.data(forKey: persistedAlertsKey),
-              let decoded = try? JSONDecoder().decode([PersistedEntropyAlert].self, from: data) else {
-            return []
-        }
-        return decoded
+        persistedAlertsRead(defaults: defaults).value(or: [])
+    }
+
+    /// The same, telling a stored log that cannot be read from one that is empty.
+    static func persistedAlertsRead(defaults: UserDefaults = .standard) -> StoredRecordRead<[PersistedEntropyAlert]> {
+        StoredRecordDefaults.peek([PersistedEntropyAlert].self, key: persistedAlertsKey, defaults: defaults)
     }
 }
 

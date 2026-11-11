@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.27 (build 206).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.29 (build 208).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -54,11 +54,12 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • 🟢 信頼 (オープン - 保護解除): 自宅など。ファイアウォールを解除し、共有サービス（SSH / SMB / 画面共有）とAirDropを許可。
                 • 🟡 標準保護 (ファイアウォール&ステルス): 職場・テザリングなど。PFパケットフィルタとステルスモードで外部からの探査を遮断しつつ、共有サービスは維持。
-                • 🔴 最大ロックダウン (共有・AirDrop停止): カフェ・公衆Wi-Fi・未登録ネットワーク。受信を全遮断し、共有デーモンを停止、AirDropを無効化。
+                • 🔴 最大ロックダウン (共有・AirDrop停止): カフェ・公衆Wi-Fi・未登録ネットワーク。受信を全遮断し、ファイル共有と画面共有を停止、AirDropを無効化。リモートログイン（SSH）は止めず、ファイアウォールが外からの接続を遮断します。
                 • 判定の仕組み: ネットワーク変更時にゲートウェイのMACアドレスを取得し、登録済みネットワークと照合。DHCP更新やWi-Fiローミングなど、ゲートウェイが変わらない経路イベントでは再判定の負荷を抑えています。
                 • 内部構造: 特権ヘルパー `RoamSwitchHelper`（XPC経由）が `pfctl` の専用アンカーを操作し、カーネルレベルでパケットを破棄します。
                 • 手動オーバーライド: メニューの「手動オーバーライド」から、レベルごとに「次回ネットワーク切断まで（推奨）」「1時間だけ」「4時間だけ」「解除するまで継続」を選択可能（set_manual_override を参照）。
-                • 端末の状態による引き下げ (Pro・既定でオン): 登録済みの「信頼 (オープン)」のネットワークにいても、この Mac に侵害の兆候が記録されている間は、標準保護にします。兆候は、ランサムウェア(おとりファイル・エントロピー)、XProtect連動のランタイム脅威、認証情報ハニートークン、ブラウザ認証情報、リバースシェル、プロセス実行レコーダーの記録のうち、重要度が high 以上で、発生から6時間以内のものです(窓は `defaults write com.tetsuharu.RoamSwitch RoamSwitch.DevicePosture.WindowHours -int N` で1〜72時間)。人が「解除」「許可」して閉じた記録は数えません。ARP・ネットワーク設定・SSH総当たり・ポート異常・ClickFix は端末の侵害ではないので数えません。下げるのは標準保護までで、最大ロックダウンにはしません。手動オーバーライドの最中とAir-Gapの最中は変えません。1分ごとと記録が増えたときに見直し、引き下げと復帰のときに1回ずつ通知します。メニューの「確認した（信頼を戻す）」を押すと、その時刻より前の兆候は数えず、すぐに戻します。メニューの「侵害の兆候があるとき、信頼ネットワークを標準保護にする (Pro)」でオフにできます。
+                • 端末の状態による引き下げ (Pro・既定でオン): 登録済みの「信頼 (オープン)」のネットワークにいても、この Mac に侵害の兆候が記録されている間は、標準保護にします。兆候は、ランサムウェア(おとりファイル・エントロピー)、XProtect連動のランタイム脅威、認証情報ハニートークン、ブラウザ認証情報、リバースシェル、プロセス実行レコーダー、自動起動の登録(LaunchAgent/Daemon・シェルの起動ファイルなど)の記録のうち、重要度が high 以上で、発生から6時間以内のものです(窓は `defaults write com.tetsuharu.RoamSwitch RoamSwitch.DevicePosture.WindowHours -int N` で1〜72時間)。人が「解除」「許可」して閉じた記録は数えません。ARP・ネットワーク設定・SSH総当たり・ポート異常・ClickFix は端末の侵害ではないので数えません。下げるのは標準保護までで、最大ロックダウンにはしません。手動オーバーライドの最中とAir-Gapの最中は変えません。1分ごとと記録が増えたときに見直し、引き下げと復帰のときに1回ずつ通知します。メニューの「確認した（信頼を戻す）」を押すと、その時刻より前の兆候は数えず、すぐに戻します。メニューの「侵害の兆候があるとき、信頼ネットワークを標準保護にする (Pro)」でオフにできます。
+                • 切り替えの通知: 保護レベルが変わると（手動の固定、最大ロックダウンを含む）、元のレベルと新しいレベル、理由（手動・登録済みネットワーク・未登録ネットワーク・未接続）を通知し、通知履歴に残します。同じレベルの再適用と、起動直後の最初の適用では通知しません。端末の状態による引き下げと復帰は、上の専用の通知で知らせます。
                 """,
                 recommendation: "自宅や安全なオフィスはメニューの「現在のネットワークを登録」から登録し、それ以外の場所では最大ロックダウンが自動で適用される状態で運用してください。"
             ),
@@ -358,7 +359,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • おとりファイル: `~/Library/Application Support/RoamSwitch/CanaryGuard/` に4つ、さらに「書類」「デスクトップ」「ダウンロード」「ピクチャ」に `.roamswitch_security_canary_do_not_delete` で始まる隠しファイルを配置。各ファイルのSHA-256をベースラインとして記録します。
                 • 検知: kqueue によるリアルタイム監視と60秒ごとの定期確認を併用。同じファイルの連続イベントは10秒のクールダウンで重複処理を防ぎます。直近60秒以内に変更された実ファイルも「影響を受けた可能性があるファイル」として記録します。
-                • 自動対応: ①アプリケーションファイアウォールのロックダウン ②エアギャップ隔離（pfで送受信を全遮断＋Wi-Fi無線オフ、feat_airgap_containment）③共有サービス（SMB / SSH / 画面共有）の停止 ④疑わしいプロセスを強制終了ではなく一時停止（SIGSTOP）⑤緊急通知と最前面の緊急モーダル表示。
+                • 自動対応: ①アプリケーションファイアウォールのロックダウン ②エアギャップ隔離（pfで送受信を全遮断＋Wi-Fi無線オフ、feat_airgap_containment）③共有サービス（SMB / 画面共有）の停止 ④疑わしいプロセスを強制終了ではなく一時停止（SIGSTOP）⑤緊急通知と最前面の緊急モーダル表示。隔離中もリモートログイン（SSH）は止めず、pfの全遮断が外からの接続を落とします。
                 • 凍結の理由: 通信はすでに遮断されているため、停止したプロセスはそれ以上被害を広げられません。誤検知だった場合は解除時に再開（SIGCONT）でき、データを失いません。
                 • ファイルを取り戻すには: 緊急モーダルに、無償の復号ツールを集めた No More Ransom と警察庁のページへのリンクと、前者の QR コードを出します(隔離中はこの Mac で開けないため)。復号ツールがあるのは仕組みが解析された一部の種類だけで、RoamSwitch 自身はファイルを復号しません。
                 • 解除時: ネットワークとWi-Fiを復旧し、停止したプロセスを再開し、改ざんされたおとりファイルを再生成します。
@@ -427,6 +428,8 @@ extension RoamSwitchKnowledgeBase {
                 • 相関ルール(通知のみ・初期設定では静か・各ルールに固定IDとMITRE ATT&CK技術ID): ブラウザ/Office/メールアプリが直接シェルやスクリプト処理系を起動(exec.shell_from_app, T1059)／/tmp・/private/var/tmp・/var/folders配下の一時フォルダ・/Users/Sharedや隔離属性付きの場所から署名なし・アドホック署名のバイナリを実行(exec.untrusted_location, T1204.002)／curl/wgetをシェルへ渡す `sh -c` ワンライナーのうち、生IPのURL・base64・eval・TLS検証無効・ブラウザ等が親といった不審な事情を伴うもの(exec.pipe_to_shell, T1059.004)／`osascript -e` でdo shell scriptとbase64/evalを組み合わせたもの(exec.osascript_obfuscated, T1059.002)／`xattr -d com.apple.quarantine` の後15分以内にそのファイルを実行(exec.quarantine_stripped_then_exec, T1553.001)／直近24時間に書き込まれたLaunchAgent/LaunchDaemonから署名なし・アドホックのバイナリがlaunchd経由で起動(exec.launchd_untrusted_binary, T1543.001/.004)／Apple署名でないシェル以外の祖先プロセスによる `security find-generic-password -w` や `dump-keychain`(exec.keychain_access, T1555.001)／osascript以外の裸のインタプリタが `-c`/`-e`/`-Command` のインライン一行コードを実行し、base64/evalとダウンロードやexec相当の呼び出しを組み合わせたもの(exec.interpreter_inline_obfuscated, T1059)／DYLD_INSERT_LIBRARIESを設定した非Apple署名バイナリの実行(exec.dyld_insert_libraries, T1574.006)／RoamSwitch自身でもAppleのプロセスでもない何かによる`tmutil deletelocalsnapshots`/`thinlocalsnapshots`の実行(exec.ransomware_recovery_tampering, T1490)／コマンドラインが、RoamSwitchの設置した偽の認証情報ファイル(~/.aws/credentials、~/.env.backupなど中身にマーカーを持つもの)を直接指定して実行(exec.honeytoken_path, T1552.001)。本物のファイルは対象外で、ライブラリ経由の読み取りはハニートークンの監視が担当。スクリプトやAIエージェントが動かす攻撃ツール連鎖(HexStrike AIのようなバックエンドなど)を狙う規則も2つあります。1つのプロセスが30秒以内に8種類以上のペネトレーションテスト用ツールをwhich/typeで立て続けに調べる場合(exec.offensive_tool_inventory, T1595)と、スクリプト処理系やAIコーディングエージェントが2分以内に3種類以上の同種ツールを起動する場合(exec.offensive_tool_burst, T1595)です。人がTerminalで同じコマンドを打っても検知しません。Terminalで普通に打った `curl | sh` は意図的に検知しません。 シェルの `-c` で渡されたコマンドラインや、nc・ncat・socatを直接起動したコマンドラインに、リバースシェル(バインドシェルを含む)の形が書かれている場合も検知します(exec.reverse_shell_argv, T1059.004)。対象は、シェルを運ぶ /dev/tcp・/dev/udp へのリダイレクト、mkfifoで作ったパイプをnc・telnet・openssl s_client・sshにつなぐ形、`nc -e <シェル>`、socatの exec:<シェル>、シェルへパイプで渡すopenssl s_clientです。`echo > /dev/tcp/host/22` のようなポートの疎通確認や、これらの語を文字として含むだけの文は検知しません。
                 • サービスのアカウントが起動したシェル(exec.shell_from_service、T1505.003): Webサーバーやアプリのサービスのプロセス(httpd・nginx・php-fpm・java・tomcat・gunicorn・uwsgi・node など)が、サービスのアカウント(macOS標準のApacheの `_www`、MacPortsの `www` など)で、シェル(sh・bash・zsh など)、または python・perl・ruby・node の -c / -e のワンライナーを直接起動すると通知します。Webシェルがコマンドを実行するときの形です。アカウントとサービスのプロセスの両方が当てはまる場合だけ検知するため、自分のアカウントで動かす開発サーバー・apachectl・brew services・cron では通知しません。アカウントを足すには `defaults write com.tetsuharu.RoamSwitch RoamSwitch.ExecRule.ServiceUsers "名前,名前"` を実行し、アプリを再起動するか、プロセス実行の記録をオフにしてオンに戻します(一覧に足すだけで、`_www` は外れません)。`_mysql`・`_postgres` などのデータベースのアカウントは、データベース自身がシェルを起動することがある(archive_command など)ため、初期設定の対象にしていません。プログラムを起動せずWebサーバーのプロセスの中でコードを実行するWebシェルは見えません。
                 • AIコーディングエージェントの配下から外へ出るデータ(exec.agent_sensitive_send と exec.agent_sensitive_then_send、T1048): AIコーディングエージェント(claude・codex・gemini・opencode・aider・goose・cursor-agent・openclaw・qwen・crush)が起動した送信用のコマンドが、外へ出してはいけないファイル(SSHの鍵、クラウドの認証情報、.env、エージェント自身のログイン情報、ブラウザのデータ、シェルの履歴。.env.example・公開鍵・.pem は対象外)を名指しして送る、または引数に秘密らしき値を含むと通知します。送信用のコマンドは、本文やアップロードを伴う curl と wget、scp・sftp・rsync・rclone・s3cmd・mc、s3:// への aws s3 cp/mv/sync と aws s3api put-object、gs:// への gsutil と gcloud storage、az storage blob upload、nc・ncat・socat・telnet・ftp です。ファイルを送る場合は重要度が高(通知のバナーを出す)、秘密らしき値だけの場合は中(記録のみ)です。もうひとつのルール(重要度は中)は、同じエージェントの配下のコマンドがそのようなファイルを読み、5分以内に送信が続いた場合に通知します。送信がファイル名を含まなくても対象です(cat ~/.aws/credentials のあとに curl -d @- など)。Authorizationヘッダーは漏えいとは見ず、ふつうの curl の GET は送信に数えません。限界: エージェントがプロセスとして起動したコマンドだけが見えます。エージェント自身のファイル読み取り、モデル提供元へ送る内容、git push、自分でソケットを開くスクリプト実行(python -c・node -e)は見えません。引数を分割や符号化すると検知をすり抜けます。プロセス名が node のエージェントは判別できません。通知のみで、ネットワークの隔離は行いません。
+                • 端末のない ssh のトンネル(exec.ssh_remote_forward、T1572): ssh が -R(RemoteForward)または -D(DynamicForward)の転送を求め、そのプロセスに端末が無い(macOS が制御端末なしと報告した)か、launchd が直接起動したときに、重要度は中で通知します(この規則は中でもバナーを出します。Air-Gap やポートの遮断はしません)。-R は、外の相手が、このMacの開いた接続を通って、このMacやその先のネットワークへ入る道になります。外からの接続だけを止めるファイアウォールでは見えません。ターミナルで人が打った ssh -R は端末があるので通知しません。-L(ローカルの転送)は対象外です。限界: ssh 以外のトンネル(chisel・frp・ngrok など)と、~/.ssh/config に書いた RemoteForward だけで開いたもの(コマンドラインに出ない)は、このルールでは見えません。ほかのマシンから SSH でこのMacに入った相手が求めた -R は、このMacではプログラムが起動しないのでこのルールには当たりません。ポート異常ガード(Pro)が、そのセッションのプロセス(sshd-session)が開いた待ち受けから、127.0.0.1 のものも含めて知らせます。
+                • 同じ当たりの繰り返し: 同じルール・同じプログラム・同じ親の当たりは、最初の1件から5分のあいだ通知しません。記録は残し、インシデントタイムラインには「(5分以内の同じ検知の繰り返し。通知はしていません)」を付けて残します。5分のあいだに残すのは、同じ当たり20件までです。
                 • 通知: 通知(Pro)とインシデントタイムラインへの記録(発生源 execRecorder、対応「通知のみ」)。通知が単独でAir-Gapなどの隔離を発動することはありません。
                 • 保存: /Library/Application Support/RoamSwitch/exec_log にセグメント分割のJSON Lines(root専用の0700/0600。コマンドライン引数に機密が含まれ得るため、アプリ・ビューア・MCPサーバーは特権ヘルパー経由でのみ読み取ります)。既定200MB・14日(変更可)、クラッシュ安全なローテーション。セグメント間をハッシュチェーンで連結し、削除・編集・切り詰めを検出します(「チェーンを検証」)。改ざん検知であり改ざん防止ではありません。環境変数は記録しませんが、コマンドライン引数に機密が含まれる場合があります。
                 • 負荷対策: 過負荷時は古い行から捨てる有界キュー(件数を表示)、指数バックオフでの再起動、オフにするとesloggerを完全に停止します。
@@ -615,6 +618,7 @@ extension RoamSwitchKnowledgeBase {
                 • 保存期間: 7日間。古い記録は新しい通知を記録するたびに自動で削除されます。
                 • 記録内容: 日時・タイトル・本文。脅威アラート、リンク保護の接続イベント、ClickFix・機密キー検知、各種自動遮断などを含みます。
                 • EICARテスト署名: 業界標準の無害なテストファイルは実際の脅威ではないため、隔離も遮断もせず、通知バナーも出さずに履歴へ記録のみ行います（ダウンロード保護・クイックスキャン・定期スキャンのいずれでも同様）。
+                • 言語: 題名と本文は、いまアプリで選んでいる言語で表示します（記録した時点の言語ではありません）。保護レベルの切り替えと、ウォッチドッグによる自動再起動の通知も残ります。この表示に対応する前に記録した通知は、記録したときの言語のままです。
                 • MCPツール `get_notification_history` でAIから確認することもできます。
                 """,
                 recommendation: "外出中や作業中に通知を見逃した場合は、通知履歴で内容を確認してください。"
@@ -1073,6 +1077,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • 発生原因: FileVaultやファイアウォールの無効化、危険なポートの公開、ガードの停止など、設定や環境の変化。
                 • 判定基準: スコア80点未満、または不合格の項目が4つ以上。
+                • 通知の頻度: 同じ状態のあいだは、起動のたびや4時間ごとの診断のたびには通知しません。不合格の項目が増えたとき、スコアが前回の通知より下がったとき、または1日に1回通知します。状態が戻ると数え直します。
                 """,
                 recommendation: """
                 1. メニューの「📊 総合診断レポートを開く…」（またはMCPの `get_security_report`）で内容を確認してください。
@@ -1147,7 +1152,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "おとり（カナリア）ファイルの改ざん・削除・リネームを検知し、エアギャップ隔離・共有サービス停止・疑わしいプロセスの一時停止が発動した際の緊急通知とモーダルです。",
                 details: """
                 • 発生原因: ランサムウェアなど、ユーザーフォルダのファイルを暗号化・破壊しようとするプロセスの活動（またはシミュレーションの実行）。
-                • 自動防御: 送受信の全遮断＋Wi-Fi無線オフ、SMB / SSH / 画面共有の停止、疑わしいプロセスの一時停止（SIGSTOP）。緊急モーダルに遮断の成否、疑わしいプロセス、影響を受けた可能性のあるファイルを表示します。
+                • 自動防御: 送受信の全遮断＋Wi-Fi無線オフ、SMB / 画面共有の停止、疑わしいプロセスの一時停止（SIGSTOP）。緊急モーダルに遮断の成否、疑わしいプロセス、影響を受けた可能性のあるファイルを表示します。隔離中もリモートログイン（SSH）は止めず、pfの全遮断が外からの接続を落とします。
                 """,
                 recommendation: """
                 1. 作業中のファイルを保存し、不審なアプリをすべて終了してください。

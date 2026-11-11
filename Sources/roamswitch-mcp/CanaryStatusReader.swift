@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.27 (build 206).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.29 (build 208).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -72,11 +72,12 @@ enum CanaryStatusReader {
     /// type's header comment) was that incidents only ever lived in the main
     /// app process's memory; they're now also written to `defaults`.
     static func persistedIncidents(defaults: UserDefaults = .standard) -> [PersistedCanaryIncident] {
-        guard let data = defaults.data(forKey: persistedIncidentsKey),
-              let decoded = try? JSONDecoder().decode([PersistedCanaryIncident].self, from: data) else {
-            return []
-        }
-        return decoded
+        persistedIncidentsRead(defaults: defaults).value(or: [])
+    }
+
+    /// The same, telling a stored log that cannot be read from one that is empty.
+    static func persistedIncidentsRead(defaults: UserDefaults = .standard) -> StoredRecordRead<[PersistedCanaryIncident]> {
+        StoredRecordDefaults.peek([PersistedCanaryIncident].self, key: persistedIncidentsKey, defaults: defaults)
     }
 }
 

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.27 (build 206).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.29 (build 208).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -18,11 +18,12 @@ enum BrowserCredentialWatchStatusReader {
     }
 
     static func persistedEvents(defaults: UserDefaults = .standard) -> [PersistedBrowserCredentialEvent] {
-        guard let data = defaults.data(forKey: persistedEventsKey),
-              let decoded = try? JSONDecoder().decode([PersistedBrowserCredentialEvent].self, from: data) else {
-            return []
-        }
-        return decoded
+        persistedEventsRead(defaults: defaults).value(or: [])
+    }
+
+    /// The same, telling a stored log that cannot be read from one that is empty.
+    static func persistedEventsRead(defaults: UserDefaults = .standard) -> StoredRecordRead<[PersistedBrowserCredentialEvent]> {
+        StoredRecordDefaults.peek([PersistedBrowserCredentialEvent].self, key: persistedEventsKey, defaults: defaults)
     }
 }
 

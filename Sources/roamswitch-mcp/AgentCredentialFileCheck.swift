@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.27 (build 206).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.29 (build 208).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -185,9 +185,9 @@ enum AgentCredentialFileCheck {
             let bad = found.filter { !$0.problems.isEmpty }
             if bad.isEmpty {
                 isPassed = true
-                statusText = String(format: loc("%d件のファイルは、所有者だけが読め、同期フォルダやgit管理下にもありません"), found.count)
+                statusText = locFormat("%d件のファイルは、所有者だけが読め、同期フォルダやgit管理下にもありません", found.count)
             } else {
-                statusText = String(format: loc("⚠️ %d件のファイルに問題があります"), bad.count)
+                statusText = locFormat("⚠️ %d件のファイルに問題があります", bad.count)
                 recommendation = bad.flatMap(lines(for:)).prefix(6).joined(separator: "\n")
             }
         }

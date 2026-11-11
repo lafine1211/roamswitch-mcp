@@ -44,7 +44,8 @@ CORE=(ProcessWait AppLanguage TrustedNetwork GatewayFingerprint WiFiSecurityMoni
       SecretLeakScanning FrontendBundleScan TrustAnchorCheck ReflectedXssProbe SecurityLogAuditor LogTemplateAnalyzer QuarantineManager CanaryStatusReader \
       RansomwareEntropyStatusReader ForensicCaptureManager HoneytokenStatusReader \
       BrowserCredentialWatchStatusReader \
-      PortAnomalyStatusReader RuntimeThreatStatusReader NotificationHistory \
+      PortAnomalyStatusReader RuntimeThreatStatusReader NotificationTextLocalization \
+      SensorFindingTexts SensorFindingTextsData StoredRecordHealth \
       ContainmentIncidentTimeline NetworkHistoryGuard MCPSensorAuditStatusReader \
       RansomwareSnapshotStatusReader MCPExecRecorderTools TOMLSubset AgentSetupAuditor AgentSetupBaseline SSHGuardStatusReader PromptInjectionSignals AgentSetupSarif ActiveVulnScanSarif DetectionCoverage \
       BackupRecency PackageCveEpss VulnerabilityAcceptance DependencySourceScan \
@@ -54,7 +55,8 @@ CORE=(ProcessWait AppLanguage TrustedNetwork GatewayFingerprint WiFiSecurityMoni
 
 # Sources that live in the app's Shared/ folder (also compiled into the helper).
 SHARED=(RansomwareSnapshotLogic ExecEventModel ExecLogStore ExecProcessTree ExecReadAPI \
-        CryptoSecretDetection SafeScanFS ExecCommandMasker LinkFilterEngine KnownAttackServers SSHGuardCore GuardReaderHealth StrictJSON WatchdogAgentState PFSystemAnchors)
+        CryptoSecretDetection SafeScanFS ExecCommandMasker LinkFilterEngine KnownAttackServers SSHGuardCore GuardReaderHealth StrictJSON WatchdogAgentState PFSystemAnchors \
+        NotificationHistory NotificationText SensorFindingTextKeys StoredRecordRead WatchdogMessages)
 
 # App test files that only exercise types present in this repo. Their
 # `@testable import RoamSwitch` is rewritten to this package's module name.

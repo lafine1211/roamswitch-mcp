@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.27 (build 206).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.29 (build 208).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -55,11 +55,12 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • 🟢 信任（開放－解除保護）：例如住家。防火牆關閉；允許共享服務（SSH / SMB / 螢幕共享）與 AirDrop。
                 • 🟡 平衡（防火牆與隱形模式）：例如公司或行動熱點分享。PF 封包過濾器與隱形模式會阻擋外部探測，同時保留共享服務。
-                • 🔴 最大鎖定（關閉共享與 AirDrop）：咖啡廳、公共 Wi-Fi、未註冊的網路。封鎖所有連入連線、停止共享常駐程式、停用 AirDrop。
+                • 🔴 最大鎖定（關閉共享與 AirDrop）：咖啡廳、公共 Wi-Fi、未註冊的網路。封鎖所有連入連線、停止檔案共享與螢幕共享、停用 AirDrop。遠端登入（SSH）不會停止，由防火牆拒絕來自其他裝置的連線。
                 • 判斷方式：網路變更時會讀取閘道的 MAC 位址並與已註冊網路比對。不會改變閘道的路徑事件（DHCP 更新、Wi-Fi 漫遊）不會觸發完整重新判斷。
                 • 內部運作：特權輔助工具 `RoamSwitchHelper`（透過 XPC）管理專用的 `pfctl` 錨點，封包會在核心層級被丟棄。
                 • 手動覆蓋：可在「手動覆蓋」中為每個等級選擇「直到網路中斷（推薦）」「僅 1 小時」「僅 4 小時」或「直到手動解除」（參見 set_manual_override）。
-                • 依本機狀態降級（Pro，預設開啟）：即使處於登錄為「信任（開放）」的網路，只要本機記錄有入侵跡象，就維持在標準保護。跡象是指勒索軟體（誘餌檔案、熵）、與 XProtect 連動的執行階段威脅、憑證蜜罐權杖、瀏覽器憑證、反向 Shell 或處理程序執行記錄器中重要度為 high 以上、且發生在最近 6 小時內的記錄（時間窗可用 `defaults write com.tetsuharu.RoamSwitch RoamSwitch.DevicePosture.WindowHours -int N` 設為 1～72 小時）。由人以「解除」或「允許」關閉的記錄不計入。ARP、網路設定、SSH 暴力破解、連接埠異常與 ClickFix 並非本機遭入侵，因此不計入。只降到標準保護，不會降到最大鎖定；手動覆蓋期間與 Air-Gap 期間不會變更。每分鐘以及記錄增加時重新檢查，降級與恢復時各通知一次。按選單中的「已確認（恢復信任）」後，此前的跡象不再計入，並立即恢復。可透過選單中的「存在入侵跡象時，將信任網路維持在標準保護 (Pro)」關閉。
+                • 依本機狀態降級（Pro，預設開啟）：即使處於登錄為「信任（開放）」的網路，只要本機記錄有入侵跡象，就維持在標準保護。跡象是指勒索軟體（誘餌檔案、熵）、與 XProtect 連動的執行階段威脅、憑證蜜罐權杖、瀏覽器憑證、反向 Shell、處理程序執行記錄器或自動啟動項目（LaunchAgent/Daemon、Shell 啟動檔案等）中重要度為 high 以上、且發生在最近 6 小時內的記錄（時間窗可用 `defaults write com.tetsuharu.RoamSwitch RoamSwitch.DevicePosture.WindowHours -int N` 設為 1～72 小時）。由人以「解除」或「允許」關閉的記錄不計入。ARP、網路設定、SSH 暴力破解、連接埠異常與 ClickFix 並非本機遭入侵，因此不計入。只降到標準保護，不會降到最大鎖定；手動覆蓋期間與 Air-Gap 期間不會變更。每分鐘以及記錄增加時重新檢查，降級與恢復時各通知一次。按選單中的「已確認（恢復信任）」後，此前的跡象不再計入，並立即恢復。可透過選單中的「存在入侵跡象時，將信任網路維持在標準保護 (Pro)」關閉。
+                • 切換通知：防護級別改變時（包括手動固定和最大鎖定），會通知原級別、新級別和原因（手動、已登記網路、未登記網路、未連線），並保留在通知歷史中。重複套用同一級別以及啟動後的首次套用不會通知。依本機狀態的降級與恢復使用上面的專用通知。
                 """,
                 recommendation: "透過「已註冊網路」把住家與其他安全的辦公室註冊起來，其餘場所讓最大鎖定自動套用即可。"
             ),
@@ -358,7 +359,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • 誘餌檔案：`~/Library/Application Support/RoamSwitch/CanaryGuard/` 中有四個，另外在文稿、桌面、下載項目與圖片資料夾中有以 `.roamswitch_security_canary_do_not_delete` 開頭的隱藏檔案。每個檔案的 SHA-256 會被記錄為基準值。
                 • 偵測方式：結合即時 kqueue 監控與每 60 秒的定期檢查。每個檔案有 10 秒的冷卻時間，避免同一波事件被重複處理。過去 60 秒內遭修改的真實檔案也會被記錄為可能受影響。
-                • 自動回應：（1）套用「應用程式防火牆」鎖定 （2）氣隙圍堵（pf 封鎖所有流量並關閉 Wi-Fi 無線電，feat_airgap_containment） （3）停止共享服務（SMB / SSH / 螢幕共享） （4）以 SIGSTOP 暫停可疑程序而非強制結束 （5）發出緊急警示並顯示最前端的緊急視窗。
+                • 自動回應：（1）套用「應用程式防火牆」鎖定 （2）氣隙圍堵（pf 封鎖所有流量並關閉 Wi-Fi 無線電，feat_airgap_containment） （3）停止共享服務（SMB / 螢幕共享） （4）以 SIGSTOP 暫停可疑程序而非強制結束 （5）發出緊急警示並顯示最前端的緊急視窗。隔離期間遠端登入（SSH）不會停止，由 pf 的全面封鎖丟棄來自其他裝置的連線。
                 • 為何暫停而非結束：網路已經被切斷，因此暫停的程序無法造成進一步損害。若確認是誤判，解除時會以 SIGCONT 恢復該程序，不會遺失任何資料。
                 • 找回檔案：緊急視窗會顯示指向 No More Ransom 與日本警察廳頁面（兩者彙整了免費解密工具）的連結，以及前者的 QR 碼（隔離期間這台 Mac 無法開啟）。只有部分已被分析清楚的勒索軟體才有解密工具，RoamSwitch 本身不會解密檔案。
                 • 解除時：網路與 Wi-Fi 會恢復，暫停的程序會被恢復執行，遭竄改的誘餌檔案也會重新產生。
@@ -427,6 +428,8 @@ extension RoamSwitchKnowledgeBase {
                 • 關聯規則（僅通知，預設保持安靜，每條規則都有固定 ID 和 MITRE ATT&CK 技術編號）：瀏覽器/Office/郵件 App 直接啟動 Shell 或指令碼直譯器（exec.shell_from_app，T1059）；從 /tmp、/private/var/tmp、/var/folders 下的暫存資料夾、/Users/Shared 或帶隔離屬性的位置執行未簽署/臨時簽署的二進位檔（exec.untrusted_location，T1204.002）；將 curl/wget 傳給 Shell 的 `sh -c` 單行指令，並伴有 IP 直連 URL、base64、eval、關閉 TLS 驗證或瀏覽器作為父程序等加重因素（exec.pipe_to_shell，T1059.004）；`osascript -e` 把 do shell script 與 base64/eval 結合（exec.osascript_obfuscated，T1059.002）；`xattr -d com.apple.quarantine` 之後 15 分鐘內執行該檔案（exec.quarantine_stripped_then_exec，T1553.001）；launchd 從最近 24 小時內寫入的 LaunchAgent/LaunchDaemon 啟動未簽署/臨時簽署的二進位檔（exec.launchd_untrusted_binary，T1543.001/.004）；在非 Shell 且非 Apple 簽署的祖先程序之下執行 `security find-generic-password -w` 或 `dump-keychain`（exec.keychain_access，T1555.001）；osascript 以外的裸直譯器執行內嵌的 `-c`/`-e`/`-Command` 單行程式碼，並將 base64/eval 與下載或類似 exec 的呼叫結合（exec.interpreter_inline_obfuscated，T1059）；設定了 DYLD_INSERT_LIBRARIES 的非 Apple 簽署二進位檔被執行（exec.dyld_insert_libraries，T1574.006）；既非 RoamSwitch 自身也非 Apple 程序執行的 `tmutil deletelocalsnapshots`/`thinlocalsnapshots`（exec.ransomware_recovery_tampering，T1490）；指令列直接指定 RoamSwitch 放置的誘餌憑證檔案（如 ~/.aws/credentials、~/.env.backup，內容中帶有標記；真實檔案不會符合，透過函式庫讀取的情況由蜜罐權杖監視負責）（exec.honeytoken_path，T1552.001）。另有兩條規則針對由腳本或 AI 代理驅動的攻擊工具鏈（例如 HexStrike AI 後端）：一個行程在 30 秒內以 which/type 連續查詢 8 種以上不同的滲透測試工具（exec.offensive_tool_inventory，T1595），以及腳本執行環境或 AI 程式設計代理在 2 分鐘內啟動 3 種以上此類不同工具（exec.offensive_tool_burst，T1595）。人在終端機裡輸入相同的指令不會被標記。在「終端機」裡正常輸入的 `curl | sh` 不會被刻意標記。 寫在 `sh -c` 指令列中，或直接啟動的 nc、ncat、socat 指令列中的反向 Shell（含綁定 Shell）形態也會被標記（exec.reverse_shell_argv，T1059.004）：攜帶 Shell 的 /dev/tcp、/dev/udp 重新導向，把 mkfifo 管線接到 nc、telnet、openssl s_client 或 ssh 的形態，`nc -e <Shell>`，socat 的 exec:<Shell>，以及透過管線交給 Shell 的 openssl s_client。`echo > /dev/tcp/host/22` 這類連接埠探測，以及僅在文字中提到這些指令的內容不會被標記。
                 • 服務帳號啟動的 Shell（exec.shell_from_service，T1505.003）：當 Web 伺服器或應用程式服務程序（httpd、nginx、php-fpm、java、tomcat、gunicorn、uwsgi、node 等）以服務帳號（macOS 內建 Apache 的 `_www`、MacPorts 的 `www` 等）直接啟動 Shell（sh、bash、zsh 等），或 python、perl、ruby、node 的 -c / -e 單行指令時發出通知。這是 Web Shell 執行指令時的典型形態。帳號和服務程序兩者都符合才會偵測，因此以自己的帳號執行的開發伺服器、apachectl、brew services 和 cron 不會通知。要新增帳號，請執行 `defaults write com.tetsuharu.RoamSwitch RoamSwitch.ExecRule.ServiceUsers "名稱,名稱"`，然後重新啟動 App，或先關閉再重新開啟程序執行記錄（設定只是向清單新增，`_www` 不會被移除）。`_mysql`、`_postgres` 等資料庫帳號不在預設範圍內，因為資料庫本身會啟動 Shell（例如 archive_command）。不啟動程式、直接在 Web 伺服器程序內部執行程式碼的 Web Shell 無法偵測到。
                 • AI 程式設計代理之下向外傳送的資料（exec.agent_sensitive_send 與 exec.agent_sensitive_then_send，T1048）：當 AI 程式設計代理（claude、codex、gemini、opencode、aider、goose、cursor-agent、openclaw、qwen、crush）啟動的傳輸程式傳送了不應離開這台 Mac 的檔案（SSH 與雲端金鑰、.env 檔案、代理自身的登入檔案、瀏覽器資料、Shell 歷史；不含 .env.example、公開金鑰與 .pem 檔案），或引數中帶有疑似機密的值時，發出通知。傳輸程式包括帶內容或上傳的 curl 與 wget、scp、sftp、rsync、rclone、s3cmd、mc、寫入 s3:// 的 aws s3 cp/mv/sync 與 aws s3api put-object、寫入 gs:// 的 gsutil 與 gcloud storage、az storage blob upload、nc、ncat、socat、telnet 與 ftp。傳送檔案為高嚴重度（顯示橫幅）；僅有疑似機密的值為中（只記錄）。第二條規則（中）：同一代理之下的指令讀取了此類檔案，且 5 分鐘內出現傳送，即使傳送指令沒有寫出檔名（cat ~/.aws/credentials 之後 curl -d @-）也會通知。Authorization 標頭不算洩漏，一般的 curl GET 也不算傳送。限制：只能看到代理作為程序啟動的指令。代理自身的檔案讀取、傳給模型提供者的內容、git push、自行開啟 socket 的指令碼執行環境（python -c、node -e）都看不到；拆分或編碼後的引數可能繞過偵測；程序名稱為 node 的代理無法辨識。僅通知，不會隔離網路。
+                • 沒有終端機的 ssh 通道（exec.ssh_remote_forward，T1572）：當 ssh 要求遠端（-R、RemoteForward）或動態（-D、DynamicForward）轉送，且該程序沒有終端機（macOS 回報沒有控制終端機）或由 launchd 直接啟動時，以中嚴重度通知(此規則在中嚴重度下也會顯示橫幅;不會觸發 Air-Gap 或連接埠阻斷)。遠端轉送會讓外部的人透過這台 Mac 自己建立的連線，進入這台 Mac 或其後方的網路；只阻擋傳入連線的防火牆看不到它。在終端機中由人輸入的 ssh -R 有終端機，不會通知。本機轉送（-L）不在範圍內。限制：ssh 以外的通道（chisel、frp、ngrok 等），以及只寫在 ~/.ssh/config 中的 RemoteForward（不會出現在命令列中），此規則看不到。從其他機器透過 SSH 登入這台 Mac 的人所要求的 -R，不會在這台 Mac 上啟動程式，因此此規則看不到；連接埠異常防護(Pro)會根據該工作階段程序(sshd-session)開啟的監聽(包括 127.0.0.1 上的)發出通知。
+                • 相同偵測的重複：同一規則、同一程式、同一父程序的偵測，從第一次起 5 分鐘內不再通知。仍會記錄，並在事件時間軸中加上「（5 分鐘內相同偵測的重複，未通知）」保留。這 5 分鐘內，同一偵測最多保留 20 筆。
                 • 通知：一則通知（Pro）加上事件時間軸中的一筆記錄（來源 execRecorder，處置「僅通知」）。通知本身絕不會觸發 Air-Gap 等隔離。
                 • 儲存：分段的 JSON Lines，位於 /Library/Application Support/RoamSwitch/exec_log（僅 root 可讀：0700/0600，因為命令列可能包含機密；App、檢視器與 MCP 伺服器只能透過具權限的 Helper 讀取），預設 200 MB·14 天（可變更），當機安全的輪替。各分段以雜湊鏈相連，可發現被刪除、編輯或截斷的分段（「驗證雜湊鏈」）；這是竄改偵測，而非竄改防護。不會記錄環境變數，但命令列引數中可能包含敏感資訊。
                 • 負載控制：有界佇列，過載時丟棄最舊的行（計數並顯示），指數退避重新啟動，關閉後 eslogger 會被完全停止。
@@ -615,6 +618,7 @@ extension RoamSwitchKnowledgeBase {
                 • 保留期限：7 天；每次記錄新項目時，會自動清除較舊的項目。
                 • 內容：時間、標題與內文，包含威脅警示、連結保護連線事件、ClickFix 與機密金鑰偵測，以及自動斷網事件。
                 • EICAR 測試特徵碼：這個無害的業界測試檔並非真正的威脅，因此不會被隔離或封鎖，也不會顯示橫幅；只會被記錄於此。無論是下載保護、快速掃描或排程掃描皆是如此。
+                • 語言：標題和內文以 App 目前選擇的語言顯示，而不是記錄當時的語言。防護級別的切換和看門狗自動重新啟動的通知也會保留。在支援此功能之前記錄的通知維持記錄當時的語言。
                 • AI 助理可透過 MCP 工具 `get_notification_history` 讀取此記錄。
                 """,
                 recommendation: "若在外出或忙碌時錯過了通知，可在此處查看。"
@@ -1073,6 +1077,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • 原因：設定或環境的變化，例如關閉 FileVault 或防火牆、公開了危險的連接埠，或某項防護被停用。
                 • 判斷條件：分數低於 80，或未通過項目達 4 個以上。
+                • 通知頻率：狀態不變期間，不會在每次啟動或每 4 小時的診斷時重複通知。出現新的未通過項目、分數低於上次通知時，或每天一次時才會通知。狀態恢復後重新計算。
                 """,
                 recommendation: """
                 1. 從選單開啟稽核報告（或使用 MCP 工具 `get_security_report`）。
@@ -1147,7 +1152,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "當誘餌（canary）檔案遭修改、刪除或重新命名，並已觸發氣隙圍堵、共享服務關閉與暫停可疑程序時，所顯示的緊急通知與緊急視窗。",
                 details: """
                 • 原因：類似勒索軟體的程序試圖加密或破壞您使用者資料夾中的檔案（或執行模擬測試）。
-                • 自動防禦：切斷所有流量並關閉 Wi-Fi 無線電、停止 SMB / SSH / 螢幕共享，並暫停（SIGSTOP）可疑程序。緊急視窗會顯示斷網是否成功、可疑程序，以及可能受影響的檔案。
+                • 自動防禦：切斷所有流量並關閉 Wi-Fi 無線電、停止 SMB / 螢幕共享，並暫停（SIGSTOP）可疑程序。緊急視窗會顯示斷網是否成功、可疑程序，以及可能受影響的檔案。隔離期間遠端登入（SSH）不會停止，由 pf 的全面封鎖丟棄來自其他裝置的連線。
                 """,
                 recommendation: """
                 1. 儲存目前正在編輯的檔案，並結束所有可疑的應用程式。

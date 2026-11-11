@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.27 (build 206).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.29 (build 208).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -70,6 +70,11 @@ public enum ContainmentIncidentSource: String, Codable {
     /// air-gapped. Always maps to T1219 (Remote Access Software). Added
     /// additively, same as the cases above.
     case rmmInstallerUnofficialSource
+    /// `PersistenceMonitorGuard`: a new LaunchAgent/LaunchDaemon that looks illegitimate, or a suspicious line in a
+    /// file run at start-up (shell start-up files, periodic scripts, hooks, Folder Actions, Python start-up files).
+    /// The Mac counterpart of the Linux edition's `Persistence`, and like it a sign for `DevicePosture`. The callers
+    /// pass the technique. Added additively, same as the cases above.
+    case persistence
 }
 
 /// What a ransomware canary actually observed, as a stable identifier —
@@ -115,6 +120,28 @@ public struct ContainmentEvidenceRef: Codable, Equatable {
     }
 }
 
+/// The kind of sentence a record's `summary` is, and its values, so a reader can write the sentence in the language it
+/// shows now instead of the one in use when the record was made. The same shape as the Linux edition's `summary_code`
+/// (`{"code": "...", "args": {...}}`). `code` is a fixed dotted name, never translated; the values are copied as they
+/// were (paths, addresses, process names: text from the system or from an attacker, never interpreted).
+public struct ContainmentSummaryCode: Codable, Equatable {
+    public let code: String
+    public let args: [String: String]
+
+    public init(_ code: String, _ args: [String: String] = [:]) {
+        self.code = code
+        self.args = args
+    }
+
+    private enum CodingKeys: String, CodingKey { case code, args }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        code = try c.decode(String.self, forKey: .code)
+        args = try c.decodeIfPresent([String: String].self, forKey: .args) ?? [:]
+    }
+}
+
 public struct ContainmentIncidentEvent: Identifiable, Codable, Equatable {
     public let id: UUID
     public let timestamp: Date
@@ -139,6 +166,15 @@ public struct ContainmentIncidentEvent: Identifiable, Codable, Equatable {
     public var rootEventID: UUID?
     /// Evidence saved for this record (at most `ContainmentIncidentTimeline.maxEvidenceRefs`).
     public var evidenceRefs: [ContainmentEvidenceRef]
+    /// What `summary` says, without a language (see `ContainmentSummaryCode`). `nil` on records written before it
+    /// existed and on records whose text has no fixed form; those are shown as stored.
+    public var summaryCode: ContainmentSummaryCode?
+
+    /// The summary in the language shown now: written from `summaryCode` when it is a code this build knows,
+    /// otherwise the stored text.
+    public var displaySummary: String {
+        summaryCode.flatMap { ContainmentSummaryText.text(for: $0) } ?? summary
+    }
 
     public init(
         id: UUID = UUID(),
@@ -154,7 +190,8 @@ public struct ContainmentIncidentEvent: Identifiable, Codable, Equatable {
         resolution: ContainmentIncidentResolution? = nil,
         parentEventID: UUID? = nil,
         rootEventID: UUID? = nil,
-        evidenceRefs: [ContainmentEvidenceRef] = []
+        evidenceRefs: [ContainmentEvidenceRef] = [],
+        summaryCode: ContainmentSummaryCode? = nil
     ) {
         self.id = id
         self.timestamp = timestamp
@@ -170,13 +207,14 @@ public struct ContainmentIncidentEvent: Identifiable, Codable, Equatable {
         self.parentEventID = parentEventID
         self.rootEventID = rootEventID
         self.evidenceRefs = evidenceRefs
+        self.summaryCode = summaryCode
     }
 
     // The three link fields are newer than the file format: a file written before them has none of the keys, and a
     // record without links is written without them, so an older build reads the file as before.
     private enum CodingKeys: String, CodingKey {
         case id, timestamp, source, severity, summary, processName, processID, attackTechnique, actionTaken
-        case resolvedAt, resolution, parentEventID, rootEventID, evidenceRefs
+        case resolvedAt, resolution, parentEventID, rootEventID, evidenceRefs, summaryCode
     }
 
     public init(from decoder: Decoder) throws {
@@ -195,6 +233,8 @@ public struct ContainmentIncidentEvent: Identifiable, Codable, Equatable {
         parentEventID = try c.decodeIfPresent(UUID.self, forKey: .parentEventID)
         rootEventID = try c.decodeIfPresent(UUID.self, forKey: .rootEventID)
         evidenceRefs = try c.decodeIfPresent([ContainmentEvidenceRef].self, forKey: .evidenceRefs) ?? []
+        // A code this build cannot read (a damaged entry) leaves the record readable with its stored text.
+        summaryCode = (try? c.decodeIfPresent(ContainmentSummaryCode.self, forKey: .summaryCode)) ?? nil
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -213,6 +253,7 @@ public struct ContainmentIncidentEvent: Identifiable, Codable, Equatable {
         try c.encodeIfPresent(parentEventID, forKey: .parentEventID)
         try c.encodeIfPresent(rootEventID, forKey: .rootEventID)
         if !evidenceRefs.isEmpty { try c.encode(evidenceRefs, forKey: .evidenceRefs) }
+        try c.encodeIfPresent(summaryCode, forKey: .summaryCode)
     }
 }
 
@@ -350,7 +391,8 @@ public enum ContainmentIncidentTimeline {
         attackTechnique: String? = nil,
         actionTaken: String,
         parentEventID: UUID? = nil,
-        evidenceRefs: [ContainmentEvidenceRef] = []
+        evidenceRefs: [ContainmentEvidenceRef] = [],
+        summaryCode: ContainmentSummaryCode? = nil
     ) -> UUID {
         var event = ContainmentIncidentEvent(
             source: source,
@@ -361,7 +403,8 @@ public enum ContainmentIncidentTimeline {
             attackTechnique: attackTechnique ?? Self.attackTechnique(for: source, context: summary),
             actionTaken: actionTaken,
             parentEventID: parentEventID,
-            evidenceRefs: evidenceRefs
+            evidenceRefs: evidenceRefs,
+            summaryCode: summaryCode
         )
         queue.sync {
             var events = loadAll()
@@ -375,6 +418,25 @@ public enum ContainmentIncidentTimeline {
         recordObserver?(event)
         changeHook?()
         return event.id
+    }
+
+    /// Records an incident whose summary has a fixed form: `summary` is `code` written in the language shown now, and
+    /// the code is stored with it so readers can write it again in theirs.
+    @discardableResult
+    public static func record(
+        source: ContainmentIncidentSource,
+        severity: String,
+        code: ContainmentSummaryCode,
+        processName: String? = nil,
+        processID: Int32? = nil,
+        attackTechnique: String? = nil,
+        actionTaken: String,
+        parentEventID: UUID? = nil,
+        evidenceRefs: [ContainmentEvidenceRef] = []
+    ) -> UUID {
+        record(source: source, severity: severity, summary: ContainmentSummaryText.text(for: code) ?? code.code,
+               processName: processName, processID: processID, attackTechnique: attackTechnique, actionTaken: actionTaken,
+               parentEventID: parentEventID, evidenceRefs: evidenceRefs, summaryCode: code)
     }
 
     /// Adds `refs` to the evidence of the record with `id` (duplicates and anything past `maxEvidenceRefs` are skipped).
@@ -488,10 +550,200 @@ public enum ContainmentIncidentTimeline {
             return "T1557" // Adversary-in-the-Middle — current callers always pass this explicitly anyway
         case .rmmInstallerUnofficialSource:
             return "T1219" // Remote Access Software — current callers always pass this explicitly anyway
-        case .runtimeThreat, .portAnomaly, .clickFix, .execRecorder, .vulnerabilityAcceptance, .criticalPathFim, .forensicCapture:
+        case .runtimeThreat, .portAnomaly, .clickFix, .execRecorder, .vulnerabilityAcceptance, .criticalPathFim, .forensicCapture,
+             .persistence:
             // XProtect/Gatekeeper/port-anomaly summaries don't carry a
             // Falco-style rule name to pattern-match on macOS, so this
             // stays unmapped rather than guessing.
+            return nil
+        }
+    }
+}
+
+/// Writes a `ContainmentSummaryCode` as a sentence in the language shown now. Every code here has the same sentence as
+/// the text its writer stores in `summary`, so a record reads the same in the language it was made in. A code this
+/// build does not know, or one that lacks a value it needs, gives `nil`: the reader then shows the stored text.
+///
+/// The codes are the Mac edition's own. None reuses a Linux `summary_code` name, because their values differ.
+public enum ContainmentSummaryText {
+    /// The title of an exec-recorder rule by its id. Set by the app (the rule titles live there); the targets that only
+    /// read the timeline (the MCP server) leave it `nil` and show the stored text for those records.
+    public static var execRuleTitle: ((String) -> String?)?
+
+    // MARK: Codes (the writers use these, so a name or value is never spelled twice)
+
+    public static func browserCredentialAccess(file: String) -> ContainmentSummaryCode {
+        ContainmentSummaryCode("browser_credential.access", ["file": file])
+    }
+    public static func vulnAcceptanceExpired(package: String, version: String, cve: String, reason: String) -> ContainmentSummaryCode {
+        ContainmentSummaryCode("vuln_acceptance.expired", ["package": package, "version": version, "cve": cve, "reason": reason])
+    }
+    public static func networkSettingsChanged(savedDNSOnly: Bool) -> ContainmentSummaryCode {
+        ContainmentSummaryCode(savedDNSOnly ? "network_settings.saved_dns_added" : "network_settings.changed")
+    }
+    public static let portScanSaturated = ContainmentSummaryCode("port_scan.saturated")
+    public static func portScanIncoming(source: String) -> ContainmentSummaryCode {
+        ContainmentSummaryCode("port_scan.incoming", ["source": source])
+    }
+    public static let airGapDegraded = ContainmentSummaryCode("air_gap.degraded")
+    public static func evidenceBundleSaved(bundle: String) -> ContainmentSummaryCode {
+        ContainmentSummaryCode("forensic.bundle_saved", ["bundle": bundle])
+    }
+    public static func sigmaRuleMatch(title: String, process: String) -> ContainmentSummaryCode {
+        ContainmentSummaryCode("sigma.rule_match", ["title": title, "process": process])
+    }
+    public enum SSHKind: String { case banned = "ssh_guard.source_banned", detected = "ssh_guard.source_detected",
+                                       loginAfterFailures = "ssh_guard.source_login_after_failures" }
+    public static func ssh(_ kind: SSHKind, source: String) -> ContainmentSummaryCode {
+        ContainmentSummaryCode(kind.rawValue, ["source": source])
+    }
+    public static func gatewayMACChanged(previous: String, current: String) -> ContainmentSummaryCode {
+        ContainmentSummaryCode("arp_spoof.gateway_mac_changed", ["previous": previous, "current": current])
+    }
+    public static func honeytokenCascade(path: String) -> ContainmentSummaryCode {
+        ContainmentSummaryCode("honeytoken.cascade_deployed", ["path": path])
+    }
+    public static func honeytokenAccess(kind: String, path: String) -> ContainmentSummaryCode {
+        ContainmentSummaryCode("honeytoken.access", ["kind": kind, "path": path])
+    }
+    public static func persistence(path: String) -> ContainmentSummaryCode {
+        ContainmentSummaryCode("persistence.suspicious", ["path": path])
+    }
+    public static func exposedPort(_ port: Int, udp: Bool) -> ContainmentSummaryCode {
+        ContainmentSummaryCode(udp ? "port_anomaly.udp_exposed" : "port_anomaly.tcp_exposed", ["port": String(port)])
+    }
+    /// A listener an SSH session into this Mac opened (`ssh -R` from the other side). `address`: `127.0.0.1:8080`.
+    public static func sshForwardListener(address: String, process: String, pid: Int) -> ContainmentSummaryCode {
+        ContainmentSummaryCode("port_anomaly.ssh_forward_listener", ["address": address, "process": process, "pid": String(pid)])
+    }
+    /// `repeated`: the same rule, program and parent less than five minutes after a notified alert (recorded, not notified).
+    public static func execRule(_ ruleID: String, process: String, repeated: Bool = false) -> ContainmentSummaryCode {
+        var args = ["rule": ruleID, "process": process]
+        if repeated { args["repeated"] = "1" }
+        return ContainmentSummaryCode("exec.rule", args)
+    }
+    public static func reverseShell(process: String, peer: String) -> ContainmentSummaryCode {
+        ContainmentSummaryCode("reverse_shell.suspected", ["process": process, "peer": peer])
+    }
+    public static func canary(_ trigger: RansomwareCanaryTrigger) -> ContainmentSummaryCode {
+        ContainmentSummaryCode("canary.triggered", ["trigger": trigger.rawValue])
+    }
+    /// `average` / `window`: the entropy figures, kept with two decimals as the sentence shows them.
+    public static func entropyBurst(files: Int, average: Double?, window: Double?) -> ContainmentSummaryCode {
+        var args = ["files": String(files)]
+        if let average { args["average"] = String(format: "%.2f", average) }
+        if let window { args["window"] = String(format: "%.2f", window) }
+        return ContainmentSummaryCode("ransomware.entropy_files", args)
+    }
+    public enum ClickFixPattern: String { case known, base64Osascript = "base64_osascript", base64PipeShell = "base64_pipe_shell",
+                                              base64ShellRun = "base64_shell_run" }
+    /// `name`: the signature name, for `.known` only.
+    public static func clickFix(_ pattern: ClickFixPattern, name: String? = nil) -> ContainmentSummaryCode {
+        ContainmentSummaryCode("clickfix.pattern", name.map { ["pattern": pattern.rawValue, "name": $0] } ?? ["pattern": pattern.rawValue])
+    }
+    /// Files under /etc/pam.d that the first scan on a new macOS build took into the baseline.
+    public static func pamRebaselined(_ paths: [String]) -> ContainmentSummaryCode {
+        ContainmentSummaryCode("fim.pam_rebaselined", ["files": paths.joined(separator: "\n")])
+    }
+    /// An accepted baseline: `entries` are (kind, path) with kind `changed` / `deleted` / `new`; `more` files were left out.
+    public static func fimBaselineAccepted(entries: [(kind: String, path: String)], more: Int) -> ContainmentSummaryCode {
+        var args = ["entries": entries.map { $0.kind + "\t" + $0.path }.joined(separator: "\n")]
+        if more > 0 { args["more"] = String(more) }
+        return ContainmentSummaryCode("fim.baseline_accepted", args)
+    }
+
+    // MARK: Writing the sentence
+
+    /// `localeCode`: the language to write in (one of `AppLanguage`'s raw values); the shown one when left out.
+    public static func text(for c: ContainmentSummaryCode, localeCode: String? = nil) -> String? {
+        let lang = localeCode ?? AppLanguage.activeLocaleCode
+        let a = c.args
+        func f(_ key: String, _ names: [String]) -> String? {
+            var values: [CVarArg] = []
+            for n in names { guard let v = a[n] else { return nil }; values.append(v) }
+            return locFormat(key, localeCode: lang, arguments: values)
+        }
+        switch c.code {
+        case "browser_credential.access": return f("ブラウザ認証情報ストア(%@)への不審なアクセスを検知", ["file"])
+        case "vuln_acceptance.expired":
+            return f("脆弱性の受容が期限切れになりました: %@ %@ の %@。再び要対応として表示します。受容した理由: %@", ["package", "version", "cve", "reason"])
+        case "network_settings.changed": return loc("ネットワーク設定の変化を検知(DNS・ルーター・プロキシ)", localeCode: lang)
+        case "network_settings.saved_dns_added": return loc("保存されたDNSサーバーに、新しいものが加わりました", localeCode: lang)
+        case "port_scan.saturated": return loc("SYNの大量受信で、ポートスキャンの検知が飽和しました", localeCode: lang)
+        case "port_scan.incoming": return f("着信ポートスキャンを検知: %@", ["source"])
+        case "air_gap.degraded": return loc("Air-Gapを全遮断から縮退モードへ移行（原因の解消を確認できなかったため）", localeCode: lang)
+        case "forensic.bundle_saved": return f("証拠バンドルを保存しました: %@", ["bundle"])
+        case "sigma.rule_match":
+            guard let title = a["title"], let process = a["process"] else { return nil }
+            return locFormat("Sigmaルールに一致: %@", localeCode: lang, title + " — " + process)
+        case SSHKind.banned.rawValue: return f("SSH総当たりを検知し遮断: %@", ["source"])
+        case SSHKind.detected.rawValue: return f("SSH総当たりを検知: %@", ["source"])
+        case SSHKind.loginAfterFailures.rawValue: return f("失敗を重ねたSSH送信元からログイン成功: %@", ["source"])
+        case "arp_spoof.gateway_mac_changed": return f("ゲートウェイMACが %@ から %@ に変化", ["previous", "current"])
+        case "honeytoken.cascade_deployed": return f("囮への実際のアクセスを受け、関連する囮を追加で配置しました: %@", ["path"])
+        case "honeytoken.access": return f("ハニートークン(%@)へのアクセスを検知: %@", ["kind", "path"])
+        case "persistence.suspicious": return f("不審な自動起動の登録: %@", ["path"])
+        case "port_anomaly.tcp_exposed", "port_anomaly.udp_exposed":
+            guard let port = a["port"].flatMap(Int.init) else { return nil }
+            // A port number is not a count: no grouping ("8080", not "8,080").
+            return String(format: loc(c.code == "port_anomaly.udp_exposed" ? "UDPポート %d の外部公開を検知" : "ポート %d の外部公開を検知", localeCode: lang), port)
+        case "port_anomaly.ssh_forward_listener":
+            // Not through locFormat: the PID and the port are not counts ("8080", not "8,080").
+            guard let address = a["address"], let process = a["process"], let pid = a["pid"] else { return nil }
+            return String(format: loc("SSH の接続が開いた待ち受け: %1$@ (%2$@、PID %3$@)", localeCode: lang), address, process, pid)
+        case "exec.rule":
+            guard let rule = a["rule"], let process = a["process"], let title = execRuleTitle?(rule) else { return nil }
+            guard a["repeated"] == "1" else { return title + " — " + process }
+            return title + " — " + process + " " + loc("(5分以内の同じ検知の繰り返し。通知はしていません)", localeCode: lang)
+        case "reverse_shell.suspected": return f("リバースシェルの疑い: %1$@ が %2$@ に接続", ["process", "peer"])
+        case "canary.triggered":
+            switch a["trigger"].flatMap(RansomwareCanaryTrigger.init(rawValue:)) {
+            case .deletedOrRenamed: return loc("不審なファイルの削除または拡張子改ざんを検知", localeCode: lang)
+            case .tampered: return loc("不審なファイル暗号化・改ざんの活動を検知", localeCode: lang)
+            case nil: return nil
+            }
+        case "ransomware.entropy_files":
+            guard let files = a["files"].flatMap(Int.init) else { return nil }
+            let average = a["average"].flatMap(Double.init)
+            let window = a["window"].flatMap(Double.init)
+            switch (average, window) {
+            case (let average?, let window?):
+                return locFormat("%d件のファイルで高エントロピー(暗号化済みの疑いがある)な書き込みを検知しました(全体で判定したファイルの平均エントロピー %.2f、一部分だけで判定したファイルの最も高い窓 %.2f)", localeCode: lang, files, average, window)
+            case (nil, let window?):
+                return locFormat("%d件のファイルで、一部分が高エントロピー(暗号化済みの疑いがある)な書き込みを検知しました(最も高い窓のエントロピー %.2f)", localeCode: lang, files, window)
+            case (let average, nil):
+                return locFormat("%d件のファイルで高エントロピー(暗号化済みの疑いがある)な書き込みを検知しました(平均エントロピー %.2f)", localeCode: lang, files, average ?? 0.0)
+            }
+        case "clickfix.pattern":
+            switch a["pattern"].flatMap(ClickFixPattern.init(rawValue:)) {
+            case .known: return f("既知の不審コマンドパターン(%@)", ["name"])
+            case .base64Osascript: return loc("Base64デコードした内容をosascriptに直接渡す実行パターン(ClickFix典型手口)", localeCode: lang)
+            case .base64PipeShell: return loc("Base64デコードした内容をシェルに直接パイプする実行パターン(ClickFix典型手口)", localeCode: lang)
+            case .base64ShellRun: return loc("Base64デコードした内容をシェルに直接渡して実行するパターン(ClickFix典型手口)", localeCode: lang)
+            case nil: return nil
+            }
+        case "fim.pam_rebaselined":
+            guard let files = a["files"], !files.isEmpty else { return nil }
+            return locFormat("macOSの更新のあと、/etc/pam.d の次のファイルを基準に取り込みました: %@", localeCode: lang,
+                             files.split(separator: "\n").joined(separator: ", "))
+        case "fim.baseline_accepted":
+            guard let entries = a["entries"] else { return nil }
+            var parts: [String] = []
+            for line in entries.split(separator: "\n") {
+                let pieces = line.split(separator: "\t", maxSplits: 1).map(String.init)
+                guard pieces.count == 2 else { return nil }
+                let kind: String
+                switch pieces[0] {
+                case "changed": kind = loc("変更", localeCode: lang)
+                case "deleted": kind = loc("削除", localeCode: lang)
+                case "new": kind = loc("新規追加", localeCode: lang)
+                default: return nil
+                }
+                parts.append("\(pieces[1]) (\(kind))")
+            }
+            if let more = a["more"].flatMap(Int.init) { parts.append(locFormat("他%d件", localeCode: lang, more)) }
+            return locFormat("重要ファイルの基準を更新(%@)", localeCode: lang, parts.joined(separator: ", "))
+        default:
             return nil
         }
     }

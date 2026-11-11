@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.27 (build 206).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.29 (build 208).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -93,10 +93,19 @@ final class NetworkHistoryGuard {
     /// Decodes the history file directly, without touching `shared` (whose
     /// `observe` writes). Missing/corrupt file → empty snapshot.
     static func readSnapshot(from url: URL? = nil) -> (entries: [HistorySnapshotEntry], lookalikes: [LookalikePair]) {
-        guard let fileURL = url ?? defaultStoreURL(),
-              let data = try? Data(contentsOf: fileURL),
-              let records = try? JSONDecoder().decode([String: SSIDRecord].self, from: data) else {
-            return ([], [])
+        let read = readSnapshotState(from: url)
+        return (read.entries, read.lookalikes)
+    }
+
+    /// `readSnapshot`, and whether the file is there but could not be read (the snapshot is then empty because
+    /// nothing was read).
+    static func readSnapshotState(from url: URL? = nil) -> (entries: [HistorySnapshotEntry], lookalikes: [LookalikePair], unreadable: Bool) {
+        guard let fileURL = url ?? defaultStoreURL() else { return ([], [], false) }
+        let records: [String: SSIDRecord]
+        switch StoredRecordFile.read([String: SSIDRecord].self, path: fileURL.path) {
+        case .missing: return ([], [], false)
+        case .unreadable: return ([], [], true)
+        case .loaded(let v): records = v
         }
 
         var entries: [HistorySnapshotEntry] = []
@@ -123,7 +132,7 @@ final class NetworkHistoryGuard {
                 }
             }
         }
-        return (entries, lookalikes)
+        return (entries, lookalikes, false)
     }
 
     /// Evaluates `(ssid, gatewayMAC)` against the recorded history, then
@@ -189,13 +198,24 @@ final class NetworkHistoryGuard {
 
     // MARK: - Persistence
 
+    /// false when the history could not be read nor copied aside: then nothing is saved over it.
+    private var mayWrite = true
+
     private func load() {
-        guard let storeURL, let data = try? Data(contentsOf: storeURL) else { return }
-        entries = (try? JSONDecoder().decode([String: SSIDRecord].self, from: data)) ?? [:]
+        guard let storeURL else { return }
+        if StoredRecordFile.read([String: SSIDRecord].self, path: storeURL.path).isUnreadable {
+            StoredRecordHealth.set(.networkHistory, unreadable: true)
+        }
+        // A history that cannot be read is copied aside (`network_history.json.corrupt-…`) before it is written again.
+        guard let loaded = StoredRecordFile.loadForUpdate([String: SSIDRecord].self, path: storeURL.path, empty: [:]) else {
+            mayWrite = false
+            return
+        }
+        entries = loaded
     }
 
     private func save() {
-        guard let storeURL else { return }
+        guard let storeURL, mayWrite else { return }
         try? FileManager.default.createDirectory(at: storeURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         guard let data = try? JSONEncoder().encode(entries) else { return }
         try? data.write(to: storeURL, options: .atomic)

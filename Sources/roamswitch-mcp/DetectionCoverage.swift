@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.27 (build 206).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.29 (build 208).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -242,6 +242,13 @@ enum DetectionCoverage {
         Entry(technique: "T1048", name: "Exfiltration Over Alternative Protocol", coverage: .partial,
               sources: [guardSource("execRecorder"), rule("exec.agent_sensitive_send"), rule("exec.agent_sensitive_then_send")],
               blindSpot: "Only commands an AI coding agent (claude, codex, gemini, opencode, aider, goose, cursor-agent, openclaw, qwen, crush) starts as child processes are seen, and an agent whose process name is node is not recognized. The agent's own file reads, what it sends to its model provider, git push, and a script runtime that opens its own socket (python -c, node -e) are not seen. Arguments that are split or encoded can evade the file and secret tests. Exfiltration by anything that is not an AI agent is not covered."),
+        // T1572. Shared/ExecCorrelationRules.swift rule 18: ssh with a remote or dynamic forward (-R, -D, RemoteForward,
+        // DynamicForward on the command line) and no controlling terminal, or started by launchd. And
+        // RoamSwitch/SSHForwardListeners.swift: a listener that an SSH session into this Mac opened (ssh -R from the
+        // other side), loopback included, told by the Port Anomaly Guard.
+        Entry(technique: "T1572", name: "Protocol Tunneling", coverage: .partial,
+              sources: [guardSource("execRecorder"), rule("exec.ssh_remote_forward"), guardSource("portAnomalyGuard")],
+              blindSpot: "ssh only, and only a forward written on its command line: a RemoteForward set in ~/.ssh/config, and tunnels made by other programs (chisel, frp, ngrok, a VPN client), are not seen. An ssh -R typed by a person in a terminal is not flagged. The exec recorder is opt-in. A remote forward asked for by someone logged in to this Mac over SSH is told from its listener by the Port Anomaly Guard (Pro, checked every few seconds; a listener of another account's session needs the privileged helper)."),
         // T1566.002. RoamSwitch/LinkGuardManager.swift: outbound connections to hosts in the phishing and scam feed are
         // blocked or paused for an answer (hosts sinkhole, plus the content-filter extension when it is active).
         Entry(technique: "T1566.002", name: "Phishing: Spearphishing Link", coverage: .partial,
@@ -258,7 +265,6 @@ enum DetectionCoverage {
     /// the guards some entry above relies on, this covers the whole guard-status vocabulary; the tests fail for a guard that
     /// is in neither place.
     static let exemptGuards: [String: String] = [
-        "portAnomalyGuard": "Exposure control: blocks outside access to a newly listening executable; no ATT&CK technique matches a new listener.",
         "runtimeThreatContainment": "Contains what XProtect convicted; XProtect's detections are not tied to one technique.",
         "dnsThreatGuard": "Switches to a filtering DNS resolver away from home; prevention, not the detection of a technique.",
         "bluetoothGuard": "Turns Bluetooth off on an untrusted network; exposure reduction, no detection.",

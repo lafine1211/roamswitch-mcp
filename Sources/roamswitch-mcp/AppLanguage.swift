@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.27 (build 206).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.29 (build 208).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -141,6 +141,26 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     /// directory ending in `.app` and returns a `Bundle` for that instead, which does
     /// have the real resources. For the main app itself, `Bundle.main` already has
     /// them directly, so this is a no-op there (the loop below never runs).
+    /// Every key of the catalog, or none in a build without the `.lproj` resources. `en.lproj/Localizable.strings`
+    /// holds them all but the ones with plural variations, which are only in `Localizable.stringsdict` (the score
+    /// warning's sentence was missing, so the notification history could not read it back: 2026-11-10, VM).
+    static let catalogKeys: [String] = {
+        var keys = Set<String>()
+        for type in ["strings", "stringsdict"] {
+            guard let path = resourceBundle.path(forResource: "Localizable", ofType: type, inDirectory: nil, forLocalization: english.rawValue),
+                  let dict = NSDictionary(contentsOfFile: path) as? [String: Any] else { continue }
+            keys.formUnion(dict.keys)
+        }
+        return keys.sorted()
+    }()
+
+    /// Whether `key` is in the catalog (a key written by a newer version, or removed since, is not).
+    static func catalogHasKey(_ key: String) -> Bool {
+        bundle(forLocaleCode: english.rawValue).localizedString(forKey: key, value: catalogMissingSentinel, table: nil) != catalogMissingSentinel
+    }
+
+    private static let catalogMissingSentinel = "\u{0}RoamSwitch.catalog.missing\u{0}"
+
     private static var resourceBundle: Bundle {
         if Bundle.main.path(forResource: "ja", ofType: "lproj") != nil {
             return Bundle.main
@@ -215,7 +235,29 @@ extension Notification.Name {
 private let locMissingSentinel = "\u{0}RoamSwitch.loc.missing\u{0}"
 
 func loc(_ key: String) -> String {
-    let code = AppLanguage.activeLocaleCode
+    loc(key, localeCode: AppLanguage.activeLocaleCode)
+}
+
+/// `String(format: loc(key), args…)` for a sentence whose words follow a count ("1 hour" / "3 hours").
+///
+/// Such keys carry plural variations in Localizable.xcstrings. Foundation picks the variation while formatting, by the
+/// plural rules of the locale it is given, so the locale must be the display language: French counts 0 as singular,
+/// English does not, and `String(format:)` without a locale (or with the system locale) would use the wrong rules.
+func locFormat(_ key: String, _ args: CVarArg...) -> String {
+    locFormat(key, localeCode: AppLanguage.activeLocaleCode, arguments: args)
+}
+
+/// `locFormat(_:_:)` in the language `code` (one of `AppLanguage`'s raw values) instead of the active one.
+func locFormat(_ key: String, localeCode code: String, _ args: CVarArg...) -> String {
+    locFormat(key, localeCode: code, arguments: args)
+}
+
+func locFormat(_ key: String, localeCode code: String, arguments args: [CVarArg]) -> String {
+    String(format: loc(key, localeCode: code), locale: Locale(identifier: code), arguments: args)
+}
+
+/// `loc(_:)` in the language `code` (one of `AppLanguage`'s raw values) instead of the active one.
+func loc(_ key: String, localeCode code: String) -> String {
     let value = AppLanguage.bundle(forLocaleCode: code)
         .localizedString(forKey: key, value: locMissingSentinel, table: nil)
     if value != locMissingSentinel {

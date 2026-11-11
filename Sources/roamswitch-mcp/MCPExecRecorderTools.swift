@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.27 (build 206).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.29 (build 208).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -84,7 +84,7 @@ enum ExecOutputSanitizer {
     /// crypto keys, mnemonics). `redact` compiles its patterns per call, so it is only
     /// run on strings long enough to hold any of those secrets.
     static func maskText(_ s: String) -> String {
-        let result = ExecCommandMasker.maskStructural(s, marker: redactionMarker)
+        let result = ExecCommandMasker.maskStructural(ExecCommandMasker.collapseSSHPublicKeys(s), marker: redactionMarker)
         return result.count >= 12 ? ExecCommandMasker.maskHighEntropy(SecretLeakScanning.redact(result), marker: redactionMarker) : result
     }
 }

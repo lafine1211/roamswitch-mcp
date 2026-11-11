@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.27 (build 206).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.29 (build 208).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -117,20 +117,33 @@ enum MCPConfigAuditor {
     /// detection (see `AgentSetupBaseline`). Config path -> server name -> digest. Only digests
     /// leave this function: a server's arguments and environment can hold a token.
     static func serverSnapshot(home: String = NSHomeDirectory(), projectFolders: [String]) -> [String: [String: AgentSetupBaseline.Entry]] {
+        serverSnapshotReport(home: home, projectFolders: projectFolders).servers
+    }
+
+    /// `serverSnapshot`, and the definition files that exist but could not be read or parsed this time (too large, no
+    /// permission, half written by the tool that rewrites it). Their servers are missing from `servers`, which is not
+    /// the same as the servers being gone.
+    static func serverSnapshotReport(home: String = NSHomeDirectory(), projectFolders: [String])
+        -> (servers: [String: [String: AgentSetupBaseline.Entry]], unreadable: [String]) {
         let fm = FileManager.default
         var out: [String: [String: AgentSetupBaseline.Entry]] = [:]
+        var unreadable: [String] = []
         for path in serverConfigPaths(home: home) + projectConfigPaths(folders: projectFolders) {
-            guard let attrs = try? fm.attributesOfItem(atPath: path),
+            guard let attrs = try? fm.attributesOfItem(atPath: path) else { continue }
+            guard (attrs[.type] as? FileAttributeType) != .typeDirectory,
                   let size = attrs[.size] as? NSNumber, size.intValue <= maxFileBytes,
                   let data = fm.contents(atPath: path),
-                  let root = parseRoot(path: path, data: data) else { continue }
+                  let root = parseRoot(path: path, data: data) else {
+                if (attrs[.type] as? FileAttributeType) != .typeDirectory { unreadable.append(path) }
+                continue
+            }
             var entries: [String: AgentSetupBaseline.Entry] = [:]
             for (name, config) in servers(in: root).prefix(maxServersPerFile) {
                 if let entry = AgentSetupBaseline.serverEntry(config) { entries[name] = entry }
             }
             if !entries.isEmpty { out[path] = entries }
         }
-        return out
+        return (out, unreadable)
     }
 
     // MARK: - Pure audit

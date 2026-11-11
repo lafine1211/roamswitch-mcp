@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.27 (build 206). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.29 (build 208). Do not edit here; see SYNC.md.
 
 import XCTest
 import Network
@@ -124,10 +124,13 @@ final class ActiveVulnScanTests: XCTestCase {
 
     // MARK: - Path traversal
 
-    func testTraversalDetectsMacOSPasswdMarker() {
+    func testAServerThatHandsOutPasswdForEveryPathIsTheSystemFilesFinding() {
+        // This stub answers every path with the file, as a server whose document root is / does (`../` dropped):
+        // over real connections that is not a traversal but the whole filesystem published.
         let port = spawnHTTPStub(response:
             "HTTP/1.1 200 OK\r\nContent-Length: 40\r\n\r\nroot:*:0:0:System Administrator:/var/root")
-        XCTAssertEqual(ActiveVulnScan.probePathTraversal(port: port), true)
+        XCTAssertEqual(ActiveVulnScan.probePathTraversal(port: port), false)
+        XCTAssertEqual(ActiveVulnScan.probeSystemFilesServed(port: port), true)
     }
 
     func testTraversalDoesNotFlagNormal404() {

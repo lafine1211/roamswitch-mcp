@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.27 (build 206).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.29 (build 208).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -82,14 +82,14 @@ enum RansomwareSnapshotStatusReader {
         let retentionMode: Bool
         /// The last attempt to take a snapshot failed (nil after a success, or if none failed).
         let lastFailure: RansomwareSnapshotFailure?
+        /// The stored records could not be read: `snapshots` is empty because nothing was read.
+        var recordsUnreadable = false
     }
 
     /// `presentIDs` is injectable so tests never touch the real snapshots.
     static func currentStatus(defaults: UserDefaults = .standard, now: Date = Date(), presentIDs: Set<String>? = TmutilRunner.presentSnapshotIDs()) -> Status {
-        var records: [RansomwareSnapshot] = []
-        if let data = defaults.data(forKey: recordsKey), let decoded = try? JSONDecoder().decode([RansomwareSnapshot].self, from: data) {
-            records = decoded
-        }
+        let read = StoredRecordDefaults.peek([RansomwareSnapshot].self, key: recordsKey, defaults: defaults)
+        let records = read.value(or: [])
         // If `tmutil` could not be run, keep the stored flags rather than guess.
         let checked = presentIDs.map { RansomwareSnapshotPolicy.merge(records, presentIDs: $0, now: now) }
             ?? records.sorted { $0.createdAt > $1.createdAt }
@@ -100,7 +100,8 @@ enum RansomwareSnapshotStatusReader {
             recommendedID: RansomwareSnapshotPolicy.recommended(from: checked)?.id,
             intervalHours: hours,
             retentionMode: RansomwareSnapshotPolicy.isRetentionMode(checked, now: now),
-            lastFailure: RansomwareSnapshotFailureStore.read(defaults: defaults)
+            lastFailure: RansomwareSnapshotFailureStore.read(defaults: defaults),
+            recordsUnreadable: read.isUnreadable
         )
     }
 }
