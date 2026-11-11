@@ -113,7 +113,6 @@ All files live in `Sources/roamswitch-mcp/`.
 | `SafeScanFS.swift` | `Shared/SafeScanFS.swift` (from `Shared/`) |
 | `ExecCommandMasker.swift` | `Shared/ExecCommandMasker.swift` (from `Shared/`) |
 | `LinkFilterEngine.swift` | `Shared/LinkFilterEngine.swift` (from `Shared/`) |
-| `KnownAttackServers.swift` | `Shared/KnownAttackServers.swift` (from `Shared/`) |
 | `SSHGuardCore.swift` | `Shared/SSHGuardCore.swift` (from `Shared/`) |
 | `GuardReaderHealth.swift` | `Shared/GuardReaderHealth.swift` (from `Shared/`) |
 | `StrictJSON.swift` | `Shared/StrictJSON.swift` (from `Shared/`) |
@@ -169,7 +168,6 @@ via `@testable import RoamSwitch`. Only `main.swift` (the stdin→stdout pump) i
 | `StrictJSONTests.swift` | `RoamSwitchTests/StrictJSONTests.swift` |
 | `TOMLSubsetTests.swift` | `RoamSwitchTests/TOMLSubsetTests.swift` |
 | `AgentSetupAuditorTests.swift` | `RoamSwitchTests/AgentSetupAuditorTests.swift` |
-| `KnownAttackServersTests.swift` | `RoamSwitchTests/KnownAttackServersTests.swift` |
 | `AgentCredentialFileCheckTests.swift` | `RoamSwitchTests/AgentCredentialFileCheckTests.swift` |
 | `BackupRecencyTests.swift` | `RoamSwitchTests/BackupRecencyTests.swift` |
 | `DependencySourceScanTests.swift` | `RoamSwitchTests/DependencySourceScanTests.swift` |

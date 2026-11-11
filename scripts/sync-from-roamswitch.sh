@@ -55,7 +55,7 @@ CORE=(ProcessWait AppLanguage TrustedNetwork GatewayFingerprint WiFiSecurityMoni
 
 # Sources that live in the app's Shared/ folder (also compiled into the helper).
 SHARED=(RansomwareSnapshotLogic ExecEventModel ExecLogStore ExecProcessTree ExecReadAPI \
-        CryptoSecretDetection SafeScanFS ExecCommandMasker LinkFilterEngine KnownAttackServers SSHGuardCore GuardReaderHealth StrictJSON WatchdogAgentState PFSystemAnchors \
+        CryptoSecretDetection SafeScanFS ExecCommandMasker LinkFilterEngine SSHGuardCore GuardReaderHealth StrictJSON WatchdogAgentState PFSystemAnchors \
         NotificationHistory NotificationText SensorFindingTextKeys StoredRecordRead WatchdogMessages)
 
 # App test files that only exercise types present in this repo. Their
@@ -66,7 +66,7 @@ SHARED=(RansomwareSnapshotLogic ExecEventModel ExecLogStore ExecProcessTree Exec
 TESTS=(LinkSafetyAuditorTests CryptoSecretDetectionTests MCPKnowledgeBaseTests MCPProtocolTests \
        MCPResponseFormattingTests ARPSpoofMonitorTests MCPServerRobustnessTests ParserRobustnessTests \
        TyposquatGuardTests RansomwareRecoveryMCPTests RoamSwitchMCPSkillsContentTests \
-       ActiveVulnScanTests MCPConfigAuditorTests TOMLSubsetTests AgentSetupAuditorTests KnownAttackServersTests PromptInjectionSignalsTests AgentSetupSarifTests ActiveVulnScanSarifTests SarifRuleIdStabilityTests IncidentReconciliationTests DetectionCoverageTests LocalAIRuntimeTests GuardReaderHealthTests StrictJSONTests MCPToolCallLogTests \
+       ActiveVulnScanTests MCPConfigAuditorTests TOMLSubsetTests AgentSetupAuditorTests PromptInjectionSignalsTests AgentSetupSarifTests ActiveVulnScanSarifTests SarifRuleIdStabilityTests IncidentReconciliationTests DetectionCoverageTests LocalAIRuntimeTests GuardReaderHealthTests StrictJSONTests MCPToolCallLogTests \
        AgentCredentialFileCheckTests BackupRecencyTests DependencySourceScanTests PackageCveEpssTests \
        ProbeCatalogTests MCPToolAnnotationsTests \
        FrontendBundleScanTests ForensicChainTests TrustAnchorCheckTests ReflectedXssProbeTests)
