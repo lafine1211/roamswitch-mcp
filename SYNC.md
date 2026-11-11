@@ -96,7 +96,10 @@ All files live in `Sources/roamswitch-mcp/`.
 | `CanaryStatusReader.swift` | `RoamSwitch/CanaryStatusReader.swift` |
 | `PortAnomalyStatusReader.swift` | `RoamSwitch/PortAnomalyStatusReader.swift` |
 | `RuntimeThreatStatusReader.swift` | `RoamSwitch/RuntimeThreatStatusReader.swift` |
-| `NotificationHistory.swift` | `RoamSwitch/NotificationHistory.swift` |
+| `NotificationHistory.swift` | `Shared/NotificationHistory.swift` |
+| `NotificationText.swift` | `Shared/NotificationText.swift` |
+| `WatchdogMessages.swift` | `Shared/WatchdogMessages.swift` |
+| `NotificationTextLocalization.swift` | `RoamSwitch/NotificationTextLocalization.swift` |
 | `ContainmentIncidentTimeline.swift` | `RoamSwitch/ContainmentIncidentTimeline.swift` |
 | `NetworkHistoryGuard.swift` | `RoamSwitch/NetworkHistoryGuard.swift` |
 | `MCPSensorAuditStatusReader.swift` | `RoamSwitch/MCPSensorAuditStatusReader.swift` |
@@ -117,9 +120,11 @@ All files live in `Sources/roamswitch-mcp/`.
 | `WatchdogAgentState.swift` | `Shared/WatchdogAgentState.swift` (from `Shared/`) |
 | `PFSystemAnchors.swift` | `Shared/PFSystemAnchors.swift` (from `Shared/`) |
 | `SSHGuardStatusReader.swift` | `RoamSwitch/SSHGuardStatusReader.swift` |
+| `StoredRecordRead.swift` | `Shared/StoredRecordRead.swift` (from `Shared/`) |
+| `StoredRecordHealth.swift` | `RoamSwitch/StoredRecordHealth.swift` |
 
 This is exactly the source set the app compiles into its `RoamSwitchMCPServer` target
-(see `project.yml` in the app repo). Thirteen of the files come from the app's `Shared/` folder
+(see `project.yml` in the app repo). Nineteen of the files come from the app's `Shared/` folder
 (compiled into the app and the privileged helper too); the sync script keeps them in its `SHARED`
 list, and everything else in its `CORE` list. `Localizable.xcstrings` is also in that target but is
 not mirrored (this package does not use it).
