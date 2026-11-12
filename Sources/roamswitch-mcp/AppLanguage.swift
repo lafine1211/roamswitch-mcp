@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.30 (build 209).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.31 (build 210).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -254,6 +254,12 @@ func locFormat(_ key: String, localeCode code: String, _ args: CVarArg...) -> St
 
 func locFormat(_ key: String, localeCode code: String, arguments args: [CVarArg]) -> String {
     String(format: loc(key, localeCode: code), locale: Locale(identifier: code), arguments: args)
+}
+
+/// Text handed to an LLM (MCP results: errors, caveats, finding explanations) is English whatever the display
+/// language is; what the app shows on screen stays in the display language (`loc`).
+func locLLM(_ key: String) -> String {
+    loc(key, localeCode: AppLanguage.english.rawValue)
 }
 
 /// `loc(_:)` in the language `code` (one of `AppLanguage`'s raw values) instead of the active one.

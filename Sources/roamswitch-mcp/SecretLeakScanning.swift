@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.30 (build 209).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.31 (build 210).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -269,7 +269,7 @@ public enum SecretLeakScanning {
     /// 内容を読まずに判別するため(読むこと自体が検知を誘発する)サイズで照合する。内容変更時は同ガードと揃えること。
     /// 旧版が設置済みの囮(`[default]`のAWS、Docker Hub宛のDocker、`.ssh/id_rsa`)も、移行されるまで読まない。
     static let honeytokenDecoySizes: [String: [Int]] = [
-        ".aws/credentials": [135, 130],
+        ".aws/credentials": [176, 135, 130],
         ".ssh/id_rsa_backup": [192],
         ".ssh/id_rsa": [192],
         ".docker/config.json": [146, 131],

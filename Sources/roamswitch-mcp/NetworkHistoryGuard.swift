@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.30 (build 209).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.31 (build 210).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -218,7 +218,7 @@ final class NetworkHistoryGuard {
         guard let storeURL, mayWrite else { return }
         try? FileManager.default.createDirectory(at: storeURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         guard let data = try? JSONEncoder().encode(entries) else { return }
-        try? data.write(to: storeURL, options: .atomic)
+        try? AtomicFile.write(data, to: storeURL)
     }
 }
 

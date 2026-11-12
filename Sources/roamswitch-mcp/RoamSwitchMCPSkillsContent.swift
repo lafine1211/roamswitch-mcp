@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.30 (build 209).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.31 (build 210).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -316,6 +316,10 @@ enum RoamSwitchMCPSkillsContent {
        that anyone is exploiting the CVE, and it changes from day to day. A
        finding with no `epss` has no value in the feed: say "no EPSS data",
        never read it as low risk, and never fill one in.
+    6b. Every finding also carries `tier`: `kev` (CISA KEV lists it),
+       `epss_high` (EPSS 0.9 or more) or `info` (neither). It is the same
+       order as steps 5 and 6 in one field: kev, then epss_high, then info.
+       `info` does not mean safe, only that neither signal is present.
     7. The result's `acceptance` block gives counts only: `accepted`,
        `expiringWithin14Days`, `expired` and `needsAttention`. A person
        accepted those findings with a reason and an end date in the app;
@@ -390,7 +394,11 @@ enum RoamSwitchMCPSkillsContent {
        confident enough to tag," not "not an attack"), and `actionTaken`.
        The response's own `caveats` field may note that a `summary` was
        recorded in a different display language than your current one —
-       don't be thrown by that.
+       don't be thrown by that. Read `chain` too: an event with
+       `chainBreak: true` means part of the record was edited or removed
+       afterwards, so say so before drawing conclusions from it. An event
+       with `blindNear: true` was recorded while the guard that made it had
+       lost its input, so related activity may be missing.
     2. If a ransomware canary event appears (or the user specifically
        reports one), call `get_canary_status` for the fuller picture:
        `monitoredFilesCount` vs `expectedFilesCount` (a mismatch suggests
@@ -542,6 +550,16 @@ enum RoamSwitchMCPSkillsContent {
        medium, say that it concerns indirect prompt injection (ATT&CK
        T1698), and if the acting server also has an `auto_approve` finding
        in the same result, state that chain and let the user judge it.
+       The `egress_exposure` finding is the same kind of pairing for data
+       leaving the machine: a server that reads text other people wrote
+       next to a different server that can send data out (mail, chat
+       posts, cloud storage, webhooks; the Slack, Gmail and GitHub servers
+       count as both). It is recognised only by well-known package names,
+       does not show where any tool sends or that anything was sent, and
+       its absence says nothing about servers with other names. Report it as
+       medium and say that it concerns indirect prompt injection used for
+       exfiltration (ATT&CK T1567). One Slack, Gmail or GitHub server on its
+       own is not reported.
     7. Before telling the user something is fixed, re-measure it with
        `verify_security_findings` and report its answer, including
        `inconclusive` when that is what it returned. A `resolved` result is a

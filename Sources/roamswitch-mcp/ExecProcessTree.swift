@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.30 (build 209).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.31 (build 210).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -37,7 +37,8 @@ public enum ExecProcessTreeBuilder {
                              maxAncestors: Int = 16, maxNodes: Int = 200) -> ExecProcessTree {
         // Incarnations: fork/exec lines only. For a pid, exec supersedes the
         // fork line that came just before it (same process, new image).
-        let procs = records.filter { $0.kind == "exec" || $0.kind == "fork" }.sorted { $0.time < $1.time }
+        // A repeat line of the log stands for several processes: each run is one.
+        let procs = ExecRepeat.expandAll(records).filter { $0.kind == "exec" || $0.kind == "fork" }.sorted { $0.time < $1.time }
         var byPid: [Int32: [ExecEventRecord]] = [:]
         var byPpid: [Int32: [ExecEventRecord]] = [:]
         for r in procs {

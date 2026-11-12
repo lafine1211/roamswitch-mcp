@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.30 (build 209). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.31 (build 210). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -146,6 +146,37 @@ final class MCPKnowledgeBaseTests: XCTestCase {
                     XCTAssertTrue(entry.details.contains(needle), "\(code): \(check.id) does not mention \(needle)")
                 }
             }
+        }
+    }
+
+    /// 2026-11-12 additions (adoption plan): each is stated in every language by the name a reader would search for,
+    /// and the event forwarding entry no longer says the Mac lacks the internal address refusal.
+    func testAdoptionPlanAdditionsAreDocumentedInEveryLanguage() throws {
+        let checks: [(id: String, needles: [String])] = [
+            ("feat_event_forwarding", ["CGNAT", "CIDR", "Fleet"]),
+            ("feat_containment_incident_timeline", ["prevHash", "chainBreak", "blindNear", "sshSession"]),
+            ("feat_notification_history", ["feat_automation_safety"]),
+            ("alert_honeytoken_access", ["cursor-agent", "PID"]),
+            ("feat_web_worker_crash_guard", ["copytruncate", "256"]),
+            ("feat_privileged_helper", ["JSON"]),
+            ("faq_zero_telemetry", ["manifest", "60"]),
+            ("feat_mcp_server", ["remote_no_auth", "mcp_wide_bind", "sarif", "get_system_timeline", "roamswitch timeline --since"]),
+            ("feat_package_cve_scan", ["epss_high", "sarif"]),
+        ]
+        let ja = RoamSwitchKnowledgeBase.localizedEntries(for: "ja")
+        for code in RoamSwitchKnowledgeBase.supportedLanguageCodes {
+            let entries = RoamSwitchKnowledgeBase.localizedEntries(for: code)
+            for check in checks {
+                let entry = try XCTUnwrap(entries.first { $0.id == check.id }, "\(check.id) missing for \(code)")
+                for needle in check.needles {
+                    XCTAssertTrue(entry.details.contains(needle), "\(code): \(check.id) does not mention \(needle)")
+                }
+                if code != "ja", let jaEntry = ja.first(where: { $0.id == check.id }) {
+                    XCTAssertNotEqual(entry.details, jaEntry.details, "\(code): \(check.id) is not translated")
+                }
+            }
+            let fwd = try XCTUnwrap(entries.first { $0.id == "feat_event_forwarding" })
+            XCTAssertFalse(fwd.details.contains("Webhook の内部アドレスの拒否は"), code)
         }
     }
 

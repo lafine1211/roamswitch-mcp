@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.30 (build 209).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.31 (build 210).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -22,7 +22,8 @@ import Foundation
 /// Read-only and local: it opens a fixed list of well-known files, never the network, and
 /// never reports a secret. `env` and `headers` values, and any argument, are not copied
 /// into the result (they routinely hold API keys); only the server name, a command's
-/// basename, a URL's host and (when it is a plain registry name) the package or image
+/// basename, a URL's host, a listen flag with its wildcard address (`--host 0.0.0.0`, `docker -p
+/// 8080:8080`) and (when it is a plain registry name) the package or image
 /// name a launcher fetches are. Everything read from those files is untrusted data (a
 /// server name can say anything), so names are trimmed to printable text and the MCP tool
 /// marks the whole result as untrusted.
@@ -31,7 +32,8 @@ enum MCPConfigAuditor {
     struct Finding: Codable, Equatable {
         /// Stable id: `auto_approve`, `remote_plain_http`, `shell_wrapper`, `hexstrike`,
         /// `world_writable_config`, `auto_trust_project_servers`, `unpinned_package_launcher`,
-        /// `container_host_access`, `code_loading_env`, `traffic_interception_env`, `injection_exposure`.
+        /// `container_host_access`, `code_loading_env`, `traffic_interception_env`, `injection_exposure`,
+        /// `remote_no_auth`, `mcp_wide_bind`, `egress_exposure`.
         let id: String
         /// `high` or `medium`.
         let severity: String
@@ -39,8 +41,12 @@ enum MCPConfigAuditor {
         let server: String?
         /// Short technical fact, never a secret (see the type's doc comment).
         let detail: String
-        /// Localized explanation and what to do about it.
-        let message: String
+        /// Catalog key (the Japanese source text) of the explanation and what to do about it.
+        let messageKey: String
+        /// The explanation in the display language (the RoamSwitch window).
+        var message: String { loc(messageKey) }
+        /// The explanation in English, for the `audit_mcp_configs` MCP result (LLM input is English).
+        var messageForLLM: String { locLLM(messageKey) }
     }
 
     struct Result: Equatable {
@@ -163,7 +169,7 @@ enum MCPConfigAuditor {
                 result.findings.append(Finding(
                     id: "auto_trust_project_servers", severity: "high", file: file.path, server: nil,
                     detail: "enableAllProjectMcpServers is true",
-                    message: loc("Claude Code が、リポジトリ内の .mcp.json に書かれた MCP サーバーを確認なしですべて有効にする設定（enableAllProjectMcpServers）です。悪意のあるリポジトリを開いただけで、そこに書かれたコマンドが実行されます。この設定をオフにして、サーバーごとに確認してください。")
+                    messageKey: "Claude Code が、リポジトリ内の .mcp.json に書かれた MCP サーバーを確認なしですべて有効にする設定（enableAllProjectMcpServers）です。悪意のあるリポジトリを開いただけで、そこに書かれたコマンドが実行されます。この設定をオフにして、サーバーごとに確認してください。"
                 ))
             }
 
@@ -176,12 +182,15 @@ enum MCPConfigAuditor {
             if let exposure = injectionExposure(servers: fileServers, file: file.path) {
                 result.findings.append(exposure)
             }
+            if let exposure = egressExposure(servers: fileServers, file: file.path) {
+                result.findings.append(exposure)
+            }
 
             if fileHasMCPContent, let mode = file.mode, mode & 0o022 != 0 {
                 result.findings.append(Finding(
                     id: "world_writable_config", severity: "medium", file: file.path, server: nil,
                     detail: "mode \(String(mode, radix: 8)) is writable by group or others",
-                    message: loc("この設定ファイルは、所有者以外も書き込める権限になっています。他のユーザーやプロセスが MCP サーバーの起動コマンドを差し替えれば、次回の起動時に任意のコードが実行されます。chmod go-w で書き込み権限を外してください。")
+                    messageKey: "この設定ファイルは、所有者以外も書き込める権限になっています。他のユーザーやプロセスが MCP サーバーの起動コマンドを差し替えれば、次回の起動時に任意のコードが実行されます。chmod go-w で書き込み権限を外してください。"
                 ))
             }
         }
@@ -308,7 +317,7 @@ enum MCPConfigAuditor {
             findings.append(Finding(
                 id: "auto_approve", severity: "high", file: file, server: name,
                 detail: everyToolAutoApproved ? "every tool is auto-approved" : "\(autoApprovedCount) tool(s) are auto-approved",
-                message: loc("この MCP サーバーのツールが、毎回の確認なしに自動承認される設定です。プロンプトインジェクションで AI が誘導されると、ユーザーの目に触れないままツールが実行されます。自動承認は読み取り専用で影響の小さいツールだけに絞ってください。")
+                messageKey: "この MCP サーバーのツールが、毎回の確認なしに自動承認される設定です。プロンプトインジェクションで AI が誘導されると、ユーザーの目に触れないままツールが実行されます。自動承認は読み取り専用で影響の小さいツールだけに絞ってください。"
             ))
         }
 
@@ -332,7 +341,26 @@ enum MCPConfigAuditor {
             findings.append(Finding(
                 id: "remote_plain_http", severity: "high", file: file, server: name,
                 detail: "http:// to non-loopback host \(sanitized(host))" + (plainHTTPFromArgument ? " (launch argument)" : ""),
-                message: loc("暗号化されていない http:// で、ループバック以外のホストに接続する MCP サーバーです。通信内容を同じネットワークの第三者に読まれたり書き換えられたりします。MCP サーバーはツール実行の窓口なので、https とクライアント認証を使ってください。")
+                messageKey: "暗号化されていない http:// で、ループバック以外のホストに接続する MCP サーバーです。通信内容を同じネットワークの第三者に読まれたり書き換えられたりします。MCP サーバーはツール実行の窓口なので、https とクライアント認証を使ってください。"
+            ))
+        }
+
+        // An https server on another host with no credential in the config (headers, a token, OAuth settings).
+        if let host = remoteHostWithoutAuth(config: config, urlString: urlString, command: commandBase, args: args) {
+            findings.append(Finding(
+                id: "remote_no_auth", severity: "medium", file: file, server: name,
+                detail: "https to \(sanitized(host)) with no authentication in the config",
+                messageKey: "https のリモートの MCP サーバーですが、設定ファイルに認証の情報(Authorization などのヘッダー、トークン、OAuth の設定)がありません。接続のときにクライアントが OAuth でログインするサーバーなら問題ありません。そうでなければ、このサーバーのツールは URL を知っている誰でも呼べる状態です。自分で立てたサーバーなら認証を付け、他社のサーバーなら提供元の認証の方法を確かめてください。"
+            ))
+        }
+
+        // A server started to listen on every interface (0.0.0.0, ::, docker -p without an address).
+        if !isShellOneLiner && !isInterpreterOneLiner,
+           let how = wideBind(command: commandBase, args: args, env: config["env"] as? [String: Any]) {
+            findings.append(Finding(
+                id: "mcp_wide_bind", severity: "high", file: file, server: name,
+                detail: how,
+                messageKey: "この MCP サーバーは、すべてのネットワークの口(0.0.0.0 や ::)で待ち受ける設定で起動します。同じ Wi-Fi や LAN の人が、このサーバーのツールを直接呼べます。認証を持たない MCP サーバーが多く、ツールがこの Mac でコマンドを実行したりファイルを読んだりできるなら、その操作を他人にもさせることになります。127.0.0.1 で待ち受けるように変えてください(Docker なら -p 127.0.0.1:ポート:ポート と書きます)。"
             ))
         }
 
@@ -341,7 +369,7 @@ enum MCPConfigAuditor {
             findings.append(Finding(
                 id: "shell_wrapper", severity: "medium", file: file, server: name,
                 detail: "command is \(sanitized(commandBase)) with an inline script",
-                message: loc("MCP サーバーの起動コマンドが、シェルやインタープリタのインラインコード（sh -c など）になっています。設定ファイルを書き換えられるだけで、AI クライアントの起動のたびに任意のコマンドが実行されます。実行ファイルと引数を直接指定してください。")
+                messageKey: "MCP サーバーの起動コマンドが、シェルやインタープリタのインラインコード（sh -c など）になっています。設定ファイルを書き換えられるだけで、AI クライアントの起動のたびに任意のコマンドが実行されます。実行ファイルと引数を直接指定してください。"
             ))
         }
 
@@ -351,7 +379,7 @@ enum MCPConfigAuditor {
             findings.append(Finding(
                 id: "unpinned_package_launcher", severity: "medium", file: file, server: name,
                 detail: "\(launch.runner) fetches unpinned \(names)" + (launch.autoYes ? " (auto-confirmed)" : ""),
-                message: loc("この MCP サーバーは、起動のたびにレジストリからコードを取得して実行します。バージョンが固定されていないため、パッケージが乗っ取られたり、名前を似せた別パッケージに解決されたりすると、AI クライアントと同じ権限で攻撃者のコードが動きます。「パッケージ名@x.y.z」のようにバージョンを固定し（Docker はイメージのダイジェストまたは固定タグ）、公開元を確認してください。")
+                messageKey: "この MCP サーバーは、起動のたびにレジストリからコードを取得して実行します。バージョンが固定されていないため、パッケージが乗っ取られたり、名前を似せた別パッケージに解決されたりすると、AI クライアントと同じ権限で攻撃者のコードが動きます。「パッケージ名@x.y.z」のようにバージョンを固定し（Docker はイメージのダイジェストまたは固定タグ）、公開元を確認してください。"
             ))
         }
 
@@ -360,7 +388,7 @@ enum MCPConfigAuditor {
             findings.append(Finding(
                 id: "container_host_access", severity: "high", file: file, server: name,
                 detail: "container runs with " + risks.joined(separator: ", "),
-                message: loc("この MCP サーバーのコンテナは、ホストの管理権限に近いアクセス（--privileged、Docker ソケットやルートディレクトリのマウント、ホストの PID 名前空間）付きで起動します。サーバーやその依存先が侵害されると、コンテナを越えてこの Mac 側の Docker 環境全体を操作されます。必要なディレクトリだけを読み取り専用でマウントし、特権オプションは外してください。")
+                messageKey: "この MCP サーバーのコンテナは、ホストの管理権限に近いアクセス（--privileged、Docker ソケットやルートディレクトリのマウント、ホストの PID 名前空間）付きで起動します。サーバーやその依存先が侵害されると、コンテナを越えてこの Mac 側の Docker 環境全体を操作されます。必要なディレクトリだけを読み取り専用でマウントし、特権オプションは外してください。"
             ))
         }
 
@@ -371,7 +399,7 @@ enum MCPConfigAuditor {
                 findings.append(Finding(
                     id: "code_loading_env", severity: "high", file: file, server: name,
                     detail: "env sets " + keys.joined(separator: ", "),
-                    message: loc("この MCP サーバーの環境変数に、起動したプロセスが自分のコードより先に追加のライブラリやスクリプトを読み込む設定（LD_PRELOAD、DYLD_INSERT_LIBRARIES、NODE_OPTIONS の --require など）があります。ふつうの MCP サーバーには要らない設定で、設定ファイルを書き換えられる人がコードを紛れ込ませる手口です。心当たりがなければこの項目を削除し、設定ファイルを書き換えられる人がほかにいないか確認してください。")
+                    messageKey: "この MCP サーバーの環境変数に、起動したプロセスが自分のコードより先に追加のライブラリやスクリプトを読み込む設定（LD_PRELOAD、DYLD_INSERT_LIBRARIES、NODE_OPTIONS の --require など）があります。ふつうの MCP サーバーには要らない設定で、設定ファイルを書き換えられる人がコードを紛れ込ませる手口です。心当たりがなければこの項目を削除し、設定ファイルを書き換えられる人がほかにいないか確認してください。"
                 ))
             }
         }
@@ -384,7 +412,7 @@ enum MCPConfigAuditor {
                 findings.append(Finding(
                     id: "traffic_interception_env", severity: "medium", file: file, server: name,
                     detail: "env sets " + items.joined(separator: ", "),
-                    message: loc("この MCP サーバーの環境変数に、通信をプロキシ経由にする設定(HTTP_PROXY・HTTPS_PROXY・ALL_PROXY)、追加の認証局を信頼させる設定(NODE_EXTRA_CA_CERTS・SSL_CERT_FILE・REQUESTS_CA_BUNDLE など)、または証明書の検証を切る設定(NODE_TLS_REJECT_UNAUTHORIZED=0)があります。社内のプロキシを使うための正しい設定のこともありますが、心当たりがなければ、このサーバーの通信(API キーやトークンを含みます)をプロキシの運営者や認証局を持つ人に読まれるおそれがあります。この項目を確認し、設定ファイルを書き換えられる人がほかにいないか確かめてください。")
+                    messageKey: "この MCP サーバーの環境変数に、通信をプロキシ経由にする設定(HTTP_PROXY・HTTPS_PROXY・ALL_PROXY)、追加の認証局を信頼させる設定(NODE_EXTRA_CA_CERTS・SSL_CERT_FILE・REQUESTS_CA_BUNDLE など)、または証明書の検証を切る設定(NODE_TLS_REJECT_UNAUTHORIZED=0)があります。社内のプロキシを使うための正しい設定のこともありますが、心当たりがなければ、このサーバーの通信(API キーやトークンを含みます)をプロキシの運営者や認証局を持つ人に読まれるおそれがあります。この項目を確認し、設定ファイルを書き換えられる人がほかにいないか確かめてください。"
                 ))
             }
         }
@@ -395,10 +423,108 @@ enum MCPConfigAuditor {
             findings.append(Finding(
                 id: "hexstrike", severity: "high", file: file, server: name,
                 detail: "entry references HexStrike AI",
-                message: loc("HexStrike AI（AI にペネトレーションテスト用ツールを自律実行させる MCP バックエンド）に接続する設定です。接続先のサーバーは認証なしで、受け取った文字列をそのままシェルで実行します。自分で検証用に運用しているものでなければ、この設定を削除してください。")
+                messageKey: "HexStrike AI（AI にペネトレーションテスト用ツールを自律実行させる MCP バックエンド）に接続する設定です。接続先のサーバーは認証なしで、受け取った文字列をそのままシェルで実行します。自分で検証用に運用しているものでなければ、この設定を削除してください。"
             ))
         }
         return findings
+    }
+
+    // MARK: remote_no_auth / mcp_wide_bind
+
+    /// Header names that carry a credential (compared lower-cased, as a part of the name).
+    private static let authHeaderParts = ["authorization", "token", "api-key", "apikey", "api_key", "auth", "secret", "cookie", "key"]
+    /// Config keys of the clients that hold a credential or an OAuth set-up for a remote server.
+    private static let authConfigKeys = ["oauth", "auth", "authorization", "authProviderType", "bearer_token_env_var",
+                                         "bearer_token", "apiKey", "api_key", "token", "accessToken"]
+    /// Header maps by client: Claude Code / Cursor / VS Code / Gemini `headers`, Codex `http_headers` and `env_http_headers`.
+    private static let headerMapKeys = ["headers", "http_headers", "env_http_headers", "requestInit"]
+    /// URL query names that carry a credential.
+    private static let authQueryNames: Set<String> = ["token", "key", "api_key", "apikey", "access_token", "auth", "secret", "sig", "signature", "code"]
+
+    static func hasCredentialHeader(_ headers: [String: Any]) -> Bool {
+        for (k, v) in headers {
+            if let nested = v as? [String: Any], hasCredentialHeader(nested) { return true } // requestInit.headers
+            let name = k.lowercased()
+            guard authHeaderParts.contains(where: { name.contains($0) }) else { continue }
+            if let text = v as? String, text.trimmingCharacters(in: .whitespaces).isEmpty { continue }
+            return true
+        }
+        return false
+    }
+
+    /// The host of an https server on another host whose config carries no credential, else nil. Read from the
+    /// `url` / `serverUrl` field, or from an `mcp-remote` bridge's arguments (`npx mcp-remote https://... --header ...`).
+    static func remoteHostWithoutAuth(config: [String: Any], urlString: String, command: String, args: [String]) -> String? {
+        var url = urlString
+        var bridgeHasHeader = false
+        if url.isEmpty, args.contains(where: { $0.lowercased().hasPrefix("mcp-remote") || $0.lowercased().hasPrefix("@modelcontextprotocol/mcp-remote") }) {
+            url = args.first { $0.lowercased().hasPrefix("https://") } ?? ""
+            bridgeHasHeader = args.contains { $0 == "--header" || $0.hasPrefix("--header=") }
+        }
+        guard let c = URLComponents(string: url), c.scheme?.lowercased() == "https",
+              let host = c.host, !host.isEmpty, !isLoopbackHost(host) else { return nil }
+        if bridgeHasHeader || c.user != nil || c.password != nil { return nil }
+        if (c.queryItems ?? []).contains(where: { authQueryNames.contains($0.name.lowercased()) && !($0.value ?? "").isEmpty }) { return nil }
+        for k in headerMapKeys {
+            if let h = config[k] as? [String: Any], hasCredentialHeader(h) { return nil }
+        }
+        for k in authConfigKeys where config[k] != nil {
+            if let text = config[k] as? String, text.trimmingCharacters(in: .whitespaces).isEmpty { continue }
+            if (config[k] as? Bool) == false { continue }
+            return nil
+        }
+        return host
+    }
+
+    /// Addresses that mean "every interface".
+    static func isWildcardAddress(_ raw: String) -> Bool {
+        var v = raw.trimmingCharacters(in: CharacterSet(charactersIn: " \"'"))
+        // `0.0.0.0:8080`, `[::]:8080`
+        if v.hasPrefix("[") , let close = v.firstIndex(of: "]") { v = String(v[v.index(after: v.startIndex)..<close]) }
+        else if v.filter({ $0 == ":" }).count == 1, let colon = v.firstIndex(of: ":") { v = String(v[..<colon]) }
+        return ["0.0.0.0", "::", "*", "0:0:0:0:0:0:0:0", "::0"].contains(v)
+    }
+
+    private static let bindFlags: Set<String> = ["--host", "--bind", "--listen", "--address", "--addr", "--hostname", "--http-host",
+                                                 "--server-host", "--bind-address", "--listen-address", "-b"]
+    private static let bindEnvKeys: Set<String> = ["HOST", "MCP_HOST", "FASTMCP_HOST", "MCP_SERVER_HOST", "SERVER_HOST", "BIND",
+                                                   "BIND_ADDRESS", "BIND_HOST", "LISTEN_ADDRESS", "LISTEN_HOST", "UVICORN_HOST", "HTTP_HOST"]
+
+    /// How the server is told to listen on every interface, or nil. Only the flag or variable name and the address
+    /// are returned (no other argument).
+    static func wideBind(command: String, args: [String], env: [String: Any]?) -> String? {
+        let isContainer = ["docker", "podman"].contains(command)
+        // Inside a container 0.0.0.0 is how a server listens at all; what reaches the network is the published port.
+        for (i, a) in args.enumerated() where !isContainer {
+            let lower = a.lowercased()
+            if let eq = lower.firstIndex(of: "="), bindFlags.contains(String(lower[..<eq])), isWildcardAddress(String(a[a.index(after: eq)...])) {
+                return "\(lower[..<eq]) \(sanitized(String(a[a.index(after: eq)...])))"
+            }
+            if bindFlags.contains(lower), i + 1 < args.count, isWildcardAddress(args[i + 1]) {
+                return "\(lower) \(sanitized(args[i + 1]))"
+            }
+        }
+        if let env, !isContainer {
+            for (k, v) in env where bindEnvKeys.contains(k.uppercased()) {
+                if let text = v as? String, isWildcardAddress(text) { return "env \(sanitized(k))=\(sanitized(text))" }
+            }
+        }
+        // `docker run -p 8080:8080` publishes on every interface unless an address is written first.
+        if isContainer, args.contains("run") {
+            for (i, a) in args.enumerated() {
+                var spec: String?
+                if (a == "-p" || a == "--publish"), i + 1 < args.count { spec = args[i + 1] }
+                else if a.hasPrefix("--publish=") { spec = String(a.dropFirst("--publish=".count)) }
+                else if a.hasPrefix("-p"), a.count > 2, a.dropFirst(2).first?.isNumber == true { spec = String(a.dropFirst(2)) }
+                guard let spec else { continue }
+                let parts = spec.split(separator: ":", omittingEmptySubsequences: false)
+                // `8080:80` or `80` (no address), `0.0.0.0:8080:80`, `[::]:8080:80`.
+                if parts.count <= 2 || isWildcardAddress(String(parts[0])) || spec.hasPrefix("[::]") {
+                    return "\(command) -p \(sanitized(spec)) (all interfaces)"
+                }
+            }
+        }
+        return nil
     }
 
     /// Launch-line fragments (package or image names) of well-known servers whose job is to bring text
@@ -444,7 +570,43 @@ enum MCPConfigAuditor {
         return Finding(
             id: "injection_exposure", severity: "medium", file: file, server: nil,
             detail: "reads outside content: \(list(readers)); acts on this Mac: \(list(actors))",
-            message: loc("この設定には、Web ページ・メール・チャット・Issue など第三者が書いた文章を AI に読ませる MCP サーバーと、このマシンでコマンドを実行したりファイルを書き換えたりできる MCP サーバーが、同時に入っています。読み込んだ文章に紛れた命令（間接プロンプトインジェクション）を AI が実行すると、手元の操作をしていなくてもコマンドやファイル変更が走ります。実行系のツールは毎回の確認を残し、読み取り用のサーバーとは別のクライアントやプロファイルに分けてください。")
+            messageKey: "この設定には、Web ページ・メール・チャット・Issue など第三者が書いた文章を AI に読ませる MCP サーバーと、このマシンでコマンドを実行したりファイルを書き換えたりできる MCP サーバーが、同時に入っています。読み込んだ文章に紛れた命令（間接プロンプトインジェクション）を AI が実行すると、手元の操作をしていなくてもコマンドやファイル変更が走ります。実行系のツールは毎回の確認を残し、読み取り用のサーバーとは別のクライアントやプロファイルに分けてください。"
+        )
+    }
+
+    /// Launch-line fragments of well-known servers that can send data off this Mac: mail, chat posts, cloud
+    /// storage uploads, webhooks, and the GitHub server (it can post comments and push to a remote repository).
+    /// Chat, mail and GitHub servers are also in `untrustedContentReaders`: one server can be both.
+    private static let remoteSenders: [String] = [
+        "server-slack", "slack-mcp", "server-gmail", "gmail-mcp", "server-github", "github-mcp-server",
+        "mcp-send-email", "email-mcp", "resend-mcp", "sendgrid-mcp", "mailgun-mcp", "discord-mcp",
+        "mcp-discord", "telegram-mcp", "twilio-mcp", "server-gdrive", "mcp-server-s3", "s3-mcp",
+        "dropbox-mcp", "notion-mcp", "mcp-server-webhook", "webhook-mcp",
+    ]
+
+    /// Data leaving the machine through indirect prompt injection (ATT&CK T1567, exfiltration over a web
+    /// service): one server that reads text other people wrote, and a different server that can send data
+    /// off this machine. A page or issue can then carry the instruction and the model sends your files or
+    /// conversation to the attacker's address. Like `injectionExposure` it only reports that the combination
+    /// is configured, from well-known names in the launch line; it cannot see what the tools do or where they
+    /// send. A server that is both reader and sender (Slack, Gmail, GitHub) counts for each role, but one such
+    /// server alone is not a finding. One finding per file; names are sanitized and nothing else is copied.
+    static func egressExposure(servers: [(String, [String: Any])], file: String) -> Finding? {
+        var readers: [(Int, String)] = []
+        var senders: [(Int, String)] = []
+        for (index, (rawName, config)) in servers.enumerated() {
+            let text = launchText(config)
+            if untrustedContentReaders.contains(where: { text.contains($0) }) { readers.append((index, sanitized(rawName))) }
+            if remoteSenders.contains(where: { text.contains($0) }) { senders.append((index, sanitized(rawName))) }
+        }
+        guard readers.contains(where: { reader in senders.contains(where: { $0.0 != reader.0 }) }) else { return nil }
+        func list(_ names: [(Int, String)]) -> String {
+            names.prefix(3).map { $0.1 }.joined(separator: ", ") + (names.count > 3 ? " (+\(names.count - 3))" : "")
+        }
+        return Finding(
+            id: "egress_exposure", severity: "medium", file: file, server: nil,
+            detail: "reads outside content: \(list(readers)); can send off this machine: \(list(senders))",
+            messageKey: "この設定には、Web ページ・メール・チャット・Issue など第三者が書いた文章を AI に読ませる MCP サーバーと、データをこのマシンの外へ送れる MCP サーバー（メール・チャット投稿・クラウド保存・Webhook など）が、別々に入っています。読み込んだ文章に紛れた命令（間接プロンプトインジェクション）を AI が実行すると、手元のファイルや会話の内容が、気づかないうちに外部へ送られるおそれがあります。送信系のツールは毎回の確認を残し、送信先を固定できるものは固定し、読み取り用のサーバーとは別のクライアントやプロファイルに分けてください。"
         )
     }
 

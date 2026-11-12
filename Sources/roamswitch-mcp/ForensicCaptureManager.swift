@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.30 (build 209).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.31 (build 210).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -115,7 +115,7 @@ enum ForensicCaptureManager {
         )
         if let data = try? JSONEncoder().encode(manifest) {
             let manifestURL = bundleDir.appendingPathComponent("manifest.json")
-            try? data.write(to: manifestURL, options: .atomic)
+            try? AtomicFile.write(data, to: manifestURL)
             ForensicChain.flush(manifestURL)
             ForensicChain.flush(bundleDir)
             // Anchor the manifest outside the bundle, so rewriting it after the fact is detectable.
@@ -167,7 +167,7 @@ enum ForensicCaptureManager {
             return ForensicArtifactRecord(name: name, status: "skipped", detail: skippedNote, relativePath: nil, sha256: nil)
         }
         let fileURL = bundleDir.appendingPathComponent(relativePath)
-        guard (try? content.write(to: fileURL, atomically: true, encoding: .utf8)) != nil else {
+        guard (try? AtomicFile.write(content, to: fileURL)) != nil else {
             return ForensicArtifactRecord(name: name, status: "skipped", detail: skippedNote, relativePath: nil, sha256: nil)
         }
         ForensicChain.flush(fileURL)
@@ -218,6 +218,13 @@ enum ForensicCaptureManager {
     static func bundlesPayload() -> MCPForensicEvidenceBundlesPayload {
         guard let root = evidenceRoot() else { return MCPForensicEvidenceBundlesPayload(bundles: []) }
         return bundlesPayload(root: root)
+    }
+
+    /// How the bundles named by timeline records stand against the anchor chain right now (see `ForensicChain.check`).
+    /// Empty when no record points at a bundle.
+    static func checkEvidenceRefs(_ refs: [ContainmentEvidenceRef]) -> [MCPEvidenceCheckPayload] {
+        guard !refs.isEmpty, let root = evidenceRoot() else { return [] }
+        return ForensicChain.check(refs: refs, root: root, chain: ForensicChain.load(root: root))
     }
 
     static func bundlesPayload(root: URL, limit: Int = 20) -> MCPForensicEvidenceBundlesPayload {
@@ -427,5 +434,44 @@ enum ForensicChain {
     /// Bundles the chain names that are no longer in the folder (deleted after the fact).
     static func missingBundles(root: URL, chain: Loaded) -> [String] {
         chain.entries.map(\.bundle).filter { !FileManager.default.fileExists(atPath: root.appendingPathComponent($0).path) }
+    }
+
+    /// Whether each bundle a timeline record points at (`evidenceRefs`) still matches the chain as it is now, one result
+    /// per distinct bundle. The statuses are the Linux edition's (`roamswitch-core` `evidence_check`): `matches`,
+    /// `bundle_missing` (the chain agrees but the folder is gone), `manifest_altered` (the manifest differs from the one the
+    /// chain recorded), `ref_changed` (the hash held by the timeline differs from the chain's), `chain_broken`,
+    /// `not_anchored` (no line for the bundle) and `unchecked` (the log cannot be read). Read-only; nothing is stored.
+    static func check(refs: [ContainmentEvidenceRef], root: URL, chain: Loaded) -> [MCPEvidenceCheckPayload] {
+        let log = root.appendingPathComponent(fileName).path
+        let unreadable = FileManager.default.fileExists(atPath: log) && !FileManager.default.isReadableFile(atPath: log)
+        var seen: [String] = []
+        var out: [MCPEvidenceCheckPayload] = []
+        for r in refs where !seen.contains(r.bundle) {
+            seen.append(r.bundle)
+            let refManifest = refs.first { $0.bundle == r.bundle && $0.artifact == "manifest.json" }?.sha256
+            let status: String
+            if unreadable {
+                status = "unchecked"
+            } else if !chain.chainOK {
+                status = "chain_broken"
+            } else if let entry = chain.anchored(r.bundle) {
+                if let held = refManifest, held != entry.manifestSHA {
+                    status = "ref_changed"
+                } else if let data = try? Data(contentsOf: root.appendingPathComponent(r.bundle).appendingPathComponent("manifest.json")) {
+                    status = sha256Hex(data) == entry.manifestSHA ? "matches" : "manifest_altered"
+                } else if FileManager.default.fileExists(atPath: root.appendingPathComponent(r.bundle).path) {
+                    status = "unchecked"
+                } else {
+                    status = "bundle_missing"
+                }
+            } else {
+                status = "not_anchored"
+            }
+            out.append(MCPEvidenceCheckPayload(
+                bundle: r.bundle, status: status, stale: status != "matches" && status != "unchecked",
+                chainBrokenAt: status == "chain_broken" ? chain.brokenAt : nil
+            ))
+        }
+        return out
     }
 }

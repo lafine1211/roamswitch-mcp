@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.30 (build 209).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.31 (build 210).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -111,9 +111,10 @@ public enum NotificationHistory {
         return now.timeIntervalSince(t) <= retention
     }
 
-    /// Called with every recorded notification. The app sets it to hand the text to the opt-in forwarder
-    /// (`EventForwarder`); it stays `nil` in the targets that only read the history.
-    public static var recordObserver: ((String, String) -> Void)?
+    /// Called with every recorded notification: the title and body as shown, and the same without a language (`nil`
+    /// when none was found). The app sets it to hand the notification to the opt-in forwarder (`EventForwarder`),
+    /// which sends it in English; it stays `nil` in the targets that only read the history.
+    public static var recordObserver: ((String, String, NotificationTexts?) -> Void)?
 
     /// Turns a title and body rendered in the current language into `NotificationTexts` (the app sets it to its
     /// catalog parser, `NotificationTextParser`). `nil` in a process without the catalog: the text is kept as rendered.
@@ -150,7 +151,7 @@ public enum NotificationHistory {
         entries.append(NotificationHistoryEntry(timestamp: stamp, title: title, body: body, text: text))
         save(entries, defaults)
         recordLock.unlock()
-        recordObserver?(title, body)
+        recordObserver?(title, body, text)
     }
 
     private static let recordLock = NSLock()

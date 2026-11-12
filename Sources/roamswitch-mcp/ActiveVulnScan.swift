@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.30 (build 209).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.31 (build 210).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -156,7 +156,7 @@ public enum ActiveVulnScan {
     private static func saveProbeLog(_ entries: [ProbeRunRecord], to url: URL) {
         guard let data = try? JSONEncoder().encode(entries) else { return }
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try? data.write(to: url, options: .atomic)
+        try? AtomicFile.write(data, to: url)
     }
 
     /// Appends `records` (oldest-first within this run), capped at
@@ -170,9 +170,10 @@ public enum ActiveVulnScan {
         // advisory lock on a sidecar file for the whole read-modify-write, or two appends
         // racing lose or duplicate rows. Best effort: without the lock the append still runs.
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let lockFD = open(url.appendingPathExtension("lock").path, O_CREAT | O_WRONLY, 0o600)
-        if lockFD >= 0 { flock(lockFD, LOCK_EX) }
-        defer { if lockFD >= 0 { flock(lockFD, LOCK_UN); close(lockFD) } }
+        AtomicFile.withLock(url.path) { appendProbeLogLocked(records, to: url) }
+    }
+
+    private static func appendProbeLogLocked(_ records: [ProbeRunRecord], to url: URL) {
         let scanId = String(Int(Date().timeIntervalSince1970 * 1000), radix: 16) + "-" + String(ProcessInfo.processInfo.processIdentifier, radix: 16)
         var records = records
         for i in records.indices where records[i].scanId == nil { records[i].scanId = scanId }

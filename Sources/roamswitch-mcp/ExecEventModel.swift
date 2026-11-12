@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.30 (build 209).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.31 (build 210).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -74,13 +74,26 @@ public struct ExecEventRecord: Codable, Equatable {
     /// The controlling terminal of the new process (`/dev/ttys003`), "" when EndpointSecurity reported none, nil when
     /// the event did not say (older records).
     public var tty: String?
+    /// Set only on a `repeat` line of the exec log (`ExecRepeatFolder`): the same program, arguments, signature,
+    /// parent image and terminal ran again and again less than `ExecRepeatFolder.gapSecs` apart (a health check every
+    /// 30 seconds). The first run is written as an ordinary `exec` record; the later ones are kept here as
+    /// (pid, ppid, time, seq) only, and the line itself carries the last run's pid, ppid, time and seq. The rules saw
+    /// every run. Readers give the runs back as `exec` records (`ExecRepeat.expand`). Encoded as `repeat`; an older
+    /// reader ignores it and sees one record of kind `repeat`.
+    public var repeatInfo: ExecRepeatInfo?
+
+    enum CodingKeys: String, CodingKey {
+        case seq, time, kind, pid, ppid, uid, path, args, cwd, priorPath, signingID, teamID, cdhash, isPlatform, csFlags,
+             exitStatus, dyldInsertLibraries, tty
+        case repeatInfo = "repeat"
+    }
 
     public init(
         seq: UInt64 = 0, time: Double, kind: String, pid: Int32, ppid: Int32, uid: UInt32? = nil,
         path: String, args: [String]? = nil, cwd: String? = nil, priorPath: String? = nil,
         signingID: String? = nil, teamID: String? = nil, cdhash: String? = nil,
         isPlatform: Bool? = nil, csFlags: UInt32? = nil, exitStatus: Int32? = nil,
-        dyldInsertLibraries: String? = nil, tty: String? = nil
+        dyldInsertLibraries: String? = nil, tty: String? = nil, repeatInfo: ExecRepeatInfo? = nil
     ) {
         self.seq = seq
         self.time = time
@@ -100,6 +113,7 @@ public struct ExecEventRecord: Codable, Equatable {
         self.exitStatus = exitStatus
         self.dyldInsertLibraries = dyldInsertLibraries
         self.tty = tty
+        self.repeatInfo = repeatInfo
     }
 
     public var signatureClass: ExecSignatureClass {

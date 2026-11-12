@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.30 (build 209).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.31 (build 210).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -51,6 +51,9 @@ enum StoredRecordFile {
         } catch {
             return classify(error).map { .unreadable($0) } ?? .missing
         }
+        // A key that appears twice in one object is not what any writer of ours saved (JSONEncoder never does it), and
+        // the decoder would silently keep one of the two values: the file was edited or damaged, so it is corrupt.
+        if StoredRecordJSON.hasDuplicateKeys(data) { return .unreadable(.corrupt) }
         guard let value = try? JSONDecoder().decode(type, from: data) else { return .unreadable(.corrupt) }
         return .loaded(value)
     }
@@ -164,7 +167,8 @@ enum StoredRecordDefaults {
     /// Reads without writing anything (the MCP server, a status reader).
     static func peek<T: Decodable>(_ type: T.Type, key: String, defaults: UserDefaults) -> StoredRecordRead<T> {
         guard let raw = defaults.object(forKey: key) else { return .missing }
-        guard let data = raw as? Data, let value = try? JSONDecoder().decode(type, from: data) else { return .unreadable(.corrupt) }
+        guard let data = raw as? Data, !StoredRecordJSON.hasDuplicateKeys(data),
+              let value = try? JSONDecoder().decode(type, from: data) else { return .unreadable(.corrupt) }
         return .loaded(value)
     }
 
@@ -226,5 +230,92 @@ enum StoredRecordDefaults {
         let plain = key + ".unreadable"
         guard existing(plain) else { return plain }
         return plain + ".\(Int(now.timeIntervalSince1970))"
+    }
+}
+
+/// Duplicate-key detection for stored JSON. `JSONDecoder` (like `JSONSerialization`) keeps one of two values for the same
+/// key without saying so, so a record with `"enabled": false, "enabled": true` reads as whichever it picks. One pass over
+/// the bytes, no recursion (a deeply nested file cannot exhaust the stack). Keys are compared after their escapes are
+/// decoded (`"a"` and `"\u0061"` are the same key). Text that is not valid JSON is left to the decoder to refuse.
+enum StoredRecordJSON {
+    static func hasDuplicateKeys(_ data: Data) -> Bool {
+        let b = [UInt8](data)
+        var i = 0
+        // One entry per open container: the keys seen so far for an object, nil for an array.
+        var stack: [Set<String>?] = []
+        // Inside an object, the next string is a key.
+        var expectKey = false
+        while i < b.count {
+            let c = b[i]
+            switch c {
+            case UInt8(ascii: "{"):
+                stack.append(Set<String>()); expectKey = true; i += 1
+            case UInt8(ascii: "["):
+                stack.append(nil); expectKey = false; i += 1
+            case UInt8(ascii: "}"), UInt8(ascii: "]"):
+                if !stack.isEmpty { stack.removeLast() }
+                expectKey = false; i += 1
+            case UInt8(ascii: ","):
+                if let top = stack.last { expectKey = top != nil }
+                i += 1
+            case UInt8(ascii: ":"):
+                expectKey = false; i += 1
+            case UInt8(ascii: "\""):
+                guard let (text, end) = decodeString(b, from: i) else { return false }
+                if expectKey, let top = stack.last, var keys = top {
+                    if keys.contains(text) { return true }
+                    keys.insert(text)
+                    stack[stack.count - 1] = keys
+                    expectKey = false
+                }
+                i = end
+            default:
+                i += 1
+            }
+        }
+        return false
+    }
+
+    /// The decoded string starting at the quote at `start`, and the index after its closing quote. nil when the
+    /// string is not closed or an escape is malformed.
+    private static func decodeString(_ b: [UInt8], from start: Int) -> (String, Int)? {
+        var i = start + 1
+        var units: [UInt16] = []
+        var raw: [UInt8] = []
+        func flushRaw() {
+            if !raw.isEmpty { units.append(contentsOf: String(decoding: raw, as: UTF8.self).utf16); raw.removeAll() }
+        }
+        while i < b.count {
+            let c = b[i]
+            if c == UInt8(ascii: "\"") {
+                flushRaw()
+                return (String(decoding: units, as: UTF16.self), i + 1)
+            }
+            if c == UInt8(ascii: "\\") {
+                guard i + 1 < b.count else { return nil }
+                flushRaw()
+                let e = b[i + 1]
+                switch e {
+                case UInt8(ascii: "\""): units.append(0x22)
+                case UInt8(ascii: "\\"): units.append(0x5C)
+                case UInt8(ascii: "/"): units.append(0x2F)
+                case UInt8(ascii: "b"): units.append(0x08)
+                case UInt8(ascii: "f"): units.append(0x0C)
+                case UInt8(ascii: "n"): units.append(0x0A)
+                case UInt8(ascii: "r"): units.append(0x0D)
+                case UInt8(ascii: "t"): units.append(0x09)
+                case UInt8(ascii: "u"):
+                    guard i + 6 <= b.count, let v = UInt16(String(decoding: b[(i + 2)..<(i + 6)], as: UTF8.self), radix: 16) else { return nil }
+                    units.append(v)
+                    i += 4
+                default: return nil
+                }
+                i += 2
+                continue
+            }
+            raw.append(c)
+            i += 1
+        }
+        return nil
     }
 }

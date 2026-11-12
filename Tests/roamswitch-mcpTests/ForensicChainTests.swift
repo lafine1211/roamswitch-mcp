@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.30 (build 209). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.31 (build 210). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -92,5 +92,79 @@ final class ForensicChainTests: XCTestCase {
         try JSONEncoder().encode(manifest).write(to: dir.appendingPathComponent("manifest.json"))
         XCTAssertEqual(integrity(root), ["20261019T000000Z-old": "not_anchored"])
         XCTAssertTrue(ForensicCaptureManager.bundlesPayload(root: root).chainOk, "no log is not a broken log")
+    }
+
+    // MARK: - timeline references against the chain
+
+    private func refs(for dir: URL, manifestSHA: String? = nil) throws -> [ContainmentEvidenceRef] {
+        let data = try Data(contentsOf: dir.appendingPathComponent("manifest.json"))
+        return [ContainmentEvidenceRef(bundle: dir.lastPathComponent, artifact: "manifest.json", sha256: manifestSHA ?? ForensicChain.sha256Hex(data))]
+    }
+
+    private func status(_ refs: [ContainmentEvidenceRef], _ root: URL) -> [MCPEvidenceCheckPayload] {
+        ForensicChain.check(refs: refs, root: root, chain: ForensicChain.load(root: root))
+    }
+
+    func testAnUntouchedBundleMatchesTheTimelineReference() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let a = try makeBundle("20261020T000000Z-a", in: root)
+        let got = status(try refs(for: a), root)
+        XCTAssertEqual(got, [MCPEvidenceCheckPayload(bundle: "20261020T000000Z-a", status: "matches", stale: false)])
+    }
+
+    func testAPrunedBundleARewrittenManifestAndAChangedReferenceAreStale() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let a = try makeBundle("20261020T000000Z-a", in: root)
+        let b = try makeBundle("20261020T000100Z-b", in: root, capturedAt: "2026-10-20T00:01:00Z")
+        let c = try makeBundle("20261020T000200Z-c", in: root, capturedAt: "2026-10-20T00:02:00Z")
+        let all = try refs(for: a) + refs(for: b) + refs(for: c, manifestSHA: ForensicChain.sha256Hex(Data("other".utf8)))
+        try FileManager.default.removeItem(at: a)
+        try JSONEncoder().encode(ForensicManifest(capturedAt: "x", reason: "forged", suspectedPID: nil, artifacts: [])).write(to: b.appendingPathComponent("manifest.json"))
+        let got = Dictionary(uniqueKeysWithValues: status(all, root).map { ($0.bundle, $0) })
+        XCTAssertEqual(got["20261020T000000Z-a"]?.status, "bundle_missing")
+        XCTAssertEqual(got["20261020T000100Z-b"]?.status, "manifest_altered")
+        XCTAssertEqual(got["20261020T000200Z-c"]?.status, "ref_changed")
+        XCTAssertTrue(got.values.allSatisfy(\.stale))
+    }
+
+    func testABrokenChainAndABundleWithNoLineAreStaleAndNamed() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let a = try makeBundle("20261020T000000Z-a", in: root)
+        let b = try makeBundle("20261020T000100Z-b", in: root, capturedAt: "2026-10-20T00:01:00Z")
+        let both = try refs(for: a) + refs(for: b)
+        let stranger = [ContainmentEvidenceRef(bundle: "20261019T000000Z-none", artifact: "manifest.json", sha256: "00")]
+        XCTAssertEqual(status(stranger, root).first?.status, "not_anchored")
+        XCTAssertEqual(status(stranger, root).first?.stale, true)
+        let log = root.appendingPathComponent("chain.log")
+        let lines = try String(contentsOf: log, encoding: .utf8).split(separator: "\n")
+        try (String(lines[1]) + "\n").write(to: log, atomically: true, encoding: .utf8)
+        let got = status(both, root)
+        XCTAssertEqual(got.map(\.status), ["chain_broken", "chain_broken"])
+        XCTAssertEqual(got.first?.chainBrokenAt, "20261020T000100Z-b")
+    }
+
+    func testAnUnreadableLogIsUncheckedNotStale() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: root.appendingPathComponent("chain.log").path); try? FileManager.default.removeItem(at: root) }
+        let a = try makeBundle("20261020T000000Z-a", in: root)
+        let r = try refs(for: a)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: root.appendingPathComponent("chain.log").path)
+        try XCTSkipIf(getuid() == 0, "root can read it")
+        let got = status(r, root)
+        XCTAssertEqual(got.first?.status, "unchecked")
+        XCTAssertEqual(got.first?.stale, false)
+    }
+
+    func testTheTimelinePayloadCarriesTheChecksOnlyWhenThereAreSome() {
+        let none = MCPResponseFormatting.makeIncidentTimelinePayload(events: [])
+        XCTAssertNil(none.evidenceChecks)
+        XCTAssertNil(none.evidenceChecksNote)
+        let check = MCPEvidenceCheckPayload(bundle: "b", status: "bundle_missing", stale: true)
+        let some = MCPResponseFormatting.makeIncidentTimelinePayload(events: [], evidenceChecks: [check])
+        XCTAssertEqual(some.evidenceChecks, [check])
+        XCTAssertTrue(some.evidenceChecksNote?.contains("stale") == true)
     }
 }

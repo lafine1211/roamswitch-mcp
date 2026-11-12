@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.30 (build 209).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.31 (build 210).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -169,6 +169,13 @@ public struct ContainmentIncidentEvent: Identifiable, Codable, Equatable {
     /// What `summary` says, without a language (see `ContainmentSummaryCode`). `nil` on records written before it
     /// existed and on records whose text has no fixed form; those are shown as stored.
     public var summaryCode: ContainmentSummaryCode?
+    /// The hash of the record stored just before this one (`IncidentChain`). nil on records from before the chain.
+    public var prevHash: String?
+    /// The input of the guard that made this record was lost around its time (`IncidentBlindSpot`), so something
+    /// related may not have been seen. Stored only when true.
+    public var blindNear: Bool
+    /// The SSH session the process ran in (`IncidentCorrelation.sshSession`), when an sshd is among its ancestors.
+    public var sshSession: String?
 
     /// The summary in the language shown now: written from `summaryCode` when it is a code this build knows,
     /// otherwise the stored text.
@@ -191,7 +198,10 @@ public struct ContainmentIncidentEvent: Identifiable, Codable, Equatable {
         parentEventID: UUID? = nil,
         rootEventID: UUID? = nil,
         evidenceRefs: [ContainmentEvidenceRef] = [],
-        summaryCode: ContainmentSummaryCode? = nil
+        summaryCode: ContainmentSummaryCode? = nil,
+        prevHash: String? = nil,
+        blindNear: Bool = false,
+        sshSession: String? = nil
     ) {
         self.id = id
         self.timestamp = timestamp
@@ -208,6 +218,9 @@ public struct ContainmentIncidentEvent: Identifiable, Codable, Equatable {
         self.rootEventID = rootEventID
         self.evidenceRefs = evidenceRefs
         self.summaryCode = summaryCode
+        self.prevHash = prevHash
+        self.blindNear = blindNear
+        self.sshSession = sshSession
     }
 
     // The three link fields are newer than the file format: a file written before them has none of the keys, and a
@@ -215,6 +228,7 @@ public struct ContainmentIncidentEvent: Identifiable, Codable, Equatable {
     private enum CodingKeys: String, CodingKey {
         case id, timestamp, source, severity, summary, processName, processID, attackTechnique, actionTaken
         case resolvedAt, resolution, parentEventID, rootEventID, evidenceRefs, summaryCode
+        case prevHash, blindNear, sshSession
     }
 
     public init(from decoder: Decoder) throws {
@@ -235,6 +249,9 @@ public struct ContainmentIncidentEvent: Identifiable, Codable, Equatable {
         evidenceRefs = try c.decodeIfPresent([ContainmentEvidenceRef].self, forKey: .evidenceRefs) ?? []
         // A code this build cannot read (a damaged entry) leaves the record readable with its stored text.
         summaryCode = (try? c.decodeIfPresent(ContainmentSummaryCode.self, forKey: .summaryCode)) ?? nil
+        prevHash = try c.decodeIfPresent(String.self, forKey: .prevHash)
+        blindNear = try c.decodeIfPresent(Bool.self, forKey: .blindNear) ?? false
+        sshSession = try c.decodeIfPresent(String.self, forKey: .sshSession)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -254,6 +271,9 @@ public struct ContainmentIncidentEvent: Identifiable, Codable, Equatable {
         try c.encodeIfPresent(rootEventID, forKey: .rootEventID)
         if !evidenceRefs.isEmpty { try c.encode(evidenceRefs, forKey: .evidenceRefs) }
         try c.encodeIfPresent(summaryCode, forKey: .summaryCode)
+        try c.encodeIfPresent(prevHash, forKey: .prevHash)
+        if blindNear { try c.encode(true, forKey: .blindNear) }
+        try c.encodeIfPresent(sshSession, forKey: .sshSession)
     }
 }
 
@@ -300,6 +320,23 @@ public enum ContainmentIncidentTimeline {
             current = next
         }
         event.rootEventID = current.id
+    }
+
+    /// Whether the guard's input was lost around a new record's time. Reads the reader-health records saved now; tests
+    /// replace it.
+    static var blindNearProbe: (ContainmentIncidentEvent) -> Bool = { event in
+        IncidentBlindSpot.isBlindNear(event, records: GuardReaderHealthStore.all(defaults: AppLanguage.sharedDefaults))
+    }
+    /// The process table for the SSH-session walk; tests replace it.
+    static var processLookup: (Int32) -> IncidentCorrelation.ProcessFacts? = IncidentCorrelation.liveFacts
+
+    /// The links of the stored records (`IncidentChain.verify`). A break is logged and reported; reading goes on.
+    public static func verifyChain() -> IncidentChain.Verification {
+        let result = queue.sync { IncidentChain.verify(loadAll()) }
+        if !result.intact {
+            NSLog("RoamSwitch ContainmentIncidentTimeline: the record chain is broken at %d record(s); a record was edited or removed", result.breaks.count)
+        }
+        return result
     }
 
     /// Called with every record after it was stored. The app sets it to hand the event to the opt-in
@@ -369,12 +406,21 @@ public enum ContainmentIncidentTimeline {
         }
     }
 
+    /// One read-modify-write of the file: this process's queue, then the file's lock, because another process (the MCP
+    /// server) can record too and the queue only orders this one.
+    private static func mutate<T>(_ body: () -> T) -> T {
+        queue.sync {
+            try? FileManager.default.createDirectory(at: storeURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            return AtomicFile.withLock(storeURL.path, body)
+        }
+    }
+
     private static func saveAll(_ events: [ContainmentIncidentEvent]) {
         guard let data = try? JSONEncoder().encode(events) else { return }
         let url = storeURL
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         setAsideIfDamaged()
-        try? data.write(to: url, options: .atomic)
+        try? AtomicFile.write(data, to: url)
     }
 
     /// Records a new incident and returns its id, so the caller can later
@@ -406,9 +452,13 @@ public enum ContainmentIncidentTimeline {
             evidenceRefs: evidenceRefs,
             summaryCode: summaryCode
         )
-        queue.sync {
+        if let pid = processID, pid > 1 { event.sshSession = IncidentCorrelation.sshSession(ofPID: pid, lookup: processLookup) }
+        event.blindNear = blindNearProbe(event)
+        mutate {
             var events = loadAll()
             resolveLinks(&event, existing: events)
+            // Last: the hash covers the links and the marks set above. Records from before the chain start it.
+            IncidentChain.link(&event, after: events.first)
             events.insert(event, at: 0)
             if events.count > maxEntries {
                 events.removeLast(events.count - maxEntries)
@@ -443,7 +493,7 @@ public enum ContainmentIncidentTimeline {
     /// `false` when the record is not there. Best effort, like every writer here.
     @discardableResult
     public static func linkEvidence(to id: UUID, refs: [ContainmentEvidenceRef]) -> Bool {
-        queue.sync {
+        mutate {
             var events = loadAll()
             guard let idx = events.firstIndex(where: { $0.id == id }) else { return false }
             events[idx].evidenceRefs = appendingEvidence(refs, to: events[idx].evidenceRefs)
@@ -472,7 +522,7 @@ public enum ContainmentIncidentTimeline {
         processID: Int32? = nil,
         resolution: ContainmentIncidentResolution
     ) {
-        queue.sync {
+        mutate {
             var events = loadAll()
             guard let idx = events.firstIndex(where: {
                 $0.source == source && $0.resolvedAt == nil && (processID == nil || $0.processID == processID)
@@ -489,7 +539,7 @@ public enum ContainmentIncidentTimeline {
     /// which are stamped resolved at creation so a later `resolveLatest`
     /// still lands on the original incident, not on the transition record.
     public static func resolve(id: UUID, resolution: ContainmentIncidentResolution) {
-        queue.sync {
+        mutate {
             var events = loadAll()
             guard let idx = events.firstIndex(where: { $0.id == id }) else { return }
             events[idx].resolvedAt = Date()
@@ -566,9 +616,10 @@ public enum ContainmentIncidentTimeline {
 ///
 /// The codes are the Mac edition's own. None reuses a Linux `summary_code` name, because their values differ.
 public enum ContainmentSummaryText {
-    /// The title of an exec-recorder rule by its id. Set by the app (the rule titles live there); the targets that only
-    /// read the timeline (the MCP server) leave it `nil` and show the stored text for those records.
-    public static var execRuleTitle: ((String) -> String?)?
+    /// The title of an exec-recorder rule by its id, in the language given second. Set by the app (the rule titles live
+    /// there); the targets that only read the timeline (the MCP server) leave it `nil` and show the stored text for
+    /// those records.
+    public static var execRuleTitle: ((String, String) -> String?)?
 
     // MARK: Codes (the writers use these, so a name or value is never spelled twice)
 
@@ -692,7 +743,7 @@ public enum ContainmentSummaryText {
             guard let address = a["address"], let process = a["process"], let pid = a["pid"] else { return nil }
             return String(format: loc("SSH の接続が開いた待ち受け: %1$@ (%2$@、PID %3$@)", localeCode: lang), address, process, pid)
         case "exec.rule":
-            guard let rule = a["rule"], let process = a["process"], let title = execRuleTitle?(rule) else { return nil }
+            guard let rule = a["rule"], let process = a["process"], let title = execRuleTitle?(rule, lang) else { return nil }
             guard a["repeated"] == "1" else { return title + " — " + process }
             return title + " — " + process + " " + loc("(5分以内の同じ検知の繰り返し。通知はしていません)", localeCode: lang)
         case "reverse_shell.suspected": return f("リバースシェルの疑い: %1$@ が %2$@ に接続", ["process", "peer"])

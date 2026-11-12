@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.30 (build 209).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.31 (build 210).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -180,13 +180,35 @@ public final class ExecLogWriter {
         public var maxTotalBytes: Int
         public var maxAgeSecs: Double
         public var hashChain: Bool
+        /// Sealed segments younger than this are kept past `maxTotalBytes`, up to `hardCapFactor` times it and
+        /// while the disk is not short of space (`diskShort`). The age cap still wins when it is shorter. With only
+        /// the size cap, a busy Linux server kept 18 hours of its exec log, and an incident's records were gone
+        /// before anyone looked (2026-11-12). 0: no floor.
+        public var minRetentionSecs: Double
+        public var hardCapFactor: Int
+        /// Whether the volume of the log is short of space (under 5 % or 1 GiB free); `nil` when it cannot be read.
+        public var diskShort: (URL) -> Bool?
+
+        public static let defaultMinRetentionSecs: Double = 72 * 3600
 
         public init(segmentBytes: Int = 8 * 1024 * 1024, maxTotalBytes: Int = 200 * 1024 * 1024,
-                    maxAgeSecs: Double = 14 * 86_400, hashChain: Bool = true) {
+                    maxAgeSecs: Double = 14 * 86_400, hashChain: Bool = true,
+                    minRetentionSecs: Double = 0, hardCapFactor: Int = 4,
+                    diskShort: @escaping (URL) -> Bool? = ExecLogWriter.Options.volumeIsShort) {
             self.segmentBytes = max(64 * 1024, segmentBytes)
             self.maxTotalBytes = max(1024 * 1024, maxTotalBytes)
             self.maxAgeSecs = max(3600, maxAgeSecs)
             self.hashChain = hashChain
+            self.minRetentionSecs = max(0, minRetentionSecs)
+            self.hardCapFactor = max(1, hardCapFactor)
+            self.diskShort = diskShort
+        }
+
+        public static func volumeIsShort(_ dir: URL) -> Bool? {
+            guard let a = try? FileManager.default.attributesOfFileSystem(forPath: dir.path),
+                  let free = (a[.systemFreeSize] as? NSNumber)?.int64Value,
+                  let size = (a[.systemSize] as? NSNumber)?.int64Value, size > 0 else { return nil }
+            return free * 100 / size < 5 || free < 1 << 30
         }
     }
 
@@ -326,8 +348,17 @@ public final class ExecLogWriter {
         if let cur = currentURL, let i = urls.firstIndex(of: cur) { urls.remove(at: i) }
         var sizes: [(URL, Int)] = urls.map { ($0, ((try? FileManager.default.attributesOfItem(atPath: $0.path))?[.size] as? Int) ?? 0) }
         var total = sizes.reduce(0) { $0 + $1.1 } + currentBytes
+        // Oldest first: once a young segment is kept for the floor, every later one is younger still.
+        let floor = min(options.minRetentionSecs, options.maxAgeSecs)
+        let hardCap = options.maxTotalBytes.multipliedReportingOverflow(by: options.hardCapFactor)
+        let hard = hardCap.overflow ? Int.max : hardCap.partialValue
+        let short = floor > 0 && options.diskShort(dir) == true
         while total > options.maxTotalBytes, !sizes.isEmpty {
-            let (u, s) = sizes.removeFirst()
+            let (u, s) = sizes[0]
+            let m = (try? FileManager.default.attributesOfItem(atPath: u.path))?[.modificationDate] as? Date
+            let young = m.map { now.timeIntervalSince($0) < floor } ?? false
+            if young && total <= hard && !short { break }
+            sizes.removeFirst()
             if (try? FileManager.default.removeItem(at: u)) != nil {
                 removed += 1
                 total -= s
@@ -420,6 +451,234 @@ public final class ExecLogWriter {
     }
 }
 
+// MARK: - Folding repeated runs
+//
+// A container health check or a monitoring agent runs the same command every few seconds; written one line per
+// run, it filled a Linux server's exec log so fast that only 18 hours were kept and an incident could no longer be
+// looked into (2026-11-12). The same run (everything but the pid, the parent's pid, the time and the sequence
+// number) coming again within `ExecRepeatFolder.gapSecs` of the one before is therefore written as the first run in
+// full plus one `repeat` line that lists the later runs:
+//   {"kind":"repeat", <the first run's fields, with the last run's pid/ppid/time/seq>,
+//    "repeat":{"count":N,"firstTime":t1,"lastTime":tN,"runs":[[pid,ppid,time,seq],...]}}
+// Only the log is folded: the correlation rules see every run before this (`ExecRecordStep`). Every reader gives the
+// runs back as the exec records they stand for (`ExecRepeat.expand`), so a search by pid or time, the process tree
+// and the Sigma rules see each run.
+
+/// One run a `repeat` line stands for, encoded as `[pid, ppid, time, seq]` to keep the line short.
+public struct ExecRepeatRun: Codable, Equatable, Hashable {
+    public var pid: Int32
+    public var ppid: Int32
+    public var time: Double
+    public var seq: UInt64
+
+    public init(pid: Int32, ppid: Int32, time: Double, seq: UInt64) {
+        self.pid = pid
+        self.ppid = ppid
+        self.time = time
+        self.seq = seq
+    }
+
+    public init(_ r: ExecEventRecord) {
+        self.init(pid: r.pid, ppid: r.ppid, time: r.time, seq: r.seq)
+    }
+
+    public init(from decoder: Decoder) throws {
+        var c = try decoder.unkeyedContainer()
+        pid = try c.decode(Int32.self)
+        ppid = try c.decode(Int32.self)
+        time = try c.decode(Double.self)
+        seq = c.isAtEnd ? 0 : try c.decode(UInt64.self)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.unkeyedContainer()
+        try c.encode(pid)
+        try c.encode(ppid)
+        try c.encode(time)
+        try c.encode(seq)
+    }
+}
+
+/// The runs of a `repeat` line (see `ExecEventRecord.repeatInfo`).
+public struct ExecRepeatInfo: Codable, Equatable {
+    /// How many runs the line stands for (the first run, written as its own record, is not counted).
+    public var count: Int
+    public var firstTime: Double
+    public var lastTime: Double
+    /// Oldest first.
+    public var runs: [ExecRepeatRun]
+
+    public init(runs: [ExecRepeatRun]) {
+        self.count = runs.count
+        self.firstTime = runs.first?.time ?? 0
+        self.lastTime = runs.last?.time ?? 0
+        self.runs = runs
+    }
+}
+
+public enum ExecRepeat {
+    /// The repeat line for `runs` (oldest first, at least one) of the series whose first run was `first`: `first`
+    /// with kind `repeat`, the pid, parent, time and seq of the last run, and every run in `repeatInfo`.
+    public static func line(first: ExecEventRecord, runs: [ExecRepeatRun]) -> ExecEventRecord {
+        var r = first
+        r.kind = "repeat"
+        if let last = runs.last {
+            r.pid = last.pid
+            r.ppid = last.ppid
+            r.time = last.time
+            r.seq = last.seq
+        }
+        r.repeatInfo = ExecRepeatInfo(runs: runs)
+        return r
+    }
+
+    /// The runs of a repeat line as the exec records they stand for (each with its own pid, parent, time and seq),
+    /// oldest first. Any other record is given back as it is.
+    public static func expand(_ r: ExecEventRecord) -> [ExecEventRecord] {
+        guard let info = r.repeatInfo else { return [r] }
+        return info.runs.map { run in
+            var e = r
+            e.kind = "exec"
+            e.repeatInfo = nil
+            e.pid = run.pid
+            e.ppid = run.ppid
+            e.time = run.time
+            e.seq = run.seq
+            return e
+        }
+    }
+
+    /// `records` with every repeat line replaced by its runs.
+    public static func expandAll(_ records: [ExecEventRecord]) -> [ExecEventRecord] {
+        guard records.contains(where: { $0.repeatInfo != nil }) else { return records }
+        return records.flatMap(expand)
+    }
+
+    /// How many runs `records` stand for (a repeat line counts its runs).
+    public static func runCount(_ records: [ExecEventRecord]) -> Int {
+        records.reduce(0) { $0 + ($1.repeatInfo?.count ?? 1) }
+    }
+}
+
+/// Folds runs that repeat a recent one into repeat lines (see the comment above `ExecRepeatRun`). Thread-safe: the
+/// recorder folds on its queue while the read service takes the runs not written yet (`pendingLines`).
+public final class ExecRepeatFolder {
+    /// A run counts as a repeat of the series when it comes within this of the run before it.
+    public static let gapSecs: Double = 600
+    /// A series' pending runs are written out at least this often, and at most `maxRuns` per line.
+    public static let flushSecs: Double = 600
+    public static let maxRuns = 1000
+    /// Series followed at once; past this the one seen longest ago is written out and forgotten.
+    public static let seriesCap = 512
+
+    /// Everything a reader or a rule looks at except the pid, the parent's pid, the time and the seq.
+    struct Key: Hashable {
+        var path: String
+        var args: [String]
+        var cwd: String?
+        var uid: UInt32?
+        var priorPath: String?
+        var signingID: String?
+        var teamID: String?
+        var cdhash: String
+        var isPlatform: Bool?
+        var csFlags: UInt32?
+        var tty: String?
+    }
+
+    private struct Series {
+        var first: ExecEventRecord
+        var lastTime: Double
+        var pending: [ExecRepeatRun]
+    }
+
+    private let lock = NSLock()
+    private var series: [Key: Series] = [:]
+
+    public init() {}
+
+    /// The identity of a run for folding, or nil for a record that is always written in full: anything but a plain
+    /// exec, one without its command line, one with `DYLD_INSERT_LIBRARIES`, and one without a cdhash (an unsigned
+    /// binary: nothing says the file is the same one as last time).
+    static func key(_ r: ExecEventRecord) -> Key? {
+        guard r.kind == "exec", r.repeatInfo == nil, r.dyldInsertLibraries == nil,
+              let args = r.args, !args.isEmpty, let cdhash = r.cdhash, !cdhash.isEmpty else { return nil }
+        return Key(path: r.path, args: args, cwd: r.cwd, uid: r.uid, priorPath: r.priorPath, signingID: r.signingID,
+                   teamID: r.teamID, cdhash: cdhash, isPlatform: r.isPlatform, csFlags: r.csFlags, tty: r.tty)
+    }
+
+    public static func folds(_ r: ExecEventRecord) -> Bool { key(r) != nil }
+
+    /// The records to write now for `rec`: `rec` itself when it starts a series or is never folded, nothing when it
+    /// is kept for its series' repeat line, and before `rec` the repeat line of a series that stopped. `alerted`: a
+    /// rule raised an alert for this run, which is then always written in full (the alert names it by its seq).
+    public func fold(_ rec: ExecEventRecord, alerted: Bool = false) -> [ExecEventRecord] {
+        guard !alerted, let key = Self.key(rec) else { return [rec] }
+        lock.lock()
+        defer { lock.unlock() }
+        var out: [ExecEventRecord] = []
+        if var s = series[key] {
+            if rec.time >= s.lastTime, rec.time - s.lastTime <= Self.gapSecs {
+                s.lastTime = rec.time
+                s.pending.append(ExecRepeatRun(rec))
+                if s.pending.count >= Self.maxRuns {
+                    out.append(ExecRepeat.line(first: s.first, runs: s.pending))
+                    s.pending.removeAll()
+                }
+                series[key] = s
+                return out
+            }
+            // The series stopped (a long gap, or the clock went back): its runs are written, and this run starts it
+            // again in full.
+            series[key] = nil
+            if !s.pending.isEmpty { out.append(ExecRepeat.line(first: s.first, runs: s.pending)) }
+        }
+        if series.count >= Self.seriesCap,
+           let oldest = series.min(by: { $0.value.lastTime < $1.value.lastTime }) {
+            series[oldest.key] = nil
+            if !oldest.value.pending.isEmpty { out.append(ExecRepeat.line(first: oldest.value.first, runs: oldest.value.pending)) }
+        }
+        out.append(rec)
+        series[key] = Series(first: rec, lastTime: rec.time, pending: [])
+        return out
+    }
+
+    /// The repeat lines due as of `now`: a series quiet for `gapSecs` is written and forgotten, one whose oldest
+    /// pending run is `flushSecs` old is written and goes on. `all` writes every pending run (stop).
+    public func due(now: Double, all: Bool = false) -> [ExecEventRecord] {
+        lock.lock()
+        defer { lock.unlock() }
+        var out: [(Double, ExecEventRecord)] = []
+        for (key, s) in series {
+            let ended = all || now - s.lastTime > Self.gapSecs
+            let flush = ended || (s.pending.first.map { now - $0.time >= Self.flushSecs } ?? false)
+            guard flush else { continue }
+            if !s.pending.isEmpty { out.append((s.lastTime, ExecRepeat.line(first: s.first, runs: s.pending))) }
+            if ended {
+                series[key] = nil
+            } else {
+                series[key]?.pending.removeAll()
+            }
+        }
+        return out.sorted { $0.0 < $1.0 }.map(\.1)
+    }
+
+    /// The runs kept and not written yet, as repeat lines (what the log will hold once they are written), so a
+    /// reader sees every run at once.
+    public func pendingLines() -> [ExecEventRecord] {
+        lock.lock()
+        defer { lock.unlock() }
+        return series.values.filter { !$0.pending.isEmpty }.sorted { $0.lastTime < $1.lastTime }
+            .map { ExecRepeat.line(first: $0.first, runs: $0.pending) }
+    }
+
+    public var pendingRunCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return series.values.reduce(0) { $0 + $1.pending.count }
+    }
+}
+
 // MARK: - Reader / search / verify
 
 public struct ExecLogQuery {
@@ -440,10 +699,14 @@ public struct ExecLogQuery {
     /// Upper bound on bytes read per call so a query can never turn into a
     /// multi-second full scan of a 1 GB log.
     public var maxScanBytes: Int
+    /// False (the default): a repeat line is given as the runs it stands for, each an `exec` record. True: as one
+    /// `repeat` record holding the runs that matched (the viewer, the MCP tool). A query by pid always gets the runs.
+    public var foldRepeats: Bool
 
     public init(text: String? = nil, pid: Int32? = nil, ppid: Int32? = nil, since: Double? = nil, until: Double? = nil,
                 kind: String? = nil, signature: ExecSignatureClass? = nil, teamID: String? = nil,
-                limit: Int = 50, maskedTextMatch: Bool = false, maxScanBytes: Int = 64 * 1024 * 1024) {
+                limit: Int = 50, maskedTextMatch: Bool = false, maxScanBytes: Int = 64 * 1024 * 1024,
+                foldRepeats: Bool = false) {
         self.text = text
         self.pid = pid
         self.ppid = ppid
@@ -455,6 +718,7 @@ public struct ExecLogQuery {
         self.limit = min(max(limit, 1), 5000)
         self.maskedTextMatch = maskedTextMatch
         self.maxScanBytes = maxScanBytes
+        self.foldRepeats = foldRepeats
     }
 
     public func matches(_ r: ExecEventRecord) -> Bool {
@@ -562,8 +826,11 @@ public enum ExecLogReader {
         return parseHeader(Data(data[data.startIndex..<nl]))?.created
     }
 
-    /// Newest-first search across segments, bounded by `query.maxScanBytes`.
-    public static func search(dir: URL, query: ExecLogQuery) -> ExecLogSearchResult {
+    /// Newest-first search across segments, bounded by `query.maxScanBytes`. `pending`: repeat lines the recorder
+    /// has not written yet (`ExecRepeatFolder.pendingLines`), read as the newest lines. A repeat line is matched run
+    /// by run (`ExecRepeat.expand`); with `query.foldRepeats` (and no pid) the runs that matched come back as one
+    /// `repeat` record counted once toward the limit, otherwise as one `exec` record each.
+    public static func search(dir: URL, query: ExecLogQuery, pending: [ExecEventRecord] = []) -> ExecLogSearchResult {
         let urls = segmentURLs(dir: dir)
         var isDir: ObjCBool = false
         let exists = FileManager.default.fileExists(atPath: dir.path, isDirectory: &isDir)
@@ -574,6 +841,36 @@ public enum ExecLogReader {
         var scanned = 0
         var truncated = false
         let decoder = JSONDecoder()
+        // A run is listed once: the recorder may write a pending repeat line between the snapshot and the read.
+        var seenRuns = Set<ExecRepeatRun>()
+        var sawRepeat = false
+        /// Adds what `rec` contributes; true once the limit is reached.
+        func take(_ rec: ExecEventRecord) -> Bool {
+            guard rec.repeatInfo != nil else {
+                guard rec.kind != "repeat", query.matches(rec) else { return false }
+                out.append(rec)
+                return out.count >= query.limit
+            }
+            sawRepeat = true
+            let runs = ExecRepeat.expand(rec).filter { query.matches($0) && seenRuns.insert(ExecRepeatRun($0)).inserted }
+            guard !runs.isEmpty else { return false }
+            if query.foldRepeats && query.pid == nil {
+                out.append(ExecRepeat.line(first: rec, runs: runs.map(ExecRepeatRun.init)))
+                return out.count >= query.limit
+            }
+            for r in runs.reversed() {
+                out.append(r)
+                if out.count >= query.limit { return true }
+            }
+            return false
+        }
+        func finish() -> [ExecEventRecord] {
+            // Runs of a repeat line are older than the records written before it: newest first again.
+            sawRepeat ? out.sorted { ($0.time, $0.seq) > ($1.time, $1.seq) } : out
+        }
+        for line in pending.reversed() where take(line) {
+            return ExecLogSearchResult(events: finish(), scannedBytes: 0, truncatedScan: false, segments: urls.count, readable: true)
+        }
         segments: for url in urls.reversed() {
             guard let data = try? Data(contentsOf: url) else { continue }
             // Segments are append-only but a wall-clock step can put an older timestamp after a
@@ -594,10 +891,7 @@ public enum ExecLogReader {
                 if lineEnd > lineStart {
                     let line = Data(data[lineStart..<lineEnd])
                     if !ExecLogChain.isMeta(line), let rec = try? decoder.decode(ExecEventRecord.self, from: line) {
-                        if query.matches(rec) {
-                            out.append(rec)
-                            if out.count >= query.limit { break segments }
-                        }
+                        if take(rec) { break segments }
                     }
                 }
                 end = nlBefore ?? data.startIndex
@@ -605,7 +899,7 @@ public enum ExecLogReader {
             if let since = query.since, let created = segmentCreated(data), created < since - sinceSkewSecs { segmentHeaderBeforeSince = true }
             if segmentHeaderBeforeSince { break segments }
         }
-        return ExecLogSearchResult(events: out, scannedBytes: scanned, truncatedScan: truncated, segments: urls.count, readable: true)
+        return ExecLogSearchResult(events: finish(), scannedBytes: scanned, truncatedScan: truncated, segments: urls.count, readable: true)
     }
 
     /// Verifies the hash chain across all segments (see the file header for

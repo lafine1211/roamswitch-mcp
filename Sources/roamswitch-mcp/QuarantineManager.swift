@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.30 (build 209).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.31 (build 210).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -58,8 +58,14 @@ final class QuarantineManager {
 
     /// Tests point this at a throwaway folder; the app uses the default under Application Support.
     private let directoryOverride: URL?
+    /// Where each move is recorded (`begin`, then `done` or `failed` from the files as they are after the move). The
+    /// app's journal by default; none for a test folder unless the test gives one.
+    private let journal: ActionJournal?
 
-    init(directory: URL? = nil) { directoryOverride = directory }
+    init(directory: URL? = nil, journal: ActionJournal? = nil) {
+        directoryOverride = directory
+        self.journal = journal ?? (directory == nil ? AppActionJournal.shared : nil)
+    }
 
     private var quarantineDirectoryURL: URL {
         directoryOverride ?? FileManager.default
@@ -140,6 +146,16 @@ final class QuarantineManager {
             let originalFileName = (originalPath as NSString).lastPathComponent
 
             // 既に別の記録が使っている隔離名(=別ファイル)。同名の別ファイルを「隔離済み」と誤認しないために使う。
+            let journalID = journal?.begin(.quarantine, target: originalPath, origin: .auto, trigger: threatName)
+            // Read back after the move: in the folder, and gone from where it was.
+            func finishJournal(_ destination: String?) {
+                guard let journalID, let journal else { return }
+                if let destination, fileManager.fileExists(atPath: destination), !fileManager.fileExists(atPath: originalPath) {
+                    journal.finish(journalID, .done)
+                } else {
+                    journal.finish(journalID, .failed, detail: "the file is not in the quarantine folder")
+                }
+            }
             let takenNames = Set(entries.map { $0.quarantinedFileName })
             var actualQuarantinedName = originalFileName
             var destPath = qDir + "/" + actualQuarantinedName
@@ -165,9 +181,11 @@ final class QuarantineManager {
                 // 元ファイルは既に無いが、隔離フォルダの同名ファイルは別の元パスの記録のもの。
                 // どちらのファイルか判別できないので「隔離済み」とは記録しない。
                 NSLog("RoamSwitch QuarantineManager: \(originalPath) is gone, but the same-named quarantine file belongs to a different record; not claiming it")
+                finishJournal(nil)
                 continue
             }
 
+            finishJournal(destPath)
             guard fileManager.fileExists(atPath: destPath) else {
                 // The move either failed above, or never ran because
                 // `originalPath` was already gone for some other reason —
@@ -343,7 +361,7 @@ final class QuarantineManager {
     private func saveMetadata(_ entries: [MetadataEntry]) {
         guard let data = try? JSONEncoder().encode(entries) else { return }
         ensureQuarantineDirectory()
-        try? data.write(to: URL(fileURLWithPath: metadataPath), options: .atomic)
+        try? AtomicFile.write(data, to: URL(fileURLWithPath: metadataPath))
     }
 
     private func removeMetadata(for file: QuarantinedFile) {

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.30 (build 209).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.31 (build 210).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -61,12 +61,16 @@ enum MCPToolCallLog {
     static func record(tool: String, arguments: [String: Any]) {
         guard let newLine = line(for: tool, argumentKeys: Array(arguments.keys)) else { return }
         let url = logURL
-        let existing = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
-        var lines = existing.isEmpty ? [] : existing.components(separatedBy: "\n").filter { !$0.isEmpty }
-        lines.append(newLine)
-        if lines.count > maxEntries {
-            lines.removeFirst(lines.count - maxEntries)
+        // Every MCP client starts its own server process: hold the file while reading and replacing it, or two calls
+        // at once keep only one of the two lines.
+        AtomicFile.withLock(url.path) {
+            let existing = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+            var lines = existing.isEmpty ? [] : existing.components(separatedBy: "\n").filter { !$0.isEmpty }
+            lines.append(newLine)
+            if lines.count > maxEntries {
+                lines.removeFirst(lines.count - maxEntries)
+            }
+            try? AtomicFile.write(lines.joined(separator: "\n") + "\n", to: url)
         }
-        try? (lines.joined(separator: "\n") + "\n").write(to: url, atomically: true, encoding: .utf8)
     }
 }

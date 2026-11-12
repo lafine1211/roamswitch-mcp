@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.30 (build 209).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.31 (build 210).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -108,12 +108,34 @@ struct MCPExecEventPayload: Encodable {
     /// otherwise — the one deliberate exception to this recorder never
     /// reading environment variables (see `ExecEventRecord`'s doc comment).
     let dyldInsertLibraries: String?
+    /// Only on an event of kind `repeat`: the same command ran again and again less than ten minutes apart; this
+    /// event is its last run, and `repeat` lists the runs (the first run is its own `exec` event).
+    let `repeat`: MCPExecRepeatPayload?
+}
+
+/// The runs of a `repeat` event: `count` runs from `firstTime` to `lastTime`, the newest `runs` of them listed
+/// (oldest first) and `runsOmitted` left out. Same shape as the Linux edition's `repeat` (count, first, last, runs).
+struct MCPExecRepeatPayload: Encodable {
+    let count: Int
+    let firstTime: String
+    let lastTime: String
+    let runs: [MCPExecRepeatRunPayload]
+    let runsOmitted: Int
+}
+
+struct MCPExecRepeatRunPayload: Encodable {
+    let pid: Int32
+    let ppid: Int32
+    let time: String
+    let seq: UInt64
 }
 
 struct MCPExecSearchPayload: Encodable {
     let recorder: MCPExecRecorderStatePayload
     let logReadable: Bool
     let matched: Int
+    /// How many runs `events` stand for: a `repeat` event counts its runs.
+    let matchedRuns: Int
     let scanTruncated: Bool
     let events: [MCPExecEventPayload]
     /// Why no data could be read (nil when the log was read).
@@ -240,8 +262,21 @@ enum MCPExecRecorderTools {
             cwd: ExecOutputSanitizer.clean(r.cwd), signature: r.signatureClass.rawValue,
             signingID: ExecOutputSanitizer.clean(r.signingID), teamID: ExecOutputSanitizer.clean(r.teamID),
             cdhash: ExecOutputSanitizer.clean(r.cdhash), exitStatus: r.exitStatus,
-            dyldInsertLibraries: ExecOutputSanitizer.clean(r.dyldInsertLibraries)
+            dyldInsertLibraries: ExecOutputSanitizer.clean(r.dyldInsertLibraries),
+            repeat: r.repeatInfo.map { repeatPayload($0, iso: iso) }
         )
+    }
+
+    /// At most this many runs of one `repeat` event are listed (the newest); a search by pid finds any run.
+    static let maxRepeatRuns = 100
+
+    static func repeatPayload(_ info: ExecRepeatInfo, iso: ISO8601DateFormatter) -> MCPExecRepeatPayload {
+        let shown = info.runs.suffix(maxRepeatRuns)
+        return MCPExecRepeatPayload(
+            count: info.count, firstTime: iso.string(from: Date(timeIntervalSince1970: info.firstTime)),
+            lastTime: iso.string(from: Date(timeIntervalSince1970: info.lastTime)),
+            runs: shown.map { MCPExecRepeatRunPayload(pid: $0.pid, ppid: $0.ppid, time: iso.string(from: Date(timeIntervalSince1970: $0.time)), seq: $0.seq) },
+            runsOmitted: info.runs.count - shown.count)
     }
 
     static func nodePayload(_ n: ExecProcessNode) -> MCPProcessNodePayload {
@@ -271,7 +306,7 @@ enum MCPExecRecorderTools {
     /// A rejected query (too short / too frequent): same payload shape, no data, the reason in
     /// `unavailableReason`.
     private static func rejectedSearch(_ reason: String, defaults: UserDefaults, now: Date) -> MCPExecSearchPayload {
-        MCPExecSearchPayload(recorder: recorderState(defaults: defaults, now: now), logReadable: false, matched: 0,
+        MCPExecSearchPayload(recorder: recorderState(defaults: defaults, now: now), logReadable: false, matched: 0, matchedRuns: 0,
                              scanTruncated: false, events: [], unavailableReason: reason, caveats: caveats())
     }
 
@@ -301,7 +336,7 @@ enum MCPExecRecorderTools {
         }
         let request = ExecSearchRequest(text: text, pid: int32("pid"), ppid: int32("ppid"), since: since, until: until, kind: kind,
                                         signature: sig?.rawValue, teamID: arguments["teamID"] as? String, limit: limit,
-                                        maskedTextMatch: true)
+                                        maskedTextMatch: true, foldRepeats: true)
         let response = transport(ExecMCPMailbox.Request(op: "search", search: request))
         let reply = (response?.ok == true) ? response?.search : nil
         let scanTruncated = (reply?.truncatedScan ?? false) || (reply?.truncatedReply ?? false)
@@ -309,6 +344,7 @@ enum MCPExecRecorderTools {
             recorder: recorderState(defaults: defaults, now: now),
             logReadable: reply?.readable ?? false,
             matched: reply?.events.count ?? 0,
+            matchedRuns: ExecRepeat.runCount(reply?.events ?? []),
             scanTruncated: scanTruncated,
             events: (reply?.events ?? []).map(eventPayload),
             unavailableReason: reply == nil ? unavailableText(code: response?.error) : nil,

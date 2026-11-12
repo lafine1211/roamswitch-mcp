@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.30 (build 209). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.31 (build 210). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -31,6 +31,26 @@ final class SarifRuleIdStabilityTests: XCTestCase {
         "nmap-nse", "unclassified",
     ]
 
+    private static let publishedMCPConfigIDs: [String] = [
+        "auto_approve", "remote_plain_http", "remote_no_auth", "shell_wrapper", "unpinned_package_launcher",
+        "container_host_access", "code_loading_env", "traffic_interception_env", "mcp_wide_bind", "hexstrike",
+        "world_writable_config", "auto_trust_project_servers", "injection_exposure",
+    ]
+
+    func testNoPublishedMCPConfigIdWasRemovedOrRenamed() {
+        let current = Set(MCPConfigAuditor.findingIDs)
+        let missing = Self.publishedMCPConfigIDs.filter { !current.contains($0) }
+        XCTAssertTrue(missing.isEmpty, "rule ids removed or renamed: \(missing). See docs/sarif_rule_id_policy.md")
+    }
+
+    func testTheMCPConfigSarifLogKeepsEveryPublishedRule() throws {
+        let log = MCPConfigAuditor.sarifLog(MCPConfigAuditor.Result(), toolVersion: "0")
+        let run = try XCTUnwrap((log["runs"] as? [[String: Any]])?.first)
+        let driver = try XCTUnwrap((run["tool"] as? [String: Any])?["driver"] as? [String: Any])
+        let ids = Set((driver["rules"] as? [[String: Any]] ?? []).compactMap { $0["id"] as? String })
+        XCTAssertTrue(Set(Self.publishedMCPConfigIDs).isSubset(of: ids))
+    }
+
     func testNoPublishedAgentSetupIdWasRemovedOrRenamed() {
         let current = Set(AgentSetupAuditor.findingIDs)
         let missing = Self.publishedAgentSetupIDs.filter { !current.contains($0) }
@@ -62,7 +82,7 @@ final class SarifRuleIdStabilityTests: XCTestCase {
 
     /// An id stays unique and plain: a dashboard keys on it as text.
     func testIdsAreUniqueAndPlain() {
-        for list in [AgentSetupAuditor.findingIDs, ActiveVulnScan.sarifRuleIDs] {
+        for list in [AgentSetupAuditor.findingIDs, ActiveVulnScan.sarifRuleIDs, MCPConfigAuditor.findingIDs] {
             XCTAssertEqual(Set(list).count, list.count)
             for id in list { XCTAssertNotNil(id.range(of: #"^[a-z0-9][a-z0-9_-]*$"#, options: .regularExpression), id) }
         }

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.30 (build 209).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.31 (build 210).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -266,7 +266,9 @@ extension RoamSwitchKnowledgeBase {
                 • 실패했을 때: TCP·TLS·웹훅은 디스크 대기열(0600, 크기와 시간에 상한이 있고 재시작 후에도 남음)에 넣고 간격을 늘려 가며 재전송합니다. UDP와 파일은 재전송하지 않습니다. 앱을 종료할 때 보내지 못한 분도 재전송 대상이면 대기열에 남깁니다.
                 • 안전 조치: 프로세스 이름이나 명령줄처럼 공격자가 정할 수 있는 문자열은 형식별로 이스케이프하고, 줄바꿈 등의 제어 문자는 `\\xNN`으로 바꿉니다. 가짜 레코드를 끼워 넣을 수 없습니다.
                 • 설정: 메뉴→악성코드 방어→"이벤트 전달 (SIEM)…". "테스트 보내기"로 저장 전에 대상을 확인할 수 있습니다. Pro 라이선스가 유효할 때만 동작합니다.
-                • Linux 버전과의 차이: 형식, 설정 항목, 재전송 동작은 Linux 버전과 같습니다. Linux 버전에 있는 조직 정책(Fleet)에 의한 전송 대상 지정과 내부 주소 웹훅 거부는 Mac 버전에 없습니다.
+                • Linux 버전과의 차이: 형식, 설정 항목, 재전송 동작, 내부 주소의 구분은 Linux 버전과 같습니다. Linux 버전에 있는 조직 정책(Fleet)에 의한 전송 대상 지정은 Mac 버전에 없습니다.
+                • 내부 주소 거부: “내부 주소(루프백, LAN, 링크 로컬, 클라우드 메타데이터)로 보내지 않음”이 켜져 있으면, syslog와 웹훅 대상이 내부 주소(CGNAT와 고유 로컬 포함)일 때 보내지 않습니다. 이름으로 된 대상은 보내기 전에 조회해 돌아온 주소를 모두 확인하고, 확인한 주소에만 연결합니다. LAN 안의 SIEM으로 보낼 때는 “내부 주소라도 보내도 되는 대상”에 그 주소나 CIDR을 적습니다. 새로 설정할 때는 기본으로 켜져 있습니다. 이전 버전에서 대상을 저장한 설정은 한 번만 옮깁니다. 앱을 시작할 때와 전송 설정을 다시 읽을 때, 쓰고 있는 내부 주소를 “내부 주소라도 보내도 되는 대상”에 더한 뒤 켜고, 더한 주소를 알림 기록에 남깁니다(전송이 꺼진 동안 옮겼다면 다음에 전송을 시작할 때 남깁니다). 주소로 적은 대상은 전송이 꺼져 있어도 옮깁니다. 이름으로 적은 대상이 있으면 전송이 보내는 상태(켜져 있고 Pro가 유효)가 된 뒤에 이름을 조회해 옮깁니다. 이름을 조회할 수 없으면 꺼진 채로 한 번 알리고, 다음에 전송을 시작할 때 다시 시도합니다. 그 뒤 설정 화면에서 끄면 꺼진 채로 둡니다.
+                • 전송 대상 일시 중지: 재전송 대기 시간은 매번 조금씩 어긋나게 합니다. TCP, TLS, 웹훅 대상으로 5번 연속 보내지 못하면 그 대상으로의 전송을 30초 멈추고, 실패가 계속되면 멈추는 시간을 두 배로 늘립니다(최장 10분). 멈춘 동안의 이벤트는 재전송 대기열에 넣고, 설정 화면에 그렇게 표시합니다.
                 """,
                 recommendation: "SIEM이나 syslog 서버가 있고 인시던트를 단말 밖에도 남기고 싶을 때 켜세요. 개인 용도라면 꺼 두어도 됩니다."
             ),
@@ -431,7 +433,7 @@ extension RoamSwitchKnowledgeBase {
                 • 터미널이 없는 ssh 터널(exec.ssh_remote_forward, T1572): ssh가 원격(-R, RemoteForward) 또는 동적(-D, DynamicForward) 포워딩을 요청하고, 그 프로세스에 터미널이 없거나(macOS가 제어 터미널이 없다고 보고) launchd가 직접 시작했을 때 중요도 중간으로 알립니다(이 규칙은 중간이어도 배너를 띄웁니다. Air-Gap이나 포트 차단은 하지 않습니다). 원격 포워딩은 바깥의 상대가 이 Mac이 연 연결을 거쳐 이 Mac이나 그 너머의 네트워크로 들어오는 길이 됩니다. 들어오는 연결만 막는 방화벽에서는 보이지 않습니다. 터미널에서 사람이 입력한 ssh -R은 터미널이 있으므로 알리지 않습니다. 로컬 포워딩(-L)은 대상이 아닙니다. 한계: ssh가 아닌 터널(chisel, frp, ngrok 등)과 ~/.ssh/config에만 적은 RemoteForward(명령줄에 나타나지 않음)는 이 규칙으로는 보이지 않습니다. 다른 기기에서 SSH로 이 Mac에 들어온 상대가 요청한 -R은 이 Mac에서 프로그램을 시작하지 않으므로 이 규칙에 해당하지 않습니다. 포트 이상 가드(Pro)가 그 세션의 프로세스(sshd-session)가 연 대기 포트를 보고, 127.0.0.1의 것도 포함해 알립니다.
                 • 같은 탐지의 반복: 같은 규칙, 같은 프로그램, 같은 부모 프로세스의 탐지는 첫 번째부터 5분 동안 다시 알리지 않습니다. 기록은 남기며, 인시던트 타임라인에는 「(5분 이내 같은 탐지의 반복. 알리지 않았습니다)」를 붙여 남깁니다. 그 5분 동안 같은 탐지는 20건까지 남깁니다.
                 • 알림: 알림(Pro)과 인시던트 타임라인 기록(출처 execRecorder, 조치 「알림 전용」). 알림 하나만으로 Air-Gap 등의 격리가 발동되는 일은 없습니다.
-                • 저장: /Library/Application Support/RoamSwitch/exec_log 아래의 세그먼트 분할 JSON Lines(root 전용 0700/0600. 명령줄에 비밀 정보가 포함될 수 있어, 앱·뷰어·MCP 서버는 권한 있는 헬퍼를 통해서만 읽습니다), 기본 200MB·14일(변경 가능), 충돌에도 안전한 로테이션. 세그먼트를 해시 체인으로 연결해 삭제·수정·잘림을 탐지합니다(「체인 검증」). 변조 탐지일 뿐 변조 방지는 아닙니다. 환경 변수는 기록하지 않지만 명령줄 인수에는 민감한 정보가 포함될 수 있습니다.
+                • 저장: /Library/Application Support/RoamSwitch/exec_log 아래의 세그먼트 분할 JSON Lines(root 전용 0700/0600. 명령줄에 비밀 정보가 포함될 수 있어, 앱·뷰어·MCP 서버는 권한 있는 헬퍼를 통해서만 읽습니다), 기본 200MB·14일(변경 가능. 디스크 여유 공간이 5%와 1GB를 넘는 동안 최근 72시간분은 크기의 4배까지 보관합니다), 충돌에도 안전한 로테이션. 세그먼트를 해시 체인으로 연결해 삭제·수정·잘림을 탐지합니다(「체인 검증」). 변조 탐지일 뿐 변조 방지는 아닙니다. 환경 변수는 기록하지 않지만 명령줄 인수에는 민감한 정보가 포함될 수 있습니다.
                 • 부하 대책: 과부하 시 오래된 줄부터 버리는 제한 큐(건수 표시), 지수 백오프 재시작, 끄면 eslogger가 완전히 중지됩니다.
                 • exec.offensive_tool_inventory와 exec.offensive_tool_burst의 공격 도구 이름에 chisel, ligolo, ligolo-ng, suo5, stowaway, iox, venom, mimikatz, certipy, rubeus, kerbrute, bloodhound, sharphound, sliver, havoc, godzilla, behinder, antsword, weevely, fscan, gogo, ehole, oneforall, ksubdomain, dnsx, subzy, tlsx, cdncheck와 impacket 계열 도구를 추가했습니다. frp, nps, ngrok, ssh는 일상적으로 쓰이므로 넣지 않았습니다. exec.offensive_tool_burst은 이제 실행 파일이 /Users, /tmp, /private/tmp, /var/folders 등에 있는 프로그램(Go나 Rust로 만들어 도구를 직접 실행하는 에이전트)도 대상으로 합니다. 터미널, ssh, login 아래의 연쇄는 이전처럼 제외됩니다.
                 • 보기와 내보내기: 메뉴 → 악성코드 방어 → 「프로세스 실행 기록…」(검색, 프로세스 트리, JSON Lines 내보내기). MCP 도구 `search_exec_events`, `get_process_tree`(Pro, 읽기 전용). 출력 안전: 프로세스 경로·인수·서명 ID는 공격자가 임의로 만들 수 있으므로, 제어 문자를 제거하고 문자열당 300자로 제한하며 알려진 비밀 정보 형식과 비밀 이름 플래그의 값을 ****로 가리고, JSON 뒤에 신뢰할 수 없는 외부 데이터임을 알리는 두 번째 텍스트 블록을 덧붙입니다. 검색어(`query`)도 이미 마스킹된 명령줄에 대해서만 대조되며(마스킹된 값은 검색으로 찾을 수 없습니다), 3자 이상이어야 하고, 검색어가 있는 검색은 세션마다 횟수가 제한되므로 검색으로 비밀 정보를 한 글자씩 알아낼 수 없습니다. 앱 자체의 보기 화면은 본인의 로그를 전체 텍스트로 검색합니다.
@@ -463,6 +465,7 @@ extension RoamSwitchKnowledgeBase {
                 • 알림만: 같은 서버당 1시간에 1회이며, 멈추거나 차단하지 않습니다.
                 • 기본값: Pro에서 켜져 있습니다.
                 • 상태: 스위치는 없고 앱이 시작될 때 함께 시작됩니다. 추적 중인 로그 수는 메뉴 'Web 셸 등 탐지 규칙 설정…' 창에 표시됩니다. 추적할 로그가 하나도 없으면(웹 서버를 실행하지 않는 Mac 등) 아무것도 감시하지 않으며, `get_guard_status`의 webWorkerCrashWatch가 off(이유 log_not_found)가 됩니다. 알림은 Pro 전용입니다.
+                • 로그 교체: 로그가 다른 파일로 바뀌었을 때, 짧아졌을 때, 비워진 뒤 다시 쓰였을 때(copytruncate)는 새 내용을 처음부터 읽습니다. copytruncate 뒤에 이전 위치보다 길어졌어도 앞 256바이트의 해시로 구별합니다.
                 """,
                 recommendation: "`grep signal`로 오류 로그를 확인하고, 같은 시각의 접근 로그에서 크래시 직전의 요청을 찾아보세요. nginx·Apache에 적용하지 않은 보안 수정이 없는지도 확인하세요."
             ),
@@ -532,7 +535,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • 대상 파일: `/etc/sudoers`, `/etc/sudoers.d/` 아래의 모든 파일, `/etc/pam.d/` 아래의 모든 파일, `/etc/ssh/sshd_config`, `/etc/ssh/sshd_config.d/` 아래의 모든 파일, `/etc/hosts`, 그리고 root의 `~/.ssh/authorized_keys`. 이들은 root 전용이므로 특권 헬퍼가 해시를 계산합니다.
                 • 시점: `/etc`, `/etc/pam.d`, `/etc/ssh`의 FSEvents가 거의 실시간으로 재검사를 유발하며, 매시간 검사가 안전장치로 작동합니다.
-                • 기준선: 첫 검사에서 확보됩니다. 탐지된 변경과, 추가 파일(`/etc/sudoers.d/`와 `/etc/ssh/sshd_config.d/` 아래의 파일, `/etc/pam.d/sudo_local`)이 아닌 파일의 삭제는 사람이 검토할 때까지 자동으로 새 기준선으로 채택되지 않으므로 발견 내용이 계속 남아 있습니다. 앱이 실행되는 동안 같은 상태에 대해서는 다시 알리지 않으며, 추가 변경이 있으면 다시 경고합니다. 새 파일은 한 번 알린 뒤 기준선에 추가됩니다. 삭제된 추가 파일은 한 번 알린 뒤 기준선에서 제외됩니다. sudo에 Touch ID를 켜면 `/etc/pam.d/sudo_local`이 만들어지며, 새 파일 알림으로 한 번만 표시됩니다. 끄면 이 파일이 삭제되며, 이것도 한 번만 알립니다. 받아들이려면 악성코드 보호 → "중요 파일 기준을 현재 상태로 갱신…"을 사용하세요. 먼저 차이 목록이 표시됩니다.
+                • 기준선: 첫 검사 때의 상태를 기록합니다. 탐지된 변경과 삭제는 자동으로 새 기준선으로 채택하지 않으므로, 사람이 확인할 때까지 탐지 상태가 이어집니다(같은 상태는 다시 알리지 않으며, 추가 변경이 있으면 다시 알립니다). `/etc/ssh/sshd_config.d/` 아래 파일의 추가와 삭제는 한 번 알린 뒤 기준선에 반영합니다. sudoers·sudoers.d·PAM(`/etc/pam.d/`)·root의 authorized_keys는 보호 대상 탐지로, 추가와 삭제를 포함해 자동으로 반영하지 않으며, 같은 알림 반복 억제나 유지보수 시간에도 알림을 막지 않습니다(feat_automation_safety). sudo에 Touch ID를 켜면 생기는 `/etc/pam.d/sudo_local`도 한 번 알리고, 반영할 때까지 탐지 상태가 이어집니다. macOS 업데이트 후 PAM 파일이 바뀌면 알림에 그렇게 적습니다. 받아들이려면 악성코드 보호 → "중요 파일 기준을 현재 상태로 갱신…"을 사용하세요. 먼저 차이 목록이 표시됩니다.
                 • 사각지대 경고: 헬퍼에 3회 연속 접속하지 못하면 변조 탐지가 작동하지 않고 있다고 알려줍니다.
                 • 참고: 링크 보호가 hosts 대체 모드로 동작하는 동안 RoamSwitch 자체가 관리하는 `/etc/hosts` 구역을 다시 쓸 수 있습니다. LaunchAgent / Daemon은 feat_persistence_monitor_guard가 담당합니다.
                 • 기본값: Pro를 처음 활성화할 때 자동으로 켜집니다. 메뉴: 악성코드 보호 → "중요 시스템 파일 변조를 정기적으로 감시 (Pro)".
@@ -575,10 +578,27 @@ extension RoamSwitchKnowledgeBase {
                 • MITRE ATT&CK: 매핑이 확실할 때만 기법 ID를 붙입니다(ARP 스푸핑 = T1557, 미끼 파일 삭제 또는 이름 변경 = T1485, 암호화 = T1486, 그 외의 변조 = T1565). 추측으로 매핑하지 않습니다.
                 • 저장 위치: `~/Library/Application Support/RoamSwitch/containment_incident_timeline.json`(최신 200건). 어디로도 전송되지 않습니다.
                 • MCP 도구 `get_incident_timeline`은 이 통합 타임라인을 반환합니다(에어갭 상황에서 로컬 AI로 원인을 조사할 때 유용). 각 가드별 기록은 `get_canary_status`, `get_port_anomaly_incidents`, `get_runtime_threat_status`로도 확인할 수 있습니다.
-                • 증거 번들을 저장하면 그 저장이 탐지 기록 아래의 기록으로 추가되고, 탐지 기록에는 번들 이름과 manifest의 SHA-256이 붙습니다. 계기가 된 기록의 ID를 알 때만 연결하며, 시각이 가깝다는 이유만으로는 연결하지 않습니다. `get_incident_timeline`은 있을 때만 parentEventID, rootEventID, evidenceRefs를 덧붙입니다.
+                • 증거 번들을 저장하면 그 저장이 탐지 기록 아래의 기록으로 추가되고, 탐지 기록에는 번들 이름과 manifest의 SHA-256이 붙습니다. 계기가 된 기록의 ID를 알 때만 연결하며, 시각이 가깝다는 이유만으로는 연결하지 않습니다. `get_incident_timeline`은 있을 때만 parentEventID, rootEventID, evidenceRefs를 덧붙입니다. 또한 `get_incident_timeline`은 evidenceRefs가 가리키는 번들을 그 시점의 체인과 대조해 evidenceChecks로 반환합니다(matches, bundle_missing, manifest_altered, ref_changed, chain_broken, not_anchored, unchecked). 참조가 현재 체인과 맞지 않으면 stale이 true가 됩니다.
                 • 기록 파일을 읽을 수 없을 때(손상되었거나 권한이 없음)는 빈 목록이 아니라 읽을 수 없었다고 표시합니다(활동 로그 창, `get_incident_timeline`의 recordFile이 unreadable). 손상된 파일은 다음 기록 전에 .bak으로 따로 보관합니다(덮어쓰거나 삭제하지 않습니다).
+                • 기록의 연쇄: 각 기록에 바로 앞 기록의 해시(prevHash, SHA-256)를 담습니다. 기록 일부가 고쳐지거나 지워져 연쇄가 맞지 않으면 활동 로그 창에 띠를 표시하고, `get_incident_timeline`의 chain과 chainBreak로 알려 줍니다. 경고일 뿐이며, 읽을 수 있는 기록은 모두 표시합니다. 키가 없으므로 파일 전체를 다시 쓴 경우는 구별하지 못합니다.
+                • 감시의 끊김: 기록을 만든 탐지의 입력이 기록 5분 전부터 1분 후 사이에 끊겼거나(또는 지금 끊겨 있으면) blindNear를 붙이고, 활동 로그에도 관련된 일을 놓쳤을 수 있다고 적습니다.
+                • 묶는 방법: `get_incident_timeline`의 incidents는 원인의 연결과 같은 프로세스 외에도, 같은 접속 출발지 주소(SSH 출발지, 포트 스캔 출발지, 리버스 셸의 상대. 60분 이내)와 같은 SSH 세션(sshSession)의 기록도 묶습니다. 묶음은 자동 추정이며, 같은 공격이라는 증명은 아닙니다.
                 """,
                 recommendation: "자동 차단이 발생한 후에는 이 타임라인을 알림 기록과 함께 검토하여 원인을 찾고 재발을 방지하세요."
+            ),
+            LocalizedEntry(
+                id: "feat_automation_safety",
+                title: "보호 대상 탐지, 유지보수 시간, 자동 대응의 기록과 상한",
+                summary: "사람의 확인이 반드시 필요한 탐지(보호 대상 탐지)를 한곳에서 정하고, 그 알림은 막지 않습니다. 자동 차단·일시 정지·격리는 모두 기록하고 실제 상태를 다시 읽어 확인하며, 시간당 상한을 넘은 분은 권장으로만 합니다.",
+                details: """
+                • 보호 대상 탐지: 미끼 인증 정보(허니토큰) 읽기, sudoers·sudoers.d, PAM(`/etc/pam.d/`), root의 authorized_keys 변경. 같은 알림 반복 억제, 유지보수 시간, 기준에 자동 반영의 어느 것에도 걸리지 않습니다. macOS 업데이트 후의 PAM 변경도 자동으로 반영하지 않으며, 알림에 업데이트 후에 발견되었다고 적습니다. 기준에 반영하는 것은 “중요 파일 기준을 현재 상태로 갱신…”뿐입니다.
+                • 유지보수 시간: 메뉴 “복구 및 제거” → “유지보수 시간 시작…”. 1·2·4시간 중에서 고르며 이유는 필수입니다. 관리자 암호가 필요하며, 특권 헬퍼가 root 권한으로 저장합니다. 이 시간 동안 보호 대상 이외의 알림은 배너도 소리도 없이 알림 기록에만 남기고, 끝나면 요약을 한 번 표시합니다. 탐지와 자동 대응은 멈추지 않습니다.
+                • 자동 대응의 기록: SSH 접속 출발지 차단, 포트 스캔 출발지 차단, Air-Gap 격리, 프로세스 일시 정지, 웹 서버 계정 잠금은 특권 헬퍼가 실행 전과 후를 기록합니다(`/Library/Application Support/RoamSwitch/action_journal.jsonl`, root만 읽고 씀). 실행 후 pf 규칙(`pfctl -sr`)이나 프로세스 상태를 다시 읽고, 실제로 적용되었을 때만 완료로 합니다. 헬퍼가 도중에 다시 시작되면, 시작할 때 실제 상태로 확인해 기록을 마무리합니다. 파일 격리는 앱이 자체 기록에 남깁니다.
+                • 네트워크 긴급 복구: 먼저 기록된 네트워크 대응(Air-Gap 격리·SSH 출발지 차단·포트 스캔 출발지 차단)을 최신 순으로 취소한 뒤, 기존 항목을 되돌립니다. 일시 정지된 프로세스와 잠근 계정은 각각의 화면에서 되돌립니다.
+                • 자동 대응의 상한: 메뉴 “복구 및 제거” → “자동 대응 상한…”. 자동으로 실행하는 범위(아무것도 하지 않음 / 출발지 차단까지 / 프로세스 일시 정지까지 / Air-Gap 격리까지)와 시간당 횟수(기본값: 출발지 차단 60, 일시 정지 20, Air-Gap 격리 6)를 정합니다. 초과분은 실행하지 않고 “자동 대응을 권장으로만 바꿨습니다”라고 알립니다(같은 종류는 1시간에 한 번). 사람이 하는 대응에는 적용되지 않습니다. 변경에는 관리자 암호가 필요합니다.
+                • 이 중 어느 것도 AI 에이전트(MCP)에서는 바꿀 수 없습니다.
+                """,
+                recommendation: "작업이나 업데이트로 알림이 늘어날 것을 알고 있다면 유지보수 시간을 사용하고, 끝나면 요약과 알림 기록을 확인하세요."
             ),
             LocalizedEntry(
                 id: "feat_forensic_evidence_bundles",
@@ -620,6 +640,7 @@ extension RoamSwitchKnowledgeBase {
                 • EICAR 테스트 시그니처: 무해한 업계 테스트 파일은 실제 위협이 아니므로 격리되거나 차단되지 않고 배너도 표시되지 않으며 여기에만 기록됩니다. 다운로드 보호, 빠른 검사, 예약 검사 모두 동일합니다.
                 • 언어: 제목과 본문은 기록 당시의 언어가 아니라 지금 앱에서 선택한 언어로 표시합니다. 보호 수준 전환과 워치독의 자동 재시작 알림도 남습니다. 이 기능 이전에 기록된 알림은 기록 당시의 언어 그대로입니다.
                 • AI 도우미는 MCP 도구 `get_notification_history`로 이 기록을 읽을 수 있습니다.
+                • 같은 종류의 경고: 포트 번호나 주소 같은 값만 다른 같은 종류의 경고는 10분에 한 번만 배너와 소리를 냅니다. 내지 않은 것도 매번 이 기록에 남습니다. 보호 대상 탐지(feat_automation_safety)와 격리 상태 알림은 이 방식으로 멈추지 않습니다.
                 """,
                 recommendation: "외출 중이거나 바빠서 알림을 놓쳤다면 여기서 확인하세요."
             ),
@@ -664,6 +685,7 @@ extension RoamSwitchKnowledgeBase {
                 • 자동 확인(Pro, 기본값 켜짐): 창이나 MCP를 쓰지 않아도, 등록한 프로젝트 폴더의 잠금 파일에 대한 쓰기가 잠잠해진 뒤, 시작 직후, 그리고 하루에 한 번, 의존성에 CISA가 악용을 확인했거나(KEV) EPSS가 0.9 이상이며 기한 내 위험 수용이 없는 취약점이 있는지 자동으로 확인해 알립니다(CVE 맵과 KEV 목록은 매일 갱신되므로 잠금 파일이 그대로여도 새로 해당될 수 있습니다). 아무것도 전송하지 않습니다. 확인 1회당 알림은 1건이며 이미 알린 것은 반복하지 않습니다(고쳐졌다가 다시 나타나면 다시 알립니다). CVE 맵이 없는 생태계는 확인하지 못한 것으로 보고 아무것도 알리지 않으며, 폴더를 등록하지 않은 동안은 아무것도 하지 않습니다(이유 no_folders_registered). 메뉴의 '의존성 취약점을 자동으로 확인 (Pro)'로 끌 수 있고, 상태는 `get_guard_status`의 dependencyWatch에 나옵니다. Linux 에디션에도 같은 기능이 있습니다(데몬이 수행하며 Pro 구분 없음).
                 • Node.js 본체: Homebrew와 MacPorts가 가지지 않은 Node.js(공식 설치 프로그램, nvm·fnm·Volta·asdf·mise·n, /opt 등의 tarball)도 조사합니다. 버전은 바이너리를 실행하지 않고 읽어 Homebrew 목록에 `node <버전>`으로 더하고, 같은 맵의 node 행과 대조합니다. Homebrew가 없는 Mac에서도 찾아낸 것은 ‘조사함’으로 셉니다.
                 • PHP 본체: Homebrew와 MacPorts가 가지지 않은 PHP(MAMP, XAMPP, /usr/local이나 /opt의 tarball·소스 빌드, phpbrew·asdf·phpenv·mise)도 조사합니다. 버전은 바이너리를 실행하지 않고 읽어 Homebrew 목록에 `php <버전>`으로 더하고, 같은 맵의 php 행과 대조합니다.
+                • 구분: MCP 결과의 각 탐지에 tier가 붙습니다(kev = CISA의 KEV에 있음, epss_high = EPSS 0.9 이상, info = 그 밖). `format: "sarif"`로 SARIF 2.1.0 형식으로도 낼 수 있습니다.
                 """,
                 recommendation: "정기적으로 Homebrew 검사를 실행하고, 진행 중인 프로젝트를 의존성 탭에 등록하며, 심각한 CVE가 있는 패키지는 신속히 업데이트하세요."
             ),
@@ -848,6 +870,7 @@ extension RoamSwitchKnowledgeBase {
                 • 부속 데몬: 에어갭 안전장치(신뢰도 낮음은 10분 후 자동 해제, 신뢰도 높음은 상한 후 축소 모드)와 부팅 게이트(최대 90초)를 위한 헬퍼 LaunchDaemon도 함께 등록됩니다.
                 • 검증: XPC 연결 시 코드 서명(Team ID)을 확인하여 권한 없는 프로세스의 호출을 거부합니다.
                 • 업데이트 후 재승인: 앱이 새 헬퍼로 자동 전환을 시도하지만, macOS가 재승인 대기 상태로 남겨둘 수 있습니다. 이 경우 메뉴 막대 아이콘이 경고 표시로 바뀌며 \u{201C}⚠️ 업데이트 후 재승인이 필요합니다\u{201D}가 표시되고, 알림으로도 안내됩니다.
+                • 상태 파일 저장: 헬퍼와 앱이 저장하는 상태 파일은 같은 폴더에 임시 파일을 만들어 쓰고, 디스크에 기록한 뒤 이름을 바꿔 넣습니다. 저장 위치가 심볼릭 링크이면 쓰지 않습니다. 앱과 MCP 서버처럼 여러 프로세스가 갱신하는 파일은 잠금을 건 뒤 읽고 씁니다. 같은 키가 두 번 나오는 JSON은 손상된 것으로 다루며, 빈 기록으로 보지 않습니다.
                 """,
                 recommendation: "처음 실행할 때 표시되는 안내에 따라 헬퍼를 승인하세요. 승인되지 않았다면 메뉴에 \u{201C}⚠️ 헬퍼 승인…\u{201D}이 표시됩니다. 업데이트 후 이 표시나 알림이 나타나도 같은 방법(시스템 설정 > 일반 > 로그인 항목 및 확장 프로그램)으로 재승인할 수 있습니다."
             ),
@@ -857,7 +880,7 @@ extension RoamSwitchKnowledgeBase {
                 summary: "RoamSwitch.app에는 MCP(Model Context Protocol) 서버가 포함되어 있어 Claude 같은 AI 도우미가 Mac의 보안 상태를 물어볼 수 있습니다. 설정, 보호 수준, 포트, 장치를 바꾸는 도구는 없습니다. 무언가를 기록하는 도구는 세 개뿐이며, 자신의 기록 파일에만 씁니다.",
                 details: """
                 • 전송 방식: 로컬 stdio만 사용합니다. 실행 파일: `/Applications/RoamSwitch.app/Contents/MacOS/RoamSwitchMCPServer`.
-                • 주요 도구(총 35개): `get_security_report`(보안 진단), `verify_security_findings`(진단에서 지적된 항목이 아직 남아 있는지 다시 확인, 읽기 전용, `change`로 수정한 것인지 원래 해당하지 않았던 것인지 구분), `get_exposed_ports`, `get_guard_status`, `audit_url_safety`, `audit_secrets`, `audit_mcp_configs`(MCP 클라이언트 설정 파일의 위험한 항목 점검(다른 사람이 쓴 글을 읽는 서버와 명령 실행 서버가 한 설정에 함께 있는 구성, 즉 간접 프롬프트 인젝션의 전제도 지적), 로컬·읽기 전용. 악성코드 보호 → "🧩 MCP 설정(AI 연동) 감사…"의 전용 창에서도 실행 가능), `audit_agent_setup`(AI 에이전트에게 읽히는 지시 파일·스킬·OpenClaw 설정의 위험한 내용(보이지 않는 Unicode 문자, 지시 덮어쓰기, curl | sh, 비밀 유출 형태 등) 점검. 같은 규칙으로 에이전트 메모리도 점검하고, 등록한 프로젝트의 `.vscode/tasks.json`(폴더를 열면 자동 실행되는 작업)과 `.github/workflows`(시크릿이 있는 환경에서 풀 리퀘스트 코드 실행, 신뢰할 수 없는 문자열의 스크립트 삽입, 커밋으로 고정하지 않은 외부 액션)도 점검. Claude Code 설정(`~/.claude`와 등록한 프로젝트의 `.claude` 폴더에 있는 `settings.json`·`settings.local.json`)에서는 확인 없이 모든 것을 실행하는 권한 모드, 모든 명령을 허용하는 지나치게 넓은 허용 규칙, 훅, API 접속처 변경도 점검하고, 확인 완료로 표시한 뒤 설정이 느슨해진 것(거부 규칙 삭제, 넓은 허용 규칙이나 훅 추가, 권한 모드 상향, 샌드박스 비활성화)도 알려 줌. 규칙과 명령의 문자는 결과에 포함하지 않음. 로컬·읽기 전용. 메뉴 「악성코드 방어」→「🤖 AI 에이전트 지시 파일 감사…」 창에서도 실행 가능), `audit_security_logs`, `get_quarantine_status`, `get_notification_history`, `get_canary_status`, `get_port_anomaly_incidents`, `get_ssh_guard_incidents`(SSH 무차별 대입 기록과 최근 SSH 로그인, 읽기 전용), `get_runtime_threat_status`, `get_incident_timeline`(봉쇄 사고 타임라인),`get_detection_coverage`(RoamSwitch가 탐지할 수 있는 공격 수법과 탐지할 수 없는 공격 수법을 나열, 읽기 전용), `get_network_history`(네트워크 이력 학습), `run_package_cve_scan`, `run_package_cve_scan_languages`, `run_active_vuln_scan`(127.0.0.1로만 비파괴적 프로브를 보냄), `run_npm_audit_signatures`(외부 서버, 즉 npm 레지스트리와 통신하는 유일한 도구, Pro·옵트인), `get_app_help`(이 지식 베이스).
+                • 주요 도구(총 41개): `get_security_report`(보안 진단), `verify_security_findings`(진단에서 지적된 항목이 아직 남아 있는지 다시 확인, 읽기 전용, `change`로 수정한 것인지 원래 해당하지 않았던 것인지 구분), `get_exposed_ports`, `get_guard_status`, `audit_url_safety`, `audit_secrets`, `audit_mcp_configs`(MCP 클라이언트 설정 파일의 위험한 항목 점검(다른 사람이 쓴 글을 읽는 서버와 명령 실행 서버 또는 외부로 데이터를 보낼 수 있는 서버가 한 설정에 함께 있는 구성, 즉 간접 프롬프트 인젝션의 전제도 지적), 로컬·읽기 전용. 악성코드 보호 → "🧩 MCP 설정(AI 연동) 감사…"의 전용 창에서도 실행 가능), `audit_agent_setup`(AI 에이전트에게 읽히는 지시 파일·스킬·OpenClaw 설정의 위험한 내용(보이지 않는 Unicode 문자, 지시 덮어쓰기, curl | sh, 비밀 유출 형태 등) 점검. 같은 규칙으로 에이전트 메모리도 점검하고, 등록한 프로젝트의 `.vscode/tasks.json`(폴더를 열면 자동 실행되는 작업)과 `.github/workflows`(시크릿이 있는 환경에서 풀 리퀘스트 코드 실행, 신뢰할 수 없는 문자열의 스크립트 삽입, 커밋으로 고정하지 않은 외부 액션)도 점검. Claude Code 설정(`~/.claude`와 등록한 프로젝트의 `.claude` 폴더에 있는 `settings.json`·`settings.local.json`)에서는 확인 없이 모든 것을 실행하는 권한 모드, 모든 명령을 허용하는 지나치게 넓은 허용 규칙, 훅, API 접속처 변경도 점검하고, 확인 완료로 표시한 뒤 설정이 느슨해진 것(거부 규칙 삭제, 넓은 허용 규칙이나 훅 추가, 권한 모드 상향, 샌드박스 비활성화)도 알려 줌. 규칙과 명령의 문자는 결과에 포함하지 않음. 로컬·읽기 전용. 메뉴 「악성코드 방어」→「🤖 AI 에이전트 지시 파일 감사…」 창에서도 실행 가능), `audit_security_logs`, `get_quarantine_status`, `get_notification_history`, `get_canary_status`, `get_port_anomaly_incidents`, `get_ssh_guard_incidents`(SSH 무차별 대입 기록과 최근 SSH 로그인, 읽기 전용), `get_runtime_threat_status`, `get_incident_timeline`(봉쇄 사고 타임라인),`get_detection_coverage`(RoamSwitch가 탐지할 수 있는 공격 수법과 탐지할 수 없는 공격 수법을 나열, 읽기 전용), `get_network_history`(네트워크 이력 학습), `get_system_timeline`(대기 포트, Homebrew 패키지, 주요 설정 파일 해시의 일별 기록과 그 변화, 읽기 전용), `get_privilege_escalation_paths`(설치된 PathScope를 호출한 사용자 권한으로 실행해 계정이 root에 이를 수 있는 경로를 반환, 읽기 전용), `get_access_log_report`(설치된 AccessScope를 호출한 사용자 권한으로 실행해 읽을 수 있는 웹 서버·SSH·인증 로그에서 발견된 공격을 반환, 읽기 전용), `get_link_guard_status`(링크 보호 모드, 적용 위치, 허용·추가 차단 목록, 최근 7일간의 차단, 읽기 전용), `get_vpn_status`(신뢰할 수 없는 네트워크에서의 VPN 설정, 터널이 실제로 연결됐는지는 여기서 볼 수 없음), `verify_fim`(읽을 수 있는 핵심 시스템 파일을 다시 해시해 저장된 기준과 비교, 읽기 전용), `run_package_cve_scan`, `run_package_cve_scan_languages`, `run_active_vuln_scan`(127.0.0.1로만 비파괴적 프로브를 보냄), `run_npm_audit_signatures`(외부 서버, 즉 npm 레지스트리와 통신하는 유일한 도구, Pro·옵트인), `get_app_help`(이 지식 베이스).
                 • 프로세스 실행 기록(Pro, 읽기 전용): `search_exec_events`(실행 이벤트 검색), `get_process_tree`(프로세스의 조상·자손 트리).
                 • 리소스: `roamswitch://docs/features`, `roamswitch://docs/alerts-and-messages`, `roamswitch://docs/settings-guide`, `roamswitch://docs/troubleshooting`.
                 • 언어: 응답은 앱의 언어 설정을 따릅니다. `get_app_help`는 `language` 인자(ja / en / zh-Hans / zh-Hant / ko / de / fr / es / it / pt-PT)를 받습니다.
@@ -866,6 +889,9 @@ extension RoamSwitchKnowledgeBase {
                 • 안전성: 설정이나 보호 수준을 바꾸는 도구가 없으므로 프롬프트 주입에 조작된 AI라도 보호 수준을 바꾸거나 포트를 격리할 수 없습니다.
                 • 지시처럼 보이는 문구의 탐지에 이제 도구 목록이나 API 키, 토큰, 환경 변수를 내놓으라는 요청(system-prompt-leak), “권한이 있다고 확인·응답하라”는 자기 증명 요청(authority-claim), “안전하다고 보고하라”, “위협 없음으로 보고하라”, “해결된 것으로 처리하라”는 지시(instruction-override)의 형태도 포함됩니다. 범주의 종류는 늘지 않았습니다.
                 • AI 에이전트 설정 변경 탐지: '이 상태를 확인 완료로 표시'를 눌러 정한 기준과 비교하는 백그라운드 알림입니다. Pro 전용이며 기준이 없는 동안은 동작하지 않습니다. 상태는 점검 창과 `get_guard_status`의 agentSetupWatch(이유 no_baseline 또는 pro_not_active)에 나오며, 기준이 없는 동안 점검 창에는 버튼을 누르면 시작된다고 표시됩니다. 바뀐 파일과 내용(추가, MCP 서버 정의 변경, 설정이 느슨해짐)을 알림 한 건으로 알리고 같은 변경은 반복하지 않습니다. 메뉴의 'AI 에이전트 설정이 바뀌면 자동으로 알림 (Pro)'로 끌 수 있습니다(기본값 켜짐). 확인한 상태는 이 Mac의 계정에 있으므로 같은 사용자로 실행되는 에이전트가 고쳐 쓸 수 있습니다. 아무것도 전송하지 않습니다. Linux 에디션에도 같은 기능이 있습니다(데몬이 수행하며 Pro 구분 없음).
+                • audit_mcp_configs의 추가 지적: 인증 설정이 없는 다른 호스트의 https 서버(remote_no_auth, medium. 클라이언트가 연결할 때 OAuth로 로그인하면 문제없음)와, 모든 인터페이스에서 대기하도록 시작하는 서버(`--host 0.0.0.0` 등. mcp_wide_bind, high).
+                • SARIF: `audit_mcp_configs`, `audit_agent_setup`, `run_active_vuln_scan`, `run_package_cve_scan`, `run_package_cve_scan_languages`는 `format: "sarif"`로 SARIF 2.1.0 형식으로도 반환합니다.
+                • get_system_timeline: 앱이 하루 한 번 기록한 대기 포트, Homebrew 패키지, 주요 설정의 해시(최대 90일)와 그 차이를 반환합니다. `since`에 `yyyy-MM-dd` 또는 `7d`를 지정할 수 있습니다. 설정 내용은 저장하지도 출력하지도 않습니다. Linux 버전의 `roamswitch timeline --since`에 해당합니다.
                 """,
                 recommendation: "설정 방법은 faq_mcp_setup을 참고하세요. \u{201C}지금 내 Mac이 안전한가요?\u{201D}나 \u{201C}이 알림은 무슨 뜻인가요?\u{201D}처럼 자연스러운 말로 물어볼 수 있습니다."
             ),
@@ -1331,6 +1357,7 @@ extension RoamSwitchKnowledgeBase {
                 • 알림에 표시되는 정보: 읽힌 가짜 파일의 경로, 접근한 프로그램(경로와 PID), 그 부모 프로세스, 명령(비밀 정보는 가림).
                 • 접근한 쪽을 특정하지 못했을 때: 알림에 그렇게 적고, 확인한 내용(파일을 열고 있는 프로세스 확인, 프로세스 실행 기록 조회)도 표시합니다. 읽은 프로세스는 이미 종료된 경우가 많으며, 프로세스 실행 기록이 켜져 있으면 같은 시각에 시작된 명령을 나열합니다(그 명령이 읽었다고 단정할 수는 없습니다). '파일을 여는 프로세스 기록'이 켜져 있으면('프로세스 실행 기록' 창), 읽은 프로세스 자체를 PID, 부모, 명령, 서명과 함께 표시하고 같은 시각에 시작된 명령 같은 추측은 싣지 않습니다. 꺼져 있거나 부하로 일시 중지되었거나 시작 전이면 알림에 그렇게 적습니다.
                 • 자동 방어: 알림과 기록만(관련된 가짜 파일을 추가로 둡니다. 네트워크는 끊지 않습니다).
+                • AI 에이전트일 때: 읽은 프로세스나 그 조상(8대 위까지)이 AI 에이전트(claude, codex, gemini, opencode, aider, goose, cursor-agent, openclaw, qwen, crush)이면 알림에 에이전트 이름과 PID를 적습니다. 대개는 에이전트가 읽은 저장소, 페이지, issue에 인증 정보를 찾게 하는 문장이 들어 있었던 것이 원인입니다. 알림에는 에이전트에게 준 지시와 읽게 한 내용을 확인하라고 적습니다.
                 """,
                 recommendation: """
                 1. 접근한 경로와 명령을 보고 직접 실행한 것인지 확인하세요.
@@ -1713,6 +1740,7 @@ extension RoamSwitchKnowledgeBase {
                   - 실증형 취약점 검증의 127.0.0.1(이 Mac 자체)로의 비파괴적 프로브
                   - npm 서명 검증(옵트인, Pro 전용)을 실행할 때 registry.npmjs.org와 통신
                 • 코드 어디에도 사용 현황 수집이나 원격 측정은 존재하지 않습니다. 헬퍼 승인 알림조차 기기 내 카운트만으로 동작합니다.
+                • 받아 온 데이터의 검사: 위협 피드, CVE 맵, 웹 규칙은 서명된 목록(manifest)을 확인한 뒤에 사용합니다. 작성일이 60일보다 오래된 목록, 하루보다 앞선 날짜의 목록, 지금 설치된 것보다 오래된 버전은 쓰지 않습니다. 서명 키는 목록 안에서 교체와 폐기를 할 수 있으며, 폐기된 키와 기한이 지난 키의 서명은 받지 않습니다. 권한 헬퍼는 링크 보호 목록을 자신의 기록으로 다시 확인합니다. 이 검사를 위한 통신은 없습니다.
                 """,
                 recommendation: "기밀성이 높은 업무 환경이나 개인 개발 환경에서도 데이터 유출 걱정 없이 안심하고 사용할 수 있습니다."
             ),

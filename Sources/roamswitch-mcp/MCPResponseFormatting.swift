@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.30 (build 209).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.31 (build 210).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -171,6 +171,8 @@ public struct MCPPackageCveFindingPayload: Codable, Equatable {
     /// `true` when CISA's Known Exploited Vulnerabilities catalog lists the CVE (exploitation in the wild is
     /// confirmed; a record of fact, unlike `epss`). Absent otherwise.
     public var kev: Bool? = nil
+    /// `kev`, `epss_high` (EPSS >= 0.9) or `info` (`PackageCveEpss.tier`).
+    public var tier: String = "info"
 }
 
 /// How many of a scan's findings a person has accepted (see `VulnerabilityAcceptance`). Counts only: the
@@ -223,6 +225,8 @@ public struct MCPPackageCveLanguageFindingPayload: Codable, Equatable {
     public var kev: Bool? = nil
     /// `true` when no fixed version has been published (`fixedVersion` is empty): updating does not close it.
     public var unfixed: Bool? = nil
+    /// See `MCPPackageCveFindingPayload.tier`.
+    public var tier: String = "info"
 }
 
 public struct MCPPackageCveScanLanguagesResultPayload: Codable, Equatable {
@@ -882,6 +886,24 @@ public struct MCPIncidentTimelineEventPayload: Codable, Equatable {
     public var rootEventID: String? = nil
     /// Evidence bundles saved for this record: bundle folder name, optional file name, optional SHA-256. Never content.
     public var evidenceRefs: [MCPEvidenceRefPayload]? = nil
+    /// true (else left out) when the guard's input was lost around this record's time: something related may not have
+    /// been seen.
+    public var blindNear: Bool? = nil
+    /// The remote address the record is about (SSH source, port-scan source, reverse-shell peer), when it has one.
+    public var sourceAddress: String? = nil
+    /// The SSH session the process ran in, `<pid>@<start unix seconds>` of the outermost sshd.
+    public var sshSession: String? = nil
+    /// true (else left out) when this record's link to the one before it does not match (`chain`).
+    public var chainBreak: Bool? = nil
+}
+
+/// The hash chain of the stored records (`IncidentChain`).
+public struct MCPIncidentChainPayload: Codable, Equatable {
+    public let intact: Bool
+    public let verifiedCount: Int
+    /// Records from before the chain existed: they start it and are not checked.
+    public let legacyCount: Int
+    public let breakEventIds: [String]
 }
 
 public struct MCPEvidenceRefPayload: Codable, Equatable {
@@ -917,6 +939,12 @@ public struct MCPReconciledIncidentPayload: Codable, Equatable {
     public var evidenceRefs: [MCPEvidenceRefPayload]? = nil
     /// The summary of the oldest record with the highest severity.
     public let summary: String
+    /// Remote addresses of the records (left out when none).
+    public var sourceAddresses: [String]? = nil
+    /// SSH sessions of the records (left out when none).
+    public var sshSessions: [String]? = nil
+    /// true (else left out) when any record is `blindNear`.
+    public var blindNear: Bool? = nil
 }
 
 public struct MCPIncidentTimelinePayload: Codable, Equatable {
@@ -930,6 +958,24 @@ public struct MCPIncidentTimelinePayload: Codable, Equatable {
     /// `ok`, `missing` (no incident was ever recorded) or `unreadable` (the file exists but cannot be read: an empty
     /// `events` list then does NOT mean there were no incidents).
     public var recordFile: String? = nil
+    /// Whether the links between the stored records check out. Left out when it was not checked.
+    public var chain: MCPIncidentChainPayload? = nil
+    /// Present when a record points at an evidence bundle: how each bundle stands against the anchor chain right now.
+    /// Same name and shape as the Linux edition's `evidenceChecks`.
+    public var evidenceChecks: [MCPEvidenceCheckPayload]? = nil
+    public var evidenceChecksNote: String? = nil
+}
+
+/// One evidence bundle named by timeline records, checked against `chain.log` (see `ForensicChain.check`).
+public struct MCPEvidenceCheckPayload: Codable, Equatable {
+    public let bundle: String
+    /// `matches`, `bundle_missing`, `manifest_altered`, `ref_changed`, `chain_broken`, `not_anchored` or `unchecked`.
+    public let status: String
+    /// The reference no longer matches the chain: every status except `matches` and `unchecked` (not being able to check is not a verdict).
+    public let stale: Bool
+    /// Only with `chain_broken`: the first bundle whose chain line does not follow. This edition names a bundle; the
+    /// Linux edition gives a line number.
+    public var chainBrokenAt: String? = nil
 }
 
 public struct MCPKnownNetworkPayload: Codable, Equatable {
@@ -1540,6 +1586,8 @@ public enum MCPResponseFormatting {
         case "air_gap": return loc("ネットワーク全遮断 (Air-Gap)")
         case "port_block": return loc("ポートのLAN公開を遮断")
         case "ssh_block": return loc("SSH接続元を遮断（新しい接続のみ）")
+        // `PortScanGuard` (1.17.39: shown as the bare token "port_scan_block").
+        case "port_scan_block": return loc("ポートスキャン元を遮断")
         case "notify_only": return loc("通知のみ（遮断は行わない）")
         case "air_gap_degraded": return loc("Air-Gapを縮退モードへ移行（新規の外部通信は遮断を継続）")
         case "baseline_accepted": return loc("基準を更新（人の操作）")
@@ -1550,6 +1598,7 @@ public enum MCPResponseFormatting {
         case "evidence_captured": return loc("証拠を保存")
         case "cascade_decoy_deployed": return loc("追加のおとりを配置")
         case "air_gap_failed": return loc("ネットワーク全遮断 (Air-Gap) に失敗")
+        case "air_gap_recommended": return loc("ネットワーク全遮断 (Air-Gap) を推奨（自動の対応の上限）")
         default: return action
         }
     }
@@ -1568,6 +1617,8 @@ public enum MCPResponseFormatting {
 
     /// Records of one process further apart than this are not taken as one incident on the process alone.
     static let incidentProcessGap: TimeInterval = 15 * 60
+    /// Records about one remote address further apart than this are not taken as one incident on the address alone.
+    static let incidentAddressGap: TimeInterval = 60 * 60
     static let maxIncidentEvidenceRefs = 8
 
     static func severityRank(_ severity: String) -> Int {
@@ -1583,10 +1634,15 @@ public enum MCPResponseFormatting {
 
     /// Groups timeline records into incidents. Two records belong together when (a) they share a `rootEventID`, or one
     /// is the root or the parent of the other, or (b) they carry the same process id and name and the next record of
-    /// that process is at most 15 minutes after the previous one. The grouping is transitive. A record with neither
-    /// link is an incident of its own. It is an aid for reading the timeline, not a statement that two records are one
-    /// attack: PIDs are reused and one process can be involved in unrelated events.
-    public static func reconcileIncidents(events: [ContainmentIncidentEvent]) -> [MCPReconciledIncidentPayload] {
+    /// that process is at most 15 minutes after the previous one, or (c) they are about the same remote address
+    /// (`IncidentCorrelation.sourceAddress`) and the next such record is at most 60 minutes after the previous one, or
+    /// (d) they ran in the same SSH session (`sshSession`, which carries the session's start time, so no time limit).
+    /// The grouping is transitive. A record with no link is an incident of its own. It is an aid for reading the
+    /// timeline, not a statement that two records are one attack: PIDs are reused, one process can be involved in
+    /// unrelated events, and one address can be shared by many people. `blindNear` says, for a record, whether its
+    /// guard lost input around its time; the stored mark is used when it is not given.
+    public static func reconcileIncidents(events: [ContainmentIncidentEvent],
+                                          blindNear: ((ContainmentIncidentEvent) -> Bool)? = nil) -> [MCPReconciledIncidentPayload] {
         let sorted = events.enumerated().sorted { a, b in
             a.element.timestamp != b.element.timestamp ? a.element.timestamp < b.element.timestamp : a.offset < b.offset
         }.map(\.element)
@@ -1629,6 +1685,24 @@ public enum MCPResponseFormatting {
             }
         }
 
+        // (c) the same remote address, close in time.
+        let addresses = sorted.map(IncidentCorrelation.sourceAddress(of:))
+        var byAddress: [String: [Int]] = [:]
+        for (i, a) in addresses.enumerated() { if let a { byAddress[a, default: []].append(i) } }
+        for indexes in byAddress.values {
+            for (a, b) in zip(indexes, indexes.dropFirst()) where sorted[b].timestamp.timeIntervalSince(sorted[a].timestamp) <= incidentAddressGap {
+                union(a, b)
+            }
+        }
+
+        // (d) the same SSH session.
+        var firstOfSession: [String: Int] = [:]
+        for (i, e) in sorted.enumerated() {
+            guard let session = e.sshSession else { continue }
+            if let first = firstOfSession[session] { union(i, first) } else { firstOfSession[session] = i }
+        }
+        let isBlind = blindNear ?? { $0.blindNear }
+
         var members: [Int: [Int]] = [:]
         for i in sorted.indices { members[find(i), default: []].append(i) }
 
@@ -1663,7 +1737,11 @@ public enum MCPResponseFormatting {
             }
 
             let named = group.first { $0.processName != nil }
-            let payload = MCPReconciledIncidentPayload(
+            var groupAddresses: [String] = []
+            for i in indexes { if let a = addresses[i], !groupAddresses.contains(a) { groupAddresses.append(a) } }
+            var sessions: [String] = []
+            for e in group { if let s = e.sshSession, !sessions.contains(s) { sessions.append(s) } }
+            var payload = MCPReconciledIncidentPayload(
                 incidentId: incidentID.uuidString,
                 firstTimestamp: iso.string(from: group[0].timestamp),
                 lastTimestamp: iso.string(from: group[group.count - 1].timestamp),
@@ -1679,6 +1757,9 @@ public enum MCPResponseFormatting {
                 evidenceRefs: refs.isEmpty ? nil : refs,
                 summary: topEvent.displaySummary
             )
+            payload.sourceAddresses = groupAddresses.isEmpty ? nil : groupAddresses
+            payload.sshSessions = sessions.isEmpty ? nil : sessions
+            payload.blindNear = group.contains(where: isBlind) ? true : nil
             incidents.append((group[group.count - 1].timestamp, payload))
         }
         return incidents.sorted { a, b in
@@ -1686,8 +1767,20 @@ public enum MCPResponseFormatting {
         }.map(\.payload)
     }
 
-    public static func makeIncidentTimelinePayload(events: [ContainmentIncidentEvent], fileState: ContainmentIncidentTimeline.FileState = .ok) -> MCPIncidentTimelinePayload {
+    /// What `evidenceChecks` means, in the Linux edition's wording.
+    static let evidenceChecksNote = "evidenceChecks compares each evidence bundle the events refer to (evidenceRefs[].bundle) with chain.log as it is now. matches: the chain is intact and the manifest is as recorded. bundle_missing: pruned or deleted. manifest_altered: the manifest differs from the one recorded at capture. ref_changed: the hash held by the timeline differs from the chain's. chain_broken: the chain was edited (chainBrokenAt is the first bundle that no longer follows). not_anchored: the chain has no line for it. unchecked: the chain could not be read. stale: true means the reference no longer matches and the evidence should not be relied on without checking get_forensic_evidence_bundles."
+
+    /// `chain`: the check of the whole stored file (nil: not checked). `evidenceChecks`: how each evidence bundle the records name stands against the anchor chain (empty: none named or not checked). `readerHealth`: the reader-health records saved
+    /// now, so a gap recorded after a record was written still marks it `blindNear` (nil: only the stored mark).
+    public static func makeIncidentTimelinePayload(events: [ContainmentIncidentEvent], fileState: ContainmentIncidentTimeline.FileState = .ok,
+                                                   chain: IncidentChain.Verification? = nil,
+                                                   readerHealth: [String: GuardReaderHealth]? = nil,
+                                                   evidenceChecks: [MCPEvidenceCheckPayload] = []) -> MCPIncidentTimelinePayload {
         let iso = ISO8601DateFormatter()
+        let isBlind: (ContainmentIncidentEvent) -> Bool = { e in
+            e.blindNear || (readerHealth.map { IncidentBlindSpot.isBlindNear(e, records: $0) } ?? false)
+        }
+        let breaks = Set(chain?.breaks ?? [])
         var payloads: [MCPIncidentTimelineEventPayload] = []
         var unresolved = 0
         for event in events {
@@ -1700,7 +1793,7 @@ public enum MCPResponseFormatting {
                 status = "open"
                 unresolved += 1
             }
-            payloads.append(MCPIncidentTimelineEventPayload(
+            var payload = MCPIncidentTimelineEventPayload(
                 id: event.id.uuidString,
                 timestamp: iso.string(from: event.timestamp),
                 source: event.source.rawValue,
@@ -1718,14 +1811,25 @@ public enum MCPResponseFormatting {
                 parentEventID: event.parentEventID?.uuidString,
                 rootEventID: event.rootEventID?.uuidString,
                 evidenceRefs: event.evidenceRefs.isEmpty ? nil : event.evidenceRefs.map { MCPEvidenceRefPayload(bundle: $0.bundle, artifact: $0.artifact, sha256: $0.sha256) }
-            ))
+            )
+            payload.blindNear = isBlind(event) ? true : nil
+            payload.sourceAddress = IncidentCorrelation.sourceAddress(of: event)
+            payload.sshSession = event.sshSession
+            payload.chainBreak = breaks.contains(event.id) ? true : nil
+            payloads.append(payload)
         }
         var caveats: [String] = [
-            loc("summary は、summaryCode のある記録では、今の表示言語で書き直した文です。summaryCode のない記録(この機能より前の記録など)は、検知の時点の文言のままです。"),
-            loc("事象(incidents)は rootEventID と、同じプロセスの15分以内の間隔による自動的なまとめです。同じ攻撃だという証明ではありません。個々の events が正本です。")
+            locLLM("summary は、summaryCode のある記録では、今の表示言語で書き直した文です。summaryCode のない記録(この機能より前の記録など)は、検知の時点の文言のままです。"),
+            locLLM("事象(incidents)は、rootEventID、同じプロセス(15分以内の間隔)、同じ接続元アドレス(60分以内の間隔)、同じ SSH セッションによる自動的なまとめです。同じ攻撃だという証明ではありません。個々の events が正本です。")
         ]
+        if let chain, !chain.intact {
+            caveats.append(locLLM("記録の連鎖が途切れています。chainBreak の付いた記録の直前で、記録が書き換えられたか、消されています。読み出しは続けています。"))
+        }
+        if payloads.contains(where: { $0.blindNear == true }) {
+            caveats.append(locLLM("blindNear の付いた記録は、その前後に検知の入力が途切れていました。関連する出来事を取りこぼしている可能性があります。"))
+        }
         if fileState == .unreadable {
-            caveats.append(loc("インシデントの記録ファイルを読めませんでした。events が空でも、インシデントがなかったとは限りません。壊れたファイルは、次の記録の前に .bak として退避されます。"))
+            caveats.append(locLLM("インシデントの記録ファイルを読めませんでした。events が空でも、インシデントがなかったとは限りません。壊れたファイルは、次の記録の前に .bak として退避されます。"))
         }
         let fileName: String
         switch fileState {
@@ -1733,9 +1837,17 @@ public enum MCPResponseFormatting {
         case .missing: fileName = "missing"
         case .unreadable: fileName = "unreadable"
         }
-        let incidents = reconcileIncidents(events: events)
-        return MCPIncidentTimelinePayload(unresolvedCount: unresolved, events: payloads, caveats: caveats, incidents: incidents,
-                                          openIncidentCount: incidents.filter { $0.status == "open" }.count, recordFile: fileName)
+        let incidents = reconcileIncidents(events: events, blindNear: isBlind)
+        var result = MCPIncidentTimelinePayload(unresolvedCount: unresolved, events: payloads, caveats: caveats, incidents: incidents,
+                                                openIncidentCount: incidents.filter { $0.status == "open" }.count, recordFile: fileName)
+        result.chain = chain.map {
+            MCPIncidentChainPayload(intact: $0.intact, verifiedCount: $0.verified, legacyCount: $0.legacy, breakEventIds: $0.breaks.map(\.uuidString))
+        }
+        if !evidenceChecks.isEmpty {
+            result.evidenceChecks = evidenceChecks
+            result.evidenceChecksNote = evidenceChecksNote
+        }
+        return result
     }
 
     // MARK: get_network_history

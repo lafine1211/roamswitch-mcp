@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.30 (build 209).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.31 (build 210).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -248,7 +248,10 @@ public final class LinkFilterEngine {
         if let size = try? FileManager.default.attributesOfItem(atPath: eventsURL.path)[.size] as? Int,
            size > 65_536,
            let all = try? Data(contentsOf: eventsURL) {
-            try? all.suffix(16_384).write(to: eventsURL)
+            // Cut at a line start, so the kept part does not begin with half an event line.
+            var kept = all.suffix(16_384)
+            if let nl = kept.firstIndex(of: 0x0A) { kept = kept[kept.index(after: nl)...] }
+            try? Data(kept).write(to: eventsURL)
         }
     }
 

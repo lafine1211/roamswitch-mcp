@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.30 (build 209).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.31 (build 210).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -42,6 +42,10 @@ public struct ExecSearchRequest: Codable, Equatable {
     /// the secret-masked command line only, with a minimum query length (MCP path; see
     /// `ExecCommandMasker`). Optional so an older app's request still decodes.
     public var maskedTextMatch: Bool?
+    /// true: a repeat line of the log (`ExecRepeatFolder`) comes back as one record of kind `repeat` holding the runs
+    /// that matched (the viewer and the MCP tool show it that way). nil/false: as one `exec` record per run, which is
+    /// what a reader that predates repeat lines expects (an older helper ignores the field and has no repeat lines).
+    public var foldRepeats: Bool?
 
     /// Hard cap on events per reply (the app's export uses the maximum; the MCP
     /// tools ask for at most 200).
@@ -49,7 +53,7 @@ public struct ExecSearchRequest: Codable, Equatable {
 
     public init(text: String? = nil, pid: Int32? = nil, ppid: Int32? = nil, since: Double? = nil, until: Double? = nil,
                 kind: String? = nil, signature: String? = nil, teamID: String? = nil, limit: Int = 50,
-                maskedTextMatch: Bool? = nil) {
+                maskedTextMatch: Bool? = nil, foldRepeats: Bool? = nil) {
         self.text = text
         self.pid = pid
         self.ppid = ppid
@@ -60,6 +64,7 @@ public struct ExecSearchRequest: Codable, Equatable {
         self.teamID = teamID
         self.limit = limit
         self.maskedTextMatch = maskedTextMatch
+        self.foldRepeats = foldRepeats
     }
 
     /// Untrusted input -> a clamped `ExecLogQuery` (helper side).
@@ -71,7 +76,8 @@ public struct ExecSearchRequest: Codable, Equatable {
             signature: signature.flatMap { ExecSignatureClass(rawValue: $0) },
             teamID: teamID.map { String($0.prefix(32)) },
             limit: min(max(limit, 1), Self.maxLimit),
-            maskedTextMatch: maskedTextMatch == true
+            maskedTextMatch: maskedTextMatch == true,
+            foldRepeats: foldRepeats == true
         )
     }
 }
@@ -130,8 +136,11 @@ public enum ExecReadService {
     public static let maxReplyBytes = 8 * 1024 * 1024
     public static let maxAlerts = 200
 
-    public static func search(_ req: ExecSearchRequest, dir: URL, now: Date = Date()) -> ExecSearchReply {
-        let res = ExecLogReader.search(dir: dir, query: req.toQuery())
+    /// `pending`: the repeat lines the recorder has not written yet (`ExecRepeatFolder.pendingLines`), so a run is
+    /// found as soon as it happened.
+    public static func search(_ req: ExecSearchRequest, dir: URL, now: Date = Date(),
+                              pending: [ExecEventRecord] = []) -> ExecSearchReply {
+        let res = ExecLogReader.search(dir: dir, query: req.toQuery(), pending: pending)
         var events: [ExecEventRecord] = []
         var bytes = 0
         var cut = false
@@ -145,10 +154,13 @@ public enum ExecReadService {
                                truncatedReply: cut, segments: res.segments, readable: res.readable)
     }
 
-    public static func processTree(_ req: ExecProcessTreeRequest, dir: URL, now: Date = Date()) -> ExecProcessTreeReply {
+    public static func processTree(_ req: ExecProcessTreeRequest, dir: URL, now: Date = Date(),
+                                   pending: [ExecEventRecord] = []) -> ExecProcessTreeReply {
         let lookback = Double(min(max(req.lookbackHours, 1), 168)) * 3600
         let anchor = req.at ?? now.timeIntervalSince1970
-        let res = ExecLogReader.search(dir: dir, query: ExecLogQuery(since: anchor - lookback, limit: ExecSearchRequest.maxLimit))
+        // Each run of a repeat line is its own process here (the default of the query).
+        let res = ExecLogReader.search(dir: dir, query: ExecLogQuery(since: anchor - lookback, limit: ExecSearchRequest.maxLimit),
+                                       pending: pending)
         let tree = ExecProcessTreeBuilder.build(records: res.events, pid: req.pid, at: req.at.map { $0 + 1 })
         return ExecProcessTreeReply(readable: res.readable, truncatedScan: res.truncatedScan || tree.truncated, tree: tree)
     }
