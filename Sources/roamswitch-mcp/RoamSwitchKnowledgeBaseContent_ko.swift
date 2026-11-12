@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.29 (build 208).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.30 (build 209).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -727,7 +727,7 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "feat_typosquat_guard",
                 title: "오타스쿼팅 탐지 (npm/pnpm package.json, Pro)",
-                summary: "package.json의 의존성 이름을 인기 npm 패키지 이름 목록과 편집 거리(레벤슈타인 1〜2)로 비교하여 expres→express, loadash→lodash 같은 오타스쿼팅 가능성을 탐지합니다. 앱 자체는 이를 위해 네트워크 연결을 전혀 하지 않습니다. Pro 전용.",
+                summary: "package.json의 의존성 이름을 인기 npm 패키지 이름 목록과 편집 거리(레벤슈타인 1~2)로 비교하여 expres→express, loadash→lodash 같은 오타스쿼팅 가능성을 탐지합니다. 앱 자체는 이를 위해 네트워크 연결을 전혀 하지 않습니다. Pro 전용.",
                 details: """
                 • 범위: package.json의 프로젝트 자체 dependencies/devDependencies/optionalDependencies만 해당(peerDependencies는 제외). node_modules(이미 설치된 전이 의존성)도 의도적으로 제외됩니다 — 오타는 사람이 package.json에 의존성을 추가하는 순간 발생하기 때문입니다.
                 • 비교 로직: 표준 레벤슈타인 거리 DP 구현으로 각 의존성 이름을 인기 npm 패키지 이름 목록과 비교합니다. 스코프가 있는 패키지(`@scope/pkg`)는 기본 이름(`pkg`)으로 비교합니다. 길이 차이가 2를 초과하는 후보는 저비용 사전 필터로 건너뜁니다. 임계값은 인기 패키지 이름이 8자 이상이면 편집 거리 2까지, 그보다 짧으면 거리 1만 허용합니다.
@@ -793,8 +793,8 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",
-                title: "Mac 보안 진단 (23개 항목, 점수와 개선 단계)",
-                summary: "시스템 강화, 네트워크 방어, 인증 및 접근 제어, 포트 노출, 악성코드 보호, 물리적 기기 방어 등 6개 영역 23개 항목을 검사하여 0~100점의 점수, 등급, 실패 항목별 개선 단계를 보여줍니다. 무료 버전에서도 사용할 수 있습니다.",
+                title: "Mac 보안 진단 (24개 항목, 점수와 개선 단계)",
+                summary: "시스템 강화, 네트워크 방어, 인증 및 접근 제어, 포트 노출, 악성코드 보호, 물리적 기기 방어 등 6개 영역 24개 항목을 검사하여 0~100점의 점수, 등급, 실패 항목별 개선 단계를 보여줍니다. 무료 버전에서도 사용할 수 있습니다.",
                 details: """
                 • 시스템 강화: 1. FileVault, 2. SIP(시스템 무결성 보호), 3. Gatekeeper, 4. 자동 보안 업데이트, 5. Apple XProtect, 6. 백업(Time Machine의 가장 최근 백업이 7일 이내인지, 복원 가능 여부는 확인하지 않음).
                 • 네트워크 방어: 7. macOS 방화벽, 8. 스텔스 모드, 9. Wi-Fi 암호화 강도, 10. ARP 스푸핑 모니터, 11. 게이트웨이 ARP 고정, 12. 프록시 자동 검색 (WPAD / PAC).
@@ -805,6 +805,7 @@ extension RoamSwitchKnowledgeBase {
                 • 해당 없음 처리: 신뢰 네트워크에서의 방화벽과 스텔스 모드, 원격 로그인이 꺼져 있을 때의 SSH, 헬퍼 연결 전의 sudo 감사는 점수 계산에서 제외됩니다.
                 • 22. 추가된 신뢰 인증서(인증 기관)(`trust_anchors`, 네트워크 방어): 사용자 도메인과 관리자 도메인에 대해 `security dump-trust-settings`를 읽습니다. 신뢰 설정은 사람, 관리자 또는 프로파일이 설정한 경우에만 붙으므로, 목록에 나오는 인증서는 누군가 추가한 것입니다. Apple 자체의 루트 인증서는 세지 않으며, 신뢰 결과가 'deny'(신뢰하지 않음)인 인증서도 세지 않습니다. 추가된 인증서의 이름이 가로채기 도구처럼 보이면(mitm, proxy, charles, fiddler, burp, portswigger, zscaler, netskope, squid, inspection, sslsplit) 불합격으로 처리하고 그 이름을 표시합니다(최대 3개). 그 밖의 추가된 인증서(회사 루트 인증서, mkcert 등)는 정보로 표시하고 합격으로 처리합니다(직접 설정한 것이라면 문제없습니다). 명령을 읽을 수 없으면 '확인할 수 없음'으로 처리합니다. 이유: 암호화된 통신(비밀번호와 API 키 포함)을 읽는 프록시는 Mac이 그 인증 기관을 신뢰해야 하기 때문입니다. 볼 수 없는 것: 앱이 자체적으로 가진 인증서, 인증서를 언제 추가했는지. 새로 들어와도 그 시점에 알리지 않습니다. 탐지 범위: T1553.004(일부). 아무것도 변경하지 않고 아무것도 보내지 않습니다.
                 • 23. 악용되기 쉬운 취약점 (설치된 소프트웨어)(`package_cve_exposure`, 시스템 강화): Homebrew 패키지와 PHP를 점검합니다. `brew list --versions`로 읽은 Homebrew 패키지를, 업데이터가 배포하는 서명된 알려진 CVE 데이터(Homebrew용)와 매일 도착하는 CISA의 KEV 목록과 대조합니다. CISA가 악용을 확인한(KEV) 취약점이나 EPSS 90% 이상인 취약점이 영향받는 버전에 남아 있으면 불합격으로 하고, 패키지 이름과 CVE 번호를 보여 줍니다(상태란에는 최대 3건). 위험 수용 기간이 끝나지 않은 것은 세지 않습니다. PHP는 Homebrew, MAMP, Herd, PATH에 있는 실행 파일의 버전과 php.ini, FPM, Apache의 설정을 읽습니다. 수정 이전 버전(중대한 취약점 2건 CVE-2026-109618과 CVE-2026-109619. 수정 버전은 8.2.35, 8.3.36, 8.4.27, 8.5.12이며 8.1 이하에는 수정 버전이 없습니다)이거나 CVE-2026-115560의 조건(설정이 php_binary 또는 php_serialize, 앱 코드가 ini_set()으로 전환, upload_progress 활성화의 세 가지가 모두 갖춰진 경우. 아직 수정 버전이 없습니다)이 있으면 불합격으로 합니다. mod_php나 upload_progress 활성화처럼 중요도가 중간 이하인 지적은 불합격으로 하지 않습니다. 데이터에 있는 Homebrew의 php는 데이터 쪽에서 세며 중복해서 세지 않습니다. PHP 실행 파일은 버전을 표시할 때만 실행합니다. 네트워크 통신은 하지 않습니다. 결과는 30분간 유지하며, 20초 안에 끝나지 않으면 '확인할 수 없음'으로 표시합니다. Homebrew 패키지도 PHP도 없으면 해당 없음으로 하여 점수에 넣지 않습니다. 데이터가 없을 때도 '확인할 수 없음'으로 표시합니다. 볼 수 없는 것은 Homebrew로 설치하지 않은 PHP 이외의 소프트웨어, 데이터에 항목이 없는 취약점, 최신 KEV 목록 이후에 KEV에 오른 CVE입니다(자세히 란에 데이터 버전과 KEV 날짜를 표시합니다). PHP의 세션 파일은 이 항목이 아니라 웹셸 등 탐지 규칙 검사가 읽습니다. 상태란에는 설치된 패키지 중 데이터에 있는 개수를 표시합니다.
+                • 24. Tailscale을 통한 노출(`overlay_exposure`, 네트워크 방어): 이 Mac이 tailnet에 들어 있을 때 tailnet 쪽에서 무엇이 보이는지 점검합니다. Tailscale의 수신 차단(shields up)이 꺼진 상태에서 tailnet이 닿는 곳에 SSH, 파일 공유, 원격 조작, 데이터베이스, 인증 없는 AI 추론 서버 같은 위험한 포트가 대기 중이면 불합격입니다. 대기 주소가 와일드카드이거나 tailnet 주소(100.64.0.0/10, fd7a:115c:a1e0::/48)인 것만 세고, LAN 주소나 루프백에만 묶인 대기는 세지 않습니다. ngrok이나 cloudflared가 Tailscale과 함께 실행 중인 경우도 불합격입니다(실행 파일 이름으로 판정). Exit Node·Subnet 경로의 광고와 Tailscale SSH는 상태로 표시만 하고 불합격으로 보지 않습니다. 읽는 것은 `tailscale status --json`(실행 여부만), `tailscale debug prefs`(ShieldsUp, AdvertiseRoutes, RunSSH 3개 항목만; 나머지는 버리고 키 등은 기록하지 않습니다), 대기 포트 목록, 실행 중인 프로그램 이름입니다. 외부로는 아무것도 보내지 않고 설정도 바꾸지 않습니다. Tailscale을 찾을 수 없거나 실행 중이 아니면 해당 없음이며 점수에 넣지 않습니다. tailnet의 접근 제어(ACL)는 읽지 않으므로 ACL로 가려진 포트도 지적합니다. macOS 방화벽이 있다는 이유로 합격시키지 않습니다. 수신을 차단하려면 `sudo tailscale set --shields-up`을 실행합니다(이 Mac에서 다른 기기로 나가는 연결은 그대로 사용할 수 있습니다).
                 • 등급: 100점은 S, 85~99점은 A, 70~84점은 B, 70점 미만은 C입니다. MCP 도구 `get_security_report`로도 확인할 수 있습니다.
                 • 보호 작동 상태: 켜 둔 보호가 실제로 작동하는지를 가드별(36개)로 보여 주는 창입니다. 메뉴(Mac 보안 종합 진단 > 🛡️ 보호 작동 상태…)에서 열거나, 종합 진단 보고서 맨 위 카드(요약과 작동하지 않는 보호만)의 '모든 보호 보기…'로 엽니다. 상태는 작동 중, 일부만 작동, 작동하지 않음, 끄기, Pro 전용의 5가지입니다. 작동하지 않는 보호에는 이유 코드(`pro_not_active`, `helper_not_connected`, `system_extension_not_approved` 등)와 원인·해결 방법 문장이 표시되고, 이유에 따라 'Pro 버전 인증…', '헬퍼 승인…', '시스템 설정 열기…' 버튼도 나타납니다. 15초마다, 그리고 '다시 확인'을 누르면 다시 읽습니다. Pro 버전이 아닌 Mac에서 기본값으로만 켜져 있는 Pro 기능은 'Pro 전용'으로 표시하며 오류로 세지 않습니다. 작동하지 않는 보호가 있는 동안에는 메뉴 맨 위에도 '⚠️ 작동하지 않는 보호가 있습니다(N개). 이유 보기…' 줄이 나타납니다. 판정은 메뉴 표시, 알림, MCP의 `get_guard_status`와 같은 원본 데이터를 씁니다. 탐지 데이터의 업데이트가 멈추었을 때(`state_stale`)는 알림을 보내지 않고 메뉴와 이 창에만 표시합니다.
                 • 설정이 약해졌을 때의 알림(Pro, 기본값 켜짐): 진단 뒤, 지난번에는 합격(또는 해당 없음)이었는데 지금 불합격이 된 설정을 알림 한 건으로 알립니다. 저절로 바뀌지 않는 10개 설정(SSH, sudo, SIP, Gatekeeper, 자동 업데이트, XProtect, 브라우저의 피싱 방어, 액세서리 연결 보호, FileVault, 백업의 최신성)이 대상입니다. Wi-Fi, ARP, 공개 포트처럼 그때그때 달라지는 것과, 연결된 네트워크에 따라 결과가 달라지는 방화벽 항목은 대상이 아닙니다. 측정하지 못한 항목은 세지 않습니다. 첫 진단은 기록만 하고, 같은 항목은 24시간 안에 반복하지 않으며, 알림을 꺼 둔 동안 일어난 약화는 다시 켠 뒤에도 알리지 않습니다. 아무것도 전송하지 않습니다. 메뉴의 '설정이 약해지면 알림 (Pro)'로 끌 수 있고, 상태는 `get_guard_status`의 configRegressionNotice에 나옵니다. Linux 에디션에도 같은 기능이 있습니다(데몬이 1시간마다 하는 진단 뒤에 수행하며 Pro 구분 없음).
@@ -1489,11 +1490,11 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "faq_free_vs_pro",
                 title: "무료 버전과 Pro 평생 버전의 차이",
-                summary: "무료 버전에는 네트워크 기반 자동 보호 전환, 23개 항목 보안 진단, 다양한 수동 검사 도구가 시간 제한 없이 포함되어 있습니다. Pro는 자동 봉쇄, 실시간 방어, 순찰 경고를 추가로 제공합니다.",
+                summary: "무료 버전에는 네트워크 기반 자동 보호 전환, 24개 항목 보안 진단, 다양한 수동 검사 도구가 시간 제한 없이 포함되어 있습니다. Pro는 자동 봉쇄, 실시간 방어, 순찰 경고를 추가로 제공합니다.",
                 details: """
                 【무료 버전】
                 • 네트워크별 3단계 PF 패킷 필터 자동 전환, 공유 서비스와 AirDrop 자동 정지 및 복원
-                • Mac 보안 진단(23개 항목), XProtect 상태, 파일/앱 안전성 진단
+                • Mac 보안 진단(24개 항목), XProtect 상태, 파일/앱 안전성 진단
                 • 노출된 포트와 USB 기기 목록
                 • 링크 안전성 진단, 수동 기밀/API 키 유출 감사, 클립보드 보호
                 • 패키지 CVE 검사, 실증형 취약점 검증, Mac 보안 로그 감사, 알림 기록

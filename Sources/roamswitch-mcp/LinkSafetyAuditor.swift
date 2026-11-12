@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.29 (build 208).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.30 (build 209).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -236,9 +236,6 @@ public final class LinkSafetyAuditor {
         return false
     }
 
-    /// Published attack-server addresses (JPCERT/CC, 2026-10); the list lives in `KnownAttackServers`.
-    static let knownAttackIPs: Set<String> = Set(KnownAttackServers.ips)
-
     private let highRiskTLDs: Set<String> = [
         "xyz", "top", "work", "click", "tk", "ml", "ga", "cf", "gq",
         "buzz", "fit", "rest", "surf", "casa", "bar", "icu", "cam"
@@ -333,17 +330,6 @@ public final class LinkSafetyAuditor {
                     kind: .ipAddressHost
                 ))
             }
-        }
-
-        // 2a. An address a named public source has published as an attack server.
-        if Self.knownAttackIPs.contains(host) {
-            penaltyScore += 30
-            riskFactors.append(LinkRiskFactor(
-                title: loc("攻撃に使われたと公表されたIPアドレス（JPCERT/CC）"),
-                detail: loc("このIPアドレスは、JPCERT/CCが2026年10月15日に公開した報告（Web・APIを狙う攻撃）で、攻撃に使われたサーバーとして挙げられています。開かないでください。貸しサーバーのアドレスは別の人に割り当て直されることがあり、今は無関係の可能性もあります。"),
-                isSevere: true,
-                kind: .ipAddressHost
-            ))
         }
 
         // 2a'. The host (or a parent domain) is on the threat feed the passive link guard also uses. A raw IP is

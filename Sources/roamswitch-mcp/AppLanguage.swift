@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.29 (build 208).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.30 (build 209).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -277,4 +277,24 @@ func loc(_ key: String, localeCode code: String) -> String {
         }
     }
     return key
+}
+
+/// Items of a list inside a sentence ("理由: A、B"), joined with the display language's separator: 「、」 in Japanese,
+/// "; " in English. Joining with a literal 「、」 put the Japanese comma into every language.
+func locList(_ items: [String], localeCode code: String = AppLanguage.activeLocaleCode) -> String {
+    items.joined(separator: loc("、", localeCode: code))
+}
+
+/// The catalog key of a bulleted line: 「・」 in Japanese, "• " in the other languages.
+let locBulletKey = "・%@"
+
+/// `text` as a line of a list, with the display language's bullet: 「・」 in Japanese, "• " in the other languages.
+/// A literal 「・」 in front of the line put the Japanese bullet into every language.
+func locBullet(_ text: String, localeCode code: String = AppLanguage.activeLocaleCode) -> String {
+    String(format: loc(locBulletKey, localeCode: code), text)
+}
+
+/// 箇条の続きの行の字下げ。日本語は全角の空白、ほかの言語は ASCII の空白 2 つ(英語などに全角の空白を出さない)。
+func locIndent(localeCode code: String = AppLanguage.activeLocaleCode) -> String {
+    code == "ja" ? "\u{3000}" : "  "
 }

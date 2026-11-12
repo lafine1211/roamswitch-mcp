@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.29 (build 208).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.30 (build 209).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -103,7 +103,7 @@ enum FeedUpdateStatusStore {
 
     /// The menu line for feeds whose updates stopped: which ones, nothing else.
     static func staleTitle(_ stale: [(feed: String, lastRun: Double)]) -> String {
-        String(format: loc("⚠️ 検知用データの更新が止まっています: %@"), stale.map { displayName($0.feed) }.joined(separator: "、"))
+        String(format: loc("⚠️ 検知用データの更新が止まっています: %@"), locList(stale.map { displayName($0.feed) }))
     }
 
     /// The tooltip of that line: when each feed was last checked, and what brings the check back.

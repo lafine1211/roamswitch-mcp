@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.29 (build 208).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.30 (build 209).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -727,7 +727,7 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "feat_typosquat_guard",
                 title: "打字仿冒检测 (npm/pnpm package.json, Pro)",
-                summary: "将 package.json 的依赖名称与知名 npm 包名列表进行编辑距离(Levenshtein 1〜2)比对，检测 expres→express、loadash→lodash 这类可能的打字仿冒。应用本身完全不为此进行网络连接。仅限 Pro 版。",
+                summary: "将 package.json 的依赖名称与知名 npm 包名列表进行编辑距离(Levenshtein 1~2)比对，检测 expres→express、loadash→lodash 这类可能的打字仿冒。应用本身完全不为此进行网络连接。仅限 Pro 版。",
                 details: """
                 • 范围：仅限项目自身 package.json 的 dependencies/devDependencies/optionalDependencies（peerDependencies 不在范围内）。node_modules（已安装的传递依赖）也刻意不在范围内——打字错误产生于人类将依赖添加到 package.json 的那一刻。
                 • 比对逻辑：标准的 Levenshtein 距离动态规划实现，将每个依赖名称与知名 npm 包名列表比对。带作用域的包（`@scope/pkg`）以其基础名称（`pkg`）比较。长度差超过 2 的候选会被低成本预过滤跳过。阈值为：知名名称长度 8 个字符以上时允许距离最多为 2，更短则仅允许距离 1。
@@ -793,8 +793,8 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",
-                title: "Mac 安全综合诊断（23 个项目·评分 & 改进步骤）",
-                summary: "检查系统健壮性、网络防御、身份验证与访问控制、端口暴露、恶意软件防护、物理设备防御 6 个领域共 23 个项目，并显示 100 分制的评分、等级和改进步骤。免费版即可使用。",
+                title: "Mac 安全综合诊断（24 个项目·评分 & 改进步骤）",
+                summary: "检查系统健壮性、网络防御、身份验证与访问控制、端口暴露、恶意软件防护、物理设备防御 6 个领域共 24 个项目，并显示 100 分制的评分、等级和改进步骤。免费版即可使用。",
                 details: """
                 • 系统健壮性：1. FileVault，2. SIP（系统完整性保护），3. Gatekeeper，4. 自动安全更新，5. Apple XProtect，6. 备份（Time Machine 最近一次备份在 7 天内；不检查能否还原）。
                 • 网络防御：7. macOS 防火墙，8. 隐身模式，9. Wi-Fi 加密强度，10. ARP 欺骗监视，11. 网关 ARP 固定，12. 代理自动发现 (WPAD / PAC)。
@@ -805,6 +805,7 @@ extension RoamSwitchKnowledgeBase {
                 • 不适用项的处理：受信任网络上的防火墙和隐身模式、远程登录禁用时的 SSH、辅助程序未连接时的 Sudo 审计将标记为 N/A，并从评分计算中排除。
                 • 22. 新增的受信任证书（证书颁发机构）（`trust_anchors`，网络防御）：针对用户域和管理员域读取 `security dump-trust-settings`。只有当人、管理员或描述文件设置过时，证书才会带有信任设置，所以列出的证书都是有人添加的；Apple 自带的根证书不计入，信任结果为“deny”（不信任）的证书也不计入。如果新增证书的名称看起来像拦截工具（mitm、proxy、charles、fiddler、burp、portswigger、zscaler、netskope、squid、inspection、sslsplit），该项不合格并列出名称（最多 3 个）。其他新增证书（公司根证书、mkcert 等）作为信息显示，该项合格（如果是你自己设置的就没有问题）。无法读取该命令时，该项为“无法确认”。原因：读取加密通信（包括密码和 API 密钥）的代理，需要 Mac 信任它的证书颁发机构。看不到的内容：应用自带的证书，以及证书是何时添加的；新增的证书出现时也不会通知。检测覆盖：T1553.004（部分）。不会更改任何内容，也不会发送任何内容。
                 • 23. 易被利用的漏洞 (已安装的软件)（`package_cve_exposure`，系统健壮性）：检查 Homebrew 软件包和 PHP。将通过 `brew list --versions` 读取的 Homebrew 软件包，与更新程序下发的带签名的已知 CVE 数据（Homebrew 用）以及每天下发的 CISA KEV 列表比对。若 CISA 确认已被利用（KEV）的漏洞，或 EPSS 达到 90% 以上的漏洞，仍留在受影响的版本中，则判为不合格，并显示软件包名和 CVE 编号（状态栏最多 3 个）。风险接受未到期的项目不计入。对于 PHP，读取 Homebrew、MAMP、Herd 和 PATH 中可执行文件的版本，以及 php.ini、FPM 和 Apache 的设置。版本早于修复版本（两个严重漏洞 CVE-2026-109618 和 CVE-2026-109619，修复版本为 8.2.35、8.3.36、8.4.27、8.5.12；8.1 及更早版本没有修复版本），或满足 CVE-2026-115560 的条件（设置为 php_binary 或 php_serialize、应用代码用 ini_set() 切换、upload_progress 已启用，三者同时具备；目前没有修复版本）时判为不合格。mod_php 或启用 upload_progress 等中等及以下的提示不会判为不合格。数据中收录的 Homebrew php 按数据统计，不会重复计算。PHP 可执行文件仅在显示版本时启动。不进行网络通信。结果保留 30 分钟，20 秒内未完成则显示“无法确认”。没有 Homebrew 软件包也没有 PHP 时判为不适用，不计入分数。没有数据时同样显示“无法确认”。无法看到的内容包括：非 Homebrew 安装的 PHP 以外的软件、数据中没有对应条目的漏洞，以及在最新 KEV 列表之后才列入 KEV 的 CVE（详情栏会显示数据版本和 KEV 日期）。PHP 的会话文件由 Web shell 检测规则的扫描读取，不在本项目中。状态栏会显示已安装软件包中数据收录的数量。
+                • 24. 通过 Tailscale 的暴露（`overlay_exposure`，网络防御）：这台 Mac 加入 tailnet 时，检查 tailnet 一侧能看到什么。在没有开启 Tailscale 入站阻止（shields up）的情况下，如果有 SSH、文件共享、远程控制、数据库、无认证的 AI 推理服务器等高风险端口在 tailnet 可达的位置监听，则不合格。只统计绑定在通配地址或 tailnet 地址（100.64.0.0/10、fd7a:115c:a1e0::/48）上的监听，只绑定在局域网地址或回环地址上的监听不计入。ngrok 或 cloudflared 与 Tailscale 同时运行时也不合格（按可执行文件名判断）。作为 Exit Node 或 Subnet 路由对外通告，以及 Tailscale SSH，只显示状态，不算不合格。读取的内容是 `tailscale status --json`（只看是否在运行）、`tailscale debug prefs`（只取 ShieldsUp、AdvertiseRoutes、RunSSH 三项，其余丢弃，不记录密钥等）、监听端口列表和正在运行的程序名。不向外部发送任何内容，也不更改任何设置。找不到 Tailscale 或它没有运行时，该项不适用，不计入分数。不会读取 tailnet 的访问控制 (ACL)，因此被 ACL 隐藏的端口也会被指出。不会因为有 macOS 防火墙就判为合格。要阻止入站连接，请运行 `sudo tailscale set --shields-up`（这台 Mac 连向其他设备的连接不受影响）。
                 • 等级：100 分 = S，85～99 分 = A，70～84 分 = B，低于 70 分 = C。也可通过 MCP 工具 `get_security_report` 获取。
                 • 保护的运行状态：按防护项（36 项）列出已开启的保护是否真正在运行的窗口。可从菜单（Mac 安全综合诊断 > 🛡️ 保护的运行状态…）打开，也可用综合诊断报告顶部卡片（摘要和未运行的保护）上的“显示所有保护…”打开。状态共五种：已生效、部分生效、未生效、关闭、仅限 Pro。未运行的保护会显示原因代码（如 `pro_not_active`、`helper_not_connected`、`system_extension_not_approved`）以及说明原因和解决方法的句子；根据原因，还会出现“认证 Pro 版…”“批准辅助程序…”“打开系统设置…”按钮。每 15 秒以及点击“重新确认”时重新读取。在没有 Pro 的 Mac 上，仅因默认值而开启的 Pro 功能显示为“仅限 Pro”，不计为故障。有保护未运行时，菜单顶部还会出现一行“⚠️ 有保护未生效(N 项)。查看原因…”。判定使用与菜单标记、通知和 MCP 的 `get_guard_status` 相同的数据。检测数据的更新停止时（`state_stale`）不发通知，只显示在菜单和这个窗口中。
                 • 设置被削弱时的通知（Pro，默认开启）：诊断之后，上次合格（或不适用）而现在不合格的设置，用一条通知告知。涵盖 10 项不会自行变化的设置（SSH、sudo、SIP、Gatekeeper、自动更新、XProtect、浏览器的钓鱼防护、配件连接保护、FileVault、备份新旧）。Wi-Fi、ARP、开放端口这类随时变化的内容，以及结果取决于所连网络的防火墙项目不在其内。无法测量的项目不计入。首次诊断只做记录，同一项目 24 小时内不重复，通知关闭期间发生的削弱在重新开启后也不会通知。不会发送任何数据。可用菜单中的“设置被削弱时通知 (Pro)”关闭，状态显示在 `get_guard_status` 的 configRegressionNotice 中。Linux 版有相同功能（由守护进程在每小时的检查之后执行，不区分 Pro）。
@@ -1489,11 +1490,11 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "faq_free_vs_pro",
                 title: "免费版与 Pro 永久版的区别",
-                summary: "免费版也可以无限期使用根据网络自动切换保护、23 个项目的综合诊断等基础防御功能以及各类手动诊断工具。Pro 版将解锁自动隔离、实时防御、自主巡查警告等功能。",
+                summary: "免费版也可以无限期使用根据网络自动切换保护、24 个项目的综合诊断等基础防御功能以及各类手动诊断工具。Pro 版将解锁自动隔离、实时防御、自主巡查警告等功能。",
                 details: """
                 【免费版】
                 • 根据 Wi-Fi 和网络自动切换三级 pf 数据包过滤，自动停止与恢复共享服务和 AirDrop
-                • Mac 安全综合诊断（23 个项目）、XProtect 运行状态确认与文件/应用安全性诊断
+                • Mac 安全综合诊断（24 个项目）、XProtect 运行状态确认与文件/应用安全性诊断
                 • 外部公开端口和 USB 设备列表显示
                 • 链接安全性诊断、机密信息与 API 密钥泄露手动审计、剪贴板保护
                 • 软件包 CVE 照合、实证型漏洞验证、Mac 安全日志审计、通知历史

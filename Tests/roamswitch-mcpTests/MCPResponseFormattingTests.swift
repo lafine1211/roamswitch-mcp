@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.29 (build 208). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.30 (build 209). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -557,7 +557,7 @@ final class MCPResponseFormattingTests: XCTestCase {
 
     func testMakeSecurityReportPayload_wifiAndARPThatLookHealthyCarryTheirReason() throws {
         // PersonalSOC が困っていた2項目。isApplicable/isPassed は「正常」に見えるが、確認済みではない。
-        let report = SecurityHealthChecker.shared.generateComprehensiveReport(
+        let report = SecurityHealthChecker(overlaySource: StubOverlayExposureSource()).generateComprehensiveReport(
             wifiInfo: WiFiInfo(ssid: nil, bssid: nil, securityLevel: .notConnected),
             arpStatus: ARPMonitorStatus(isSpoofingDetected: false, message: "", previousMAC: nil, currentMAC: nil, gatewayKnown: true, hadBaseline: false),
             listeningPorts: [],
@@ -575,7 +575,7 @@ final class MCPResponseFormattingTests: XCTestCase {
         XCTAssertEqual(arp.inconclusiveReason, "no_baseline")
 
         // 読み取れているときは出さない。
-        let measured = SecurityHealthChecker.shared.generateComprehensiveReport(
+        let measured = SecurityHealthChecker(overlaySource: StubOverlayExposureSource()).generateComprehensiveReport(
             wifiInfo: WiFiInfo(ssid: nil, bssid: nil, securityLevel: .notConnected),
             arpStatus: ARPMonitorStatus(isSpoofingDetected: false, message: "", previousMAC: nil, currentMAC: nil, gatewayKnown: true, hadBaseline: true),
             listeningPorts: [],
@@ -690,7 +690,7 @@ final class VerifyFindingDisciplineTests: XCTestCase {
         "host_firewall", "network_stealth_mode", "wifi_encryption_strength", "arp_spoof_monitor", "gateway_arp_lock",
         "ssh_hardening", "sudo_hygiene", "exposed_ports", "malware_scanning", "dns_threat_guard",
         "browser_phishing_protection", "usb_zero_trust", "accessory_connection_protection", "backup_recency",
-        "proxy_autodiscovery", "trust_anchors", "agent_credential_files", "package_cve_exposure",
+        "proxy_autodiscovery", "trust_anchors", "agent_credential_files", "package_cve_exposure", "overlay_exposure",
     ]
     private let allReasons = [
         "failing", "passing", "not_applicable", "helper_unavailable", "gateway_unknown", "no_baseline",
@@ -723,7 +723,7 @@ final class VerifyFindingDisciplineTests: XCTestCase {
 
     func testTheTableCoversExactlyTheChecksTheAuditProduces() {
         // The ids come from the audit itself, so a new check without texts fails here.
-        let report = SecurityHealthChecker.shared.generateComprehensiveReport(
+        let report = SecurityHealthChecker(overlaySource: StubOverlayExposureSource()).generateComprehensiveReport(
             wifiInfo: WiFiInfo(ssid: nil, bssid: nil, securityLevel: .notConnected),
             arpStatus: ARPMonitorStatus(isSpoofingDetected: false, message: "", previousMAC: nil, currentMAC: nil, gatewayKnown: true, hadBaseline: true),
             listeningPorts: [],

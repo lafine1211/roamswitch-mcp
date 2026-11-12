@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.29 (build 208).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.30 (build 209).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -276,12 +276,14 @@ final class SecurityHealthChecker {
     private let sshConfigSource: SSHDConfigSource
     private let backupSource: BackupSource
     private let packageCveSource: PackageCveSource
+    private let overlaySource: OverlayExposureSource
 
-    init(runner: @escaping CommandRunner = SystemCommand.run, sshConfigSource: SSHDConfigSource = FileSSHDConfigSource(), backupSource: BackupSource = SystemBackupSource(), packageCveSource: PackageCveSource = SystemPackageCveSource.shared) {
+    init(runner: @escaping CommandRunner = SystemCommand.run, sshConfigSource: SSHDConfigSource = FileSSHDConfigSource(), backupSource: BackupSource = SystemBackupSource(), packageCveSource: PackageCveSource = SystemPackageCveSource.shared, overlaySource: OverlayExposureSource = SystemOverlayExposureSource()) {
         self.runner = runner
         self.sshConfigSource = sshConfigSource
         self.backupSource = backupSource
         self.packageCveSource = packageCveSource
+        self.overlaySource = overlaySource
     }
 
     func checkHealth() -> SecurityHealthStatus {
@@ -598,6 +600,8 @@ final class SecurityHealthChecker {
             inconclusiveReason: portsMeasured ? nil : (portListNotMeasuredYet ? "not_measured" : "tool_failed")
         ))
 
+        items.append(overlayExposureItem(listeningPorts: listeningPorts, portListNotMeasuredYet: portListNotMeasuredYet))
+
         // MARK: - 4. Malware & Download Protection (マルウェア・ダウンロード保護)
         let isDownloadGuardEnabled = defaults.object(forKey: "RoamSwitch.WebMailDownloadGuardEnabled") == nil ? true : defaults.bool(forKey: "RoamSwitch.WebMailDownloadGuardEnabled")
         let clamCandidates = [
@@ -887,6 +891,89 @@ final class SecurityHealthChecker {
             cisControlID: "7.1",
             nistCsfCategories: ["ID.RA-01"],
             inconclusiveReason: r.outcome.unmeasuredReason
+        )
+    }
+
+    // MARK: - Overlay (Tailscale) exposure
+
+    /// `overlay_exposure`: what the Tailscale tailnet adds to this Mac's exposure (see `OverlayExposure`). Reads
+    /// Tailscale's local state and the program list; sends nothing anywhere. Without Tailscale (or with it stopped)
+    /// the item does not apply and is left out of the score.
+    func overlayExposureItem(listeningPorts: [ListeningPortInfo]?, portListNotMeasuredYet: Bool = false) -> SecurityAuditItem {
+        let tailscale = overlaySource.tailscale()
+        var programs: Set<String>?
+        if case .running = tailscale { programs = overlaySource.programNames() }
+        let r = OverlayExposure.evaluate(tailscale: tailscale, listeners: listeningPorts, programs: programs,
+                                         listenersNotMeasuredYet: portListNotMeasuredYet)
+        var detail = loc("同じtailnetにいる端末は、Tailscaleの受信遮断(ShieldsUp)が入っていないと、このMacの待ち受けポートへ直接つなげます。受信遮断がない状態で、tailnetから届くSSH・データベース・リモート操作などの危険なポートの待ち受けがあると不合格です。ngrokやcloudflaredの外部公開トンネルをTailscaleと同時に動かしている場合も不合格です。外から侵入されたとき、このMacがtailnetへの踏み台になるためです。Exit NodeやSubnetの広報は、状態として表示するだけです。外部への通信はしません。")
+        let statusText: String
+        var recommendation: String
+        switch tailscale {
+        case .notInstalled:
+            statusText = loc("対象外 (Tailscaleが見つかりません)")
+            recommendation = loc("対象がないため、点数に入れません。")
+        case .notRunning:
+            statusText = loc("対象外 (Tailscaleが動いていません)")
+            recommendation = loc("対象がないため、点数に入れません。")
+        case .unreadable:
+            statusText = loc("状態を確認できませんでした")
+            recommendation = loc("Tailscaleが応答することを確かめて、もう一度診断してください。")
+        case .running:
+            var parts: [String] = []
+            if !r.riskyPorts.isEmpty {
+                let named = r.riskyPorts.prefix(5).map { "\($0.port) \($0.process)" }.joined(separator: ", ")
+                    + (r.riskyPorts.count > 5 ? ", ..." : "")
+                parts.append(locFormat("⚠️ tailnetから届く危険なポートの待ち受けがあります (%@)", named))
+                detail += "\n" + r.riskyPorts.map { "\($0.port)  \($0.process)" }.joined(separator: "\n")
+            }
+            if !r.tunnels.isEmpty {
+                parts.append(locFormat("⚠️ Tailscaleと外部公開トンネルが同時に動いています (%@)", r.tunnels.joined(separator: ", ")))
+            }
+            if parts.isEmpty {
+                if r.inconclusiveReason != nil {
+                    parts.append(loc("状態を確認できませんでした"))
+                } else if r.prefs?.shieldsUp == true {
+                    parts.append(loc("問題なし (tailnetからの受信を遮断中)"))
+                } else {
+                    parts.append(loc("問題なし (tailnetから届く危険なポートなし)"))
+                }
+            }
+            if let prefs = r.prefs {
+                if prefs.advertisesExitNode { parts.append(loc("Exit Nodeを広報中")) }
+                if !prefs.advertisedSubnets.isEmpty { parts.append(loc("Subnetを広報中")) }
+                if prefs.runSSH { parts.append(loc("Tailscale SSHが有効")) }
+            }
+            statusText = parts.joined(separator: " / ")
+            var advice: [String] = []
+            if !r.riskyPorts.isEmpty {
+                advice.append(loc("`sudo tailscale set --shields-up` を実行すると、tailnetからこのMacへの受信を遮断できます。このMacから他の端末への接続は、そのまま使えます。受信が必要なら、不要なポートの待ち受けを止めてください。"))
+            }
+            if !r.tunnels.isEmpty {
+                advice.append(loc("ngrokやcloudflaredが不要なら止めてください。使うなら、tailnetに入るMacとは別の端末で動かしてください。"))
+            }
+            if r.prefs?.advertisesExitNode == true {
+                advice.append(loc("Exit Nodeが不要なら、`sudo tailscale set --advertise-exit-node=false` で止めてください。"))
+            }
+            switch r.inconclusiveReason {
+            case "not_measured": advice.append(loc("待ち受けポートの一覧を取得できてから、もう一度診断してください。"))
+            case .some: advice.append(loc("Tailscaleが応答することを確かめて、もう一度診断してください。"))
+            case nil: break
+            }
+            recommendation = advice.isEmpty ? loc("対応は不要です。") : advice.joined(separator: "\n")
+        }
+        return SecurityAuditItem(
+            category: loc("ネットワーク防御"),
+            title: loc("Tailscale経由の露出"),
+            isPassed: r.isPassed,
+            statusText: statusText,
+            detail: detail,
+            recommendation: recommendation,
+            settingsURL: nil,
+            isApplicable: r.isApplicable,
+            checkId: "overlay_exposure",
+            cisControlID: "4.4",
+            nistCsfCategories: ["PR.IR-01"],
+            inconclusiveReason: r.inconclusiveReason
         )
     }
 

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.29 (build 208).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.30 (build 209).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -565,8 +565,7 @@ enum SSHBlockRules {
     }
 
     /// Puts the ban rules right after `anchorCall` (the main ruleset's anchor line): they are `quick`, so they
-    /// must come before the `pass quick` holes of a kill-switch ruleset to win. Same placement rule as
-    /// `KnownAttackServers.insertingEgressBlock`.
+    /// must come before the `pass quick` holes of a kill-switch ruleset to win.
     static func inserting(into rules: String, anchorCall: String, specs: [SSHBlockSpec]) -> String {
         let block = Self.rules(specs)
         guard !block.isEmpty else { return rules }

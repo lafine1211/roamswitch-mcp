@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.29 (build 208). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.30 (build 209). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -72,21 +72,6 @@ final class LinkSafetyAuditorTests: XCTestCase {
         }
         let plain = auditor.analyzeURL("http://192.168.1.100/admin")
         XCTAssertFalse(plain.riskFactors.first { $0.kind == .ipAddressHost }?.title.contains("数値表記") == true)
-    }
-
-    func testPublishedAttackServerAddressIsNamedAsSuch() {
-        let auditor = LinkSafetyAuditor.shared
-        for ip in ["210.149.87.120", "118.26.36.16", "69.10.51.162"] {
-            for url in ["https://\(ip)/r302?u=http://169.254.169.254/", "http://\(ip):8080/x"] {
-                let report = auditor.analyzeURL(url)
-                XCTAssertTrue(report.riskFactors.contains { $0.title.contains("JPCERT/CC") && $0.isSevere }, url)
-                XCTAssertNotEqual(report.verdict, .allow, url)
-            }
-        }
-        // A neighbouring address and a domain that merely contains the digits are not listed.
-        for url in ["https://210.149.87.121/", "https://118.26.36.17/", "https://210-149-87-120.example.com/"] {
-            XCTAssertFalse(auditor.analyzeURL(url).riskFactors.contains { $0.title.contains("JPCERT/CC") }, url)
-        }
     }
 
     func testNumericHostHelpersDoNotTouchRealDomains() {

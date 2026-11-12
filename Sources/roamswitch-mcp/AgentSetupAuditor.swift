@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.29 (build 208).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.30 (build 209).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -73,6 +73,13 @@ enum AgentSetupAuditor {
         var snapshot = AgentSetupBaseline.Snapshot()
         /// When the state this run was compared with was accepted (ISO 8601), nil if none was.
         var baselineAcceptedAt: String?
+        /// Files that exist in the places the audit looks in but were not read, because the run reached `maxFiles` or a
+        /// skill folder held more than `maxFilesPerSkill` files. A lower bound: a folder walk that stopped early
+        /// (`maxWalkedFiles`) cannot count what it did not list.
+        var skippedFileCount = 0
+        /// Some file was left out for the reason above, so `skillCount` is not "skills audited" and "no findings" is
+        /// not "clean".
+        var truncated = false
     }
 
     /// One file as read from disk: its bytes and POSIX permission bits (nil if unknown).
@@ -121,6 +128,8 @@ enum AgentSetupAuditor {
     static let maxTextBytes = 512 * 1024
     static let maxFiles = 2000
     static let maxFilesPerSkill = 200
+    /// A walk of one skill folder stops after this many files.
+    static let maxWalkedFiles = maxFilesPerSkill * 5
     static let maxProjectFolders = 50
 
     // MARK: - Candidate files
@@ -243,9 +252,22 @@ enum AgentSetupAuditor {
         var unreadable: [String] = []
         var skillCount = 0
         var seenPaths = Set<String>()
+        var skippedFiles = 0
+        var truncated = false
 
         func read(_ path: String, inSkill: Bool, role: FileInput.Role = .instruction, inProject: Bool = false) {
-            guard inputs.count < maxFiles, seenPaths.insert(path).inserted else { return }
+            if inputs.count >= maxFiles {
+                // The limit was reached: count what is left out, so the result can say it stopped short. A path that
+                // does not exist (most candidates are well-known names) and one seen before are not left out.
+                if !seenPaths.contains(path), let attrs = try? fm.attributesOfItem(atPath: path),
+                   (attrs[.type] as? FileAttributeType) != .typeDirectory {
+                    seenPaths.insert(path)
+                    skippedFiles += 1
+                    truncated = true
+                }
+                return
+            }
+            guard seenPaths.insert(path).inserted else { return }
             guard let attrs = try? fm.attributesOfItem(atPath: path) else { return }
             let type = attrs[.type] as? FileAttributeType
             guard type == .typeRegular || type == .typeSymbolicLink else { return }
@@ -261,18 +283,50 @@ enum AgentSetupAuditor {
             inputs.append(FileInput(path: path, data: data, mode: mode, inSkill: inSkill, sha256: digest, role: role, inProject: inProject))
         }
 
-        func files(in folder: String, maxDepth: Int) -> [String] {
-            guard let enumerator = fm.enumerator(atPath: folder) else { return [] }
+        /// The files under `folder` and whether the walk stopped at `maxWalkedFiles` (so the list is not complete).
+        func filesMarked(in folder: String, maxDepth: Int) -> (paths: [String], stopped: Bool) {
+            guard let enumerator = fm.enumerator(atPath: folder) else { return ([], false) }
             var out: [String] = []
+            var stopped = false
             for case let rel as String in enumerator {
                 if rel.split(separator: "/").count > maxDepth { enumerator.skipDescendants(); continue }
                 if rel.split(separator: "/").contains(where: { $0 == ".git" || $0 == "node_modules" }) { enumerator.skipDescendants(); continue }
                 var isDir: ObjCBool = false
                 let full = "\(folder)/\(rel)"
-                if fm.fileExists(atPath: full, isDirectory: &isDir), !isDir.boolValue { out.append(full) }
-                if out.count >= maxFilesPerSkill * 5 { break }
+                if fm.fileExists(atPath: full, isDirectory: &isDir), !isDir.boolValue {
+                    if out.count >= maxWalkedFiles { stopped = true; break }
+                    out.append(full)
+                }
             }
-            return out.sorted()
+            return (out.sorted(), stopped)
+        }
+
+        func files(in folder: String, maxDepth: Int) -> [String] { filesMarked(in: folder, maxDepth: maxDepth).paths }
+
+        /// The skill folders directly under a skill root: `<root>/<skill>` with a `SKILL.md`, and one level further down
+        /// `<root>/<group>/<skill>` for a folder that groups skills and has no `SKILL.md` of its own
+        /// (`skills/.curated/<skill>` in openai/skills, `~/.codex/skills/.system/<skill>`). Names that start with a dot
+        /// are looked into too; only `.git` and `node_modules` are skipped. Sorted.
+        func skillDirs(under root: String) -> [String] {
+            func children(_ dir: String) -> [String] {
+                ((try? fm.contentsOfDirectory(atPath: dir)) ?? []).filter { $0 != ".git" && $0 != "node_modules" }.sorted()
+            }
+            func isDirectory(_ path: String) -> Bool {
+                var d: ObjCBool = false
+                return fm.fileExists(atPath: path, isDirectory: &d) && d.boolValue
+            }
+            func isSkill(_ dir: String) -> Bool { isDirectory(dir) && fm.fileExists(atPath: "\(dir)/SKILL.md") }
+            var out: [String] = []
+            for name in children(root) {
+                let dir = "\(root)/\(name)"
+                if isSkill(dir) {
+                    out.append(dir)
+                } else if isDirectory(dir),
+                          (try? fm.attributesOfItem(atPath: dir))?[.type] as? FileAttributeType != .typeSymbolicLink {
+                    for inner in children(dir) where isSkill("\(dir)/\(inner)") { out.append("\(dir)/\(inner)") }
+                }
+            }
+            return out
         }
 
         let folders = Array(projectFolders.prefix(maxProjectFolders))
@@ -289,14 +343,15 @@ enum AgentSetupAuditor {
             for path in files(in: folder, maxDepth: 4) where isInstructionText(path) { read(path, inSkill: false) }
         }
         for root in skillRoots {
-            guard let skills = try? fm.contentsOfDirectory(atPath: root) else { continue }
-            for skill in skills.sorted() where !skill.hasPrefix(".") {
-                let dir = "\(root)/\(skill)"
-                var isDir: ObjCBool = false
-                guard fm.fileExists(atPath: dir, isDirectory: &isDir), isDir.boolValue else { continue }
-                guard fm.fileExists(atPath: "\(dir)/SKILL.md") else { continue }
+            for dir in skillDirs(under: root) {
                 skillCount += 1
-                for path in files(in: dir, maxDepth: 4).prefix(maxFilesPerSkill) { read(path, inSkill: true) }
+                let listed = filesMarked(in: dir, maxDepth: 4)
+                if listed.stopped { truncated = true }
+                if listed.paths.count > maxFilesPerSkill {
+                    skippedFiles += listed.paths.count - maxFilesPerSkill
+                    truncated = true
+                }
+                for path in listed.paths.prefix(maxFilesPerSkill) { read(path, inSkill: true) }
             }
         }
 
@@ -353,6 +408,8 @@ enum AgentSetupAuditor {
 
         var result = audit(files: inputs, openClawConfig: openClaw, openClawDirectories: stateDirs)
         result.skillCount = skillCount
+        result.skippedFileCount = skippedFiles
+        result.truncated = truncated
         result.unreadableFiles += unreadable
 
         // Change detection: what is there now, and how it differs from the state a person accepted.
@@ -1690,4 +1747,8 @@ public struct AgentSetupAuditResultPayload: Codable, Equatable {
     public let findings: [FindingPayload]
     /// When the accepted state the drift findings compare against was recorded (ISO 8601); nil if none.
     public let baselineAcceptedAt: String?
+    /// Files that exist but were not read because a limit was reached (a lower bound).
+    public let skippedFileCount: Int
+    /// A limit was reached, so the findings do not cover every file: do not read "no findings" as "clean".
+    public let truncated: Bool
 }

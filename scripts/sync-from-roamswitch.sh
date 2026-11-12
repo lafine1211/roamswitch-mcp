@@ -45,7 +45,7 @@ CORE=(ProcessWait AppLanguage TrustedNetwork GatewayFingerprint WiFiSecurityMoni
       RansomwareEntropyStatusReader ForensicCaptureManager HoneytokenStatusReader \
       BrowserCredentialWatchStatusReader \
       PortAnomalyStatusReader RuntimeThreatStatusReader NotificationTextLocalization \
-      SensorFindingTexts SensorFindingTextsData StoredRecordHealth \
+      SensorFindingTexts SensorFindingTextsData StoredRecordHealth OverlayExposure \
       ContainmentIncidentTimeline NetworkHistoryGuard MCPSensorAuditStatusReader \
       RansomwareSnapshotStatusReader MCPExecRecorderTools TOMLSubset AgentSetupAuditor AgentSetupBaseline SSHGuardStatusReader PromptInjectionSignals AgentSetupSarif ActiveVulnScanSarif DetectionCoverage \
       BackupRecency PackageCveEpss VulnerabilityAcceptance DependencySourceScan \
@@ -69,7 +69,8 @@ TESTS=(LinkSafetyAuditorTests CryptoSecretDetectionTests MCPKnowledgeBaseTests M
        ActiveVulnScanTests MCPConfigAuditorTests TOMLSubsetTests AgentSetupAuditorTests PromptInjectionSignalsTests AgentSetupSarifTests ActiveVulnScanSarifTests SarifRuleIdStabilityTests IncidentReconciliationTests DetectionCoverageTests LocalAIRuntimeTests GuardReaderHealthTests StrictJSONTests MCPToolCallLogTests \
        AgentCredentialFileCheckTests BackupRecencyTests DependencySourceScanTests PackageCveEpssTests \
        ProbeCatalogTests MCPToolAnnotationsTests \
-       FrontendBundleScanTests ForensicChainTests TrustAnchorCheckTests ReflectedXssProbeTests)
+       FrontendBundleScanTests ForensicChainTests TrustAnchorCheckTests ReflectedXssProbeTests \
+       OverlayExposureTestSupport)
 
 TDST="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/Tests/roamswitch-mcpTests"
 

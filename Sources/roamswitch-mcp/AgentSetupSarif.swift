@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.29 (build 208).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.30 (build 209).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -216,7 +216,7 @@ extension AgentSetupAuditor {
         }
 
         // Files that exist but could not be read were NOT audited; say so in the log.
-        let notifications: [[String: Any]] = result.unreadableFiles.map {
+        var notifications: [[String: Any]] = result.unreadableFiles.map {
             [
                 "level": "warning",
                 "message": ["text": "This file exists but could not be read, so it was not audited."],
@@ -224,11 +224,20 @@ extension AgentSetupAuditor {
                 "locations": [["physicalLocation": ["artifactLocation": ["uri": sarifURI(for: $0)]]]],
             ]
         }
+        if result.truncated {
+            notifications.append([
+                "level": "warning",
+                "message": ["text": "The audit reached its file limit: \(result.scannedFiles.count) files were read and at least \(result.skippedFileCount) were not. No results does not mean the files that were not read are fine."],
+                "descriptor": ["id": "audit-truncated"],
+            ])
+        }
 
         var runProps: [String: Any] = [
             "skillCount": result.skillCount,
             "openClawConfigFound": result.openClawConfigFound,
             "scannedFileCount": result.scannedFiles.count,
+            "skippedFileCount": result.skippedFileCount,
+            "truncated": result.truncated,
         ]
         if let at = result.baselineAcceptedAt { runProps["baselineAcceptedAt"] = at }
 

@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.29 (build 208). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.30 (build 209). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -173,7 +173,7 @@ final class AgentCredentialFileCheckTests: XCTestCase {
         let original = C.scan
         defer { C.scan = original }
         C.scan = { [self.result([.accessibleByOthers(mode: 0o644)])] }
-        let report = SecurityHealthChecker.shared.generateComprehensiveReport(
+        let report = SecurityHealthChecker(overlaySource: StubOverlayExposureSource()).generateComprehensiveReport(
             wifiInfo: WiFiInfo(ssid: nil, bssid: nil, securityLevel: .notConnected),
             arpStatus: ARPMonitorStatus(isSpoofingDetected: false, message: "", previousMAC: nil, currentMAC: nil, gatewayKnown: true, hadBaseline: true),
             listeningPorts: [], activeSecurityLevel: .balanced)

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.29 (build 208).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.30 (build 209).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -727,7 +727,7 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "feat_typosquat_guard",
                 title: "打字仿冒偵測 (npm/pnpm package.json, Pro)",
-                summary: "將 package.json 的相依名稱與知名 npm 套件名稱清單進行編輯距離(Levenshtein 1〜2)比對，偵測 expres→express、loadash→lodash 這類可能的打字仿冒。應用程式本身完全不為此進行網路連線。僅限 Pro 版。",
+                summary: "將 package.json 的相依名稱與知名 npm 套件名稱清單進行編輯距離(Levenshtein 1~2)比對，偵測 expres→express、loadash→lodash 這類可能的打字仿冒。應用程式本身完全不為此進行網路連線。僅限 Pro 版。",
                 details: """
                 • 範圍：僅限專案自身 package.json 的 dependencies/devDependencies/optionalDependencies（peerDependencies 不在範圍內）。node_modules（已安裝的傳遞相依性）也刻意不在範圍內——打字錯誤產生於人類將相依性加入 package.json 的那一刻。
                 • 比對邏輯：標準的 Levenshtein 距離動態規劃實作，將每個相依名稱與知名 npm 套件名稱清單比對。帶作用域的套件（`@scope/pkg`）以其基礎名稱（`pkg`）比較。長度差超過 2 的候選會被低成本預過濾跳過。閾值為：知名名稱長度 8 個字元以上時允許距離最多為 2，更短則僅允許距離 1。
@@ -793,8 +793,8 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",
-                title: "Mac 安全稽核（23 個項目、分數與修正步驟）",
-                summary: "檢查六大領域（系統強化、網路防禦、驗證與存取控制、連接埠曝露、惡意軟體防護、實體裝置防護）共 23 個項目，並顯示 0 到 100 分的分數、等級，以及每個未通過項目的修正步驟。免費版即可使用。",
+                title: "Mac 安全稽核（24 個項目、分數與修正步驟）",
+                summary: "檢查六大領域（系統強化、網路防禦、驗證與存取控制、連接埠曝露、惡意軟體防護、實體裝置防護）共 24 個項目，並顯示 0 到 100 分的分數、等級，以及每個未通過項目的修正步驟。免費版即可使用。",
                 details: """
                 • 系統強化：1. FileVault、2. SIP（系統完整性保護）、3. Gatekeeper、4. 自動安全更新、5. Apple XProtect、6. 備份（Time Machine 最近一次備份在 7 天內；不檢查能否還原）。
                 • 網路防禦：7. macOS 防火牆、8. 隱形模式、9. Wi-Fi 加密強度、10. ARP 詐騙監控、11. 閘道 ARP 固定、12. 代理伺服器自動探索 (WPAD / PAC)。
@@ -805,6 +805,7 @@ extension RoamSwitchKnowledgeBase {
                 • 不適用項目：受信任網路上的防火牆與隱形模式、遠端登入關閉時的 SSH 檢查，以及輔助工具連線前的 sudo 稽核，都會排除在分數計算之外。
                 • 22. 新增的受信任憑證（憑證授權單位）（`trust_anchors`，網路防禦）：針對使用者網域與管理員網域讀取 `security dump-trust-settings`。只有當人、管理員或描述檔設定過時，憑證才會帶有信任設定，所以列出的憑證都是有人新增的；Apple 自帶的根憑證不計入，信任結果為「deny」（不信任）的憑證也不計入。如果新增憑證的名稱看起來像攔截工具（mitm、proxy、charles、fiddler、burp、portswigger、zscaler、netskope、squid、inspection、sslsplit），該項不合格並列出名稱（最多 3 個）。其他新增憑證（公司根憑證、mkcert 等）作為資訊顯示，該項合格（若是你自己設定的就沒有問題）。無法讀取該指令時，該項為「無法確認」。原因：讀取加密通訊（包括密碼與 API 金鑰）的代理，需要 Mac 信任它的憑證授權單位。看不到的內容：應用程式自帶的憑證，以及憑證是何時新增的；新增的憑證出現時也不會通知。偵測涵蓋：T1553.004（部分）。不會變更任何內容，也不會傳送任何內容。
                 • 23. 容易被利用的弱點 (已安裝的軟體)（`package_cve_exposure`，系統強化）：檢查 Homebrew 套件與 PHP。將透過 `brew list --versions` 讀取的 Homebrew 套件，與更新程式下發的已簽章已知 CVE 資料（Homebrew 用）以及每天下發的 CISA KEV 清單比對。若 CISA 確認已被利用（KEV）的弱點，或 EPSS 達 90% 以上的弱點，仍留在受影響的版本中，則判為不合格，並顯示套件名稱與 CVE 編號（狀態欄最多 3 個）。風險接受尚未到期的項目不計入。對於 PHP，讀取 Homebrew、MAMP、Herd 與 PATH 中執行檔的版本，以及 php.ini、FPM 與 Apache 的設定。版本早於修補版本（兩個嚴重弱點 CVE-2026-109618 與 CVE-2026-109619，修補版本為 8.2.35、8.3.36、8.4.27、8.5.12；8.1 及更早版本沒有修補版本），或符合 CVE-2026-115560 的條件（設定為 php_binary 或 php_serialize、應用程式碼以 ini_set() 切換、upload_progress 已啟用，三者同時具備；目前沒有修補版本）時判為不合格。mod_php 或啟用 upload_progress 等中等以下的提示不會判為不合格。資料中收錄的 Homebrew php 依資料計算，不會重複計算。PHP 執行檔僅在顯示版本時啟動。不進行網路通訊。結果保留 30 分鐘，20 秒內未完成則顯示「無法確認」。沒有 Homebrew 套件也沒有 PHP 時判為不適用，不計入分數。沒有資料時同樣顯示「無法確認」。看不到的內容包括：非 Homebrew 安裝的 PHP 以外的軟體、資料中沒有對應項目的弱點，以及在最新 KEV 清單之後才列入 KEV 的 CVE（詳細欄會顯示資料版本與 KEV 日期）。PHP 的工作階段檔案由 Web shell 偵測規則的掃描讀取，不在本項目中。狀態欄會顯示已安裝套件中資料收錄的數量。
+                • 24. 透過 Tailscale 的曝露（`overlay_exposure`，網路防禦）：這台 Mac 加入 tailnet 時，檢查 tailnet 一側能看到什麼。在沒有開啟 Tailscale 入站封鎖（shields up）的情況下，如果有 SSH、檔案共享、遠端控制、資料庫、無驗證的 AI 推論伺服器等高風險連接埠在 tailnet 可達的位置監聽，則不合格。只計算綁定在萬用位址或 tailnet 位址（100.64.0.0/10、fd7a:115c:a1e0::/48）上的監聽，只綁定在區域網路位址或迴路位址上的監聽不計入。ngrok 或 cloudflared 與 Tailscale 同時執行時也不合格（依可執行檔名稱判斷）。作為 Exit Node 或 Subnet 路由對外通告，以及 Tailscale SSH，只顯示狀態，不算不合格。讀取的內容是 `tailscale status --json`（只看是否在執行）、`tailscale debug prefs`（只取 ShieldsUp、AdvertiseRoutes、RunSSH 三項，其餘丟棄，不記錄金鑰等）、監聽連接埠清單和正在執行的程式名稱。不向外部傳送任何內容，也不變更任何設定。找不到 Tailscale 或它沒有執行時，該項不適用，不計入分數。不會讀取 tailnet 的存取控制 (ACL)，因此被 ACL 隱藏的連接埠也會被指出。不會因為有 macOS 防火牆就判為合格。要封鎖入站連線，請執行 `sudo tailscale set --shields-up`（這台 Mac 連向其他裝置的連線不受影響）。
                 • 等級：100 分為 S、85 至 99 分為 A、70 至 84 分為 B、低於 70 分為 C。也可透過 MCP 工具 `get_security_report` 取得。
                 • 保護的運作狀態：依防護項目（36 項）列出已開啟的保護是否真正在運作的視窗。可從選單（Mac 安全綜合診斷 > 🛡️ 保護的運作狀態…）開啟，也可用綜合診斷報告頂端卡片（摘要和未運作的保護）上的「顯示所有保護…」開啟。狀態共五種：已生效、部分生效、未生效、關閉、僅限 Pro。未運作的保護會顯示原因代碼（如 `pro_not_active`、`helper_not_connected`、`system_extension_not_approved`）以及說明原因與解決方法的句子；依原因，還會出現「認證 Pro 版…」「核准輔助程式…」「開啟系統設定…」按鈕。每 15 秒以及按下「重新確認」時重新讀取。在沒有 Pro 的 Mac 上，僅因預設值而開啟的 Pro 功能顯示為「僅限 Pro」，不計為故障。有保護未運作時，選單頂端還會出現一行「⚠️ 有保護未生效(N 項)。查看原因…」。判定使用與選單標記、通知和 MCP 的 `get_guard_status` 相同的資料。偵測資料的更新停止時（`state_stale`）不發通知，只顯示在選單和這個視窗中。
                 • 設定被削弱時的通知（Pro，預設開啟）：診斷之後，上次合格（或不適用）而現在不合格的設定，用一則通知告知。涵蓋 10 項不會自行變化的設定（SSH、sudo、SIP、Gatekeeper、自動更新、XProtect、瀏覽器的釣魚防護、配件連線保護、FileVault、備份新舊）。Wi-Fi、ARP、開放連接埠這類隨時變化的內容，以及結果取決於所連網路的防火牆項目不在其內。無法測量的項目不計入。第一次診斷只做記錄，同一項目 24 小時內不重複，通知關閉期間發生的削弱在重新開啟後也不會通知。不會傳送任何資料。可用選單中的「設定被削弱時通知 (Pro)」關閉，狀態顯示在 `get_guard_status` 的 configRegressionNotice 中。Linux 版有相同功能（由常駐程式在每小時的檢查之後執行，不區分 Pro）。
@@ -1489,11 +1490,11 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "faq_free_vs_pro",
                 title: "免費版與 Pro 永久版的差異",
-                summary: "免費版即包含依網路自動切換保護、23 項安全稽核，以及一系列手動檢查工具，且沒有時間限制。Pro 版則解鎖自動圍堵、即時防禦與巡邏警告。",
+                summary: "免費版即包含依網路自動切換保護、24 項安全稽核，以及一系列手動檢查工具，且沒有時間限制。Pro 版則解鎖自動圍堵、即時防禦與巡邏警告。",
                 details: """
                 【免費版】
                 • 依網路自動切換 3 個等級的 PF 封包過濾器，共享服務與 AirDrop 會自動停止並恢復
-                • Mac 安全稽核（23 個項目）、XProtect 狀態，以及檔案／應用程式安全性檢查
+                • Mac 安全稽核（24 個項目）、XProtect 狀態，以及檔案／應用程式安全性檢查
                 • 顯示公開連接埠與 USB 裝置清單
                 • 連結安全性診斷、手動機密資訊／API 金鑰洩露稽核、剪貼簿保護
                 • 套件 CVE 掃描、實證型漏洞驗證、Mac 安全日誌審計、通知歷史

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.29 (build 208).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.30 (build 209).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -70,6 +70,7 @@ public enum ExecCommandMasker {
     /// `--password-stdin` / `--no-password` style flags carry no secret value.
     public static func isSensitiveFlagName(_ rawName: String) -> Bool {
         let name = rawName.lowercased()
+        if namesSettingNotSecret(name) { return false }
         if name.hasSuffix("stdin") || name.hasPrefix("no-") || name.hasSuffix("-file") || name.hasSuffix("-path") { return false }
         if name == "pass" || name == "auth" || name == "passin" || name == "passout" || name == "pwd" { return true }
         return sensitiveWords.contains { name.contains($0) }
@@ -114,6 +115,8 @@ public enum ExecCommandMasker {
         "xargs": (["-I", "-n", "-P", "-L", "-s", "-d", "-E", "-a", "-J"], 0),
         "stdbuf": (["-i", "-o", "-e"], 0),
         "caffeinate": (["-t", "-w"], 0),
+        // `chroot NEWROOT cmd...`: the command runs after the new root.
+        "chroot": (["-u", "-g", "-G"], 1),
         "arch": (["-arch"], 0),
     ]
     private static let shells: Set<String> = ["sh", "bash", "zsh", "dash", "ksh", "fish"]
@@ -351,11 +354,39 @@ public enum ExecCommandMasker {
     public static func maskStructural(_ s: String, marker: String) -> String {
         var result = s
         for (rule, template) in structuralRules {
-            let range = NSRange(result.startIndex..<result.endIndex, in: result)
-            result = rule.stringByReplacingMatches(in: result, options: [], range: range,
-                                                   withTemplate: template.replacingOccurrences(of: "%M", with: marker))
+            let ns = result as NSString
+            let matches = rule.matches(in: result, options: [], range: NSRange(location: 0, length: ns.length))
+            if matches.isEmpty { continue }
+            let filled = template.replacingOccurrences(of: "%M", with: marker)
+            let out = NSMutableString(string: result)
+            for m in matches.reversed() {
+                if m.numberOfRanges > 1, m.range(at: 1).location != NSNotFound,
+                   namesSettingNotSecret(ns.substring(with: m.range(at: 1))) {
+                    continue
+                }
+                let replacement = rule.replacementString(for: m, in: result, offset: 0, template: filled)
+                out.replaceCharacters(in: m.range, with: replacement)
+            }
+            result = out as String
         }
         return result
+    }
+
+    /// Setting names that hold "password" but whose value is a count or a yes/no, never a password
+    /// (`ssh -o NumberOfPasswordPrompts=1`, `-o PasswordAuthentication=no`). Matched on the whole name, ignoring
+    /// case, so `db_password=` is still masked. Same list as Linux (`cmdline_mask::SETTING_NAMES_NOT_SECRETS`).
+    static let settingNamesThatAreNotSecrets: Set<String> = [
+        "numberofpasswordprompts", "passwordauthentication", "permitemptypasswords", "kbdinteractiveauthentication",
+    ]
+
+    /// `name` as a rule captured it (`-oNumberOfPasswordPrompts=`, `PasswordAuthentication `): without the leading
+    /// separators and the `=` / `:` / spaces after it. The `o` of ssh's attached `-o` is allowed in front.
+    static func namesSettingNotSecret(_ name: String) -> Bool {
+        var bare = name.lowercased()
+        while let last = bare.last, last == "=" || last == ":" || last.isWhitespace { bare.removeLast() }
+        while let first = bare.first, !(first.isASCII && (first.isLetter || first.isNumber)) { bare.removeFirst() }
+        if settingNamesThatAreNotSecrets.contains(bare) { return true }
+        return bare.hasPrefix("o") && settingNamesThatAreNotSecrets.contains(String(bare.dropFirst()))
     }
 
     /// Known token formats. A copy of `SecretLeakScanning.patterns` (which lives in

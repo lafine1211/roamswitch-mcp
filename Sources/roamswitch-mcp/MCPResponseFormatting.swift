@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.29 (build 208).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.30 (build 209).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -1115,7 +1115,7 @@ public enum MCPResponseFormatting {
 
     // MARK: verify_security_findings
 
-    /// 1回に指定できる checkId の上限(超過分は無視して注意書きを付ける)。全23項目より十分大きく、
+    /// 1回に指定できる checkId の上限(超過分は無視して注意書きを付ける)。全24項目より十分大きく、
     /// 巨大な引数でレスポンスが膨らまないための歯止め。
     public static let maxVerifyCheckIds = 50
     /// 未知の checkId をそのまま返すときの最大文字数(入力はエージェント由来で信頼できない)。
@@ -1544,6 +1544,12 @@ public enum MCPResponseFormatting {
         case "air_gap_degraded": return loc("Air-Gapを縮退モードへ移行（新規の外部通信は遮断を継続）")
         case "baseline_accepted": return loc("基準を更新（人の操作）")
         case "baseline_os_update": return loc("macOSの更新のあと基準に取り込み")
+        // Stored by the credential and decoy watches, the evidence capture and ClickFix (1.17.39: shown as the bare
+        // token, "notified", "evidence_captured", to whoever read the timeline).
+        case "notified": return loc("通知のみ（遮断は行わない）")
+        case "evidence_captured": return loc("証拠を保存")
+        case "cascade_decoy_deployed": return loc("追加のおとりを配置")
+        case "air_gap_failed": return loc("ネットワーク全遮断 (Air-Gap) に失敗")
         default: return action
         }
     }
@@ -1966,6 +1972,7 @@ enum VerifyFindingDiscipline {
         case "backup_recency": return loc("Time Machine以外の方法(別のバックアップアプリなど)でバックアップしている場合、この判定は実態と違います。RoamSwitchが読めるのはTime Machineの記録だけです。")
         case "proxy_autodiscovery": return loc("会社や学校が管理するMacで、プロキシ自動検出を管理者が意図して設定している場合は、この状態は設定どおりです。")
         case "trust_anchors": return loc("会社が配布した証明書や、開発用の証明書(mkcert など)を意図して信頼している場合は、この状態は設定どおりです。")
+        case "overlay_exposure": return loc("tailnetに入っている端末がすべて自分のもので、tailnetのアクセス制御(ACL)で接続元を限っているなら、実際に届く相手は限られます。この確認はACLを読みません。ngrokやcloudflaredは、公開する先が決まった用途に限っているなら、リスクは小さくなります。")
         case "agent_credential_files": return loc("同期フォルダやgit管理下に見えても、そのファイルを同期や追跡の対象から外している場合は、実際には外に出ていません。RoamSwitchは、その除外設定までは確認しません。")
         default: return nil
         }
@@ -1995,6 +2002,7 @@ enum VerifyFindingDiscipline {
         case "backup_recency": return loc("ランサムウェアに暗号化されたら取り戻せない大事なファイルがあるなら、重大になります。大事なデータがすべて別の場所に世代管理つきで保存されているなら、下がります。")
         case "proxy_autodiscovery": return loc("カフェやホテルなど、他人が管理するネットワークをよく使うなら、重大になります。自宅や職場の管理されたネットワークだけなら、下がります。")
         case "trust_anchors": return loc("ログインやAPIキーを含む通信を、カフェなど他人が管理するネットワークで行うなら、重大になります。信頼している証明書をすべて把握しているなら、下がります。")
+        case "overlay_exposure": return loc("tailnetに他人の端末や、インターネットに公開したサーバーが入っているなら、重大になります。tailnetが自分の端末だけで、受信遮断を入れれば、解消します。")
         case "agent_credential_files": return loc("ファイルが他のユーザーに読める権限や、公開されうる同期・git管理下にあるなら、重大になります。所有者だけが読める権限で、手元のディスクにだけあるなら、解消します。")
         default: return nil
         }

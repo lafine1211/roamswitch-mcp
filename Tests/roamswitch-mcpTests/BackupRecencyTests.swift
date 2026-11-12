@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.29 (build 208). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.30 (build 209). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -134,7 +134,7 @@ final class BackupRecencyTests: XCTestCase {
     private func item(_ source: FakeBackupSource, snapshots: String = "Snapshot dates for all disks:\n") -> SecurityAuditItem {
         let checker = SecurityHealthChecker(
             runner: { path, _ in path == "/usr/bin/tmutil" ? CommandOutput(status: 0, stdout: snapshots) : nil },
-            backupSource: source)
+            backupSource: source, overlaySource: StubOverlayExposureSource())
         return checker.backupRecencyItem(now: now)
     }
 
@@ -183,7 +183,7 @@ final class BackupRecencyTests: XCTestCase {
     }
 
     func testTheReportIncludesTheItemOnce() {
-        let checker = SecurityHealthChecker(runner: { _, _ in nil }, backupSource: FakeBackupSource(preferences: prefs([["SnapshotDates": [Date()]]])))
+        let checker = SecurityHealthChecker(runner: { _, _ in nil }, backupSource: FakeBackupSource(preferences: prefs([["SnapshotDates": [Date()]]])), overlaySource: StubOverlayExposureSource())
         let report = checker.generateComprehensiveReport(
             wifiInfo: WiFiInfo(ssid: nil, bssid: nil, securityLevel: .notConnected),
             arpStatus: ARPMonitorStatus(isSpoofingDetected: false, message: "", previousMAC: nil, currentMAC: nil),
