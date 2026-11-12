@@ -273,5 +273,5 @@ RoamSwitch アプリのバンドル内で動く場合、このコードはアプ
 - アーキテクチャ・セキュリティ設計書: <https://roamswitch.com/security.html>（§8 が本サーバー）
 - インストール済み RoamSwitch を照会する Swift クライアントライブラリ:
   [RoamSwitchKit](https://github.com/lafine1211/RoamSwitchKit)
-- Linux 版は独自の MCP サーバー（`roamswitch-mcp`、全 36 ツール）と非同期 Rust クライアント
+- Linux 版は独自の MCP サーバー（`roamswitch-mcp`、全 45 ツール）と非同期 Rust クライアント
   [roamswitch-linux-kit](https://github.com/lafine1211/roamswitch-linux-kit) を提供しています。

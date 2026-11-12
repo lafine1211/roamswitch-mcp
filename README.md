@@ -301,5 +301,5 @@ the code can be checked against the shipping binary's symbols. See [`SYNC.md`](.
 - Architecture & security whitepaper: <https://roamswitch.com/security.html> (§8 covers this server)
 - The Swift client library for querying an installed RoamSwitch:
   [RoamSwitchKit](https://github.com/lafine1211/RoamSwitchKit)
-- The Linux edition ships its own MCP server (`roamswitch-mcp`, 36 tools) and an async Rust
+- The Linux edition ships its own MCP server (`roamswitch-mcp`, 45 tools) and an async Rust
   client, [roamswitch-linux-kit](https://github.com/lafine1211/roamswitch-linux-kit).

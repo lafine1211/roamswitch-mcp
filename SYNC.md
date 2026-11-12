@@ -121,9 +121,20 @@ All files live in `Sources/roamswitch-mcp/`.
 | `SSHGuardStatusReader.swift` | `RoamSwitch/SSHGuardStatusReader.swift` |
 | `StoredRecordRead.swift` | `Shared/StoredRecordRead.swift` (from `Shared/`) |
 | `StoredRecordHealth.swift` | `RoamSwitch/StoredRecordHealth.swift` |
+| `OverlayExposure.swift` | `RoamSwitch/OverlayExposure.swift` |
+| `SensorFindingTexts.swift` | `RoamSwitch/SensorFindingTexts.swift` |
+| `SensorFindingTextsData.swift` | `RoamSwitch/SensorFindingTextsData.swift` |
+| `SensorFindingTextKeys.swift` | `Shared/SensorFindingTextKeys.swift` (from `Shared/`) |
+| `MCPConfigAuditSarif.swift` | `RoamSwitch/MCPConfigAuditSarif.swift` |
+| `PackageCveSarif.swift` | `RoamSwitch/PackageCveSarif.swift` |
+| `AppActionJournal.swift` | `RoamSwitch/AppActionJournal.swift` |
+| `IncidentChain.swift` | `RoamSwitch/IncidentChain.swift` |
+| `SystemTimeline.swift` | `RoamSwitch/SystemTimeline.swift` |
+| `AtomicFile.swift` | `Shared/AtomicFile.swift` (from `Shared/`) |
+| `ActionJournal.swift` | `Shared/ActionJournal.swift` (from `Shared/`) |
 
 This is exactly the source set the app compiles into its `RoamSwitchMCPServer` target
-(see `project.yml` in the app repo). Nineteen of the files come from the app's `Shared/` folder
+(see `project.yml` in the app repo). Twenty-one of the files come from the app's `Shared/` folder
 (compiled into the app and the privileged helper too); the sync script keeps them in its `SHARED`
 list, and everything else in its `CORE` list. `Localizable.xcstrings` is also in that target but is
 not mirrored (this package does not use it).
@@ -178,10 +189,18 @@ via `@testable import RoamSwitch`. Only `main.swift` (the stdin→stdout pump) i
 | `ForensicChainTests.swift` | `RoamSwitchTests/ForensicChainTests.swift` |
 | `TrustAnchorCheckTests.swift` | `RoamSwitchTests/TrustAnchorCheckTests.swift` |
 | `ReflectedXssProbeTests.swift` | `RoamSwitchTests/ReflectedXssProbeTests.swift` |
+| `MCPToolCallLogTests.swift` | `RoamSwitchTests/MCPToolCallLogTests.swift` |
+| `OverlayExposureTestSupport.swift` | `RoamSwitchTests/OverlayExposureTestSupport.swift` |
+| `IncidentChainTests.swift` | `RoamSwitchTests/IncidentChainTests.swift` |
+| `SystemTimelineTests.swift` | `RoamSwitchTests/SystemTimelineTests.swift` |
+| `PackageCveSarifTests.swift` | `RoamSwitchTests/PackageCveSarifTests.swift` |
+| `AtomicFileTests.swift` | `RoamSwitchTests/AtomicFileTests.swift` |
 | `StdioSmokeTests.swift` | **not mirrored** — specific to this repo (drives the built binary over stdio) |
 | `MutationFuzzTests.swift` | **not mirrored** — specific to this repo |
 
 `GuardReaderHealthAppTests.swift` and `DetectionCoverageAppTests.swift` are **not mirrored**: it needs `ExecRuleID` (compiled into the app only) and the app's `Localizable.xcstrings`.
+
+`ActionJournalTests.swift` is **not mirrored**: it needs `ActionGate` and `AutoActionLimits` (`Shared/ActionBudget.swift`, compiled into the app and the helper only).
 
 `VulnerabilityAcceptanceTests.swift` (needs `VulnerabilityAcceptanceWatcher`, `SecurityActivityLogCategory` and `VulnerabilityAcceptanceText`, app-only) and `DetectionMetadataLintTests.swift` (needs `ExecRuleID` and `ExecRecorderManager`, app-only) are **not mirrored**.
 
