@@ -84,7 +84,8 @@ final class StdioSmokeTests: XCTestCase {
                         "get_ransomware_entropy_guard_status", "get_honeytoken_status",
                         "get_browser_credential_watch_status", "get_forensic_evidence_bundles",
                         "get_vulnerability_scan_history", "verify_security_findings",
-                        "audit_mcp_configs", "audit_agent_setup", "get_ssh_guard_incidents"])
+                        "audit_mcp_configs", "audit_agent_setup", "get_ssh_guard_incidents",
+                        "get_system_timeline"])
         // The only tools that write local state say so on the wire: readOnlyHint is false for exactly these three.
         let notReadOnly = ((out[1]["result"] as? [String: Any])?["tools"] as? [[String: Any]] ?? []).compactMap { tool -> String? in
             (tool["annotations"] as? [String: Any])?["readOnlyHint"] as? Bool == false ? tool["name"] as? String : nil
