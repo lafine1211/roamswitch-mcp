@@ -132,6 +132,9 @@ All files live in `Sources/roamswitch-mcp/`.
 | `SystemTimeline.swift` | `RoamSwitch/SystemTimeline.swift` |
 | `AtomicFile.swift` | `Shared/AtomicFile.swift` (from `Shared/`) |
 | `ActionJournal.swift` | `Shared/ActionJournal.swift` (from `Shared/`) |
+| `MCPCompanionTools.swift` | `RoamSwitch/MCPCompanionTools.swift` |
+| `CriticalPathFimTargets.swift` | `Shared/CriticalPathFimTargets.swift` (from `Shared/`) |
+| `LinkGuardHosts.swift` | `Shared/LinkGuardHosts.swift` (from `Shared/`) |
 
 This is exactly the source set the app compiles into its `RoamSwitchMCPServer` target
 (see `project.yml` in the app repo). Twenty-one of the files come from the app's `Shared/` folder
