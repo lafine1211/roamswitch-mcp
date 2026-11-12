@@ -38,7 +38,7 @@
 
 ## 提供ツール（`tools/list`）
 
-全 35 ツール（`MCPServer.swift` の `toolDefinitions` の要素数で、`tools/list` が返す数と同じ）。
+全 36 ツール（`MCPServer.swift` の `toolDefinitions` の要素数で、`tools/list` が返す数と同じ）。
 読み取りだけのツールがほとんどで、次の 3 つはローカルに状態も書くため、MCP の `readOnlyHint` が
 `false` です。`run_active_vuln_scan`（スキャン履歴ファイルに 1 プローブ 1 行を追記）、
 `audit_security_logs`（ログパターンの基準を保存し、新しいパターンを通知履歴に記録）、
@@ -98,7 +98,9 @@
   Windsurf・VS Code・Cline・Gemini CLI の既定の場所と、登録済みフォルダの `.mcp.json`）を読み、
   危険な記述を指摘します: ツールの自動承認、非ループバックの平文 `http://` サーバー、シェルの
   ワンライナー起動、HexStrike AI への接続、グループ／全員が書き込める設定ファイル、
-  Claude Code の `enableAllProjectMcpServers`。env・ヘッダの値や引数は返しません。
+  Claude Code の `enableAllProjectMcpServers`、別のホストの https サーバーで設定に認証情報が無いもの
+  （`remote_no_auth`）、`--host 0.0.0.0` などすべてのインターフェースで待ち受ける起動（`mcp_wide_bind`）。
+  `format: "sarif"` で同じ結果を SARIF 2.1.0 で返します。env・ヘッダの値や引数は返しません。
   ネットワーク通信なし。
 
 ### 脆弱性・CVE
@@ -111,10 +113,13 @@
   検査、および既知 CVE のバージョン範囲照合のみ（実際のエクスプロイト送信は一切なし）。
   **既定で無効**で、RoamSwitch 設定の「実証型脆弱性検証」を有効にするまで実行を拒否します。
 - `run_package_cve_scan` — インストール済み Homebrew formula を、NVD の実データから機械生成
-  した完全ローカルの CVE マップと照合します。ネットワーク通信なし。
+  した完全ローカルの CVE マップと照合します。各結果に `tier` が付きます（`kev` は CISA KEV に載っている、
+  `epss_high` は EPSS が 0.9 以上、`info` はそれ以外）。`format: "sarif"` で同じ結果を SARIF 2.1.0 で
+  返します。ネットワーク通信なし。
 - `run_package_cve_scan_languages` — 指定フォルダ内の依存ロックファイル（`package-lock.json`、
   `requirements.txt`、`Pipfile.lock`、`poetry.lock`、`Cargo.lock`、`Gemfile.lock`、
-  `composer.lock`、`go.sum`、`pom.xml`）を同じローカルマップと照合します。ネットワーク通信なし。
+  `composer.lock`、`go.sum`、`pom.xml`）を同じローカルマップと照合します。`tier` と `format: "sarif"` は
+  `run_package_cve_scan` と同じです。ネットワーク通信なし。
 - `run_package_lifecycle_script_scan` — 指定フォルダの `node_modules` にある `package.json` の
   ライフサイクルスクリプト（preinstall / install / postinstall / prepare）の棚卸し。各項目に
   参考用の `isDangerPattern` が付きます。脅威の判定ではなく一覧です。ネットワーク通信なし・
@@ -150,13 +155,19 @@
 - `get_incident_timeline` — ARP スプーフィング自動封じ込め、ランサムウェア・カナリアガード、
   ランタイム脅威封じ込め、ポート異常ガードの封じ込めを 1 本の時系列で横断表示します（発生元、
   重大度、概要、プロセス、確度の高い場合のみ MITRE ATT&CK ID、実施した対処、未解決 / 解除済み /
-  許可済みの状態）。ARP スプーフィング封じ込めの記録はここにしかありません。Linux 版と同名の
+  許可済みの状態）。ARP スプーフィング封じ込めの記録はここにしかありません。各記録は、直前に保存した
+  記録のハッシュ（`prevHash`）を持ち、`chain` と `chainBreak` でつながりが合っているかを返します。
+  記録の5分前から1分後までに検知の入力が途切れていた記録には `blindNear` が付きます。Linux 版と同名の
   ツールです。
 - `get_detection_coverage` — 「RoamSwitch が見えないものは何か」。Mac の防御を弱める・回避する・生き延びる
   ための MITRE ATT&CK の手口を固定の表にし、手口ごとに `coverage`（detects / partial / none）、
   それを担うガード・プロセス実行ルール・診断項目、1 文の `blindSpot`（限界）、`liveState`
   （担当ガードの設定スイッチの状態。動作の証明ではありません）を返します。実装を確認して付けた
   RoamSwitch 自身の評価で、回避手口の実行・再現は一切しません。ネットワークには出ません。
+- `get_system_timeline` — アプリが1日1回（最大90日）残す、待ち受けのソケット、Homebrew の formula と版、
+  主な設定ファイルとフォルダの SHA-256 の記録と、その間の変化を返します（`since` は `yyyy-MM-dd` か `7d`。
+  `includeCurrent` は既定 true で、いまの状態とも比べます）。ファイルの中身は残さず、返しません。
+  ネットワーク通信なし。Linux 版の `roamswitch timeline --since` にあたります。
 - `get_network_history` — 常時稼働の Evil Twin 検知が記憶しているネットワーク履歴。SSID ごとの
   ゲートウェイ機器の**件数**と最終接続日時（MAC アドレスは出力しません）、および共通の
   ゲートウェイを持たないのに名前が酷似した SSID の組を返します。

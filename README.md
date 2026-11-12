@@ -38,7 +38,7 @@ block traffic, no license or payment code, no UI. Just the code that *observes* 
 
 ## Tools exposed (`tools/list`)
 
-35 tools (the length of `toolDefinitions` in `MCPServer.swift`, which is what `tools/list` returns).
+36 tools (the length of `toolDefinitions` in `MCPServer.swift`, which is what `tools/list` returns).
 Every one only reads, except three that also write local state, so their MCP `readOnlyHint` is
 `false`: `run_active_vuln_scan` (appends one row per probe to its scan-history file),
 `audit_security_logs` (saves the log-template baseline and records new patterns in the notification
@@ -105,7 +105,10 @@ address.
   entries pointing at HexStrike AI, group/world-writable config files, Claude Code's
   `enableAllProjectMcpServers`, and a config file that holds both a server that reads text other people
   wrote and a server that can run commands or write files (the pairing indirect prompt injection needs;
-  recognised by well-known package names). Never returns env or header values or arguments. No network.
+  recognised by well-known package names). It also flags https servers on another host whose config
+  carries no credential (`remote_no_auth`) and servers started to listen on every interface, such as
+  `--host 0.0.0.0` (`mcp_wide_bind`). `format: "sarif"` returns the same findings as a SARIF 2.1.0 log.
+  Never returns env or header values or arguments. No network.
 - `audit_agent_setup` — reads the instruction files and skills of AI coding agents (under
   `~/.claude`, `~/.codex`, `~/.cursor`, `~/.gemini`, `~/.agents`, `~/.openclaw`, plus `CLAUDE.md`,
   `AGENTS.md` and similar in registered project folders) and OpenClaw's `openclaw.json`, read-only and
@@ -129,10 +132,13 @@ address.
   exploit payload). **Off by default** — refuses to run until the user enables *Active
   Vulnerability Verification* in RoamSwitch's settings.
 - `run_package_cve_scan` — installed Homebrew formulae vs. a purely local, mechanically
-  generated CVE map built from real NVD data. No network.
+  generated CVE map built from real NVD data. Every finding carries `tier`: `kev` (CISA KEV lists it),
+  `epss_high` (EPSS 0.9 or more) or `info`. `format: "sarif"` returns the same findings as a SARIF 2.1.0
+  log. No network.
 - `run_package_cve_scan_languages` — dependency lockfiles (`package-lock.json`,
   `requirements.txt`, `Pipfile.lock`, `poetry.lock`, `Cargo.lock`, `Gemfile.lock`,
-  `composer.lock`, `go.sum`, `pom.xml`) in the given folders vs. the same local map. No network.
+  `composer.lock`, `go.sum`, `pom.xml`) in the given folders vs. the same local map. Same `tier` and
+  `format: "sarif"` as `run_package_cve_scan`. No network.
 - `run_package_lifecycle_script_scan` — inventory of `package.json` lifecycle scripts
   (preinstall / install / postinstall / prepare) in the given folders' `node_modules`, each with
   a reference-only `isDangerPattern` flag. A list, not a threat verdict. No network, executes
@@ -174,8 +180,10 @@ RoamSwitch has severed the network.
 - `get_incident_timeline` — one chronological view across ARP-spoof auto-containment, the
   Ransomware Canary Guard, Runtime Threat Containment and the Port Anomaly Guard: source,
   severity, summary, process, MITRE ATT&CK ID (only where confidently mappable), action taken,
-  and open/released/allowlisted status. ARP-spoof containment is recorded only here. Same name
-  as the Linux edition's tool.
+  and open/released/allowlisted status. ARP-spoof containment is recorded only here. Each record
+  links to the hash of the one saved before it (`prevHash`), and `chain` / `chainBreak` report whether
+  the links still match. `blindNear` marks a record whose detection input had a gap from 5 minutes before
+  to 1 minute after it. Same name as the Linux edition's tool.
 - `get_detection_coverage` — "what can RoamSwitch NOT see?": a fixed table of MITRE ATT&CK techniques
   used to weaken, evade or outlast a Mac's defenses, returned as `techniques` (`id`, `name`, `coverage`
   detects / partial / none, `coveredBy` ids of the guards, process-exec rules and audit checks behind it,
@@ -183,6 +191,11 @@ RoamSwitch has severed the network.
   Settings toggles of the covering guards, not proof they run), a `summary` (with `coveredButOff`) and
   `guards`. Same shape as the Linux edition. RoamSwitch's own assessment, checked
   against the code; it runs, simulates and reproduces no evasion. No network.
+- `get_system_timeline` — the app's daily snapshots (up to 90 days) of listening sockets, Homebrew
+  formulae with versions and the SHA-256 of main configuration files and folders, with the changes
+  between them (`since`: `yyyy-MM-dd` or `7d`; `includeCurrent`, default true, also compares a snapshot
+  taken now). File content is never stored or returned. No network. The Mac counterpart of the Linux
+  edition's `roamswitch timeline --since`.
 - `get_network_history` — the always-on Evil-Twin detector's memory: remembered SSIDs with a
   gateway-device *count* and last-seen time (MAC addresses are never returned), plus look-alike
   SSID pairs that never shared a gateway.
