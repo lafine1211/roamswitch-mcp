@@ -52,13 +52,14 @@ CORE=(ProcessWait AppLanguage TrustedNetwork GatewayFingerprint WiFiSecurityMoni
       ProxyAutoDiscoveryCheck AgentCredentialFileCheck \
       DecoyPlacement FeedUpdateStatus LinkGuardEnforcement \
       KevCatalog PackageCveExposure PhpEnvironment PhpEnvironmentAudit \
-      MCPConfigAuditSarif PackageCveSarif AppActionJournal IncidentChain SystemTimeline MCPCompanionTools)
+      MCPConfigAuditSarif PackageCveSarif AppActionJournal IncidentChain SystemTimeline MCPCompanionTools \
+      DebugPortRisk SNMPExposure AgentCheck AgentCheckLog)
 
 # Sources that live in the app's Shared/ folder (also compiled into the helper).
 SHARED=(RansomwareSnapshotLogic ExecEventModel ExecLogStore ExecProcessTree ExecReadAPI \
         CryptoSecretDetection SafeScanFS ExecCommandMasker LinkFilterEngine SSHGuardCore GuardReaderHealth StrictJSON WatchdogAgentState PFSystemAnchors \
         NotificationHistory NotificationText SensorFindingTextKeys StoredRecordRead WatchdogMessages \
-        AtomicFile ActionJournal CriticalPathFimTargets LinkGuardHosts)
+        AtomicFile ActionJournal CriticalPathFimTargets LinkGuardHosts FwdEgressClassifier ExecAgentExfil)
 
 # App test files that only exercise types present in this repo. Their
 # `@testable import RoamSwitch` is rewritten to this package's module name.
@@ -72,7 +73,15 @@ TESTS=(LinkSafetyAuditorTests CryptoSecretDetectionTests MCPKnowledgeBaseTests M
        AgentCredentialFileCheckTests BackupRecencyTests DependencySourceScanTests PackageCveEpssTests \
        ProbeCatalogTests MCPToolAnnotationsTests \
        FrontendBundleScanTests ForensicChainTests TrustAnchorCheckTests ReflectedXssProbeTests \
-       OverlayExposureTestSupport IncidentChainTests SystemTimelineTests PackageCveSarifTests AtomicFileTests)
+       OverlayExposureTestSupport IncidentChainTests SystemTimelineTests PackageCveSarifTests AtomicFileTests \
+       DebugPortRiskTests AgentCheckTests)
+
+# Sources that only the app's `RoamSwitchMCPServer/` folder compiles into the MCP server target (not into the app):
+# `main.swift` (the stdin->stdout pump) and the `agent-check` subcommand that `main.swift` calls first.
+SERVER_ONLY=(main AgentCheckCommand AgentCheckUsage)
+
+# Data files the mirrored tests read next to themselves (`#filePath`-relative), copied as they are.
+FIXTURES=(agent_check_vectors.json)
 
 TDST="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/Tests/roamswitch-mcpTests"
 
@@ -82,8 +91,12 @@ done
 for f in "${SHARED[@]}"; do
   { printf '%s\n' "$HEADER"; cat "$SRC/Shared/$f.swift"; } > "$DST/$f.swift"
 done
-for f in main; do
+for f in "${SERVER_ONLY[@]}"; do
   { printf '%s\n' "$HEADER"; cat "$SRC/RoamSwitchMCPServer/$f.swift"; } > "$DST/$f.swift"
+done
+mkdir -p "$TDST/Fixtures"
+for f in "${FIXTURES[@]}"; do
+  cp "$SRC/RoamSwitchTests/Fixtures/$f" "$TDST/Fixtures/$f"
 done
 
 for f in "${TESTS[@]}"; do
@@ -91,5 +104,5 @@ for f in "${TESTS[@]}"; do
     sed 's/@testable import RoamSwitch/@testable import roamswitch_mcp/' "$SRC/RoamSwitchTests/$f.swift"; } > "$TDST/$f.swift"
 done
 
-echo "Synced $((${#CORE[@]}+${#SHARED[@]}+1)) source files and ${#TESTS[@]} test files from RoamSwitch $VER (build $BUILD)."
+echo "Synced $((${#CORE[@]}+${#SHARED[@]}+${#SERVER_ONLY[@]})) source files and ${#TESTS[@]} test files from RoamSwitch $VER (build $BUILD)."
 echo "Next: swift test && git commit -am 'Sync from RoamSwitch $VER' && git tag v$VER"

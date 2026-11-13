@@ -19,6 +19,8 @@ All files live in `Sources/roamswitch-mcp/`.
 | This repo | RoamSwitch app repo |
 | --- | --- |
 | `main.swift` | `RoamSwitchMCPServer/main.swift` |
+| `AgentCheckCommand.swift` | `RoamSwitchMCPServer/AgentCheckCommand.swift` (the `agent-check` subcommand that `main.swift` calls first) |
+| `AgentCheckUsage.swift` | `RoamSwitchMCPServer/AgentCheckUsage.swift` |
 | `ProcessWait.swift` | `RoamSwitch/ProcessWait.swift` |
 | `AppLanguage.swift` | `RoamSwitch/AppLanguage.swift` |
 | `TrustedNetwork.swift` | `RoamSwitch/TrustedNetwork.swift` |
@@ -135,17 +137,25 @@ All files live in `Sources/roamswitch-mcp/`.
 | `MCPCompanionTools.swift` | `RoamSwitch/MCPCompanionTools.swift` |
 | `CriticalPathFimTargets.swift` | `Shared/CriticalPathFimTargets.swift` (from `Shared/`) |
 | `LinkGuardHosts.swift` | `Shared/LinkGuardHosts.swift` (from `Shared/`) |
+| `DebugPortRisk.swift` | `RoamSwitch/DebugPortRisk.swift` |
+| `SNMPExposure.swift` | `RoamSwitch/SNMPExposure.swift` |
+| `AgentCheck.swift` | `RoamSwitch/AgentCheck.swift` |
+| `AgentCheckLog.swift` | `RoamSwitch/AgentCheckLog.swift` |
+| `FwdEgressClassifier.swift` | `Shared/FwdEgressClassifier.swift` (from `Shared/`) |
+| `ExecAgentExfil.swift` | `Shared/ExecAgentExfil.swift` (from `Shared/`) |
 
 This is exactly the source set the app compiles into its `RoamSwitchMCPServer` target
-(see `project.yml` in the app repo). Twenty-one of the files come from the app's `Shared/` folder
+(see `project.yml` in the app repo). Twenty-three of the files come from the app's `Shared/` folder
 (compiled into the app and the privileged helper too); the sync script keeps them in its `SHARED`
-list, and everything else in its `CORE` list. `Localizable.xcstrings` is also in that target but is
+list, the three that only the `RoamSwitchMCPServer/` folder holds (`main`, `AgentCheckCommand`,
+`AgentCheckUsage`) in its `SERVER_ONLY` list, and everything else in its `CORE` list. `Localizable.xcstrings` is also in that target but is
 not mirrored (this package does not use it).
 
 `MCPServer.swift` (the pure parse/dispatch) lives in `RoamSwitch/`, compiled into both
 the app and the `RoamSwitchMCPServer` targets, so the app's own test suite can reach it
-via `@testable import RoamSwitch`. Only `main.swift` (the stdin→stdout pump) is
-`RoamSwitchMCPServer/`-only.
+via `@testable import RoamSwitch`. Only `main.swift` (the stdin→stdout pump) and the `agent-check`
+subcommand (`AgentCheckCommand.swift`, `AgentCheckUsage.swift`; `main.swift` calls it before anything
+else, so a mirror without them does not compile) are `RoamSwitchMCPServer/`-only.
 
 > Between RoamSwitch releases this mirror can be **ahead** of the last publicly
 > distributed build — it follows the app's `main` and is tagged with the
@@ -198,12 +208,16 @@ via `@testable import RoamSwitch`. Only `main.swift` (the stdin→stdout pump) i
 | `SystemTimelineTests.swift` | `RoamSwitchTests/SystemTimelineTests.swift` |
 | `PackageCveSarifTests.swift` | `RoamSwitchTests/PackageCveSarifTests.swift` |
 | `AtomicFileTests.swift` | `RoamSwitchTests/AtomicFileTests.swift` |
+| `DebugPortRiskTests.swift` | `RoamSwitchTests/DebugPortRiskTests.swift` |
+| `AgentCheckTests.swift` | `RoamSwitchTests/AgentCheckTests.swift`; it reads `Fixtures/agent_check_vectors.json` next to itself, which the sync copies to `Tests/roamswitch-mcpTests/Fixtures/` (the `FIXTURES` list of the script) |
 | `StdioSmokeTests.swift` | **not mirrored** — specific to this repo (drives the built binary over stdio) |
 | `MutationFuzzTests.swift` | **not mirrored** — specific to this repo |
 
 `GuardReaderHealthAppTests.swift` and `DetectionCoverageAppTests.swift` are **not mirrored**: it needs `ExecRuleID` (compiled into the app only) and the app's `Localizable.xcstrings`.
 
 `ActionJournalTests.swift` is **not mirrored**: it needs `ActionGate` and `AutoActionLimits` (`Shared/ActionBudget.swift`, compiled into the app and the helper only).
+
+`SNMPExposureTests.swift` is **not mirrored**: one of its tests reads the app's `Localizable.xcstrings`. `BrowserExtensionAuditTests.swift`, `ExecAgentRepeatTests.swift`, `OutboundScanNoticeTests.swift`, `OutboundScanTrackerTests.swift` and `LinkRedirectTraceTests.swift` are **not mirrored**: their subjects (`BrowserExtensionAudit`, `ExecAgentRepeat`, `OutboundScan*`, `LinkRedirectTrace`) are not in the `RoamSwitchMCPServer` target.
 
 `VulnerabilityAcceptanceTests.swift` (needs `VulnerabilityAcceptanceWatcher`, `SecurityActivityLogCategory` and `VulnerabilityAcceptanceText`, app-only) and `DetectionMetadataLintTests.swift` (needs `ExecRuleID` and `ExecRecorderManager`, app-only) are **not mirrored**.
 
@@ -223,4 +237,9 @@ App tests for guards that are not in this repo (`PortAnomalyGuardTests`, `Ransom
    ```
 3. The per-file header must always name the RoamSwitch version it came from.
 4. If the app's `RoamSwitchMCPServer` source set changes, update the list in
-   `scripts/sync-from-roamswitch.sh` and the table above.
+   `scripts/sync-from-roamswitch.sh` and the table above. To find what is missing, compare the
+   `RoamSwitchMCPServer:` target's `- path:` lines in the app's `project.yml` with the `CORE`, `SHARED` and
+   `SERVER_ONLY` lists (and the files in the app's `RoamSwitchMCPServer/` folder). Three files were once left
+   out this way (`MCPCompanionTools`, `CriticalPathFimTargets`, `LinkGuardHosts`), and again in the 2026-11-13
+   additions (`DebugPortRisk`, `SNMPExposure`, `AgentCheck`, `AgentCheckLog`, `FwdEgressClassifier`,
+   `ExecAgentExfil`, `AgentCheckCommand`, `AgentCheckUsage`). A missing `RoamSwitchMCPServer/` file shows up as a compile error here (`cannot find 'AgentCheckCommand' in scope`); run `swift build` after every sync.
