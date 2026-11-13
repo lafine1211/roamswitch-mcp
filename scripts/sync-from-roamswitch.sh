@@ -38,7 +38,7 @@ CORE=(ProcessWait AppLanguage TrustedNetwork GatewayFingerprint WiFiSecurityMoni
       RoamSwitchKnowledgeBaseContent_ko RoamSwitchKnowledgeBaseContent_de \
       RoamSwitchKnowledgeBaseContent_fr RoamSwitchKnowledgeBaseContent_es \
       RoamSwitchKnowledgeBaseContent_it RoamSwitchKnowledgeBaseContent_ptPT \
-      MCPResponseFormatting MCPProtocol MCPServer RoamSwitchMCPSkillsContent RoamSwitchThreatBriefsContent MCPToolCallLog \
+      MCPResponseFormatting ProtectionPreset MCPProtocol MCPServer RoamSwitchMCPSkillsContent RoamSwitchThreatBriefsContent MCPToolCallLog \
       PackageCveScan NodeRuntimeScan PhpRuntimeScan FirewallAllowList PackageCveMapData PackageCveScanLanguages PackageCveMapLanguagesData \
       PackageCveScriptScan NpmAuditSignatures TyposquatGuard MCPConfigAuditor \
       SecretLeakScanning FrontendBundleScan TrustAnchorCheck ReflectedXssProbe SecurityLogAuditor LogTemplateAnalyzer QuarantineManager CanaryStatusReader \
