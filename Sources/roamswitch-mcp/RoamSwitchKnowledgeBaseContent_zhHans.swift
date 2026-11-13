@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.34 (build 213).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.35 (build 214).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -350,7 +350,7 @@ extension RoamSwitchKnowledgeBase {
                 • 高风险 TLD：对 `.xyz`、`.top`、`.tk`、`.icu` 等常被一次性钓鱼网站使用的 TLD 扣分。
                 • 明文 HTTP、直接使用 IP：对登录页面等未加密的 HTTP 以及裸 IP 地址 URL 发出警告。
                 • 威胁情报源：如果主机（或其上级域名）在链接防护所用的同一威胁情报源中，则判定为危险，并视为链接防护会拦截的链接。比对只读取本机已有的情报源文件，不会联网。
-                • 完全本地：不会将 URL 发送到外部诊断 API，因此机密 URL 和认证令牌不会泄露。仅在展开短链接（跟踪重定向）时，才会直接访问该 URL 本身。
+                • 完全本地：不会将 URL 发送到外部诊断 API，因此机密 URL 和认证令牌不会泄露。仅在展开短链接（跟踪重定向）时，才会直接访问该 URL 本身。如果重定向目标是本机或内部网络的地址（回环、私有、云元数据），则不会连接，在此停止并在界面中说明原因。
                 """,
                 recommendation: "对于通过邮件或聊天收到的可疑链接，请不要直接点击，先用链接安全性诊断进行确认。"
             ),
@@ -431,6 +431,7 @@ extension RoamSwitchKnowledgeBase {
                 • 服务账户启动的 Shell（exec.shell_from_service，T1505.003）：当 Web 服务器或应用服务进程（httpd、nginx、php-fpm、java、tomcat、gunicorn、uwsgi、node 等）以服务账户（macOS 自带 Apache 的 `_www`、MacPorts 的 `www` 等）直接启动 Shell（sh、bash、zsh 等），或 python、perl、ruby、node 的 -c / -e 单行命令时发出通知。这是 Web Shell 执行命令时的典型形态。账户和服务进程两者都符合才会检测，因此以自己的账户运行的开发服务器、apachectl、brew services 和 cron 不会通知。要添加账户，请运行 `defaults write com.tetsuharu.RoamSwitch RoamSwitch.ExecRule.ServiceUsers "名称,名称"`，然后重启应用，或先关闭再重新开启进程执行记录（设置只是向列表添加，`_www` 不会被移除）。`_mysql`、`_postgres` 等数据库账户不在默认范围内，因为数据库自身会启动 Shell（例如 archive_command）。不启动程序、直接在 Web 服务器进程内部执行代码的 Web Shell 无法检测到。
                 • AI 编程代理之下向外发送的数据（exec.agent_sensitive_send 和 exec.agent_sensitive_then_send，T1048）：当 AI 编程代理（claude、codex、gemini、opencode、aider、goose、cursor-agent、openclaw、qwen、crush）启动的传输程序发送了不应离开这台 Mac 的文件（SSH 与云密钥、.env 文件、代理自身的登录文件、浏览器数据、Shell 历史；不含 .env.example、公钥和 .pem 文件），或参数中带有疑似机密的值时，发出通知。传输程序包括带正文或上传的 curl 和 wget、scp、sftp、rsync、rclone、s3cmd、mc、写入 s3:// 的 aws s3 cp/mv/sync 和 aws s3api put-object、写入 gs:// 的 gsutil 与 gcloud storage、az storage blob upload、nc、ncat、socat、telnet 和 ftp。发送文件为高严重度（弹出横幅）；仅有疑似机密的值为中（只记录）。第二条规则（中）：同一代理之下的命令读取了此类文件，且 5 分钟内出现发送，即使发送命令没有写出文件名（cat ~/.aws/credentials 之后 curl -d @-）也会通知。Authorization 头不算泄露，普通的 curl GET 也不算发送。局限：只能看到代理作为进程启动的命令。代理自身的文件读取、发送给模型提供方的内容、git push、自行打开套接字的脚本运行时（python -c、node -e）都看不到；拆分或编码后的参数可能绕过检测；进程名为 node 的代理无法识别。仅通知，不会隔离网络。
                 • 没有终端的 ssh 隧道（exec.ssh_remote_forward，T1572）：当 ssh 请求远程（-R、RemoteForward）或动态（-D、DynamicForward）转发，且该进程没有终端（macOS 报告没有控制终端）或由 launchd 直接启动时，以中严重度通知(此规则在中严重度下也会显示横幅;不会触发 Air-Gap 或端口阻断)。远程转发会让外部的人通过这台 Mac 自己建立的连接，进入这台 Mac 或其后面的网络；只阻止入站连接的防火墙看不到它。在终端中由人输入的 ssh -R 有终端，不会通知。本地转发（-L）不在范围内。局限：ssh 以外的隧道（chisel、frp、ngrok 等），以及只写在 ~/.ssh/config 中的 RemoteForward（不出现在命令行中），此规则看不到。从其他机器通过 SSH 登录这台 Mac 的人所请求的 -R，不会在这台 Mac 上启动程序，因此此规则看不到；端口异常防护(Pro)会根据该会话进程(sshd-session)打开的监听(包括 127.0.0.1 上的)发出通知。
+                • AI 代理之下反复执行同一操作(exec.agent_repeat，T1059；需手动开启，默认关闭)：当 AI 编程代理之下在短时间内多次执行同一类操作时，以中等严重度通知。只统计 ssh、sudo 或 doas、访问其他主机的 curl 或 wget、读取凭据文件和 git push；同一操作指忽略大小写、空白和数字后，程序名与参数相同(`ssh web01` 与 `ssh web02` 视为同一个)。统计的是同一操作，而不是失败：不会检查每次是否成功。开启方法：`defaults write com.tetsuharu.RoamSwitch RoamSwitch.ExecRule.AgentRepeat -bool true`；次数(3 到 1000，默认 6)为 `RoamSwitch.ExecRule.AgentRepeatCount`，时间窗口秒数(30 到 86400，默认 600)为 `RoamSwitch.ExecRule.AgentRepeatWindowSecs`。然后重启应用，或先关闭再重新开启进程执行记录。反复的测试或构建等普通循环不会被统计，但向多台主机部署，或等待远程任务的循环，在数量上属于同一操作，会发出通知。仅通知，不会进行隔离。
                 • 相同检测的重复：同一规则、同一程序、同一父进程的检测，从第一次起 5 分钟内不再通知。仍会记录，并在事件时间线中加上「（5 分钟内相同检测的重复，未通知）」保留。这 5 分钟内，同一检测最多保留 20 条。
                 • 通知：一条通知（Pro）加上事件时间线中的一条记录（来源 execRecorder，处置“仅通知”）。通知本身绝不会触发 Air-Gap 等隔离。
                 • 存储：分段的 JSON Lines，位于 /Library/Application Support/RoamSwitch/exec_log（仅 root 可读：0700/0600，因为命令行可能包含机密；应用、查看器和 MCP 服务器只能通过特权 Helper 读取），默认 200 MB·14 天（可更改；磁盘剩余空间超过 5% 且超过 1 GB 时，最近 72 小时的记录最多保留到该大小的 4 倍），崩溃安全的轮转。各分段以哈希链相连，可发现被删除、编辑或截断的分段（“验证哈希链”）；这是篡改检测，而非篡改防护。不会记录环境变量，但命令行参数中可能包含敏感信息。
@@ -815,8 +816,8 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",
-                title: "Mac 安全综合诊断（24 个项目·评分 & 改进步骤）",
-                summary: "检查系统健壮性、网络防御、身份验证与访问控制、端口暴露、恶意软件防护、物理设备防御 6 个领域共 24 个项目，并显示 100 分制的评分、等级和改进步骤。免费版即可使用。",
+                title: "Mac 安全综合诊断（25 个项目·评分 & 改进步骤）",
+                summary: "检查系统健壮性、网络防御、身份验证与访问控制、端口暴露、恶意软件防护、物理设备防御 6 个领域共 25 个项目，并显示 100 分制的评分、等级和改进步骤。免费版即可使用。",
                 details: """
                 • 系统健壮性：1. FileVault，2. SIP（系统完整性保护），3. Gatekeeper，4. 自动安全更新，5. Apple XProtect，6. 备份（Time Machine 最近一次备份在 7 天内；不检查能否还原）。
                 • 网络防御：7. macOS 防火墙，8. 隐身模式，9. Wi-Fi 加密强度，10. ARP 欺骗监视，11. 网关 ARP 固定，12. 代理自动发现 (WPAD / PAC)。
@@ -828,6 +829,7 @@ extension RoamSwitchKnowledgeBase {
                 • 22. 新增的受信任证书（证书颁发机构）（`trust_anchors`，网络防御）：针对用户域和管理员域读取 `security dump-trust-settings`。只有当人、管理员或描述文件设置过时，证书才会带有信任设置，所以列出的证书都是有人添加的；Apple 自带的根证书不计入，信任结果为“deny”（不信任）的证书也不计入。如果新增证书的名称看起来像拦截工具（mitm、proxy、charles、fiddler、burp、portswigger、zscaler、netskope、squid、inspection、sslsplit），该项不合格并列出名称（最多 3 个）。其他新增证书（公司根证书、mkcert 等）作为信息显示，该项合格（如果是你自己设置的就没有问题）。无法读取该命令时，该项为“无法确认”。原因：读取加密通信（包括密码和 API 密钥）的代理，需要 Mac 信任它的证书颁发机构。看不到的内容：应用自带的证书，以及证书是何时添加的；新增的证书出现时也不会通知。检测覆盖：T1553.004（部分）。不会更改任何内容，也不会发送任何内容。
                 • 23. 易被利用的漏洞 (已安装的软件)（`package_cve_exposure`，系统健壮性）：检查 Homebrew 软件包和 PHP。将通过 `brew list --versions` 读取的 Homebrew 软件包，与更新程序下发的带签名的已知 CVE 数据（Homebrew 用）以及每天下发的 CISA KEV 列表比对。若 CISA 确认已被利用（KEV）的漏洞，或 EPSS 达到 90% 以上的漏洞，仍留在受影响的版本中，则判为不合格，并显示软件包名和 CVE 编号（状态栏最多 3 个）。风险接受未到期的项目不计入。对于 PHP，读取 Homebrew、MAMP、Herd 和 PATH 中可执行文件的版本，以及 php.ini、FPM 和 Apache 的设置。版本早于修复版本（两个严重漏洞 CVE-2026-109618 和 CVE-2026-109619，修复版本为 8.2.35、8.3.36、8.4.27、8.5.12；8.1 及更早版本没有修复版本），或满足 CVE-2026-115560 的条件（设置为 php_binary 或 php_serialize、应用代码用 ini_set() 切换、upload_progress 已启用，三者同时具备；目前没有修复版本）时判为不合格。mod_php 或启用 upload_progress 等中等及以下的提示不会判为不合格。数据中收录的 Homebrew php 按数据统计，不会重复计算。PHP 可执行文件仅在显示版本时启动。不进行网络通信。结果保留 30 分钟，20 秒内未完成则显示“无法确认”。没有 Homebrew 软件包也没有 PHP 时判为不适用，不计入分数。没有数据时同样显示“无法确认”。无法看到的内容包括：非 Homebrew 安装的 PHP 以外的软件、数据中没有对应条目的漏洞，以及在最新 KEV 列表之后才列入 KEV 的 CVE（详情栏会显示数据版本和 KEV 日期）。PHP 的会话文件由 Web shell 检测规则的扫描读取，不在本项目中。状态栏会显示已安装软件包中数据收录的数量。
                 • 24. 通过 Tailscale 的暴露（`overlay_exposure`，网络防御）：这台 Mac 加入 tailnet 时，检查 tailnet 一侧能看到什么。在没有开启 Tailscale 入站阻止（shields up）的情况下，如果有 SSH、文件共享、远程控制、数据库、无认证的 AI 推理服务器等高风险端口在 tailnet 可达的位置监听，则不合格。只统计绑定在通配地址或 tailnet 地址（100.64.0.0/10、fd7a:115c:a1e0::/48）上的监听，只绑定在局域网地址或回环地址上的监听不计入。ngrok 或 cloudflared 与 Tailscale 同时运行时也不合格（按可执行文件名判断）。作为 Exit Node 或 Subnet 路由对外通告，以及 Tailscale SSH，只显示状态，不算不合格。读取的内容是 `tailscale status --json`（只看是否在运行）、`tailscale debug prefs`（只取 ShieldsUp、AdvertiseRoutes、RunSSH 三项，其余丢弃，不记录密钥等）、监听端口列表和正在运行的程序名。不向外部发送任何内容，也不更改任何设置。找不到 Tailscale 或它没有运行时，该项不适用，不计入分数。不会读取 tailnet 的访问控制 (ACL)，因此被 ACL 隐藏的端口也会被指出。不会因为有 macOS 防火墙就判为合格。要阻止入站连接，请运行 `sudo tailscale set --shields-up`（这台 Mac 连向其他设备的连接不受影响）。
+                • 25. SNMP 暴露情况（`snmp_exposure`，端口暴露）：读取 macOS 自带的 SNMP 服务（snmpd）的配置。在 /etc/snmp/snmpd.conf 以及 snmpd.conf.d、snmpd.d 中的 *.conf 里，如果有一行仍使用 SNMP 的默认团体名，且没有限制来源和 OID（rocommunity、rwcommunity，或来源为 default 的 com2sec），则不合格。snmpd 正在监听（UDP 161 绑定在非回环地址）时是强警告；已停止时，警告的含义是一旦启用就会暴露。默认配置只限定了一个 OID，所以合格，且 snmpd 出厂时是禁用的。仅在监听但配置没有问题（例如只用 SNMPv3）时，不判为不合格。只读取配置文件和 `netstat -an -p udp` 的输出，不会启动 snmpd，也不会向外部发送任何通信。团体名不会显示也不会记录。snmpd.conf 里的 include 行不会被跟随。
                 • 等级：100 分 = S，85～99 分 = A，70～84 分 = B，低于 70 分 = C。也可通过 MCP 工具 `get_security_report` 获取。
                 • 保护的运行状态：按防护项（36 项）列出已开启的保护是否真正在运行的窗口。可从菜单（Mac 安全综合诊断 > 🛡️ 保护的运行状态…）打开，也可用综合诊断报告顶部卡片（摘要和未运行的保护）上的“显示所有保护…”打开。状态共五种：已生效、部分生效、未生效、关闭、仅限 Pro。未运行的保护会显示原因代码（如 `pro_not_active`、`helper_not_connected`、`system_extension_not_approved`）以及说明原因和解决方法的句子；根据原因，还会出现“认证 Pro 版…”“批准辅助程序…”“打开系统设置…”按钮。每 15 秒以及点击“重新确认”时重新读取。在没有 Pro 的 Mac 上，仅因默认值而开启的 Pro 功能显示为“仅限 Pro”，不计为故障。有保护未运行时，菜单顶部还会出现一行“⚠️ 有保护未生效(N 项)。查看原因…”。判定使用与菜单标记、通知和 MCP 的 `get_guard_status` 相同的数据。检测数据的更新停止时（`state_stale`）不发通知，只显示在菜单和这个窗口中。 每一行都会说明这项保护监视什么（作用）以及它在菜单的哪里（位置）。没有运行的行还会显示原因、对检测的影响、状况（哪个输入停了、重启的次数和时间、无法读取的文件名称及原因）、带编号的步骤和可以点击的按钮（打开“完全磁盘访问权限”设置、重新启动此项保护、打开此功能等）。菜单提示和通知也以同样的句子开头（名称、作用、输入、原因、影响）。`get_guard_status` 的 readers 中包含最近一次扫描无法读取的示例（skippedSamples：路径和原因，最多 5 个）。
                 • 设置被削弱时的通知（Pro，默认开启）：诊断之后，上次合格（或不适用）而现在不合格的设置，用一条通知告知。涵盖 10 项不会自行变化的设置（SSH、sudo、SIP、Gatekeeper、自动更新、XProtect、浏览器的钓鱼防护、配件连接保护、FileVault、备份新旧）。Wi-Fi、ARP、开放端口这类随时变化的内容，以及结果取决于所连网络的防火墙项目不在其内。无法测量的项目不计入。首次诊断只做记录，同一项目 24 小时内不重复，通知关闭期间发生的削弱在重新开启后也不会通知。不会发送任何数据。可用菜单中的“设置被削弱时通知 (Pro)”关闭，状态显示在 `get_guard_status` 的 configRegressionNotice 中。Linux 版有相同功能（由守护进程在每小时的检查之后执行，不区分 Pro）。
@@ -1535,11 +1537,11 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "faq_free_vs_pro",
                 title: "免费版与 Pro 永久版的区别",
-                summary: "免费版也可以无限期使用根据网络自动切换保护、24 个项目的综合诊断等基础防御功能以及各类手动诊断工具。Pro 版将解锁自动隔离、实时防御、自主巡查警告等功能。",
+                summary: "免费版也可以无限期使用根据网络自动切换保护、25 个项目的综合诊断等基础防御功能以及各类手动诊断工具。Pro 版将解锁自动隔离、实时防御、自主巡查警告等功能。",
                 details: """
                 【免费版】
                 • 根据 Wi-Fi 和网络自动切换三级 pf 数据包过滤，自动停止与恢复共享服务和 AirDrop
-                • Mac 安全综合诊断（24 个项目）、XProtect 运行状态确认与文件/应用安全性诊断
+                • Mac 安全综合诊断（25 个项目）、XProtect 运行状态确认与文件/应用安全性诊断
                 • 外部公开端口和 USB 设备列表显示
                 • 链接安全性诊断、机密信息与 API 密钥泄露手动审计、剪贴板保护
                 • 软件包 CVE 照合、实证型漏洞验证、Mac 安全日志审计、通知历史

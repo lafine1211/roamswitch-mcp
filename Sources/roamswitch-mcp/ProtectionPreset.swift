@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.34 (build 213).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.35 (build 214).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -148,6 +148,8 @@ public enum ProtectionPresetTable {
         proDefault("credentialHoneytokenGuard", "CredentialHoneytokenGuardEnabled", "認証情報ハニートークン", [true, true, true, true]),
         optIn("browserCredentialWatchGuard", "BrowserCredentialWatchGuardEnabled", "ブラウザ認証情報アクセス監視", [false, false, false, true],
               risks: [.falsePositive], warning: "バックアップ、同期、パスワード管理ツールのインポートでも通知が出ます。"),
+        optIn("outboundScanWatch", "OutboundScanWatchEnabled", "内部ネットワークへの走査の検知", [false, false, false, true],
+              risks: [.falsePositive], warning: "管理者や一括実行のツールが意図して走査したときも、通知が出ます。"),
         proDefault("scheduledLogAudit", "ScheduledLogAuditEnabled", "定期ログ監査", [false, true, true, true]),
         proDefault("criticalPathFim", "CriticalPathFimEnabled", "重要システムファイルの改ざん監視", [true, true, true, true]),
         proDefault("lockfileTamperGuard", "LockfileTamperGuardEnabled", "依存関係ロックファイルの改ざん監視", [true, true, true, true]),

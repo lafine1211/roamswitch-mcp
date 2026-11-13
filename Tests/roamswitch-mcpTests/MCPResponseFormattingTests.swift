@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.34 (build 213). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.35 (build 214). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -113,10 +113,10 @@ final class MCPResponseFormattingTests: XCTestCase {
 
         // `webRulesFolderScan`, `webWorkerCrashWatch` and `agentSetupWatch` are not settings: the first two follow the Pro cache (they have
         // no switch), the third follows whether a state was accepted in the AI agent setup window. They are counted
-        // apart from the 34 toggles.
+        // apart from the 35 toggles.
         let toggles = payload.guards.filter { !["webRulesFolderScan", "agentSetupWatch", "webWorkerCrashWatch", "signedUpdates"].contains($0.key) }
-        XCTAssertEqual(toggles.count, 34)
-        XCTAssertEqual(Set(payload.guards.map(\.key)).count, 38, "guard keys must be unique")
+        XCTAssertEqual(toggles.count, 35)
+        XCTAssertEqual(Set(payload.guards.map(\.key)).count, 39, "guard keys must be unique")
         XCTAssertTrue(toggles.allSatisfy { !$0.enabledInSettings })
         XCTAssertEqual(payload.guards.first { $0.key == "webRulesFolderScan" }?.enabledInSettings, false, "not Pro in this test's defaults")
         XCTAssertFalse(payload.caveats.isEmpty)
@@ -690,7 +690,7 @@ final class VerifyFindingDisciplineTests: XCTestCase {
         "host_firewall", "network_stealth_mode", "wifi_encryption_strength", "arp_spoof_monitor", "gateway_arp_lock",
         "ssh_hardening", "sudo_hygiene", "exposed_ports", "malware_scanning", "dns_threat_guard",
         "browser_phishing_protection", "usb_zero_trust", "accessory_connection_protection", "backup_recency",
-        "proxy_autodiscovery", "trust_anchors", "agent_credential_files", "package_cve_exposure", "overlay_exposure",
+        "proxy_autodiscovery", "trust_anchors", "agent_credential_files", "package_cve_exposure", "overlay_exposure", "snmp_exposure",
     ]
     private let allReasons = [
         "failing", "passing", "not_applicable", "helper_unavailable", "gateway_unknown", "no_baseline",

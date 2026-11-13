@@ -1,10 +1,16 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.34 (build 213).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.35 (build 214).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
 // ─────────────────────────────────────────────────────────────────────────────
 import Foundation
+
+// `agent-check`: the destination check an AI coding agent's hook runs before a tool call. Not the MCP protocol: it
+// reads the hook's JSON on stdin and exits (see AgentCheckCommand.swift).
+if CommandLine.arguments.dropFirst().first == AgentCheckCommand.flag {
+    exit(AgentCheckCommand.run(Array(CommandLine.arguments.dropFirst(2))))
+}
 
 // Thin stdin→stdout pump for the MCP server. All parsing and dispatch lives
 // in `MCPServer.handleLine` (MCPServer.swift) so it can be unit tested and

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.34 (build 213).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.35 (build 214).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -585,6 +585,7 @@ extension GuardReaderHealthStore {
         "portAnomalyGuard": Requirements(pro: true, helper: .partial),               // the listeners of other users come from the helper
         "portScanGuard": Requirements(pro: true, helper: .required),                 // pflog is captured by the helper
         "sshGuard": Requirements(pro: true, helper: .required),                      // the helper reads sshd's log
+        "outboundScanWatch": Requirements(pro: true, helper: .required),             // the helper writes the extension's settings
         "arpSpoofAutoContainment": Requirements(pro: true, helper: .partial),        // detection in the app; the Air-Gap is the helper's
         "usbKeyboardGuard": Requirements(pro: true, helper: .none),
         "usbStorageGuard": Requirements(pro: true, helper: .none),

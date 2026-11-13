@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.34 (build 213).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.35 (build 214).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -42,6 +42,10 @@ public enum LinkRiskFactorKind: String, Codable, Equatable {
     case brandComboSquat
     /// ホスト(または親ドメイン)が、端末内の脅威フィード(リンク保護と同じもの)に載っている。
     case threatFeed
+    /// 公開のURLが、リダイレクトで、この端末や社内のアドレス(ループバック、プライベート、メタデータ)を指している。
+    case redirectToInternal
+    /// リダイレクトを追跡できなかった(接続できない、プロキシが必須の環境、名前が引けない)。安全とは言えない。
+    case redirectNotTraced
 }
 
 public struct LinkRiskFactor: Identifiable, Codable, Equatable {
@@ -69,6 +73,9 @@ public struct LinkAuditReport: Equatable {
     public let riskLevel: LinkRiskLevel
     public let riskFactors: [LinkRiskFactor]
     public let isHTTPS: Bool
+    /// Why the redirect trace stopped at an address it refuses to connect to (an internal address, or a host that
+    /// can be read two ways). Nil when it did not. The chain then ends with a `blocked:...` marker.
+    public var redirectBlockedReason: String? = nil
 }
 
 /// Enforcement decision for the passive link guard — mirrors
@@ -462,50 +469,8 @@ public final class LinkSafetyAuditor {
         )
     }
 
-    // MARK: - Asynchronous Analysis with Safe Redirect Expansion
-
-    public func analyzeURLWithRedirects(_ urlString: String) async -> LinkAuditReport {
-        let baseReport = analyzeURL(urlString)
-        guard let url = URL(string: baseReport.finalURLString) else {
-            return baseReport
-        }
-
-        // Safely trace redirects without executing page content or downloading full payload
-        let (chain, finalURL) = await traceRedirectChain(from: url)
-        if chain.count > 1, let lastURL = chain.last {
-            let finalReport = analyzeURL(lastURL)
-            var mergedFactors = baseReport.riskFactors
-            for factor in finalReport.riskFactors {
-                if !mergedFactors.contains(where: { $0.title == factor.title }) {
-                    mergedFactors.append(factor)
-                }
-            }
-
-            let finalScore = min(baseReport.score, finalReport.score)
-            let hasSevere = mergedFactors.contains { $0.isSevere }
-            let riskLevel: LinkRiskLevel
-            if finalScore >= 80 && mergedFactors.isEmpty {
-                riskLevel = .safe
-            } else if hasSevere || finalScore < 50 {
-                riskLevel = .dangerous
-            } else {
-                riskLevel = .caution
-            }
-
-            return LinkAuditReport(
-                originalURLString: urlString,
-                finalURLString: lastURL,
-                redirectChain: chain,
-                domain: URL(string: lastURL)?.host ?? finalReport.domain,
-                score: finalScore,
-                riskLevel: riskLevel,
-                riskFactors: mergedFactors,
-                isHTTPS: URL(string: lastURL)?.scheme?.lowercased() == "https"
-            )
-        }
-
-        return baseReport
-    }
+    // The redirect-following variant (`analyzeURLWithRedirects`) lives in LinkRedirectTrace.swift: it needs the
+    // address classifier and the connection pin of the event forwarder, which the MCP server does not link.
 
     // MARK: - Helper Algorithms
 
@@ -578,74 +543,5 @@ public final class LinkSafetyAuditor {
             return brand
         }
         return nil
-    }
-
-    private func isPrivateOrLocalHost(_ host: String) -> Bool {
-        let lowered = host.lowercased()
-        if lowered == "localhost" || lowered.hasSuffix(".localhost") || lowered.hasSuffix(".local") {
-            return true
-        }
-        if lowered == "127.0.0.1" || lowered == "::1" || lowered == "0.0.0.0" {
-            return true
-        }
-        let parts = host.split(separator: ".")
-        if parts.count == 4, let p0 = Int(parts[0]), let p1 = Int(parts[1]) {
-            if p0 == 10 { return true }                                // 10.0.0.0/8
-            if p0 == 127 { return true }                               // 127.0.0.0/8
-            if p0 == 169 && p1 == 254 { return true }                  // 169.254.0.0/16 (Link Local / Cloud Metadata)
-            if p0 == 172 && (16...31).contains(p1) { return true }     // 172.16.0.0/12
-            if p0 == 192 && p1 == 168 { return true }                  // 192.168.0.0/16
-        }
-        return false
-    }
-
-    private final class NonRedirectingSessionDelegate: NSObject, URLSessionTaskDelegate {
-        func urlSession(
-            _ session: URLSession,
-            task: URLSessionTask,
-            willPerformHTTPRedirection response: HTTPURLResponse,
-            newRequest request: URLRequest,
-            completionHandler: @escaping (URLRequest?) -> Void
-        ) {
-            // Stop automatic redirect following so each hop is inspected safely
-            completionHandler(nil)
-        }
-    }
-
-    private func traceRedirectChain(from initialURL: URL) async -> ([String], URL) {
-        var chain: [String] = [initialURL.absoluteString]
-        var currentURL = initialURL
-
-        let config = URLSessionConfiguration.ephemeral
-        config.timeoutIntervalForRequest = 3.0
-        config.timeoutIntervalForResource = 3.0
-        let delegate = NonRedirectingSessionDelegate()
-        let session = URLSession(configuration: config, delegate: delegate, delegateQueue: nil)
-
-        for _ in 0..<5 {
-            guard let host = currentURL.host, !isPrivateOrLocalHost(host) else {
-                // Stop trace on private/local destinations to prevent SSRF
-                break
-            }
-
-            var request = URLRequest(url: currentURL)
-            request.httpMethod = "HEAD"
-
-            guard let (_, response) = try? await session.data(for: request),
-                  let httpResponse = response as? HTTPURLResponse else {
-                break
-            }
-
-            if (301...308).contains(httpResponse.statusCode),
-               let location = httpResponse.value(forHTTPHeaderField: "Location"),
-               let nextURL = URL(string: location, relativeTo: currentURL)?.absoluteURL {
-                currentURL = nextURL
-                chain.append(nextURL.absoluteString)
-            } else {
-                break
-            }
-        }
-
-        return (chain, currentURL)
     }
 }

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.34 (build 213).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.35 (build 214).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -1057,6 +1057,7 @@ public enum MCPResponseFormatting {
     static let agentSetupWatchKey = "RoamSwitch.AgentSetupWatchEnabled"               // AgentSetupWatch — true (Pro; needs an accepted state; the menu item turns it off)
     static let dependencyWatchKey = "RoamSwitch.DependencyWatchEnabled"               // DependencyWatch — true (Pro; the menu item turns it off)
     static let configRegressionNoticeKey = "RoamSwitch.ConfigRegressionNoticeEnabled" // ConfigRegressionNotice — true (Pro; the menu item turns it off)
+    static let outboundScanWatchKey = "RoamSwitch.OutboundScanWatchEnabled"           // OutboundScanWatch — false; opt-in even for Pro (needs the system extension)
     static let portScanGuardKey = "RoamSwitch.PortScanGuardEnabled"                   // PortScanGuard — false; Pro default-on
     static let sshGuardKey = "RoamSwitch.SSHGuardEnabled"                             // SSHGuard — false; Pro default-on (works only while Remote Login is on)
     static let persistenceMonitorKey = "RoamSwitch.PersistenceMonitorEnabled"         // PersistenceMonitorGuard — true
@@ -1180,7 +1181,7 @@ public enum MCPResponseFormatting {
 
     // MARK: verify_security_findings
 
-    /// 1回に指定できる checkId の上限(超過分は無視して注意書きを付ける)。全24項目より十分大きく、
+    /// 1回に指定できる checkId の上限(超過分は無視して注意書きを付ける)。全25項目より十分大きく、
     /// 巨大な引数でレスポンスが膨らまないための歯止め。
     public static let maxVerifyCheckIds = 50
     /// 未知の checkId をそのまま返すときの最大文字数(入力はエージェント由来で信頼できない)。
@@ -1447,6 +1448,7 @@ public enum MCPResponseFormatting {
         var guards: [MCPGuardEntryPayload] = []
         guards.append(entry("portAnomalyGuard", portAnomalyGuardKey, defaultWhenUnset: false))
         guards.append(entry("portScanGuard", portScanGuardKey, defaultWhenUnset: false))
+        guards.append(entry("outboundScanWatch", outboundScanWatchKey, defaultWhenUnset: false))
         guards.append(entry("sshGuard", sshGuardKey, defaultWhenUnset: false))
         guards.append(entry("arpSpoofAutoContainment", arpSpoofAutoContainmentKey, defaultWhenUnset: false))
         guards.append(entry("usbKeyboardGuard", usbKeyboardGuardKey, defaultWhenUnset: false))
@@ -1527,6 +1529,12 @@ public enum MCPResponseFormatting {
             out.liveState = folded.state
             out.liveStateReason = folded.reason ?? g.liveStateReason
             if g.key == "agentSetupWatch", !g.enabledInSettings, agentWatchSwitch { out.liveStateReason = "no_baseline" }
+            // The outbound scan notices are counted by the content-filter system extension: without it the switch does nothing.
+            if g.key == "outboundScanWatch", g.enabledInSettings, out.liveState == "on",
+               let enforcement = LinkGuardEnforcement.read(defaults: defaults, now: now.timeIntervalSince1970), enforcement != .systemExtension {
+                out.liveState = "off"
+                out.liveStateReason = enforcement == .waitingForApproval ? "system_extension_not_approved" : "system_extension_not_active"
+            }
             return out
         }
 
@@ -2125,6 +2133,7 @@ enum VerifyFindingDiscipline {
         case "proxy_autodiscovery": return loc("会社や学校が管理するMacで、プロキシ自動検出を管理者が意図して設定している場合は、この状態は設定どおりです。")
         case "trust_anchors": return loc("会社が配布した証明書や、開発用の証明書(mkcert など)を意図して信頼している場合は、この状態は設定どおりです。")
         case "overlay_exposure": return loc("tailnetに入っている端末がすべて自分のもので、tailnetのアクセス制御(ACL)で接続元を限っているなら、実際に届く相手は限られます。この確認はACLを読みません。ngrokやcloudflaredは、公開する先が決まった用途に限っているなら、リスクは小さくなります。")
+        case "snmp_exposure": return loc("SNMPを自分で使っていて、コミュニティ名を初期値のまま、信頼できる管理ネットワークの中だけで使っているなら、実際に届く相手は限られます。snmpd が停止中なら、今は誰にも届きません。")
         case "agent_credential_files": return loc("同期フォルダやgit管理下に見えても、そのファイルを同期や追跡の対象から外している場合は、実際には外に出ていません。RoamSwitchは、その除外設定までは確認しません。")
         default: return nil
         }
@@ -2155,6 +2164,7 @@ enum VerifyFindingDiscipline {
         case "proxy_autodiscovery": return loc("カフェやホテルなど、他人が管理するネットワークをよく使うなら、重大になります。自宅や職場の管理されたネットワークだけなら、下がります。")
         case "trust_anchors": return loc("ログインやAPIキーを含む通信を、カフェなど他人が管理するネットワークで行うなら、重大になります。信頼している証明書をすべて把握しているなら、下がります。")
         case "overlay_exposure": return loc("tailnetに他人の端末や、インターネットに公開したサーバーが入っているなら、重大になります。tailnetが自分の端末だけで、受信遮断を入れれば、解消します。")
+        case "snmp_exposure": return loc("snmpd が待ち受け中で、インターネットや共有のLANから届くなら、重大になります。snmpd が停止中のままなら、下がります。書き込み(rwcommunity)が開いているなら、設定を変えられるので、重大になります。")
         case "agent_credential_files": return loc("ファイルが他のユーザーに読める権限や、公開されうる同期・git管理下にあるなら、重大になります。所有者だけが読める権限で、手元のディスクにだけあるなら、解消します。")
         default: return nil
         }

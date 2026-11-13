@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.34 (build 213). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.35 (build 214). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -873,6 +873,30 @@ final class AgentSetupAuditorTests: XCTestCase {
         XCTAssertEqual(edited.findings.first?.severity, "high")
         XCTAssertTrue(edited.findings.first?.detail.contains("1 hook command added or changed") ?? false)
         XCTAssertFalse(edited.findings.first?.detail.contains("gone") ?? true)
+    }
+
+    /// `RoamSwitchMCPServer agent-check --print-hook-config` prints a hook for the person's own settings. For this audit it is a hook like any
+    /// other: not a finding in the home file by itself, reported once when it is added after a state was accepted (high), quiet after the
+    /// person accepts that state, and reported again if it is taken out. It is not exempted on purpose: an exemption by command text would
+    /// also hide that the protective hook was removed, and a planted hook could copy the text.
+    func testTheAgentCheckHookIsReportedOnceWhenAddedAndQuietAfterAcceptance() throws {
+        let (home, write) = try makeHome()
+        defer { try? FileManager.default.removeItem(atPath: home) }
+        let baseline = URL(fileURLWithPath: home + "/baseline.json")
+        let command = "/Applications/RoamSwitch.app/Contents/MacOS/RoamSwitchMCPServer agent-check"
+        let hooked = #"{"hooks":{"PreToolUse":[{"matcher":"Bash|WebFetch|WebSearch|mcp__.*","hooks":[{"type":"command","command":"\#(command)","timeout":10}]}]}}"#
+        XCTAssertEqual(settings(hooked), [], "not a finding in the person's own settings file")
+        XCTAssertEqual(settings(hooked, inProject: true).map(\.id), ["agent_settings_hook"], "a repository can carry a hook: that is why the printed note says to paste it in the home file")
+        try write(".claude/settings.json", #"{"permissions":{"deny":["Read(./.env)"]}}"#)
+        try AgentSetupAuditor.acceptCurrentState(try settingsRun(write, home: home, baseline: baseline), baselineURL: baseline)
+        try write(".claude/settings.json", hooked)
+        let added = try settingsRun(write, home: home, baseline: baseline)
+        XCTAssertEqual(added.findings.map(\.id), ["agent_settings_weakened"])
+        XCTAssertFalse(added.findings.first?.detail.contains("RoamSwitchMCPServer") ?? true, "the command text is never copied")
+        try AgentSetupAuditor.acceptCurrentState(added, baselineURL: baseline)
+        XCTAssertEqual(try settingsRun(write, home: home, baseline: baseline).findings.map(\.id), [], "quiet once accepted")
+        try write(".claude/settings.json", #"{"permissions":{"deny":["Read(./.env)"]}}"#)
+        XCTAssertEqual(try settingsRun(write, home: home, baseline: baseline).findings.map(\.id), ["agent_settings_weakened"], "taking the protection out is reported")
     }
 
     func testANarrowNewAllowRuleIsNotAWeakeningButABroadOneIs() throws {

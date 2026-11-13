@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.34 (build 213).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.35 (build 214).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -344,6 +344,11 @@ public struct ExecRecorderConfig: Codable, Equatable {
     /// The CPU limit of the `open` eslogger, percent of one core (five-minute average). nil: the built-in 12. Bounded by
     /// `minFileActorBudgetPercent...maxFileActorBudgetPercent`. An older helper ignores it.
     public var fileActorOpenBudgetPercent: Double?
+    /// `exec.agent_repeat` (an AI agent runs the same operation again and again). Off by default; notify only.
+    public var agentRepeatEnabled: Bool
+    /// The same operation this many times inside the window is told (`agentRepeatCountRange`).
+    public var agentRepeatCount: Int
+    public var agentRepeatWindowSecs: Int
 
     /// Claude Code reads its own login items from the keychain on every start
     /// (Developer ID: Anthropic PBC). Both names were seen on a real Mac, read by the
@@ -363,6 +368,11 @@ public struct ExecRecorderConfig: Codable, Equatable {
     /// Bounds of `fileActorOpenBudgetPercent` (`FileActorLoadGovernor` uses the same).
     public static let minFileActorBudgetPercent: Double = 2
     public static let maxFileActorBudgetPercent: Double = 60
+    /// `exec.agent_repeat`: the defaults and bounds (the rule itself is `ExecAgentRepeat`, which only the engine links).
+    public static let defaultAgentRepeatCount = 6
+    public static let defaultAgentRepeatWindowSecs = 600
+    public static let agentRepeatCountRange = 3...1000
+    public static let agentRepeatWindowRange = 30...86_400
     public static let defaultMaxTotalMB = 200
     public static let defaultMaxAgeDays = 14
 
@@ -372,7 +382,9 @@ public struct ExecRecorderConfig: Codable, Equatable {
         persistForkExit: Bool = false, rulesEnabled: Bool = true, allowlistPrefixes: [String] = [],
         launchPlistRecentSecs: Int = 86_400, trustedKeychainReaders: [TrustedKeychainReader]? = nil,
         serviceUsers: [String] = [], fileActors: Bool = false, fileWatchRules: [FileWatchRule] = [],
-        fileActorOpenBudgetPercent: Double? = nil
+        fileActorOpenBudgetPercent: Double? = nil,
+        agentRepeatEnabled: Bool = false, agentRepeatCount: Int = ExecRecorderConfig.defaultAgentRepeatCount,
+        agentRepeatWindowSecs: Int = ExecRecorderConfig.defaultAgentRepeatWindowSecs
     ) {
         self.enabled = enabled
         self.maxTotalMB = maxTotalMB
@@ -388,6 +400,9 @@ public struct ExecRecorderConfig: Codable, Equatable {
         self.fileActors = fileActors
         self.fileWatchRules = fileWatchRules
         self.fileActorOpenBudgetPercent = fileActorOpenBudgetPercent
+        self.agentRepeatEnabled = agentRepeatEnabled
+        self.agentRepeatCount = agentRepeatCount
+        self.agentRepeatWindowSecs = agentRepeatWindowSecs
     }
 
     /// Splits the stored setting (comma separated, like `exec_rule_service_users` in the Linux build).
@@ -417,6 +432,9 @@ public struct ExecRecorderConfig: Codable, Equatable {
         fileActors = try c.decodeIfPresent(Bool.self, forKey: .fileActors) ?? d.fileActors
         fileWatchRules = try c.decodeIfPresent([FileWatchRule].self, forKey: .fileWatchRules) ?? d.fileWatchRules
         fileActorOpenBudgetPercent = try c.decodeIfPresent(Double.self, forKey: .fileActorOpenBudgetPercent)
+        agentRepeatEnabled = try c.decodeIfPresent(Bool.self, forKey: .agentRepeatEnabled) ?? d.agentRepeatEnabled
+        agentRepeatCount = try c.decodeIfPresent(Int.self, forKey: .agentRepeatCount) ?? d.agentRepeatCount
+        agentRepeatWindowSecs = try c.decodeIfPresent(Int.self, forKey: .agentRepeatWindowSecs) ?? d.agentRepeatWindowSecs
     }
 
     /// Bounds every numeric field so a corrupt or hostile config can neither
@@ -430,6 +448,8 @@ public struct ExecRecorderConfig: Codable, Equatable {
         c.allowlistPrefixes = Array(c.allowlistPrefixes.prefix(64))
         c.serviceUsers = Array(c.serviceUsers.map { String($0.prefix(64)) }.prefix(64))
         c.fileWatchRules = Array(c.fileWatchRules.prefix(ExecRecorderConfig.maxFileWatchRules)).filter { $0.pattern.hasPrefix("/") && $0.pattern.count <= 512 }
+        c.agentRepeatCount = min(max(c.agentRepeatCount, Self.agentRepeatCountRange.lowerBound), Self.agentRepeatCountRange.upperBound)
+        c.agentRepeatWindowSecs = min(max(c.agentRepeatWindowSecs, Self.agentRepeatWindowRange.lowerBound), Self.agentRepeatWindowRange.upperBound)
         c.fileActorOpenBudgetPercent = c.fileActorOpenBudgetPercent.map {
             $0.isFinite ? min(max($0, Self.minFileActorBudgetPercent), Self.maxFileActorBudgetPercent) : Self.minFileActorBudgetPercent
         }

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.34 (build 213).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.35 (build 214).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -119,6 +119,13 @@ final class PortSecurityAuditor {
             var plain = LocalAIRuntime.portsWithPlainFinding
             if !Self.namesTheService(portInfo) { plain.remove(portInfo.port) }
             findings.append(contentsOf: self.aiRuntimeFindings(aiRuntimes, port: portInfo.port, isGlobal: portInfo.isGloballyExposed, isFirewallBlocking: isFirewallBlocking, portsWithPlainFinding: plain))
+
+            // 5. Debug and proxy ports (JDWP, the Node.js inspector, PHP-FPM / Xdebug, SOCKS): unauthenticated, and a
+            // loopback listener is the intended setup, so only one reachable from the network is reported.
+            if portInfo.isNetworkReachable,
+               let debug = DebugPortRisk.identify(port: portInfo.port, processName: portInfo.processName, executablePath: portInfo.executablePath) {
+                findings.append(DebugPortRisk.finding(for: debug, isGlobal: portInfo.isNetworkReachable, isFirewallBlocking: isFirewallBlocking))
+            }
 
             // Calculate Overall Risk
             let overall: PortSecurityRiskLevel
