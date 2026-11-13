@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.33 (build 212).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.34 (build 213).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -27,6 +27,12 @@ public enum SecurityLevel: String, Codable, CaseIterable, Identifiable {
         case .balanced: return loc("標準保護")
         case .lockdown: return loc("ロックダウン")
         }
+    }
+
+    /// "ネットワークの保護レベル: 標準保護". The level names ("標準保護", "ロックダウン") sound like the settings presets
+    /// ("標準セキュリティ", "最大セキュリティ"), so wherever a level is shown by itself this is used.
+    public var labeledName: String {
+        String(format: loc("ネットワークの保護レベル: %@"), shortName)
     }
 
     public var firewallBlockAll: Bool {

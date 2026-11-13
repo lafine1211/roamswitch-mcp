@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.33 (build 212).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.34 (build 213).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -910,11 +910,11 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_protection_presets",
-                title: "防護預設(輕量、均衡、標準安全、最高安全)",
-                summary: "選單頂部的「防護預設」可一次切換自動防禦的開關與數項檢查間隔。這是 Pro 版功能。啟用 Pro 後，初始設定為「均衡」，並會提議一次「標準安全」。",
+                title: "設定預設(輕量、均衡、標準安全、最高安全)",
+                summary: "選單頂部的「設定預設」可一次切換自動防禦的開關與數項檢查間隔。這是 Pro 版功能。啟用 Pro 後，初始設定為「均衡」，並會提議一次「標準安全」。",
                 details: """
                 • 四種設定：「輕量」將常駐資源佔用降到最低，保留基本偵測。「均衡」在資源佔用與安全性之間取得平衡，與出廠預設值幾乎相同(唯一差異是家目錄中自動啟動檔案的掃描間隔為 300 秒，而非 60 秒)。「標準安全」是不考慮資源佔用的標準設定，包含程序執行記錄、檔案開啟程序記錄、ClickFix 自動隔離與較短的檢查間隔。「最高安全」會開啟所有可以設定的保護，包括會增加誤報、導致工作中斷或向外通訊的項目。
-                • 免費版：選單顯示「防護預設 (Pro)…」，點擊後開啟授權視窗，不會變更任何設定。
+                • 免費版：選單顯示「設定預設 (Pro)…」，點擊後開啟授權視窗，不會變更任何設定。
                 • 新安裝的 Mac：啟用 Pro 後的設定為「均衡」。已在使用 Pro 的 Mac 更新後數值不變(選單顯示「預設設定」)。
                 • 啟用 Pro 後會提議一次「標準安全」(「套用標準安全」或「維持均衡」)。變更項目的清單與選擇預設時的確認相同。不會提議「最高安全」，只有您在選單中親自選擇時才會套用。移除授權後重新加入，或授權到期後重新認證，不會再次提議。
                 • 寫入之前，只會出現一次列出變更項目的確認，不會出現各個防護的單獨確認。「最高安全」的確認會逐行列出會增加誤報、導致工作中斷、向外通訊或隔離網路的項目。

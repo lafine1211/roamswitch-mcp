@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.33 (build 212).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.34 (build 213).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -910,11 +910,11 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_protection_presets",
-                title: "防护预设(轻量、均衡、标准安全、最高安全)",
-                summary: "菜单顶部的“防护预设”可一次切换自动防御的开关和若干检查间隔。这是 Pro 版功能。启用 Pro 后，初始设置为“均衡”，并会提议一次“标准安全”。",
+                title: "设置预设(轻量、均衡、标准安全、最高安全)",
+                summary: "菜单顶部的“设置预设”可一次切换自动防御的开关和若干检查间隔。这是 Pro 版功能。启用 Pro 后，初始设置为“均衡”，并会提议一次“标准安全”。",
                 details: """
                 • 四种设置：“轻量”将常驻资源占用降到最低，保留基本检测。“均衡”在资源占用与安全性之间取得平衡，与出厂默认值几乎相同(唯一区别是主目录中自动启动文件的扫描间隔为 300 秒，而不是 60 秒)。“标准安全”是不考虑资源占用的标准设置，包含进程执行记录、文件打开进程记录、ClickFix 自动隔离和较短的检查间隔。“最高安全”会开启所有可以设置的保护，包括会增加误报、导致工作中断或向外通信的项目。
-                • 免费版：菜单显示“防护预设 (Pro)…”，点击后打开许可证窗口，不会更改任何设置。
+                • 免费版：菜单显示“设置预设 (Pro)…”，点击后打开许可证窗口，不会更改任何设置。
                 • 新安装的 Mac：启用 Pro 后的设置为“均衡”。已在使用 Pro 的 Mac 更新后数值不变(菜单显示“默认设置”)。
                 • 启用 Pro 后会提议一次“标准安全”(“应用标准安全”或“保持均衡”)。变更项目的列表与选择预设时的确认相同。不会提议“最高安全”，只有您在菜单中亲自选择时才会应用。移除许可证后重新添加，或许可证过期后重新认证，不会再次提议。
                 • 写入之前，只会出现一次列出变更项目的确认，不会出现各个防护的单独确认。“最高安全”的确认会逐行列出会增加误报、导致工作中断、向外通信或隔离网络的项目。

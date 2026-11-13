@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.33 (build 212).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.34 (build 213).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -910,11 +910,11 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_protection_presets",
-                title: "Preajustes de protección (Ligero, Equilibrado, Seguridad estándar, Seguridad máxima)",
-                summary: "«Preajuste de protección», en la parte superior del menú, cambia a la vez las defensas automáticas y algunos intervalos. Es una función Pro. Justo después de activar Pro, el preajuste es «Equilibrado», y «Seguridad estándar» se ofrece una sola vez.",
+                title: "Preajustes de configuración (Ligero, Equilibrado, Seguridad estándar, Seguridad máxima)",
+                summary: "«Preajuste de configuración», en la parte superior del menú, cambia a la vez las defensas automáticas y algunos intervalos. Es una función Pro. Justo después de activar Pro, el preajuste es «Equilibrado», y «Seguridad estándar» se ofrece una sola vez.",
                 details: """
                 • Los cuatro preajustes: «Ligero» reduce al mínimo el consumo de recursos permanente y mantiene las detecciones básicas. «Equilibrado» equilibra el consumo de recursos y la seguridad, y es casi igual al valor de fábrica (la única diferencia es que el recorrido de los archivos de inicio de la carpeta personal se hace cada 300 segundos en lugar de cada 60). «Seguridad estándar» es el preajuste habitual sin tener en cuenta los recursos: añade el registro de ejecución de procesos, el registro de procesos que abren archivos, el aislamiento automático de ClickFix y intervalos de comprobación cortos. «Seguridad máxima» activa todas las protecciones configurables, incluidas las que aumentan los falsos positivos, detienen su trabajo o envían datos al exterior.
-                • Versión gratuita: el menú muestra «Preajuste de protección (Pro)…», que abre la ventana de licencia. No se cambia nada.
+                • Versión gratuita: el menú muestra «Preajuste de configuración (Pro)…», que abre la ventana de licencia. No se cambia nada.
                 • Mac recién configurado: justo después de activar Pro, el preajuste es «Equilibrado». Un Mac que ya tiene Pro conserva sus valores al actualizar (el menú muestra «Ajustes predeterminados»).
                 • Justo después de activar Pro se ofrece una sola vez «Seguridad estándar» («Aplicar seguridad estándar» o «Mantener Equilibrado»). La lista de cambios es la que muestra la confirmación del preajuste. «Seguridad máxima» no se ofrece: solo se aplica si la elige en el menú. No se vuelve a ofrecer tras quitar y volver a poner la licencia, ni tras caducar y renovarse.
                 • Antes de escribir nada, una sola confirmación enumera lo que cambia. No aparecen las confirmaciones de cada protección. La de «Seguridad máxima» enumera, una línea por elemento, todo lo que aumenta los falsos positivos, detiene el trabajo, envía datos al exterior o aísla la red.

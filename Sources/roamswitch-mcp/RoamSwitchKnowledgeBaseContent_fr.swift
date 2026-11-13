@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.33 (build 212).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.34 (build 213).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -910,11 +910,11 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_protection_presets",
-                title: "Préréglages de protection (Léger, Équilibré, Sécurité standard, Sécurité maximale)",
-                summary: "« Préréglage de protection », en haut du menu, change ensemble les défenses automatiques et quelques intervalles. C'est une fonction Pro. Juste après l'activation de Pro, le réglage est « Équilibré », et « Sécurité standard » est proposée une seule fois.",
+                title: "Préréglages des paramètres (Léger, Équilibré, Sécurité standard, Sécurité maximale)",
+                summary: "« Préréglage des paramètres », en haut du menu, change ensemble les défenses automatiques et quelques intervalles. C'est une fonction Pro. Juste après l'activation de Pro, le réglage est « Équilibré », et « Sécurité standard » est proposée une seule fois.",
                 details: """
                 • Les quatre réglages : « Léger » réduit au minimum la consommation de ressources permanente et laisse les détections de base actives. « Équilibré » équilibre la consommation de ressources et la sécurité, et reste presque identique au réglage d'usine (seule différence : le parcours des fichiers de démarrage du dossier personnel se fait toutes les 300 secondes au lieu de 60). « Sécurité standard » est le réglage habituel qui ne tient pas compte des ressources : elle ajoute l'enregistrement de l'exécution des processus, l'enregistrement des processus qui ouvrent des fichiers, l'isolement automatique ClickFix et des intervalles de vérification courts. « Sécurité maximale » active toutes les protections réglables, y compris celles qui augmentent les faux positifs, interrompent votre travail ou envoient des données vers l'extérieur.
-                • Version gratuite : le menu affiche « Préréglage de protection (Pro)… », qui ouvre la fenêtre de licence. Rien n'est modifié.
+                • Version gratuite : le menu affiche « Préréglage des paramètres (Pro)… », qui ouvre la fenêtre de licence. Rien n'est modifié.
                 • Mac nouvellement configuré : juste après l'activation de Pro, le réglage est « Équilibré ». Un Mac qui a déjà Pro garde ses valeurs à la mise à jour (le menu affiche « Réglages par défaut »).
                 • Juste après l'activation de Pro, « Sécurité standard » est proposée une seule fois (« Appliquer la sécurité standard » ou « Garder Équilibré »). La liste des changements est celle que montre la confirmation du préréglage. « Sécurité maximale » n'est pas proposée : elle ne s'applique que si vous la choisissez dans le menu. Rien n'est reproposé après le retrait puis le rétablissement de la licence, ni après son expiration et son renouvellement.
                 • Avant toute écriture, une seule confirmation liste ce qui change. Les confirmations des protections prises une à une n'apparaissent pas. Celle de « Sécurité maximale » liste, une ligne chacun, tous les éléments qui augmentent les faux positifs, interrompent le travail, envoient des données vers l'extérieur ou isolent le réseau.

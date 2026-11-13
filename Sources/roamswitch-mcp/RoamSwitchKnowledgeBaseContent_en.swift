@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.33 (build 212).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.34 (build 213).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -909,11 +909,11 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_protection_presets",
-                title: "Protection presets (Light, Balanced, Standard security, Maximum security)",
-                summary: "\"Protection preset\" at the top of the menu switches the automatic defenses and a few intervals together. It is a Pro feature. Right after Pro is activated the setting is Balanced, and Standard security is offered once.",
+                title: "Settings presets (Light, Balanced, Standard security, Maximum security)",
+                summary: "\"Settings preset\" at the top of the menu switches the automatic defenses and a few intervals together. It is a Pro feature. Right after Pro is activated the setting is Balanced, and Standard security is offered once.",
                 details: """
                 • The four settings: Light keeps the resident resource use to a minimum and leaves the core detections on. Balanced balances resource use against security and is almost the shipped default (the only difference is that the start-up file walk of the home folder runs every 300 seconds instead of 60). Standard security is the ordinary setting that does not weigh resources: it adds the process-execution record, the file-open record, ClickFix auto-isolation and short check intervals. Maximum security turns on every protection that can be set, including those that add false positives, stop your work or send data out.
-                • Free: the menu shows "Protection preset (Pro)…", which opens the licence window. Nothing is changed.
+                • Free: the menu shows "Settings preset (Pro)…", which opens the licence window. Nothing is changed.
                 • A Mac newly set up: right after Pro is activated the setting is Balanced. A Mac that already has Pro keeps its values on update (the menu shows "Default settings").
                 • Right after Pro is activated, Standard security is offered once ("Apply Standard security" or "Keep Balanced"). The list of changes is the one shown when you choose the preset. Maximum security is not offered: it is applied only when you choose it in the menu. It is not offered again after the licence was removed and added back, or after it lapsed and was renewed.
                 • Before anything is written, one confirmation lists what changes. The confirmations of the single guards do not appear. The confirmation of Maximum security lists, one line each, every item that adds false positives, stops work, sends data out or isolates the network.

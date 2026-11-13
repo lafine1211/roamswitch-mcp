@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.33 (build 212).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.34 (build 213).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -190,9 +190,9 @@ public enum ProtectionPresetTable {
         onUnlessOff("npmSupplyWatch", "NpmSupplyWatchEnabled", "npm の依存関係の自動確認", [true, true, true, true]),
         onUnlessOff("dependencyWatch", "DependencyWatchEnabled", "依存パッケージの脆弱性の自動確認", [true, true, true, true]),
         onUnlessOff("configRegressionNotice", "ConfigRegressionNoticeEnabled", "設定が弱くなったときの通知", [true, true, true, true]),
-        onUnlessOff("devicePostureTrust", "DevicePosture.Enabled", "侵害の兆候での標準保護への切り替え", [true, true, true, true]),
+        onUnlessOff("devicePostureTrust", "DevicePosture.Enabled", "侵害の兆候での、ネットワークの保護レベルの標準保護への切り替え", [true, true, true, true]),
         row("devicePostureWindowHours", "DevicePosture.WindowHours", "侵害の兆候を数える期間(時間)", unset: .int(6), ints([6, 6, 6, 24]), risks: [.stopsWork],
-            warning: "侵害の兆候のあと、信頼ネットワークが標準保護に下がる時間が、最大24時間に延びます。"),
+            warning: "侵害の兆候のあと、信頼ネットワークの保護レベルが標準保護に下がる時間が、最大24時間に延びます。"),
         // ---- Choices that send something out ----
         optIn("activeVulnScan", "ActiveVulnScanEnabled", "実証型脆弱性診断", [false, false, false, true], risks: [.sendsOut],
               warning: "脆弱性の一覧(CVEマップ)を毎日取得する通信が始まります。診断そのものは、このMacの127.0.0.1にだけ送ります。"),

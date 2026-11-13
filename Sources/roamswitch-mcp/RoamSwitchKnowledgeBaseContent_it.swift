@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.33 (build 212).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.34 (build 213).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -910,11 +910,11 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_protection_presets",
-                title: "Preset di protezione (Leggero, Bilanciato, Sicurezza standard, Sicurezza massima)",
-                summary: "«Preset di protezione», in alto nel menu, cambia insieme le difese automatiche e alcuni intervalli. È una funzione Pro. Subito dopo l'attivazione di Pro il preset è «Bilanciato», e «Sicurezza standard» viene proposta una sola volta.",
+                title: "Preset delle impostazioni (Leggero, Bilanciato, Sicurezza standard, Sicurezza massima)",
+                summary: "«Preset delle impostazioni», in alto nel menu, cambia insieme le difese automatiche e alcuni intervalli. È una funzione Pro. Subito dopo l'attivazione di Pro il preset è «Bilanciato», e «Sicurezza standard» viene proposta una sola volta.",
                 details: """
                 • I quattro preset: «Leggero» riduce al minimo il consumo di risorse permanente e lascia attive le rilevazioni di base. «Bilanciato» bilancia consumo di risorse e sicurezza ed è quasi uguale al valore di fabbrica (l'unica differenza è che la scansione dei file di avvio nella cartella home avviene ogni 300 secondi invece che ogni 60). «Sicurezza standard» è l'impostazione abituale che non bada alle risorse: aggiunge la registrazione dell'esecuzione dei processi, la registrazione dei processi che aprono file, l'isolamento automatico ClickFix e intervalli di controllo brevi. «Sicurezza massima» attiva tutte le protezioni configurabili, comprese quelle che aumentano i falsi positivi, bloccano il lavoro o inviano dati all'esterno.
-                • Versione gratuita: il menu mostra «Preset di protezione (Pro)…», che apre la finestra della licenza. Non cambia nulla.
+                • Versione gratuita: il menu mostra «Preset delle impostazioni (Pro)…», che apre la finestra della licenza. Non cambia nulla.
                 • Mac appena configurato: subito dopo l'attivazione di Pro il preset è «Bilanciato». Un Mac che ha già Pro conserva i suoi valori con l'aggiornamento (il menu mostra «Impostazioni predefinite»).
                 • Subito dopo l'attivazione di Pro, «Sicurezza standard» viene proposta una sola volta («Applica la sicurezza standard» o «Mantieni Bilanciato»). L'elenco delle modifiche è quello mostrato dalla conferma del preset. «Sicurezza massima» non viene proposta: si applica solo se la scegli nel menu. Non viene riproposta dopo aver rimosso e riaggiunto la licenza, né dopo la scadenza e il rinnovo.
                 • Prima di scrivere qualsiasi cosa compare una sola conferma che elenca ciò che cambia. Le conferme delle singole protezioni non compaiono. Quella di «Sicurezza massima» elenca, una riga per voce, tutto ciò che aumenta i falsi positivi, blocca il lavoro, invia dati all'esterno o isola la rete.

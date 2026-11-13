@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.33 (build 212).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.34 (build 213).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -910,11 +910,11 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_protection_presets",
-                title: "Predefinições de proteção (Leve, Equilibrado, Segurança padrão, Segurança máxima)",
-                summary: "«Predefinição de proteção», no topo do menu, altera em conjunto as defesas automáticas e alguns intervalos. É uma funcionalidade Pro. Logo após ativar o Pro, a definição é «Equilibrado», e a «Segurança padrão» é proposta uma única vez.",
+                title: "Predefinições das definições (Leve, Equilibrado, Segurança padrão, Segurança máxima)",
+                summary: "«Predefinição das definições», no topo do menu, altera em conjunto as defesas automáticas e alguns intervalos. É uma funcionalidade Pro. Logo após ativar o Pro, a definição é «Equilibrado», e a «Segurança padrão» é proposta uma única vez.",
                 details: """
                 • As quatro definições: «Leve» reduz ao mínimo o consumo de recursos permanente e mantém as deteções básicas. «Equilibrado» equilibra o consumo de recursos e a segurança e é quase igual ao valor de fábrica (a única diferença é que a pesquisa dos ficheiros de arranque na pasta pessoal ocorre a cada 300 segundos em vez de 60). «Segurança padrão» é a definição habitual que não tem em conta os recursos: acrescenta o registo da execução de processos, o registo dos processos que abrem ficheiros, o isolamento automático do ClickFix e intervalos de verificação curtos. «Segurança máxima» ativa todas as proteções configuráveis, incluindo as que aumentam os falsos positivos, param o seu trabalho ou enviam dados para fora.
-                • Versão gratuita: o menu mostra «Predefinição de proteção (Pro)…», que abre a janela da licença. Nada é alterado.
+                • Versão gratuita: o menu mostra «Predefinição das definições (Pro)…», que abre a janela da licença. Nada é alterado.
                 • Mac recém-configurado: logo após ativar o Pro, a definição é «Equilibrado». Um Mac que já tem Pro mantém os valores ao atualizar (o menu mostra «Definições predefinidas»).
                 • Logo após ativar o Pro, a «Segurança padrão» é proposta uma única vez («Aplicar segurança padrão» ou «Manter Equilibrado»). A lista de alterações é a que a confirmação da predefinição mostra. A «Segurança máxima» não é proposta: só se aplica se a escolher no menu. Não é proposta de novo depois de remover e voltar a colocar a licença, nem depois de expirar e ser renovada.
                 • Antes de escrever o que quer que seja, uma única confirmação lista o que muda. As confirmações de cada proteção não aparecem. A de «Segurança máxima» lista, uma linha por item, tudo o que aumenta os falsos positivos, para o trabalho, envia dados para fora ou isola a rede.

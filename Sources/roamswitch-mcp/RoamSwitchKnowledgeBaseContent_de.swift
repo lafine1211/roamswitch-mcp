@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.33 (build 212).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.34 (build 213).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -910,11 +910,11 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_protection_presets",
-                title: "Schutzvorgaben (Leicht, Ausgewogen, Standardsicherheit, Maximale Sicherheit)",
-                summary: "Mit „Schutzvorgabe“ oben im Menü werden die automatischen Schutzfunktionen und einige Intervalle gemeinsam umgestellt. Das ist eine Pro-Funktion. Direkt nach der Aktivierung von Pro gilt „Ausgewogen“, und „Standardsicherheit“ wird einmal angeboten.",
+                title: "Einstellungsvorgaben (Leicht, Ausgewogen, Standardsicherheit, Maximale Sicherheit)",
+                summary: "Mit „Einstellungsvorgabe“ oben im Menü werden die automatischen Schutzfunktionen und einige Intervalle gemeinsam umgestellt. Das ist eine Pro-Funktion. Direkt nach der Aktivierung von Pro gilt „Ausgewogen“, und „Standardsicherheit“ wird einmal angeboten.",
                 details: """
                 • Die vier Einstellungen: „Leicht“ hält den dauerhaften Ressourcenverbrauch minimal und lässt die grundlegenden Erkennungen aktiv. „Ausgewogen“ gleicht Ressourcenverbrauch und Sicherheit aus und entspricht fast der Werkseinstellung (der einzige Unterschied: Der Durchlauf der Autostart-Dateien im Home-Ordner läuft alle 300 statt alle 60 Sekunden). „Standardsicherheit“ ist die übliche Einstellung ohne Rücksicht auf Ressourcen: Sie fügt die Aufzeichnung der Prozessausführung, die Aufzeichnung der Prozesse, die Dateien öffnen, die automatische ClickFix-Isolation und kurze Prüfintervalle hinzu. „Maximale Sicherheit“ schaltet jeden einstellbaren Schutz ein, auch solche, die mehr Fehlalarme verursachen, Ihre Arbeit stoppen oder Daten nach außen senden.
-                • Kostenlose Version: Das Menü zeigt „Schutzvorgabe (Pro)…“ und öffnet das Lizenzfenster. Es wird nichts geändert.
+                • Kostenlose Version: Das Menü zeigt „Einstellungsvorgabe (Pro)…“ und öffnet das Lizenzfenster. Es wird nichts geändert.
                 • Neu eingerichteter Mac: Direkt nach der Aktivierung von Pro gilt „Ausgewogen“. Ein Mac, der schon Pro hat, behält seine Werte beim Update (das Menü zeigt „Standardeinstellungen“).
                 • Direkt nach der Aktivierung von Pro wird „Standardsicherheit“ einmal angeboten („Standardsicherheit anwenden“ oder „Ausgewogen beibehalten“). Die Liste der Änderungen ist dieselbe wie bei der Bestätigung der Vorgabe. „Maximale Sicherheit“ wird nicht angeboten: Sie wird nur angewendet, wenn Sie sie im Menü wählen. Nach dem Entfernen und erneuten Hinzufügen der Lizenz oder nach Ablauf und Erneuerung wird nichts mehr angeboten.
                 • Bevor etwas geschrieben wird, listet eine einzige Bestätigung die Änderungen auf. Die Bestätigungen der einzelnen Schutzfunktionen erscheinen nicht. Die Bestätigung von „Maximale Sicherheit“ listet jede Einstellung, die Fehlalarme erhöht, die Arbeit stoppt, Daten nach außen sendet oder das Netzwerk isoliert, in einer eigenen Zeile auf.
