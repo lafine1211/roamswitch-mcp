@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.31 (build 210).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.32 (build 211).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -150,6 +150,17 @@ enum MCPConfigAuditor {
             if !entries.isEmpty { out[path] = entries }
         }
         return (out, unreadable)
+    }
+
+    /// The server definitions in `data`, read as the config file `path` (the same reading as `serverSnapshotReport`):
+    /// server name -> digest. nil when the content is not a config file of a known format. Digests only.
+    static func serverDigests(path: String, data: Data) -> [String: String]? {
+        guard let root = parseRoot(path: path, data: data) else { return nil }
+        var out: [String: String] = [:]
+        for (name, config) in servers(in: root).prefix(maxServersPerFile) {
+            if let entry = AgentSetupBaseline.serverEntry(config) { out[name] = entry.sha256 }
+        }
+        return out
     }
 
     // MARK: - Pure audit

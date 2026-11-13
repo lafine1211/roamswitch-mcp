@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.31 (build 210).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.32 (build 211).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -254,11 +254,16 @@ public final class ActionJournal {
         Self.automaticCount(in: read(), of: actions, since: since)
     }
 
+    /// The detail of a `done` line for an action asked for again while it already held (the air-gap applied again).
+    /// It is not counted against the automatic action budget.
+    public static let reappliedDetail = "reapplied while already in effect"
+
     public static func automaticCount(in records: [JournalRecord], of actions: Set<JournalAction>, since: Date) -> Int {
         let begins = Dictionary(records.filter { $0.phase == .begin }.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         return latest(of: records).filter { record in
             guard let begin = begins[record.id] else { return false }
             return begin.origin == .auto && actions.contains(begin.action) && begin.at >= since
+                && record.detail != reappliedDetail
                 && [.begin, .done, .undone, .undoFailed].contains(record.phase)
         }.count
     }
