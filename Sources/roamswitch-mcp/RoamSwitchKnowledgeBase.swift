@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.32 (build 211).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.33 (build 212).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -461,6 +461,7 @@ public struct RoamSwitchKnowledgeBase: Sendable {
             EntryMeta(id: "feat_privileged_helper", topic: t, tags: ["helper", "xpc", "root", "pfctl", "privilege", "security", "smappservice", "launchdaemon"]),
             EntryMeta(id: "feat_mcp_server", topic: t, tags: ["mcp", "ai", "claude", "read-only", "stdio", "tools", "resources", "zerotelemetry"]),
             EntryMeta(id: "feat_license_pro_tier", topic: t, tags: ["license", "pro", "team", "ed25519", "activation", "devices", "lifetime"]),
+            EntryMeta(id: "feat_protection_presets", topic: t, tags: ["preset", "protection-preset", "light", "balanced", "standard", "maximum", "default", "undo", "pro"]),
         ]
     }
 

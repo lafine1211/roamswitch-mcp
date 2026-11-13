@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.32 (build 211).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.33 (build 212).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -803,6 +803,9 @@ public struct MCPReaderHealthPayload: Codable, Equatable {
     /// True when the last scan left part of what it should watch out because a limit was reached (more working copies
     /// than it keeps, a walk that stopped at its folder limit). nil where the guard has no such limit.
     public var scopeLimited: Bool? = nil
+    /// Examples of what the last scan could not examine, with the reason for each (`permission_denied`, `not_permitted`,
+    /// `type_unreadable`, `too_large`, `not_found`, `other`); at most 5, replaced by every scan. The path is on this Mac.
+    public var skippedSamples: [GuardSkippedItem]? = nil
 }
 
 /// Every field added after the original five is optional so older
@@ -828,6 +831,22 @@ public struct MCPGuardStatusPayload: Codable, Equatable {
     /// When each signed data feed last updated and the last failure, if the last attempt failed. A feed that keeps
     /// failing leaves old data in use (a CVE scan against an old map, an old link list).
     public var feedUpdates: [MCPFeedUpdatePayload]? = nil
+    /// The protection preset in force (Pro): which one the settings match. Read only: this server never changes it.
+    public var preset: MCPPresetPayload? = nil
+}
+
+/// `get_guard_status`'s protection preset (RoamSwitch.Preset.*; the table is `ProtectionPresetTable`).
+public struct MCPPresetPayload: Codable, Equatable {
+    /// The preset the person applied last (`light`, `balanced`, `standard`, `maximum`), or nil when none was.
+    public let selected: String?
+    /// What the settings are now: `light`, `balanced`, `standard`, `maximum`, `default` (never chosen, nothing moved
+    /// off the shipped defaults) or `custom` (changed one by one after, or without, a preset).
+    public let matches: String
+    /// True when the licence is not active: a preset can only be applied with Pro, and the guards it set are stopped.
+    public let lockedByLicense: Bool
+    /// The settings that differ from the preset `selected` names, by `get_guard_status` key where there is one (empty
+    /// when `matches` is that preset).
+    public let differsFromSelected: [String]
 }
 
 public struct MCPFeedUpdatePayload: Codable, Equatable {
@@ -1417,7 +1436,7 @@ public enum MCPResponseFormatting {
                                            linesDropped: $0.linesDropped, oversizeDropped: $0.oversizeDropped,
                                            filesUnreadable: $0.filesUnreadable, filesUnreadableAt: time($0.filesUnreadableAt),
                                            foldersUnreadable: $0.foldersUnreadable, filesTruncated: $0.filesTruncated,
-                                           scopeLimited: $0.scopeLimited)
+                                           scopeLimited: $0.scopeLimited, skippedSamples: $0.skippedSamples)
                 }
             }
         }
@@ -1553,8 +1572,29 @@ public enum MCPResponseFormatting {
             caveats: caveats,
             feedUpdates: FeedUpdateStatusStore.all.map { name in
                 MCPFeedUpdatePayload.make(feed: name, record: FeedUpdateStatusStore.read(name, defaults: defaults), stale: staleNow.contains { $0.feed == name })
-            }
+            },
+            preset: presetPayload(defaults: defaults)
         )
+    }
+
+    /// The protection preset for `get_guard_status`, read from the same keys the app writes.
+    static func presetPayload(defaults: UserDefaults) -> MCPPresetPayload {
+        let state = ProtectionPresetTable.state(defaults: defaults)
+        let selected = ProtectionPresetTable.selected(defaults: defaults)
+        let matches: String
+        switch state {
+        case .preset(let p): matches = p.rawValue
+        case .defaultSettings: matches = "default"
+        case .custom: matches = "custom"
+        }
+        var differs: [String] = []
+        if let selected, state != .preset(selected) {
+            differs = ProtectionPresetTable.settings
+                .filter { ProtectionPresetTable.effectiveValue(of: $0, defaults: defaults) != $0.value(for: selected) }
+                .map(\.id)
+        }
+        return MCPPresetPayload(selected: selected?.rawValue, matches: matches,
+                                lockedByLicense: !defaults.bool(forKey: "RoamSwitch.IsProCache"), differsFromSelected: differs)
     }
 
     // MARK: get_incident_timeline

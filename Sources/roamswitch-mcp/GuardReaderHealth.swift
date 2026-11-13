@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.32 (build 211).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.33 (build 212).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -21,6 +21,87 @@ import Foundation
 //   that has no such step.
 // - `unreadable` with a `reason` code: the source cannot be read right now.
 // A helper restart is itself a gap for every helper reader that was running (see `begin`).
+
+/// One file or folder the last scan could not examine, and why. The path is local to this Mac; `reason` is a code
+/// (`permission_denied`, `not_permitted`, `type_unreadable`, `too_large`, `other`), never a sentence.
+public struct GuardSkippedItem: Codable, Equatable {
+    public var path: String
+    public var reason: String
+    public init(path: String, reason: String) { self.path = path; self.reason = reason }
+}
+
+public enum GuardSkip {
+    /// How many examples a guard keeps for the last scan (the count is kept in full).
+    public static let sampleCap = 5
+    public static let permissionDenied = "permission_denied"
+    public static let notPermitted = "not_permitted"
+    public static let typeUnreadable = "type_unreadable"
+    public static let tooLarge = "too_large"
+    /// A folder the guard was told to look at that does not exist (a registered root that was deleted or renamed).
+    public static let notFound = "not_found"
+    public static let other = "other"
+
+    /// The reason code for a failed open, or nil when the file is simply gone (deleted while the scan ran: there is
+    /// nothing left to examine, so it is not a skipped file).
+    public static func reason(forErrno e: Int32) -> String? {
+        switch e {
+        case ENOENT, ENOTDIR: return nil
+        case EACCES: return permissionDenied
+        case EPERM: return notPermitted
+        default: return other
+        }
+    }
+
+    /// Asks the system why `path` cannot be opened for reading right now. nil: it opens after all or it is gone.
+    public static func openFailureReason(path: String) -> String? {
+        let fd = open(path, O_RDONLY)
+        if fd >= 0 { close(fd); return other }
+        return reason(forErrno: errno)
+    }
+
+    /// Why the folder `path` cannot be listed: the reason code, `notFound` for a folder that is not there.
+    public static func listFailureReason(path: String) -> String {
+        guard let dir = opendir(path) else { return reason(forErrno: errno) ?? notFound }
+        closedir(dir)
+        return other
+    }
+
+    /// The reason code for an error the file enumerator reports for a folder it cannot enter; nil when the folder is
+    /// simply gone (deleted while the walk ran).
+    public static func reason(for error: Error) -> String? {
+        let ns = error as NSError
+        if ns.domain == NSPOSIXErrorDomain { return reason(forErrno: Int32(ns.code)) }
+        if let under = ns.userInfo[NSUnderlyingErrorKey] as? NSError, under.domain == NSPOSIXErrorDomain {
+            return reason(forErrno: Int32(under.code))
+        }
+        if ns.domain == NSCocoaErrorDomain {
+            switch ns.code {
+            case NSFileReadNoPermissionError: return permissionDenied
+            case NSFileNoSuchFileError, NSFileReadNoSuchFileError: return nil
+            default: break
+            }
+        }
+        return other
+    }
+
+    /// The files among `paths` that cannot be opened now, with the reason for each (examples capped). A file that is
+    /// gone is not counted.
+    public static func unreadable(among paths: [String]) -> (count: Int, samples: [GuardSkippedItem]) {
+        var count = 0
+        var samples: [GuardSkippedItem] = []
+        for path in paths {
+            guard let why = openFailureReason(path: path) else { continue }
+            count += 1
+            append(&samples, path: path, reason: why)
+        }
+        return (count, samples)
+    }
+
+    public static func append(_ list: inout [GuardSkippedItem], path: String, reason: String) {
+        guard list.count < sampleCap, !list.contains(where: { $0.path == path }) else { return }
+        list.append(GuardSkippedItem(path: path, reason: reason))
+    }
+}
 
 public struct GuardReaderHealth: Codable, Equatable {
     /// The reader is meant to be running (set when it starts, cleared on an intentional stop).
@@ -51,13 +132,16 @@ public struct GuardReaderHealth: Codable, Equatable {
     /// keeps, a walk that stopped at its folder limit, more files than its list holds). nil where the source has no such
     /// limit. What was left out was not looked at, the same as an unreadable file.
     public var scopeLimited: Bool?
+    /// Examples of what the last scan could not examine (at most `GuardSkip.sampleCap`), with the reason for each.
+    /// Replaced by every scan, so a clean scan clears it. nil where the source does not record examples.
+    public var skippedSamples: [GuardSkippedItem]?
     public var updatedAt: Double = 0
 
     public init() {}
 
     private enum CodingKeys: String, CodingKey {
         case active, restarts, lastRestartAt, gaps, lastGapAt, inGap, unreadable, reason, linesDropped, oversizeDropped
-        case filesUnreadable, filesUnreadableAt, foldersUnreadable, filesTruncated, scopeLimited, updatedAt
+        case filesUnreadable, filesUnreadableAt, foldersUnreadable, filesTruncated, scopeLimited, skippedSamples, updatedAt
     }
 
     public init(from decoder: Decoder) throws {
@@ -77,6 +161,7 @@ public struct GuardReaderHealth: Codable, Equatable {
         foldersUnreadable = try c.decodeIfPresent(Int.self, forKey: .foldersUnreadable)
         filesTruncated = try c.decodeIfPresent(Int.self, forKey: .filesTruncated)
         scopeLimited = try c.decodeIfPresent(Bool.self, forKey: .scopeLimited)
+        skippedSamples = try c.decodeIfPresent([GuardSkippedItem].self, forKey: .skippedSamples)
         updatedAt = try c.decodeIfPresent(Double.self, forKey: .updatedAt) ?? 0
     }
 
@@ -143,8 +228,9 @@ public struct GuardReaderHealth: Codable, Equatable {
 
     /// The result of one scan: how many files it had to skip because they could not be opened or read. Replaces the
     /// previous count (it is "the last scan", not a running total); the time moves only when something was skipped.
-    public mutating func setFilesUnreadable(_ count: Int, now: Double) {
+    public mutating func setFilesUnreadable(_ count: Int, samples: [GuardSkippedItem] = [], now: Double) {
         filesUnreadable = count
+        skippedSamples = samples
         if count > 0 { filesUnreadableAt = now }
         updatedAt = now
     }
@@ -152,7 +238,8 @@ public struct GuardReaderHealth: Codable, Equatable {
     /// The result of one folder scan: files it could not open, folders it could not list (everything below them
     /// unseen) and files it read only the start of. Each replaces the previous scan's count; the time moves only
     /// when the scan skipped a file or folder.
-    public mutating func setScanResult(filesUnreadable files: Int, foldersUnreadable folders: Int, filesTruncated truncated: Int, now: Double) {
+    public mutating func setScanResult(filesUnreadable files: Int, foldersUnreadable folders: Int, filesTruncated truncated: Int, samples: [GuardSkippedItem] = [], now: Double) {
+        skippedSamples = samples
         filesUnreadable = files
         foldersUnreadable = folders
         filesTruncated = truncated

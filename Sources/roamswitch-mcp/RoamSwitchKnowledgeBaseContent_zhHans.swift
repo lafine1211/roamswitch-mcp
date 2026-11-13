@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.32 (build 211).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.33 (build 212).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -829,7 +829,7 @@ extension RoamSwitchKnowledgeBase {
                 • 23. 易被利用的漏洞 (已安装的软件)（`package_cve_exposure`，系统健壮性）：检查 Homebrew 软件包和 PHP。将通过 `brew list --versions` 读取的 Homebrew 软件包，与更新程序下发的带签名的已知 CVE 数据（Homebrew 用）以及每天下发的 CISA KEV 列表比对。若 CISA 确认已被利用（KEV）的漏洞，或 EPSS 达到 90% 以上的漏洞，仍留在受影响的版本中，则判为不合格，并显示软件包名和 CVE 编号（状态栏最多 3 个）。风险接受未到期的项目不计入。对于 PHP，读取 Homebrew、MAMP、Herd 和 PATH 中可执行文件的版本，以及 php.ini、FPM 和 Apache 的设置。版本早于修复版本（两个严重漏洞 CVE-2026-109618 和 CVE-2026-109619，修复版本为 8.2.35、8.3.36、8.4.27、8.5.12；8.1 及更早版本没有修复版本），或满足 CVE-2026-115560 的条件（设置为 php_binary 或 php_serialize、应用代码用 ini_set() 切换、upload_progress 已启用，三者同时具备；目前没有修复版本）时判为不合格。mod_php 或启用 upload_progress 等中等及以下的提示不会判为不合格。数据中收录的 Homebrew php 按数据统计，不会重复计算。PHP 可执行文件仅在显示版本时启动。不进行网络通信。结果保留 30 分钟，20 秒内未完成则显示“无法确认”。没有 Homebrew 软件包也没有 PHP 时判为不适用，不计入分数。没有数据时同样显示“无法确认”。无法看到的内容包括：非 Homebrew 安装的 PHP 以外的软件、数据中没有对应条目的漏洞，以及在最新 KEV 列表之后才列入 KEV 的 CVE（详情栏会显示数据版本和 KEV 日期）。PHP 的会话文件由 Web shell 检测规则的扫描读取，不在本项目中。状态栏会显示已安装软件包中数据收录的数量。
                 • 24. 通过 Tailscale 的暴露（`overlay_exposure`，网络防御）：这台 Mac 加入 tailnet 时，检查 tailnet 一侧能看到什么。在没有开启 Tailscale 入站阻止（shields up）的情况下，如果有 SSH、文件共享、远程控制、数据库、无认证的 AI 推理服务器等高风险端口在 tailnet 可达的位置监听，则不合格。只统计绑定在通配地址或 tailnet 地址（100.64.0.0/10、fd7a:115c:a1e0::/48）上的监听，只绑定在局域网地址或回环地址上的监听不计入。ngrok 或 cloudflared 与 Tailscale 同时运行时也不合格（按可执行文件名判断）。作为 Exit Node 或 Subnet 路由对外通告，以及 Tailscale SSH，只显示状态，不算不合格。读取的内容是 `tailscale status --json`（只看是否在运行）、`tailscale debug prefs`（只取 ShieldsUp、AdvertiseRoutes、RunSSH 三项，其余丢弃，不记录密钥等）、监听端口列表和正在运行的程序名。不向外部发送任何内容，也不更改任何设置。找不到 Tailscale 或它没有运行时，该项不适用，不计入分数。不会读取 tailnet 的访问控制 (ACL)，因此被 ACL 隐藏的端口也会被指出。不会因为有 macOS 防火墙就判为合格。要阻止入站连接，请运行 `sudo tailscale set --shields-up`（这台 Mac 连向其他设备的连接不受影响）。
                 • 等级：100 分 = S，85～99 分 = A，70～84 分 = B，低于 70 分 = C。也可通过 MCP 工具 `get_security_report` 获取。
-                • 保护的运行状态：按防护项（36 项）列出已开启的保护是否真正在运行的窗口。可从菜单（Mac 安全综合诊断 > 🛡️ 保护的运行状态…）打开，也可用综合诊断报告顶部卡片（摘要和未运行的保护）上的“显示所有保护…”打开。状态共五种：已生效、部分生效、未生效、关闭、仅限 Pro。未运行的保护会显示原因代码（如 `pro_not_active`、`helper_not_connected`、`system_extension_not_approved`）以及说明原因和解决方法的句子；根据原因，还会出现“认证 Pro 版…”“批准辅助程序…”“打开系统设置…”按钮。每 15 秒以及点击“重新确认”时重新读取。在没有 Pro 的 Mac 上，仅因默认值而开启的 Pro 功能显示为“仅限 Pro”，不计为故障。有保护未运行时，菜单顶部还会出现一行“⚠️ 有保护未生效(N 项)。查看原因…”。判定使用与菜单标记、通知和 MCP 的 `get_guard_status` 相同的数据。检测数据的更新停止时（`state_stale`）不发通知，只显示在菜单和这个窗口中。
+                • 保护的运行状态：按防护项（36 项）列出已开启的保护是否真正在运行的窗口。可从菜单（Mac 安全综合诊断 > 🛡️ 保护的运行状态…）打开，也可用综合诊断报告顶部卡片（摘要和未运行的保护）上的“显示所有保护…”打开。状态共五种：已生效、部分生效、未生效、关闭、仅限 Pro。未运行的保护会显示原因代码（如 `pro_not_active`、`helper_not_connected`、`system_extension_not_approved`）以及说明原因和解决方法的句子；根据原因，还会出现“认证 Pro 版…”“批准辅助程序…”“打开系统设置…”按钮。每 15 秒以及点击“重新确认”时重新读取。在没有 Pro 的 Mac 上，仅因默认值而开启的 Pro 功能显示为“仅限 Pro”，不计为故障。有保护未运行时，菜单顶部还会出现一行“⚠️ 有保护未生效(N 项)。查看原因…”。判定使用与菜单标记、通知和 MCP 的 `get_guard_status` 相同的数据。检测数据的更新停止时（`state_stale`）不发通知，只显示在菜单和这个窗口中。 每一行都会说明这项保护监视什么（作用）以及它在菜单的哪里（位置）。没有运行的行还会显示原因、对检测的影响、状况（哪个输入停了、重启的次数和时间、无法读取的文件名称及原因）、带编号的步骤和可以点击的按钮（打开“完全磁盘访问权限”设置、重新启动此项保护、打开此功能等）。菜单提示和通知也以同样的句子开头（名称、作用、输入、原因、影响）。`get_guard_status` 的 readers 中包含最近一次扫描无法读取的示例（skippedSamples：路径和原因，最多 5 个）。
                 • 设置被削弱时的通知（Pro，默认开启）：诊断之后，上次合格（或不适用）而现在不合格的设置，用一条通知告知。涵盖 10 项不会自行变化的设置（SSH、sudo、SIP、Gatekeeper、自动更新、XProtect、浏览器的钓鱼防护、配件连接保护、FileVault、备份新旧）。Wi-Fi、ARP、开放端口这类随时变化的内容，以及结果取决于所连网络的防火墙项目不在其内。无法测量的项目不计入。首次诊断只做记录，同一项目 24 小时内不重复，通知关闭期间发生的削弱在重新开启后也不会通知。不会发送任何数据。可用菜单中的“设置被削弱时通知 (Pro)”关闭，状态显示在 `get_guard_status` 的 configRegressionNotice 中。Linux 版有相同功能（由守护进程在每小时的检查之后执行，不区分 Pro）。
                 """,
                 recommendation: "请定期打开「综合诊断报告」，按照改进步骤处理带 ⚠️ 的项目，保持 A 级以上。"
@@ -907,6 +907,24 @@ extension RoamSwitchKnowledgeBase {
                 • 失效时：Pro 专属防护会自动停用，VPN 隧道、端口隔离等也会被解除。
                 """,
                 recommendation: "如果需要自动隔离、实时防御和自主巡查警告，请考虑 Pro 版。更换 Mac 时，请先在旧 Mac 上解除许可证，再在新 Mac 上激活。"
+            ),
+            LocalizedEntry(
+                id: "feat_protection_presets",
+                title: "防护预设(轻量、均衡、标准安全、最高安全)",
+                summary: "菜单顶部的“防护预设”可一次切换自动防御的开关和若干检查间隔。这是 Pro 版功能。启用 Pro 后，初始设置为“均衡”，并会提议一次“标准安全”。",
+                details: """
+                • 四种设置：“轻量”将常驻资源占用降到最低，保留基本检测。“均衡”在资源占用与安全性之间取得平衡，与出厂默认值几乎相同(唯一区别是主目录中自动启动文件的扫描间隔为 300 秒，而不是 60 秒)。“标准安全”是不考虑资源占用的标准设置，包含进程执行记录、文件打开进程记录、ClickFix 自动隔离和较短的检查间隔。“最高安全”会开启所有可以设置的保护，包括会增加误报、导致工作中断或向外通信的项目。
+                • 免费版：菜单显示“防护预设 (Pro)…”，点击后打开许可证窗口，不会更改任何设置。
+                • 新安装的 Mac：启用 Pro 后的设置为“均衡”。已在使用 Pro 的 Mac 更新后数值不变(菜单显示“默认设置”)。
+                • 启用 Pro 后会提议一次“标准安全”(“应用标准安全”或“保持均衡”)。变更项目的列表与选择预设时的确认相同。不会提议“最高安全”，只有您在菜单中亲自选择时才会应用。移除许可证后重新添加，或许可证过期后重新认证，不会再次提议。
+                • 写入之前，只会出现一次列出变更项目的确认，不会出现各个防护的单独确认。“最高安全”的确认会逐行列出会增加误报、导致工作中断、向外通信或隔离网络的项目。
+                • 撤销：子菜单中的“撤销应用……”会把最近一次应用恢复为应用之前的值(只能撤销一次，不能回到更早的一次)。
+                • 只要手动更改了一项，菜单就会显示“自定义”。
+                • 预设不会更改的内容：网络信任设置(已登记的网络、外出时的保护级别、手动指定)、允许列表、监视文件夹、SSH 阈值、VPN、Sensor 配对和事件转发。完全磁盘访问等权限无法通过预设授予，缺少的内容会在应用后列出。
+                • 隔离(Air-Gap)期间不会应用。请先通过菜单中的“解除 Air-Gap 隔离”解除。
+                • MCP：`get_guard_status` 中的 `preset` 可读取当前预设(`selected`、`matches`、`lockedByLicense`、`differsFromSelected`)。MCP 无法更改。
+                """,
+                recommendation: "想节省资源选“轻量”，日常使用选“均衡”，想加强检测选“标准安全”。选择“最高安全”前，请逐行阅读确认内容。"
             ),
         ]
     }
