@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.36 (build 215).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.0.0 (build 216).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -528,6 +528,19 @@ public struct MCPForensicEvidenceBundlesPayload: Codable, Equatable {
     public var chainBrokenAt: String? = nil
     /// Bundles the chain names that are no longer on disk.
     public var missingBundles: [String] = []
+    /// The end of the chain now: `seq` (the number of lines) and the hash of the last one. Keep it outside this Mac;
+    /// pass it back as `witness` (`SEQ:HASH`) later. Left out when the chain is empty or broken. Same name and shape
+    /// as the Linux edition's `chainHead`.
+    public var chainHead: MCPChainHeadPayload? = nil
+    /// Only when `witness` was passed: `consistent`, `truncated` (the chain has fewer lines than the witness says),
+    /// `diverged` (that line has another hash), `invalid` (not `SEQ:HASH`) or `chain_broken`.
+    public var chainWitness: String? = nil
+}
+
+/// The end of the evidence chain (`chain.log`): the number of lines and the hash of the last one.
+public struct MCPChainHeadPayload: Codable, Equatable {
+    public let seq: Int
+    public let chain: String
 }
 
 /// Wraps `ActiveVulnScan.ProbeStatus` for the
@@ -777,6 +790,16 @@ public struct MCPGuardEntryPayload: Codable, Equatable {
     public var liveStateReason: String? = nil
     /// For a guard that reads a stream or a file: what its reader(s) have lost. Absent for the others.
     public var readers: [MCPReaderHealthPayload]? = nil
+    /// For a guard that can use the Endpoint Security extension: `es` when the extension delivers what it watches (the program that
+    /// did it is known at the moment it happened), `fallback` when the guard's own older way runs instead (a file-system notification, a timer,
+    /// `lsof`). `esRouteReason` is the extension's reason code (`es_not_approved`, `es_fda`, ...) when it is the fallback because of it. Absent from older builds.
+    public var esRoute: String? = nil
+    public var esRouteReason: String? = nil
+    /// For a guard that can take its input from the Endpoint Security extension: where it takes it from now. `endpoint_security`
+    /// (the extension's structured events), `fallback:<es_* reason>` (the extension is not working, so the guard uses its older input;
+    /// the reason is one of `liveStateReason`'s `es_*` codes), `unsupported_os:<version>` (this macOS lacks the events, first
+    /// provided in that version, so the older input is used). Absent for other guards, and when the app has not reported lately.
+    public var input: String? = nil
 }
 
 /// What one input source of a guard has lost (see `GuardReaderHealth`). Times are ISO 8601.
@@ -983,12 +1006,15 @@ public struct MCPIncidentTimelinePayload: Codable, Equatable {
     /// Same name and shape as the Linux edition's `evidenceChecks`.
     public var evidenceChecks: [MCPEvidenceCheckPayload]? = nil
     public var evidenceChecksNote: String? = nil
+    /// The end of the evidence chain and, when `witness` was passed, the check of it (see `MCPForensicEvidenceBundlesPayload`).
+    public var chainHead: MCPChainHeadPayload? = nil
+    public var chainWitness: String? = nil
 }
 
 /// One evidence bundle named by timeline records, checked against `chain.log` (see `ForensicChain.check`).
 public struct MCPEvidenceCheckPayload: Codable, Equatable {
     public let bundle: String
-    /// `matches`, `bundle_missing`, `manifest_altered`, `ref_changed`, `chain_broken`, `not_anchored` or `unchecked`.
+    /// `matches`, `bundle_missing`, `manifest_altered`, `ref_changed`, `chain_broken`, `anchor_removed`, `not_anchored` or `unchecked`.
     public let status: String
     /// The reference no longer matches the chain: every status except `matches` and `unchecked` (not being able to check is not a verdict).
     public let stale: Bool
@@ -1046,8 +1072,11 @@ public enum MCPResponseFormatting {
     static let ransomwareEntropyGuardKey = "RoamSwitch.RansomwareEntropyGuardEnabled" // RansomwareEntropyGuard — false; Pro default-on
     static let credentialHoneytokenGuardKey = "RoamSwitch.CredentialHoneytokenGuardEnabled" // CredentialHoneytokenGuard — false; Pro default-on
     static let reverseShellWatchKey = "RoamSwitch.ReverseShellWatchEnabled"           // ReverseShellWatchGuard — false; Pro default-on
+    static let preExecBlockKey = "RoamSwitch.PreExecBlockEnabled"                     // ExecBlockGuard — false; Pro default-on (needs the extension's approval and Full Disk Access)
     static let networkSettingsWatchKey = "RoamSwitch.NetworkSettingsWatchEnabled"     // NetworkSettingsWatchGuard — false; Pro default-on
     static let browserCredentialWatchGuardKey = "RoamSwitch.BrowserCredentialWatchGuardEnabled" // BrowserCredentialWatchGuard — false; opt-in even for Pro
+    static let credentialFileWatchGuardKey = "RoamSwitch.CredentialFileWatchEnabled"  // CredentialFileWatchGuard — false; Pro default-on (needs the extension's approval and Full Disk Access)
+    static let logTamperWatchGuardKey = "RoamSwitch.LogTamperWatchEnabled"            // LogTamperWatchGuard — false; opt-in (needs the extension's approval and Full Disk Access)
     static let clickFixGuardKey = "RoamSwitch.ClickFixGuardEnabled"                   // ClickFixGuard — false
     static let execRecorderKey = "RoamSwitch.ExecRecorder.Enabled"                    // ExecRecorderManager — false (Pro, opt-in)
     static let dockerEventGuardKey = "RoamSwitch.DockerEventGuardEnabled"             // DockerEventGuard — false
@@ -1057,6 +1086,27 @@ public enum MCPResponseFormatting {
     static let agentSetupWatchKey = "RoamSwitch.AgentSetupWatchEnabled"               // AgentSetupWatch — true (Pro; needs an accepted state; the menu item turns it off)
     static let dependencyWatchKey = "RoamSwitch.DependencyWatchEnabled"               // DependencyWatch — true (Pro; the menu item turns it off)
     static let configRegressionNoticeKey = "RoamSwitch.ConfigRegressionNoticeEnabled" // ConfigRegressionNotice — true (Pro; the menu item turns it off)
+    /// The guards that can take their input from Endpoint Security events, and the use (`ESSystemUse`) of each: `get_guard_status` says
+    /// where the input comes from now (`MCPGuardEntryPayload.input`). A test keeps the names equal to `ESSystemUse`'s.
+    static let endpointSecurityInputUses: [String: String] = [
+        "persistenceMonitor": "btm", "sshGuard": "ssh", "runtimeThreatContainment": "xprotect",
+        "reverseShellWatch": "reverseShellHint", "dockerEventGuard": "dockerHint", "webWorkerCrashWatch": "webWorkerExit",
+        "esAccountWatch": "sudo", "esInjectionWatch": "injection", "esQuarantineWatch": "quarantine",
+    ]
+
+    /// What the app wrote for the use (`ESSystemPathRecord`, in `Shared/ESSystemEvents.swift`, which this smaller module does not link: the
+    /// key prefix and the 180-second freshness are repeated here and a test keeps them equal), if it is fresh.
+    static func endpointSecurityInput(use: String, defaults: UserDefaults, now: Double) -> String? {
+        guard let r = defaults.dictionary(forKey: "RoamSwitch.ESSystemPathV1." + use), let s = r["state"] as? String, let at = r["at"] as? Double,
+              now - at <= 180, at - now <= 180 else { return nil }
+        return s
+    }
+
+    /// The guards that are only the Endpoint Security extension's system-events client (`ESSystemWatch.guardKeys`; a test keeps the two equal).
+    static let endpointSecurityWatchKeys: Set<String> = ["esAccountWatch", "esInjectionWatch", "esQuarantineWatch"]
+    static let esInjectionWatchKey = "RoamSwitch.ESInjectionWatchEnabled"           // ESInjectionWatchGuard — false; opt-in even for Pro (needs the Endpoint Security extension)
+    static let esQuarantineWatchKey = "RoamSwitch.ESQuarantineWatchEnabled"         // ESQuarantineWatchGuard — false; opt-in even for Pro (needs the Endpoint Security extension)
+    static let esAccountWatchKey = "RoamSwitch.ESAccountWatchEnabled"               // ESAccountWatchGuard — false; opt-in even for Pro (needs the Endpoint Security extension)
     static let outboundScanWatchKey = "RoamSwitch.OutboundScanWatchEnabled"           // OutboundScanWatch — false; opt-in even for Pro (needs the system extension)
     static let portScanGuardKey = "RoamSwitch.PortScanGuardEnabled"                   // PortScanGuard — false; Pro default-on
     static let sshGuardKey = "RoamSwitch.SSHGuardEnabled"                             // SSHGuard — false; Pro default-on (works only while Remote Login is on)
@@ -1181,7 +1231,7 @@ public enum MCPResponseFormatting {
 
     // MARK: verify_security_findings
 
-    /// 1回に指定できる checkId の上限(超過分は無視して注意書きを付ける)。全25項目より十分大きく、
+    /// 1回に指定できる checkId の上限(超過分は無視して注意書きを付ける)。全26項目より十分大きく、
     /// 巨大な引数でレスポンスが膨らまないための歯止め。
     public static let maxVerifyCheckIds = 50
     /// 未知の checkId をそのまま返すときの最大文字数(入力はエージェント由来で信頼できない)。
@@ -1461,7 +1511,15 @@ public enum MCPResponseFormatting {
         guards.append(entry("ransomwareEntropyGuard", ransomwareEntropyGuardKey, defaultWhenUnset: false))
         guards.append(entry("credentialHoneytokenGuard", credentialHoneytokenGuardKey, defaultWhenUnset: false))
         guards.append(entry("browserCredentialWatchGuard", browserCredentialWatchGuardKey, defaultWhenUnset: false))
+        guards.append(entry("credentialFileWatchGuard", credentialFileWatchGuardKey, defaultWhenUnset: false))
+        guards.append(entry("logTamperWatchGuard", logTamperWatchGuardKey, defaultWhenUnset: false))
         guards.append(entry("reverseShellWatch", reverseShellWatchKey, defaultWhenUnset: false))
+        #if ES_AUTH
+        guards.append(entry("preExecBlock", preExecBlockKey, defaultWhenUnset: false))
+        #endif
+        guards.append(entry("esAccountWatch", esAccountWatchKey, defaultWhenUnset: false))
+        guards.append(entry("esInjectionWatch", esInjectionWatchKey, defaultWhenUnset: false))
+        guards.append(entry("esQuarantineWatch", esQuarantineWatchKey, defaultWhenUnset: false))
         guards.append(entry("networkSettingsWatch", networkSettingsWatchKey, defaultWhenUnset: false))
         guards.append(entry("clickFixGuard", clickFixGuardKey, defaultWhenUnset: false))
         guards.append(entry("execRecorder", execRecorderKey, defaultWhenUnset: false))
@@ -1534,6 +1592,37 @@ public enum MCPResponseFormatting {
                let enforcement = LinkGuardEnforcement.read(defaults: defaults, now: now.timeIntervalSince1970), enforcement != .systemExtension {
                 out.liveState = "off"
                 out.liveStateReason = enforcement == .waitingForApproval ? "system_extension_not_approved" : "system_extension_not_active"
+            }
+            #if ES_AUTH
+            // The pre-exec block is the Endpoint Security extension: with the switch on but the extension not approved, not
+            // allowed Full Disk Access or not running, nothing is stopped, whatever the switch says.
+            if g.key == "preExecBlock", g.enabledInSettings, out.liveState == "on",
+               let enforcement = ESEnforcement.read(purpose: ESPurpose.execBlock, defaults: defaults, now: now.timeIntervalSince1970), !enforcement.isActive {
+                out.liveState = "off"
+                out.liveStateReason = enforcement.reasonCode
+            }
+            #endif
+            // Which way the guard sees the change it watches: through the Endpoint Security extension ("es") or by its own older way
+            // ("fallback", with the extension's reason). Two guards have no older way (real credential files, log and history tampering):
+            // without the extension they see nothing, whatever the switch says.
+            if let id = ESGuardRouteState.guardID(forKey: g.key),
+               let route = ESGuardRouteState.read(id, defaults: defaults, now: now.timeIntervalSince1970) {
+                out.esRoute = route.state.rawValue
+                out.esRouteReason = route.reason
+                if ESGuardRouteState.hasNoFallback(key: g.key), g.enabledInSettings, out.liveState == "on", route.state == .fallback {
+                    out.liveState = "off"
+                    out.liveStateReason = route.reason ?? "es_not_active"
+                }
+            }
+            // The account watch is only the Endpoint Security extension: with the switch on but the extension not approved, not
+            // allowed Full Disk Access or not running, nothing is watched, whatever the switch says.
+            if let use = Self.endpointSecurityInputUses[g.key], g.enabledInSettings || g.key == "webWorkerCrashWatch" {
+                out.input = Self.endpointSecurityInput(use: use, defaults: defaults, now: now.timeIntervalSince1970)
+            }
+            if Self.endpointSecurityWatchKeys.contains(g.key), g.enabledInSettings, out.liveState == "on",
+               let enforcement = ESEnforcement.read(purpose: ESPurpose.systemEvents, defaults: defaults, now: now.timeIntervalSince1970), !enforcement.isActive {
+                out.liveState = "off"
+                out.liveStateReason = enforcement.reasonCode
             }
             return out
         }
@@ -1618,6 +1707,8 @@ public enum MCPResponseFormatting {
         case .ransomwareEntropy: return loc("汎用ランサムウェア検知（エントロピー解析）")
         case .honeytoken: return loc("認証情報ハニートークン")
         case .browserCredentialWatch: return loc("ブラウザ認証情報アクセス監視")
+        case .credentialFileWatch: return loc("認証情報ファイルの読み取り監視")
+        case .logTamperWatch: return loc("ログと履歴の消去の検知")
         case .reverseShellWatch: return loc("リバースシェル検知")
         case .networkSettingsWatch: return loc("ネットワーク設定の変化の監視")
         case .sshGuard: return loc("SSH総当たり検知")
@@ -1816,14 +1907,16 @@ public enum MCPResponseFormatting {
     }
 
     /// What `evidenceChecks` means, in the Linux edition's wording.
-    static let evidenceChecksNote = "evidenceChecks compares each evidence bundle the events refer to (evidenceRefs[].bundle) with chain.log as it is now. matches: the chain is intact and the manifest is as recorded. bundle_missing: pruned or deleted. manifest_altered: the manifest differs from the one recorded at capture. ref_changed: the hash held by the timeline differs from the chain's. chain_broken: the chain was edited (chainBrokenAt is the first bundle that no longer follows). not_anchored: the chain has no line for it. unchecked: the chain could not be read. stale: true means the reference no longer matches and the evidence should not be relied on without checking get_forensic_evidence_bundles."
+    static let evidenceChecksNote = "evidenceChecks compares each evidence bundle the events refer to (evidenceRefs[].bundle) with chain.log as it is now. matches: the chain is intact and the manifest is as recorded. bundle_missing: pruned or deleted. manifest_altered: the manifest differs from the one recorded at capture. ref_changed: the hash held by the timeline differs from the chain's. chain_broken: the chain was edited (chainBrokenAt is the first bundle that no longer follows). anchor_removed: the chain begins with a start mark, the bundle was captured after it, and its line is gone (cut off the end). not_anchored: the chain has no line for it (a bundle from before the chain, or a chain with no start mark). chainHead is the end of the chain now ({seq, chain}); keep it elsewhere and pass it back as witness \"SEQ:HASH\" to get chainWitness: consistent, truncated (the chain has fewer lines), diverged (that line differs), invalid or chain_broken. unchecked: the chain could not be read. stale: true means the reference no longer matches and the evidence should not be relied on without checking get_forensic_evidence_bundles."
 
     /// `chain`: the check of the whole stored file (nil: not checked). `evidenceChecks`: how each evidence bundle the records name stands against the anchor chain (empty: none named or not checked). `readerHealth`: the reader-health records saved
     /// now, so a gap recorded after a record was written still marks it `blindNear` (nil: only the stored mark).
     public static func makeIncidentTimelinePayload(events: [ContainmentIncidentEvent], fileState: ContainmentIncidentTimeline.FileState = .ok,
                                                    chain: IncidentChain.Verification? = nil,
                                                    readerHealth: [String: GuardReaderHealth]? = nil,
-                                                   evidenceChecks: [MCPEvidenceCheckPayload] = []) -> MCPIncidentTimelinePayload {
+                                                   evidenceChecks: [MCPEvidenceCheckPayload] = [],
+                                                   chainHead: MCPChainHeadPayload? = nil,
+                                                   chainWitness: String? = nil) -> MCPIncidentTimelinePayload {
         let iso = ISO8601DateFormatter()
         let isBlind: (ContainmentIncidentEvent) -> Bool = { e in
             e.blindNear || (readerHealth.map { IncidentBlindSpot.isBlindNear(e, records: $0) } ?? false)
@@ -1895,6 +1988,8 @@ public enum MCPResponseFormatting {
             result.evidenceChecks = evidenceChecks
             result.evidenceChecksNote = evidenceChecksNote
         }
+        result.chainHead = chainHead
+        result.chainWitness = chainWitness
         return result
     }
 

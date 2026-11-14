@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.36 (build 215). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 2.0.0 (build 216). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -114,22 +114,59 @@ final class DetectionCoverageTests: XCTestCase {
 
     func testTechniquesWithNoMatchingCodeStayNone() {
         // These were searched for and not found; promoting one needs code and a new test, not a text edit.
-        for id in ["T1686", "T1685.006", "T1070.003", "T1574.004", "T1036", "T1055", "T1547.015"] {
+        for id in ["T1686", "T1574.004"] {
             let entry = DetectionCoverage.entries.first { $0.technique == id }
             XCTAssertEqual(entry?.coverage, DetectionCoverage.Coverage.none, id)
         }
     }
 
+    func testTechniquesTheEndpointSecurityWatchesNowCoverArePartialAndSayWhatTheyNeed() {
+        // Promoted with code (`LogTamperWatchGuard`, `CredentialFileWatchGuard`) and their tests (`ESGuardCredentialAndLogTests`).
+        for id in ["T1685.006", "T1070.003"] {
+            let e = DetectionCoverage.entries.first { $0.technique == id }
+            XCTAssertEqual(e?.coverage, .partial, id)
+            XCTAssertEqual(e?.sources.map(\.id), ["logTamperWatchGuard"], id)
+            XCTAssertTrue(e?.blindSpot.contains("Endpoint Security") ?? false, "\(id): the limit says it needs the extension")
+        }
+        let creds = DetectionCoverage.entries.first { $0.technique == "T1552.001" }
+        XCTAssertTrue(creds?.sources.contains { $0.kind == "guard" && $0.id == "credentialFileWatchGuard" } ?? false)
+        XCTAssertFalse(creds?.blindSpot.contains("Reading a real credential file is not detected") ?? true, "the old \"cannot\" sentence is gone")
+        XCTAssertTrue(creds?.blindSpot.contains("~/.kube/config") ?? false, "what is left out is said")
+    }
+
+    /// Promoted with code and tests: the exec rule `exec.name_masquerade` (`ExecNameMasqueradeTests`).
+    func testMasqueradingIsPartialThroughTheNameMasqueradeRule() {
+        let entry = DetectionCoverage.entries.first { $0.technique == "T1036" }
+        XCTAssertEqual(entry?.coverage, DetectionCoverage.Coverage.partial)
+        XCTAssertEqual(entry?.sources.map(\.id), ["execRecorder", "exec.name_masquerade"])
+    }
+
+    /// Promoted with code and tests: ES's task-port, thread and trace events (`ESInjectionRules`, `ESInjectionRulesTests`).
+    func testProcessInjectionIsPartialThroughTheTaskPortEvents() {
+        let entry = DetectionCoverage.entries.first { $0.technique == "T1055" }
+        XCTAssertEqual(entry?.coverage, DetectionCoverage.Coverage.partial)
+        XCTAssertEqual(entry?.sources.map(\.id), ["esInjectionWatch"])
+        XCTAssertTrue(entry?.blindSpot.contains("allow-list") == true, "it says how false alarms are kept down")
+    }
+
+    /// Promoted with code and tests: ES's NOTIFY_BTM_LAUNCH_ITEM_ADD (`PersistenceMonitorGuard.handleBTM`, `ESSystemEventsTests`).
+    func testLoginItemsArePartialThroughTheRegistrationEvent() {
+        let entry = DetectionCoverage.entries.first { $0.technique == "T1547.015" }
+        XCTAssertEqual(entry?.coverage, DetectionCoverage.Coverage.partial)
+        XCTAssertEqual(entry?.sources.map(\.id), ["persistenceMonitor"])
+        XCTAssertTrue(entry?.blindSpot.contains("Endpoint Security") == true, "it says what the detection needs")
+    }
+
     private func entry(_ technique: String) -> DetectionCoverage.Entry { DetectionCoverage.entries.first { $0.technique == technique }! }
 
     func testLiveStateFollowsTheGuardToggles() {
-        // T1553.001: one covering guard (execRecorder). T1543.001: execRecorder and persistenceMonitor.
-        XCTAssertEqual(DetectionCoverage.liveState(of: entry("T1553.001"), guardStates: ["execRecorder": "on"]), .on)
-        XCTAssertEqual(DetectionCoverage.liveState(of: entry("T1553.001"), guardStates: ["execRecorder": "off"]), .off)
+        // T1574.006: one covering guard (execRecorder). T1543.001: execRecorder and persistenceMonitor.
+        XCTAssertEqual(DetectionCoverage.liveState(of: entry("T1574.006"), guardStates: ["execRecorder": "on"]), .on)
+        XCTAssertEqual(DetectionCoverage.liveState(of: entry("T1574.006"), guardStates: ["execRecorder": "off"]), .off)
         XCTAssertEqual(DetectionCoverage.liveState(of: entry("T1543.001"), guardStates: ["execRecorder": "on", "persistenceMonitor": "off"]), .partial)
         XCTAssertEqual(DetectionCoverage.liveState(of: entry("T1543.001"), guardStates: ["execRecorder": "on"]), .unknown, "a guard missing from the vocabulary is unknown")
         XCTAssertEqual(DetectionCoverage.liveState(of: entry("T1685"), guardStates: [:]), .unknown, "a feature has no toggle to read")
-        XCTAssertEqual(DetectionCoverage.liveState(of: entry("T1055"), guardStates: [:]), .notApplicable, "nothing covers it")
+        XCTAssertEqual(DetectionCoverage.liveState(of: entry("T1574.004"), guardStates: [:]), .notApplicable, "nothing covers it")
     }
 
     func testPayloadShapeMatchesTheLinuxEdition() throws {
@@ -165,12 +202,14 @@ final class DetectionCoverageTests: XCTestCase {
     }
 
     func testGuardsListHoldsEveryGuardReliedOnOnceInOrderOfUse() throws {
-        let guards = guardVocabulary().map { MCPGuardEntryPayload(key: $0.key, enabledInSettings: $0.key == "execRecorder", usingDefault: false) }
-        let payload = DetectionCoverage.payload(guards: guards)
+        // The first guard is the first one an entry of the list relies on (the history and log watch, since it was added to the first entries).
         let relied = DetectionCoverage.entries.flatMap { $0.sources }.filter { $0.kind == "guard" }.map(\.id)
+        let firstUsed = try XCTUnwrap(relied.first)
+        let guards = guardVocabulary().map { MCPGuardEntryPayload(key: $0.key, enabledInSettings: $0.key == firstUsed, usingDefault: false) }
+        let payload = DetectionCoverage.payload(guards: guards)
         XCTAssertEqual(Set(payload.guards.map(\.id)), Set(relied))
         XCTAssertEqual(payload.guards.count, Set(relied).count)
-        XCTAssertEqual(payload.guards.first?.id, "execRecorder")
+        XCTAssertEqual(payload.guards.first?.id, firstUsed)
         XCTAssertEqual(payload.guards.first?.state, "on")
         XCTAssertEqual(payload.guards.first { $0.id == "persistenceMonitor" }?.state, "off")
         // Unknown guard id -> unknown.
@@ -182,12 +221,12 @@ final class DetectionCoverageTests: XCTestCase {
         let guards = guardVocabulary().map { MCPGuardEntryPayload(key: $0.key, enabledInSettings: $0.key == "execRecorder", usingDefault: false) }
         let payload = DetectionCoverage.payload(guards: guards)
         func t(_ id: String) throws -> DetectionCoverage.TechniquePayload { try XCTUnwrap(payload.techniques.first { $0.id == id }) }
-        XCTAssertEqual(try t("T1553.001").liveState, "on")
-        XCTAssertEqual(try t("T1553.001").coveredBy, ["execRecorder", "exec.quarantine_stripped_then_exec", "gatekeeper_app_verification"])
+        XCTAssertEqual(try t("T1574.006").liveState, "on")
+        XCTAssertEqual(try t("T1574.006").coveredBy, ["execRecorder", "exec.dyld_insert_libraries"])
         XCTAssertEqual(try t("T1543.001").liveState, "partial")
         XCTAssertEqual(try t("T1685").liveState, "unknown")
-        XCTAssertEqual(try t("T1055").liveState, "not_applicable")
-        XCTAssertEqual(try t("T1055").coverage, "none")
+        XCTAssertEqual(try t("T1574.004").liveState, "not_applicable")
+        XCTAssertEqual(try t("T1574.004").coverage, "none")
     }
 
     func testToolIsListedAndCallable() throws {
@@ -261,10 +300,10 @@ final class DetectionCoverageNavigatorLayerTests: XCTestCase {
     func testColoursFollowTheCoverage() throws {
         let techniques = try XCTUnwrap(try layer()["techniques"] as? [[String: Any]])
         func color(_ id: String) -> String? { techniques.first { $0["techniqueID"] as? String == id }?["color"] as? String }
-        // T1543.001 detects, T1685 partial, T1055 none.
+        // T1543.001 detects, T1685 partial, T1574.004 none.
         XCTAssertEqual(color("T1543.001"), "#3fb950")
         XCTAssertEqual(color("T1685"), "#e3b341")
-        XCTAssertEqual(color("T1055"), "#f85149")
+        XCTAssertEqual(color("T1574.004"), "#f85149")
         for t in techniques {
             let coverage = DetectionCoverage.entries.first { $0.technique == t["techniqueID"] as? String }?.coverage
             let expected: Int = coverage == .detects ? 2 : (coverage == .partial ? 1 : 0)

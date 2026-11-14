@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.36 (build 215).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.0.0 (build 216).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -62,19 +62,22 @@ enum DetectionCoverage {
         Entry(technique: "T1686", name: "Disable or Modify System Firewall", coverage: .none,
               sources: [],
               blindSpot: "RoamSwitch applies its own firewall rules, but its audit reports RoamSwitch's protection level, not the macOS firewall, so a change made outside RoamSwitch is not detected."),
-        // T1685.006 (T1070.002 before ATT&CK v19). SecurityLogAuditor.swift reads logs for anomalies; nothing watches the logs themselves.
-        Entry(technique: "T1685.006", name: "Disable or Modify Tools: Clear Linux or Mac System Logs", coverage: .none,
-              sources: [],
-              blindSpot: "System logs are read for the log audit, but their deletion or truncation is not detected."),
-        // T1070.003. ClickFixGuard.swift reads ~/.zsh_history and ~/.bash_history for pasted commands only.
-        Entry(technique: "T1070.003", name: "Indicator Removal: Clear Command History", coverage: .none,
-              sources: [],
-              blindSpot: "The shell history is read by the ClickFix guard to find pasted commands, but clearing or disabling the history is not detected."),
+        // T1685.006 (T1070.002 before ATT&CK v19). RoamSwitch/LogTamperWatchGuard.swift: opt-in, notify-only; the Endpoint Security
+        // extension reports the removal, move, truncation or large shrinking of /var/log/system.log, install.log and wifi.log (and their rotated copies).
+        Entry(technique: "T1685.006", name: "Disable or Modify Tools: Clear Linux or Mac System Logs", coverage: .partial,
+              sources: [guardSource("logTamperWatchGuard")],
+              blindSpot: "Opt-in, notify-only, and only through the Endpoint Security extension (approved, with Full Disk Access): without it nothing is seen. Only the few text logs the system still writes (system.log, install.log, wifi.log and their rotated copies) are watched. The unified log is not: `log erase` is carried out by the system's own logd, so the program the extension names is not told apart from the system's. The system's own rotation (newsyslog) is not reported."),
+        // T1070.003. RoamSwitch/LogTamperWatchGuard.swift: the same watch covers ~/.zsh_history, ~/.bash_history, fish's history and ~/.zsh_sessions.
+        Entry(technique: "T1070.003", name: "Indicator Removal: Clear Command History", coverage: .partial,
+              sources: [guardSource("logTamperWatchGuard")],
+              blindSpot: "Opt-in, notify-only, and only through the Endpoint Security extension. A history file that is removed, moved away, truncated or written to under half of its size (under a tenth when the shell itself writes it) is reported, with the program that did it. Switching the history off (unset HISTFILE, setopt NO_HIST, a shell started without one) leaves no file event and is not detected, and a small history (under 2 KB) is not worth a notice."),
         // T1553.001. Shared/ExecCorrelationRules.swift rule 5 (xattr -d/-c com.apple.quarantine, then an exec
         // under that path within a window); SecurityHealthChecker.swift gatekeeper_app_verification.
+        // RoamSwitch/ESQuarantineWatchGuard.swift, Shared/ESQuarantineRules.swift: NOTIFY_DELETEEXTATTR of com.apple.quarantine, however
+        // it is removed (the command or the API), and NOTIFY_GATEKEEPER_USER_OVERRIDE (macOS 15).
         Entry(technique: "T1553.001", name: "Subvert Trust Controls: Gatekeeper Bypass", coverage: .partial,
-              sources: [guardSource("execRecorder"), rule("exec.quarantine_stripped_then_exec"), check("gatekeeper_app_verification")],
-              blindSpot: "The rule needs the exec recorder (Pro, off by default) and fires only when something under the path is run shortly after its quarantine flag was removed. Gatekeeper being switched off is reported by the audit check when it is run."),
+              sources: [guardSource("execRecorder"), rule("exec.quarantine_stripped_then_exec"), check("gatekeeper_app_verification"), guardSource("esQuarantineWatch")],
+              blindSpot: "The rule needs the exec recorder (Pro, off by default) and fires only when something under the path is run shortly after its quarantine flag was removed. The quarantine watch (opt-in, Pro, notify only, needs the Endpoint Security extension) tells when the flag is removed from a file in Downloads, the Desktop, a shared or temporary folder or an external volume, by the xattr command or by any program that is not Apple's own or a trusted team, and when the person overrides a Gatekeeper warning (macOS 15 and later); a removal under /Applications and by Apple's installers is not told, and setting the flag to the approved value is not seen. Gatekeeper being switched off is reported by the audit check when it is run."),
         // T1574.006. Shared/ExecCorrelationRules.swift rule dyldInsertLibraries: DYLD_INSERT_LIBRARIES on the
         // exec of a non-Apple-signed binary (ExecEventRecord.dyldInsertLibraries).
         Entry(technique: "T1574.006", name: "Hijack Execution Flow: Dynamic Linker Hijacking", coverage: .partial,
@@ -83,12 +86,16 @@ enum DetectionCoverage {
         Entry(technique: "T1574.004", name: "Hijack Execution Flow: Dylib Hijacking", coverage: .none,
               sources: [],
               blindSpot: "A planted or missing dylib that an app loads by search path is not checked."),
-        Entry(technique: "T1036", name: "Masquerading", coverage: .none,
-              sources: [],
-              blindSpot: "A name is not compared with what the binary really is. Fake launch items are caught through their signature and interpreter use (see T1543), not through the name."),
-        Entry(technique: "T1055", name: "Process Injection", coverage: .none,
-              sources: [],
-              blindSpot: "Code injected into a running process is not detected."),
+        // T1036 (T1036.005). Shared/ExecNameMasquerade.swift and the rule exec.name_masquerade in Shared/ExecCorrelationRules.swift: the
+        // path, signing identifier, Team ID and platform flag the Endpoint Security process client reports for each exec.
+        Entry(technique: "T1036", name: "Masquerading", coverage: .partial,
+              sources: [guardSource("execRecorder"), rule("exec.name_masquerade")],
+              blindSpot: "Needs the exec recorder (Pro, off by default) with its Endpoint Security input. Only a program that is not in the system folders, /Applications, /usr/local or /opt/homebrew, and either carries a com.apple. signing identifier without being an Apple platform binary or Apple's own team's, or has the file name of one of a short list of system processes (launchd, WindowServer, loginwindow, ...), is told. A fake that takes the name of an ordinary app, a program hidden under /Applications, a name that differs by a look-alike character, and a process that renames itself after it starts are not seen. Fake launch items are also caught through their signature and interpreter use (see T1543)."),
+        // T1055. RoamSwitch/ESInjectionWatchGuard.swift, Shared/ESInjectionRules.swift: the Endpoint Security extension's
+        // NOTIFY_GET_TASK / GET_TASK_READ / REMOTE_THREAD_CREATE / TRACE.
+        Entry(technique: "T1055", name: "Process Injection", coverage: .partial,
+              sources: [guardSource("esInjectionWatch")],
+              blindSpot: "Opt-in, Pro, notify only, and it needs the Endpoint Security extension (approved, with Full Disk Access). It tells when a process that Apple did not sign, is not a parent holding its own child and is not on the short allow-list of debuggers (Apple's developer tools, Visual Studio Code, Chrome, Zoom) takes the task port of, creates a thread in, or traces one of RoamSwitch's own processes, a root process Apple did not sign, or a service-account process; or when an unsigned, ad-hoc signed or temp-folder program does it to any other process. A debugger that is not on the allow-list can still be told when it meets such a target. Injection into an ordinary user process by a signed, allow-listed or parent process is not told, and neither is an injection that does not use a task port or thread creation (a library loaded through DYLD_INSERT_LIBRARIES is the exec rule's, T1574.006). Code-signing invalidation and process-info checks are not used: they fire on ordinary updates and every ps."),
         // T1027.010. Shared/ExecCorrelationRules.swift rules interpreterInlineObfuscated (python/perl/ruby/php/
         // pwsh one-liners with base64/eval plus a download) and osascriptObfuscated.
         Entry(technique: "T1027.010", name: "Obfuscated Files or Information: Command Obfuscation", coverage: .partial,
@@ -102,11 +109,12 @@ enum DetectionCoverage {
         // T1059.004. Shared/ExecCorrelationRules.swift rules 1, 3 and 14: a shell or interpreter started by a
         // browser, Office or mail app; a download piped into a shell together with an aggravating fact; a
         // reverse or bind shell command line (reverseShellShape). RoamSwitch/ReverseShellScan.swift and
-        // ReverseShellWatchGuard.swift: a live poll (libproc, every 4 seconds) of the user's own shells,
+        // ReverseShellWatchGuard.swift: a live poll (libproc, every 4 seconds, and two extra scans 0.6 and 2 seconds after the Endpoint Security
+        // extension sees nc, ncat, socat, a shell or an interpreter start) of the user's own shells,
         // interpreters and nc/ncat/socat for an outward public TCP connection that is their input and output.
         Entry(technique: "T1059.004", name: "Command and Scripting Interpreter: Unix Shell", coverage: .partial,
               sources: [guardSource("reverseShellWatch"), guardSource("execRecorder"), rule("exec.shell_from_app"), rule("exec.pipe_to_shell"), rule("exec.reverse_shell_argv"), rule("exec.agent_repeat")],
-              blindSpot: "Flags a shell started by a browser, Office or mail app, and a download piped into a shell only together with an aggravating fact. A plain curl | sh typed in a terminal looks like an official installer and is not flagged on its own. The exec recorder (opt-in) flags a reverse or bind shell only when it is spelled out on a sh -c command line or an nc, ncat or socat command line. The reverse-shell watch (Pro, on by default) sees a live one: a shell or interpreter, or nc, ncat or socat running a program, whose input and output are an established outward TCP connection to a public address, found on a poll every few seconds and notified once the second poll agrees. The app reads the logged-in user's own processes; the processes of other accounts, root's included, are read by the root helper and merged in (a helper older than the app is not asked, and then a root-owned shell is not seen). A peer on a private network (home LAN, Tailscale, containers) is not watched unless the person turns on the menu item that includes the local network (off by default), loopback is never watched, and neither is a program that is not one of the listed shells, interpreters or relay tools. A shell written into a script file or compiled into a program is not seen until it connects. The exec recorder's agent-repeat rule (opt-in, off by default, notify only) reports an AI coding agent that runs the same kind of operation (ssh, sudo, curl or wget to another host, a credential-file read, git push) many times in a short window; it counts the same operation, not failures, and says nothing about what the commands do."),
+              blindSpot: "Flags a shell started by a browser, Office or mail app, and a download piped into a shell only together with an aggravating fact. A plain curl | sh typed in a terminal looks like an official installer and is not flagged on its own. The exec recorder (opt-in) flags a reverse or bind shell only when it is spelled out on a sh -c command line or an nc, ncat or socat command line. The reverse-shell watch (Pro, on by default) sees a live one: a shell or interpreter, or nc, ncat or socat running a program, whose input and output are an established outward TCP connection to a public address, found on a poll every few seconds (and on two extra scans 0.6 and 2 seconds after the Endpoint Security extension, when it runs, sees nc, ncat, socat, a shell or an interpreter start; a connection that lives for less than about two seconds is still missed) and notified once the second poll agrees. The app reads the logged-in user's own processes; the processes of other accounts, root's included, are read by the root helper and merged in (a helper older than the app is not asked, and then a root-owned shell is not seen). A peer on a private network (home LAN, Tailscale, containers) is not watched unless the person turns on the menu item that includes the local network (off by default), loopback is never watched, and neither is a program that is not one of the listed shells, interpreters or relay tools. A shell written into a script file or compiled into a program is not seen until it connects. The exec recorder's agent-repeat rule (opt-in, off by default, notify only) reports an AI coding agent that runs the same kind of operation (ssh, sudo, curl or wget to another host, a credential-file read, git push) many times in a short window; it counts the same operation, not failures, and says nothing about what the commands do."),
         // T1557.003. RoamSwitch/NetworkSettingsWatch.swift and NetworkSettingsWatchGuard.swift (system configuration
         // store: DNS servers, router, proxy auto-config compared with what the same network gave before) and
         // ProxyAutoDiscoveryCheck.swift (audit check proxy_autodiscovery: Auto Proxy Discovery / PAC in force).
@@ -115,9 +123,11 @@ enum DetectionCoverage {
               blindSpot: "A rogue DHCP server cannot be seen directly; only its result is. A new DNS server, or a new router together with one, on a network that RoamSwitch has seen before is notified, as is a new proxy auto-config (PAC) address or Auto Proxy Discovery (WPAD) switched on. The first time a network is seen it is only learned. A rogue server that hands out the same DNS and router as before, or a well-known public resolver, is not noticed, and neither is a change on a VPN or other tunnel. A DNS-over-HTTPS profile is not compared. The resolvers saved in a wired or Wi-Fi service's own settings (by `networksetup -setdnsservers` or the Network pane) are compared with that service's own history, not the network's: one that service never had saved, other than the router's address, loopback, a well-known public resolver or RoamSwitch's own secure DNS, is notified once as a weak notice. Who wrote the saved setting cannot be told, so a change the person made looks the same, and the first look after the watch starts and a service seen for the first time are only learned. The audit check reports Auto Proxy Discovery or a network-supplied PAC address being on, and does not read the PAC file."),
         // T1553.004. RoamSwitch/TrustAnchorCheck.swift (audit check trust_anchors: the certificates the user or an
         // administrator set to "trust", read with `security dump-trust-settings`).
+        // RoamSwitch/ESSystemWatchGuard.swift (esAccountWatch): the Endpoint Security extension's NOTIFY_PROFILE_ADD tells when a
+        // configuration profile (which can carry a root certificate) is installed, with the process that did it.
         Entry(technique: "T1553.004", name: "Subvert Trust Controls: Install Root Certificate", coverage: .partial,
-              sources: [check("trust_anchors")],
-              blindSpot: "Only the certificates that have a trust setting in the user and administrator domains are listed, which is every certificate somebody added to what the Mac trusts. When one was added is not known, a new one is not notified as it appears, and a certificate an application carries for itself never touches the system trust and is not seen. Added certificates whose names do not look like an interception tool are reported as information, because a company or a developer tool adds its own on purpose."),
+              sources: [check("trust_anchors"), guardSource("esAccountWatch")],
+              blindSpot: "Only the certificates that have a trust setting in the user and administrator domains are listed, which is every certificate somebody added to what the Mac trusts. The account watch (opt-in, Pro, needs the Endpoint Security extension and macOS 14 or later) notifies when a configuration profile is installed, but the event does not say what the profile contains, and a certificate added with the security command (not a profile) is seen only by the audit check, which does not notify as it appears. A certificate an application carries for itself never touches the system trust and is not seen. Added certificates whose names do not look like an interception tool are reported as information, because a company or a developer tool adds its own on purpose."),
         // T1557.001. mDNSResponder carries no LLMNR code (searched), so macOS has no LLMNR to poison. NetBIOS name
         // service is another matter: /usr/sbin/netbiosd ships with macOS and runs as a LaunchDaemon.
         Entry(technique: "T1557.001", name: "Adversary-in-the-Middle: LLMNR/NBT-NS Poisoning and SMB Relay", coverage: .none,
@@ -128,10 +138,10 @@ enum DetectionCoverage {
         // rule 6 (an unsigned or ad-hoc binary started by launchd from a just-written plist).
         Entry(technique: "T1543.001", name: "Create or Modify System Process: Launch Agent", coverage: .detects,
               sources: [guardSource("persistenceMonitor"), guardSource("execRecorder"), rule("exec.launchd_untrusted_binary")],
-              blindSpot: "A new plist is noticed within seconds, but it cannot be blocked (there is no EndpointSecurity authorization hook), and a validly signed program passes the signature check."),
+              blindSpot: "A new plist is noticed within seconds, but it is not blocked (RoamSwitch's Endpoint Security extension authorizes only the start of a program that matched a threat rule, not the writing of a plist), and a validly signed program passes the signature check."),
         Entry(technique: "T1543.004", name: "Create or Modify System Process: Launch Daemon", coverage: .detects,
               sources: [guardSource("persistenceMonitor"), guardSource("execRecorder"), rule("exec.launchd_untrusted_binary")],
-              blindSpot: "A new plist is noticed within seconds, but it cannot be blocked (there is no EndpointSecurity authorization hook), and a validly signed program passes the signature check."),
+              blindSpot: "A new plist is noticed within seconds, but it is not blocked (RoamSwitch's Endpoint Security extension authorizes only the start of a program that matched a threat rule, not the writing of a plist), and a validly signed program passes the signature check."),
         // T1546.004. RoamSwitch/StartupScriptWatch.swift (polled every 5 seconds, run by the persistence monitor):
         // zsh, bash and fish start-up files in the home folder and /etc.
         Entry(technique: "T1546.004", name: "Event Triggered Execution: Unix Shell Configuration Modification", coverage: .partial,
@@ -142,25 +152,27 @@ enum DetectionCoverage {
         Entry(technique: "T1546.018", name: "Event Triggered Execution: Python Startup Hooks", coverage: .partial,
               sources: [guardSource("persistenceMonitor")],
               blindSpot: "Only code that reads three or more kinds of credential store, decodes data and runs it, runs what it downloaded, or has the shape of a reverse shell is notified, and a module that hides its strings is not seen. Virtual environments are searched for four folders down from the home folder (not in Desktop, Documents, Downloads or Library) once a minute; environments elsewhere and inside containers are not watched."),
-        Entry(technique: "T1547.015", name: "Boot or Logon Autostart Execution: Login Items", coverage: .none,
-              sources: [],
-              blindSpot: "Login items are not monitored; the persistence monitor watches LaunchAgent and LaunchDaemon plists and a few text files (shell start-up files, periodic scripts, hooks), not the Login Items list."),
+        // T1547.015. RoamSwitch/PersistenceMonitorGuard.swift handleBTM: the Endpoint Security extension's
+        // NOTIFY_BTM_LAUNCH_ITEM_ADD (item type LOGIN_ITEM), judged by the item's own signature.
+        Entry(technique: "T1547.015", name: "Boot or Logon Autostart Execution: Login Items", coverage: .partial,
+              sources: [guardSource("persistenceMonitor")],
+              blindSpot: "Needs the Endpoint Security extension (approved, with Full Disk Access) and Pro; without it login items are not seen. A new login item is notified only when its app is unsigned or its signature does not verify, or when it is ad-hoc signed and sits in Downloads, the Desktop, a temporary folder or a hidden folder: a validly signed app that is a malicious login item is not told from a legitimate one. Items an administrator manages (MDM) are not judged. Items that were already registered when the watch started are not reported."),
         // T1555.001. Shared/ExecCorrelationRules.swift rule 7: the security command reading a secret, run by a
         // non-Apple ancestor that is not a trusted reader.
         Entry(technique: "T1555.001", name: "Credentials from Password Stores: Keychain", coverage: .partial,
               sources: [guardSource("execRecorder"), rule("exec.keychain_access")],
               blindSpot: "Only secret reads through the security command-line tool by a non-Apple process are flagged. Reading the keychain through system APIs is not seen."),
         // T1555.003. RoamSwitch/BrowserCredentialWatchGuard.swift: opt-in, notify-only watch of browser
-        // credential and cookie stores; the file header says who opened the file is a best-effort snapshot.
+        // credential and cookie stores. With the Endpoint Security extension the opener is named at the moment it opens the file.
         Entry(technique: "T1555.003", name: "Credentials from Password Stores: Credentials from Web Browsers", coverage: .partial,
               sources: [guardSource("browserCredentialWatchGuard")],
-              blindSpot: "Opt-in and notify-only. macOS does not tell an app which process opened a file. With the opt-in record of processes that open files (a second eslogger in the root helper, which keeps only the events that touch the decoys, in memory, for a few minutes, and stops itself when it costs too much CPU) the reader is named with its PID, parent, command and signature. Without it, or while it is paused or has not started yet, the reader is looked for on a best-effort basis and the notification says why it could not be named; the guard can be noisy or miss a short access."),
-        // T1552.001. RoamSwitch/CredentialHoneytokenGuard.swift and Shared/ExecCorrelationRules.swift
-        // honeytokenPath: decoy credential files only. RoamSwitch/AgentCredentialFileCheck.swift (audit check
+              blindSpot: "Opt-in and notify-only. With the Endpoint Security extension (approved, with Full Disk Access) each open of a credential or cookie store comes with the program that opened it, its signature, its parent and its command, and who may open it is judged by signature (the installed browser's own Team ID, Apple's system services), not by name. Without the extension the guard falls back to file-system notifications two seconds late and an `lsof` after them, which names the reader only if it still holds the file, and matches by name; it can then be noisy or miss a short access. Only the stores of installed browsers' existing profiles are watched, and the profile list is refreshed every five minutes."),
+        // T1552.001. RoamSwitch/CredentialHoneytokenGuard.swift (decoys) and RoamSwitch/CredentialFileWatchGuard.swift (real files, through the
+        // Endpoint Security extension); Shared/ExecCorrelationRules.swift honeytokenPath; RoamSwitch/AgentCredentialFileCheck.swift (audit check
         // agent_credential_files): permissions and location of the AI coding tools' sign-in files, metadata only.
         Entry(technique: "T1552.001", name: "Unsecured Credentials: Credentials In Files", coverage: .partial,
-              sources: [guardSource("credentialHoneytokenGuard"), guardSource("execRecorder"), rule("exec.honeytoken_path"), check("agent_credential_files")],
-              blindSpot: "Only RoamSwitch's own decoy files are watched. Reading a real credential file is not detected: the record of processes that open files watches the decoys only, and no decoy is placed at the paths real tools read on every start (it would fire constantly). The audit check looks at the permissions and location (a cloud-synced folder, a git work tree) of the sign-in files of Claude Code, Codex, Gemini CLI, GitHub Copilot and opencode, by metadata only, in their default locations. Claude Code keeps its sign-in in the Keychain on a Mac, so its file is checked only when it exists."),
+              sources: [guardSource("credentialHoneytokenGuard"), guardSource("credentialFileWatchGuard"), guardSource("execRecorder"), rule("exec.honeytoken_path"), check("agent_credential_files")],
+              blindSpot: "Reading RoamSwitch's own decoys is detected, with the reader named at the moment it happens (the Endpoint Security extension) or, without it, found after the fact. Reading a real credential file is detected only through the extension, and only for ~/.ssh/id_*, ~/.aws/credentials, the gcloud token stores, the sign-in files of Claude Code, Codex, Gemini CLI and opencode, GitHub Copilot's, the GitHub CLI's, ~/.git-credentials, ~/.netrc and ~/.pgpass, and only when the reader is not the tool the file belongs to (by name, and by signature or by a place only the system or a package manager writes to). ~/.kube/config, ~/.docker/config.json and ~/.azure are not watched: every Kubernetes, image and Azure tool opens them on each command, and the first two carry the decoys. A script run by python3 is accepted for the AWS, gcloud, .netrc and .pgpass files (not a bare -c one-liner), the same trade-off the Linux edition makes. The audit check looks at the permissions and location (a cloud-synced folder, a git work tree) of the sign-in files of Claude Code, Codex, Gemini CLI, GitHub Copilot and opencode, by metadata only, in their default locations. Claude Code keeps its sign-in in the Keychain on a Mac, so its file is checked only when it exists."),
         // T1490. Shared/ExecCorrelationRules.swift ransomwareRecoveryTampering: tmutil deletelocalsnapshots or
         // thinlocalsnapshots run by anything other than RoamSwitch or the OS.
         Entry(technique: "T1490", name: "Inhibit System Recovery", coverage: .partial,
@@ -168,20 +180,35 @@ enum DetectionCoverage {
               blindSpot: "Covers tmutil deleting or thinning local snapshots. Other ways to destroy recovery points are not watched."),
         // T1548.003. SecurityHealthChecker.swift sudo_hygiene (NOPASSWD audit); RoamSwitchHelper/HelperTool.swift
         // criticalPathFimTargets and CriticalPathFimTargets.expand (/etc/sudoers, every file in /etc/sudoers.d and /etc/pam.d hashed).
+        // RoamSwitch/ESSystemWatchGuard.swift (esAccountWatch) and Shared/ESAccountJudge.swift: NOTIFY_SUDO / NOTIFY_SU, a burst of
+        // failures, a success after one, and a command whose shape is a known abuse, with the process that ran it.
         Entry(technique: "T1548.003", name: "Abuse Elevation Control Mechanism: Sudo and Sudo Caching", coverage: .partial,
-              sources: [check("sudo_hygiene"), guardSource("criticalPathFim")],
-              blindSpot: "Detects NOPASSWD entries, and changes, additions and deletions of /etc/sudoers, the files under /etc/sudoers.d, and the PAM files under /etc/pam.d. Abuse of an already open sudo session is not seen."),
+              sources: [check("sudo_hygiene"), guardSource("criticalPathFim"), guardSource("esAccountWatch")],
+              blindSpot: "Detects NOPASSWD entries, and changes, additions and deletions of /etc/sudoers, the files under /etc/sudoers.d, and the PAM files under /etc/pam.d. The account watch (opt-in, Pro, needs the Endpoint Security extension and macOS 14 or later) also notifies a burst of failed sudo or su attempts, a sudo that works right after one, and a command whose shape is a known abuse (a reverse shell, a download piped into a shell, setuid, account or protection changes, a program from a temporary folder); an abusive command that does not look like one of those, and a sudo session reused with its cached credential, are not told apart from ordinary use."),
+        // T1021.005 / T1136.001 / T1098. RoamSwitch/ESSystemWatchGuard.swift (esAccountWatch), Shared/ESAccountJudge.swift: the
+        // Endpoint Security extension's NOTIFY_SCREENSHARING_ATTACH, NOTIFY_OD_CREATE_USER, NOTIFY_OD_GROUP_ADD,
+        // NOTIFY_OD_MODIFY_PASSWORD and NOTIFY_OD_ATTRIBUTE_SET (the Open Directory changes the helper's sandbox cannot stop).
+        Entry(technique: "T1021.005", name: "Remote Services: VNC", coverage: .partial,
+              sources: [guardSource("esAccountWatch")],
+              blindSpot: "Opt-in, Pro, notify only, and it needs the Endpoint Security extension. Every Screen Sharing connection to this Mac is notified with the source address and the account; a connection whose source address is the same as the Mac's own (a NAT gateway) is not an event. Other remote-control tools (a third-party VNC or remote-desktop server) are not seen."),
+        Entry(technique: "T1136.001", name: "Create Account: Local Account", coverage: .partial,
+              sources: [guardSource("esAccountWatch")],
+              blindSpot: "Opt-in, Pro, notify only, and it needs the Endpoint Security extension on macOS 14 or later. A local user created through Open Directory (System Settings, dscl, sysadminctl) is notified with the process that asked; a failed attempt is not. Accounts that existed before the watch started are not listed."),
+        Entry(technique: "T1098", name: "Account Manipulation", coverage: .partial,
+              sources: [guardSource("esAccountWatch")],
+              blindSpot: "Opt-in, Pro, notify only, and it needs the Endpoint Security extension on macOS 14 or later. A user added to the admin groups, a password change, and a few risky directory attributes (user ID 0, the root group, a hidden account, an unusual login shell) are notified with the process that asked. Other attribute changes, and changes made without Open Directory, are not seen."),
         // T1098.004. RoamSwitchHelper/HelperTool.swift criticalPathFimTargets: root's authorized_keys and
         // sshd_config (plus sshd_config.d) are hashed.
         Entry(technique: "T1098.004", name: "Account Manipulation: SSH Authorized Keys", coverage: .partial,
               sources: [guardSource("criticalPathFim")],
               blindSpot: "Only root's authorized_keys and the sshd configuration are hashed. Users' own ~/.ssh/authorized_keys files are not."),
         // T1110.001. RoamSwitch/SSHGuard.swift and Shared/SSHGuardCore.swift (run by RoamSwitchHelper/SSHGuardDetector.swift):
-        // failed sshd logins are read from the unified log and counted per source in a sliding window (default 6 failures
+        // failed sshd logins are read from the Endpoint Security extension's NOTIFY_OPENSSH_LOGIN events when it runs
+        // (Shared/ESSSHRules.swift), else from the unified log, and counted per source in a sliding window (default 6 failures
         // in 600 s); the source is then banned through pf for new connections to the SSH ports only.
         Entry(technique: "T1110.001", name: "Brute Force: Password Guessing", coverage: .detects,
-              sources: [guardSource("sshGuard")],
-              blindSpot: "SSH only, and only while Remote Login is on. Guessing against other services (Screen Sharing, File Sharing, a local web login) is not looked at, a source that stays under the failure limit is not banned, and a ban never cuts a session that is already open."),
+              sources: [guardSource("sshGuard"), guardSource("esAccountWatch")],
+              blindSpot: "SSH is banned (only while Remote Login is on); a source that stays under the failure limit is not banned, and a ban never cuts a session that is already open. Console and Screen Sharing logins are only notified, by the account watch (opt-in, Pro, needs the Endpoint Security extension): four failures in ten minutes from one account or source. Guessing against File Sharing or a local web login is not looked at (File Sharing failures are not an Endpoint Security event, as far as the header says)."),
         // T1046. Incoming: RoamSwitch/PortScanGuard.swift; the logic runs in RoamSwitchHelper/PortScanDetector.swift on the packet
         // filter's log (pflog0) with Shared/PortScanTracker.swift: a source that reaches many distinct ports in a short
         // window, plus a slower window for slow scans; the source is blocked for a bounded time when auto-block is on.
@@ -222,10 +249,14 @@ enum DetectionCoverage {
               blindSpot: "External USB volumes only, and the scan is signature-based: a payload with no signature passes, and a volume the user approves read-write after a clean scan is trusted. HID devices are not covered here (see T1200)."),
         // T1204.002. RoamSwitch/WebMailDownloadGuard.swift: files that arrive with the quarantine attribute in Downloads,
         // Desktop, Documents and Mail Downloads are scanned by ClamAV and, through StaticSignatureScanner, by byte-pattern
-        // rules; threats are quarantined.
+        // rules; threats are quarantined. In a build with `ES_AUTH` only, RoamSwitchESClient (an Endpoint Security system
+        // extension, ExecBlockGuard) also denies the start of a program from the home or temporary folders whose first 256 KB
+        // matches those pattern rules. A build without it has no pre-exec block (docs/ES_CLIENT.md, "AUTH のスイッチ"), and says so.
         Entry(technique: "T1204.002", name: "User Execution: Malicious File", coverage: .partial,
-              sources: [guardSource("webMailDownloadGuard")],
-              blindSpot: "Only files in the watched folders that arrive with the quarantine attribute (outside Downloads) are checked, and detection is signature and pattern based: a new variant with no signature, or an archive the engines cannot open, passes."),
+              sources: ESAuthBuild.isEnabled ? [guardSource("webMailDownloadGuard"), guardSource("preExecBlock")] : [guardSource("webMailDownloadGuard")],
+              blindSpot: ESAuthBuild.isEnabled
+              ? "Downloads are checked after they are written, in the watched folders and only when they arrive with the quarantine attribute, by signature and pattern. The pre-exec block stops the start of a program in the home or temporary folders, only when its first 256 KB matches a known pattern (a reverse-shell one-liner), only when it needs the extension's approval and Full Disk Access to run, and not a script given to an interpreter as an argument (bash script.sh). A new variant with no signature, or an archive the engines cannot open, passes."
+              : "Downloads are checked after they are written, in the watched folders and only when they arrive with the quarantine attribute, by signature and pattern. A program is not stopped before it starts: nothing checks a program started from the home or temporary folders at the moment it runs, so a file that arrives some other way (a copy, an archive that was unpacked, a build) is not examined before it runs. A new variant with no signature, or an archive the engines cannot open, passes."),
         // T1204.004. RoamSwitch/ClickFixGuard.swift (shell history lines) and RoamSwitch/SecretLeakAuditor.swift (the
         // pasteboard, at copy time) match known ClickFix command shapes; the history check runs after the command has run.
         Entry(technique: "T1204.004", name: "User Execution: Malicious Copy and Paste", coverage: .partial,
@@ -263,11 +294,12 @@ enum DetectionCoverage {
         Entry(technique: "T1566.002", name: "Phishing: Spearphishing Link", coverage: .partial,
               sources: [guardSource("linkGuard")],
               blindSpot: "Hosts in the feed only. A new or unlisted link passes, and a connection the filter cannot see (no extension, and not in the hosts file) is not stopped."),
-        // T1610. RoamSwitch/DockerEventGuard.swift: polls docker ps / inspect every 20 seconds and notifies (no
-        // containment) for a new container that runs privileged or with /var/run/docker.sock mounted.
+        // T1610. RoamSwitch/DockerEventGuard.swift: polls docker ps / inspect every 20 seconds, and looks at once (and again 1.5 and 4
+        // seconds later) when the Endpoint Security extension sees docker or podman start or a connection to the engine's socket, and
+        // notifies (no containment) for a new container that runs privileged or with /var/run/docker.sock mounted.
         Entry(technique: "T1610", name: "Deploy Container", coverage: .partial,
               sources: [guardSource("dockerEventGuard")],
-              blindSpot: "Only a new privileged container, or one with the Docker socket mounted, is flagged. Other new containers, and one that starts and stops between two polls, are not."),
+              blindSpot: "Only a new privileged container, or one with the Docker socket mounted, is flagged. Other new containers are not. A container that starts and stops between two polls is seen only when the Endpoint Security extension is running and sees the docker or podman command (or the connection to the engine's socket) that started it, and only if it still runs when the look is made 1.5 or 4 seconds later; Docker Desktop's own processes are not told apart from the command line client's, and a container started by an API client that is neither docker nor podman is seen only by the poll."),
     ]
 
     /// Guards of `get_guard_status` that detect nothing a single ATT&CK technique names, each with the reason. Together with

@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.36 (build 215). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 2.0.0 (build 216). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -15,7 +15,9 @@ final class ForensicChainTests: XCTestCase {
 
     /// A bundle in the format `captureSnapshot` writes: one artifact and a manifest holding its hash, anchored in the chain.
     @discardableResult
-    private func makeBundle(_ name: String, in root: URL, content: String = "pid 1 launchd", capturedAt: String = "2026-10-20T00:00:00Z") throws -> URL {
+    /// `startMark: false` writes the older kind of log (no start mark), which the tests that were written for it still use.
+    private func makeBundle(_ name: String, in root: URL, content: String = "pid 1 launchd", capturedAt: String = "2026-10-20T00:00:00Z",
+                            startMark: Bool = false) throws -> URL {
         let dir = root.appendingPathComponent(name)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try content.write(to: dir.appendingPathComponent("process_list.txt"), atomically: true, encoding: .utf8)
@@ -24,7 +26,7 @@ final class ForensicChainTests: XCTestCase {
         ])
         let data = try JSONEncoder().encode(manifest)
         try data.write(to: dir.appendingPathComponent("manifest.json"))
-        XCTAssertTrue(ForensicChain.record(root: root, bundleName: name, capturedAt: capturedAt, manifestData: data))
+        XCTAssertTrue(ForensicChain.record(root: root, bundleName: name, capturedAt: capturedAt, manifestData: data, startMark: startMark, logToSystem: false))
         return dir
     }
 
@@ -80,7 +82,7 @@ final class ForensicChainTests: XCTestCase {
         XCTAssertFalse(payload.chainOk)
         XCTAssertEqual(payload.chainBrokenAt, "20261020T000100Z-b")
         // A broken chain is not extended: a new bundle would hide where it broke.
-        XCTAssertFalse(ForensicChain.record(root: root, bundleName: "x", capturedAt: "t", manifestData: Data("{}".utf8)))
+        XCTAssertFalse(ForensicChain.record(root: root, bundleName: "x", capturedAt: "t", manifestData: Data("{}".utf8), logToSystem: false))
     }
 
     func testABundleWithNoLineIsNotAnchoredAndAnOldBundleStaysReadable() throws {
@@ -166,5 +168,219 @@ final class ForensicChainTests: XCTestCase {
         let some = MCPResponseFormatting.makeIncidentTimelinePayload(events: [], evidenceChecks: [check])
         XCTAssertEqual(some.evidenceChecks, [check])
         XCTAssertTrue(some.evidenceChecksNote?.contains("stale") == true)
+    }
+
+    // MARK: - start mark, head, witness
+
+    private func lines(_ root: URL) throws -> [String] {
+        try String(contentsOf: root.appendingPathComponent("chain.log"), encoding: .utf8).split(separator: "\n").map(String.init)
+    }
+
+    private func writeLines(_ lines: [String], _ root: URL) throws {
+        try (lines.joined(separator: "\n") + "\n").write(to: root.appendingPathComponent("chain.log"), atomically: true, encoding: .utf8)
+    }
+
+    /// The chain hash of line `seq` (from 1), read from the file.
+    private func chainHash(_ seq: Int, _ root: URL) throws -> String {
+        try lines(root)[seq - 1].split(separator: " ").map(String.init)[4]
+    }
+
+    func testANewChainStartsWithAStartMarkThatIsNotABundle() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try makeBundle("20261020T000000Z-a", in: root, startMark: true)
+        var got = try lines(root)
+        XCTAssertEqual(got.count, 2)
+        let mark = got[0].split(separator: " ").map(String.init)
+        XCTAssertEqual(mark[0], "2026-10-20T00:00:00Z", "the start mark is dated like the first bundle, so that bundle counts as made after it")
+        XCTAssertEqual(mark[1], "@genesis")
+        XCTAssertEqual(mark[2], String(repeating: "0", count: 64))
+        XCTAssertEqual(mark[3], "GENESIS")
+        XCTAssertEqual(mark[4], ForensicChain.chainHash(time: mark[0], bundle: mark[1], manifestSHA: mark[2], prev: mark[3]))
+        try makeBundle("20261020T000100Z-b", in: root, capturedAt: "2026-10-20T00:01:00Z", startMark: true)
+        got = try lines(root)
+        XCTAssertEqual(got.count, 3, "the mark is written once")
+        XCTAssertEqual(integrity(root), ["20261020T000000Z-a": "verified", "20261020T000100Z-b": "verified"])
+        let payload = ForensicCaptureManager.bundlesPayload(root: root)
+        XCTAssertTrue(payload.chainOk)
+        XCTAssertTrue(payload.missingBundles.isEmpty, "the start mark is not a bundle that went missing")
+        XCTAssertEqual(ForensicChain.load(root: root).bundleEntries.map(\.bundle), ["20261020T000000Z-a", "20261020T000100Z-b"])
+    }
+
+    func testAnEmptyLogFileStartsWithTheMarkAndAnOlderLogIsNotGivenOne() throws {
+        let empty = try makeRoot()
+        let old = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: empty); try? FileManager.default.removeItem(at: old) }
+        FileManager.default.createFile(atPath: empty.appendingPathComponent("chain.log").path, contents: nil)
+        try makeBundle("20261020T000000Z-a", in: empty, startMark: true)
+        XCTAssertEqual(try lines(empty).count, 2)
+        // An older log (no mark) is extended as it was, and its bundles verify.
+        try makeBundle("20261020T000000Z-a", in: old, startMark: false)
+        try makeBundle("20261020T000100Z-b", in: old, capturedAt: "2026-10-20T00:01:00Z", startMark: true)
+        XCTAssertEqual(try lines(old).count, 2, "a log that already has lines never gets a mark added")
+        XCTAssertNil(ForensicChain.load(root: old).startMarkTime)
+        XCTAssertEqual(integrity(old), ["20261020T000000Z-a": "verified", "20261020T000100Z-b": "verified"])
+    }
+
+    func testACutOffTailLineIsAnchorRemovedAndABundleFromBeforeTheLogIsNotAnchored() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try makeBundle("20261020T000000Z-a", in: root, startMark: true)
+        let b = try makeBundle("20261020T000100Z-b", in: root, capturedAt: "2026-10-20T00:01:00Z", startMark: true)
+        // a bundle from before the log began, which never had a line
+        let old = root.appendingPathComponent("20261019T000000Z-old")
+        try FileManager.default.createDirectory(at: old, withIntermediateDirectories: true)
+        try JSONEncoder().encode(ForensicManifest(capturedAt: "2026-10-19T00:00:00Z", reason: "old", suspectedPID: nil, artifacts: [])).write(to: old.appendingPathComponent("manifest.json"))
+        // the attacker rewrites b and cuts b's line off the end: the rest of the chain still checks out
+        try writeLines(Array(try lines(root).dropLast()), root)
+        XCTAssertEqual(integrity(root), ["20261020T000000Z-a": "verified", "20261020T000100Z-b": "anchor_removed", "20261019T000000Z-old": "not_anchored"])
+        XCTAssertTrue(ForensicCaptureManager.bundlesPayload(root: root).chainOk)
+        let all = try refs(for: b) + [ContainmentEvidenceRef(bundle: "20261019T000000Z-old", artifact: "manifest.json", sha256: "00")]
+        let got = Dictionary(uniqueKeysWithValues: status(all, root).map { ($0.bundle, $0) })
+        XCTAssertEqual(got["20261020T000100Z-b"]?.status, "anchor_removed")
+        XCTAssertEqual(got["20261020T000100Z-b"]?.stale, true)
+        XCTAssertEqual(got["20261019T000000Z-old"]?.status, "not_anchored")
+        // with the manifest gone too, the time in the bundle's name decides
+        try FileManager.default.removeItem(at: b.appendingPathComponent("manifest.json"))
+        XCTAssertEqual(status(try refsByName("20261020T000100Z-b"), root).first?.status, "anchor_removed")
+        XCTAssertEqual(status(try refsByName("not-a-time"), root).first?.status, "not_anchored")
+    }
+
+    func testWithoutAStartMarkACutOffTailLineStaysNotAnchored() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try makeBundle("20261020T000000Z-a", in: root)
+        try makeBundle("20261020T000100Z-b", in: root, capturedAt: "2026-10-20T00:01:00Z")
+        try writeLines(Array(try lines(root).dropLast()), root)
+        XCTAssertEqual(integrity(root), ["20261020T000000Z-a": "verified", "20261020T000100Z-b": "not_anchored"])
+    }
+
+    private func refsByName(_ bundle: String) throws -> [ContainmentEvidenceRef] {
+        [ContainmentEvidenceRef(bundle: bundle, artifact: "manifest.json", sha256: "00")]
+    }
+
+    func testTheHeadIsTheLineCountAndTheLastHash() throws {
+        let root = try makeRoot()
+        let legacy = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root); try? FileManager.default.removeItem(at: legacy) }
+        XCTAssertNil(ForensicChain.head(chain: ForensicChain.load(root: root)), "no log, no head")
+        try makeBundle("20261020T000000Z-a", in: root, startMark: true)
+        try makeBundle("20261020T000100Z-b", in: root, capturedAt: "2026-10-20T00:01:00Z", startMark: true)
+        let head = try XCTUnwrap(ForensicChain.head(chain: ForensicChain.load(root: root)))
+        XCTAssertEqual(head.seq, 3, "the start mark counts")
+        XCTAssertEqual(head.chain, try chainHash(3, root))
+        try makeBundle("20261020T000000Z-a", in: legacy)
+        XCTAssertEqual(ForensicChain.head(chain: ForensicChain.load(root: legacy))?.seq, 1)
+        // a log that does not check out has no head
+        var broken = try lines(root)
+        broken[1] = broken[1].replacingOccurrences(of: "20261020T000000Z-a", with: "20261020T000000Z-x")
+        try writeLines(broken, root)
+        XCTAssertNil(ForensicChain.head(chain: ForensicChain.load(root: root)))
+    }
+
+    func testAWitnessIsConsistentTruncatedDivergedInvalidOrChainBroken() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try makeBundle("20261020T000000Z-a", in: root, startMark: true)
+        try makeBundle("20261020T000100Z-b", in: root, capturedAt: "2026-10-20T00:01:00Z", startMark: true)
+        try makeBundle("20261020T000200Z-c", in: root, capturedAt: "2026-10-20T00:02:00Z", startMark: true)
+        let h2 = try chainHash(2, root), h4 = try chainHash(4, root)
+        func witness(_ w: String) -> String { ForensicChain.checkWitness(w, chain: ForensicChain.load(root: root)) }
+        XCTAssertEqual(witness("4:\(h4)"), "consistent")
+        XCTAssertEqual(witness("2:\(h2)"), "consistent", "an earlier head is still in the history")
+        XCTAssertEqual(witness(" 4:\(h4.uppercased()) \n"), "consistent", "case and surrounding space do not matter")
+        for bad in ["", "4", "4:", ":\(h4)", "0:\(h4)", "-1:\(h4)", "x:\(h4)", "4:\(h4.dropLast())", "4:\(String(repeating: "z", count: 64))", "4:\(h4):5"] {
+            XCTAssertEqual(witness(bad), "invalid", "\(bad)")
+        }
+        let original = try lines(root)
+        // the newest line is cut off: the chain still checks out, but it is shorter than the witness says
+        try writeLines(Array(original.dropLast()), root)
+        XCTAssertEqual(witness("4:\(h4)"), "truncated")
+        XCTAssertEqual(witness("2:\(h2)"), "consistent")
+        XCTAssertEqual(witness("999:\(h4)"), "truncated")
+        // the attacker rewrites line 2 and recomputes every hash after it: the log checks out but the history differs
+        var entries = ForensicChain.load(root: root).entries
+        _ = entries.removeLast()
+        var rebuilt: [String] = []
+        var prev = ForensicChain.genesis
+        for (i, e) in (try lines(root)).enumerated() {
+            let f = e.split(separator: " ").map(String.init)
+            let sha = i == 1 ? String(repeating: "a", count: 64) : f[2]
+            let c = ForensicChain.chainHash(time: f[0], bundle: f[1], manifestSHA: sha, prev: prev)
+            rebuilt.append("\(f[0]) \(f[1]) \(sha) \(prev) \(c)")
+            prev = c
+        }
+        try writeLines(rebuilt, root)
+        XCTAssertTrue(ForensicChain.load(root: root).chainOK)
+        XCTAssertEqual(witness("2:\(h2)"), "diverged")
+        // a line edited in place without recomputing breaks the chain, and that is what is reported
+        var edited = original
+        edited[1] = edited[1].replacingOccurrences(of: "20261020T000000Z-a", with: "20261020T000000Z-x")
+        try writeLines(edited, root)
+        XCTAssertEqual(witness("4:\(h4)"), "chain_broken")
+        XCTAssertEqual(witness("nonsense"), "invalid", "the form is checked first")
+        // no log at all: nothing is left of what the witness names
+        try FileManager.default.removeItem(at: root.appendingPathComponent("chain.log"))
+        XCTAssertEqual(witness("1:\(h2)"), "truncated")
+    }
+
+    func testThePayloadsCarryTheHeadAndTheWitnessOnlyWhenAsked() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try makeBundle("20261020T000000Z-a", in: root, startMark: true)
+        let h2 = try chainHash(2, root)
+        let plain = ForensicCaptureManager.bundlesPayload(root: root)
+        XCTAssertEqual(plain.chainHead, MCPChainHeadPayload(seq: 2, chain: h2))
+        XCTAssertNil(plain.chainWitness)
+        let asked = ForensicCaptureManager.bundlesPayload(root: root, witness: "2:\(h2)")
+        XCTAssertEqual(asked.chainWitness, "consistent")
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(asked)) as? [String: Any])
+        XCTAssertEqual((json["chainHead"] as? [String: Any])?["seq"] as? Int, 2)
+        XCTAssertEqual((json["chainHead"] as? [String: Any])?["chain"] as? String, h2)
+        XCTAssertEqual(json["chainWitness"] as? String, "consistent")
+        let plainJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(plain)) as? [String: Any])
+        XCTAssertNil(plainJSON["chainWitness"])
+        XCTAssertEqual(ForensicCaptureManager.bundlesPayload(root: root, witness: "junk").chainWitness, "invalid")
+        // an empty folder: no head, and a given witness names lines that are not there
+        let none = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: none) }
+        XCTAssertNil(ForensicCaptureManager.bundlesPayload(root: none).chainHead)
+        XCTAssertEqual(ForensicCaptureManager.chainEnd(root: none, witness: "1:\(h2)").witness, "truncated")
+        // the timeline carries the same two fields
+        let end = ForensicCaptureManager.chainEnd(root: root, witness: "2:\(h2)")
+        let timeline = MCPResponseFormatting.makeIncidentTimelinePayload(events: [], chainHead: end.head, chainWitness: end.witness)
+        XCTAssertEqual(timeline.chainHead, MCPChainHeadPayload(seq: 2, chain: h2))
+        XCTAssertEqual(timeline.chainWitness, "consistent")
+        XCTAssertNil(MCPResponseFormatting.makeIncidentTimelinePayload(events: []).chainHead)
+        XCTAssertTrue(MCPResponseFormatting.evidenceChecksNote.contains("anchor_removed"))
+        XCTAssertTrue(MCPResponseFormatting.evidenceChecksNote.contains("chainHead"))
+    }
+
+    func testTheSystemLogLineCarriesTheBundleTheManifestHashAndTheHead() {
+        XCTAssertEqual(
+            ForensicChain.systemLogMessage(bundle: "20261020T000000Z-a", manifestSHA: "ab", seq: 3, chain: "cd"),
+            "bundle=20261020T000000Z-a manifest_sha256=ab seq=3 chain=cd")
+    }
+
+    // MARK: - capture times in the manifest
+
+    func testAManifestWithoutCaptureTimesStillDecodesAndOneWithThemKeepsThem() throws {
+        let old = """
+        {"capturedAt":"2026-10-20T00:00:00Z","reason":"r","artifacts":[{"name":"process_list","status":"captured","detail":"d","relativePath":"process_list.txt","sha256":"ab"}]}
+        """
+        let decoded = try JSONDecoder().decode(ForensicManifest.self, from: Data(old.utf8))
+        XCTAssertNil(decoded.durationMs)
+        XCTAssertNil(decoded.artifacts[0].elapsedMs)
+        var record = ForensicArtifactRecord(name: "n", status: "captured", detail: "d", relativePath: "p", sha256: "ab")
+        record.elapsedMs = 12
+        let now = ForensicManifest(capturedAt: "2026-10-20T00:00:00Z", reason: "r", suspectedPID: nil, artifacts: [record], durationMs: 34)
+        let back = try JSONDecoder().decode(ForensicManifest.self, from: JSONEncoder().encode(now))
+        XCTAssertEqual(back.durationMs, 34)
+        XCTAssertEqual(back.artifacts[0].elapsedMs, 12)
+        // an old bundle on disk is still listed and verified
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try makeBundle("20261020T000000Z-a", in: root, startMark: true)
+        XCTAssertEqual(integrity(root), ["20261020T000000Z-a": "verified"])
     }
 }

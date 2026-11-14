@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.36 (build 215).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.0.0 (build 216).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -148,8 +148,21 @@ public enum ProtectionPresetTable {
         proDefault("credentialHoneytokenGuard", "CredentialHoneytokenGuardEnabled", "認証情報ハニートークン", [true, true, true, true]),
         optIn("browserCredentialWatchGuard", "BrowserCredentialWatchGuardEnabled", "ブラウザ認証情報アクセス監視", [false, false, false, true],
               risks: [.falsePositive], warning: "バックアップ、同期、パスワード管理ツールのインポートでも通知が出ます。"),
+        // On in every preset, as the Linux edition's watch is on by default: it notifies only when a program that is not the file's usual
+        // reader opens a real credential file, and it does nothing until the Endpoint Security extension is approved.
+        proDefault("credentialFileWatchGuard", "CredentialFileWatchEnabled", "認証情報ファイルの読み取り監視", [true, true, true, true]),
+        optIn("logTamperWatchGuard", "LogTamperWatchEnabled", "ログと履歴の消去の検知", [false, false, false, true],
+              risks: [.falsePositive], warning: "自分でシェルの履歴やログを消したときも、通知が出ます。"),
         optIn("outboundScanWatch", "OutboundScanWatchEnabled", "内部ネットワークへの走査の検知", [false, false, false, true],
               risks: [.falsePositive], warning: "管理者や一括実行のツールが意図して走査したときも、通知が出ます。"),
+        // The detections that exist only through Endpoint Security events: no Linux counterpart and no measured rate of false
+        // alarms (sudo, TCC and profiles are routine), so off in every preset but the maximum, notify only.
+        optIn("esAccountWatch", "ESAccountWatchEnabled", "認証・権限・アカウントの変更の監視", [false, false, false, true],
+              risks: [.falsePositive], warning: "開発の sudo や、管理者の作業、権限の許可でも、通知が出ます。"),
+        optIn("esInjectionWatch", "ESInjectionWatchEnabled", "他のプロセスへの侵入の検知", [false, false, false, true],
+              risks: [.falsePositive], warning: "デバッガーや開発の道具の通知は、許可リストで除いています。それ以外の開発の操作でも、通知が出ることがあります。"),
+        optIn("esQuarantineWatch", "ESQuarantineWatchEnabled", "隔離属性の剥がしと Gatekeeper の上書きの検知", [false, false, false, true],
+              risks: [.falsePositive], warning: "ダウンロードしたものを、開発者が配るためのビルドや、アプリの入れ替えで扱うと、通知が出ることがあります。"),
         proDefault("scheduledLogAudit", "ScheduledLogAuditEnabled", "定期ログ監査", [false, true, true, true]),
         proDefault("criticalPathFim", "CriticalPathFimEnabled", "重要システムファイルの改ざん監視", [true, true, true, true]),
         proDefault("lockfileTamperGuard", "LockfileTamperGuardEnabled", "依存関係ロックファイルの改ざん監視", [true, true, true, true]),
@@ -157,6 +170,10 @@ public enum ProtectionPresetTable {
         optIn("reverseShellIncludePrivate", "ReverseShellWatch.IncludePrivateV1", "リバースシェル検知: ローカルネットワーク内の接続先も対象にする",
               [false, false, false, true], risks: [.falsePositive],
               warning: "ssh の ProxyCommand、リモート開発、コンテナの通信でも通知が出ます。"),
+        // On in every preset: it costs something only when a program starts from the home or temporary folders (the kernel
+        // drops every other start before it reaches the extension), a clean file is remembered for 60 seconds, and Linux
+        // has it on by default. Without the extension's approval and Full Disk Access it does nothing and says so.
+        proDefault("preExecBlock", "PreExecBlockEnabled", "実行前のブロック", [true, true, true, true]),
         proDefault("networkSettingsWatch", "NetworkSettingsWatchEnabled", "ネットワーク設定の変化の監視", [true, true, true, true]),
         proDefault("arpSpoofAutoContainment", "ARPSpoofAutoContainmentEnabled", "ARPスプーフィング検知時の自動遮断", [true, true, true, true]),
         proDefault("runtimeThreatContainment", "RuntimeThreatContainmentEnabled", "XProtectが検知したときの自動遮断", [true, true, true, true]),
@@ -229,7 +246,7 @@ public enum ProtectionPresetTable {
             allowed: ints([60, 300, 900])),
         row("reverseShellScanSecs", "ReverseShellWatch.ScanIntervalSecs", "リバースシェル監視の間隔(秒)", unset: .int(4), ints([15, 4, 4, 4]),
             allowed: ints([2, 4, 8, 15])),
-    ]
+    ].filter { ESAuthBuild.hasGuard($0.id) }   // the pre-exec block's row exists only in a build with ES_AUTH
 
     /// Every key the table writes.
     public static var keys: [String] { settings.map(\.key) }

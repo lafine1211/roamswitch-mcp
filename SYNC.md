@@ -143,6 +143,12 @@ All files live in `Sources/roamswitch-mcp/`.
 | `AgentCheckLog.swift` | `RoamSwitch/AgentCheckLog.swift` |
 | `FwdEgressClassifier.swift` | `Shared/FwdEgressClassifier.swift` (from `Shared/`) |
 | `ExecAgentExfil.swift` | `Shared/ExecAgentExfil.swift` (from `Shared/`) |
+| `ESAuthBuild.swift` | `Shared/ESAuthBuild.swift` (from `Shared/`) |
+| `ESExtensionStatus.swift` | `Shared/ESExtensionStatus.swift` (from `Shared/`) |
+| `ESGuardRouteState.swift` | `Shared/ESGuardRouteState.swift` (from `Shared/`) |
+| `PacketPreroll.swift` | `Shared/PacketPreroll.swift` (from `Shared/`) |
+| `ProtectionPresetText.swift` | `RoamSwitch/ProtectionPresetText.swift` |
+| `PresetScore.swift` | `RoamSwitch/PresetScore.swift` |
 
 This is exactly the source set the app compiles into its `RoamSwitchMCPServer` target
 (see `project.yml` in the app repo). Twenty-three of the files come from the app's `Shared/` folder

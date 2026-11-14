@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.36 (build 215).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.0.0 (build 216).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -9,18 +9,53 @@ import Foundation
 /// Localized one-line state text shared by the app UI and the MCP tools (same
 /// `loc` keys, so no extra strings).
 enum ExecRecorderText {
-    static func status(_ s: ExecRecorderStatus?, enabled: Bool) -> String {
+    /// - Parameter es: the state of the Endpoint Security extension's client for this recorder (`ESEnforcement`), when known.
+    ///   The recorder reads from the extension while it runs the client and from eslogger otherwise (`ESRouteCoordinator`);
+    ///   which one it is is in `ExecRecorderStatus.source`. The Full Disk Access guidance depends on it: the extension has a row
+    ///   of its own ("com.tetsuharu.RoamSwitch.ESClient.systemextension"), eslogger uses the app's row ("RoamSwitch").
+    static func status(_ s: ExecRecorderStatus?, enabled: Bool, es: ESEnforcement? = nil) -> String {
         guard let s else {
             return enabled ? loc("ヘルパーからの状態をまだ受信していません") : loc("停止中")
         }
         switch s.state {
-        case "running": return loc("記録中")
+        case "running":
+            switch s.source {
+            case "es": return loc("記録中（Endpoint Securityの拡張から受け取っています）")
+            case "eslogger": return loc("記録中（macOS標準のesloggerから受け取っています）")
+            default: return loc("記録中")
+            }
         case "starting": return loc("起動中…")
-        case "needsFullDiskAccess": return loc("実行記録は利用できません: フルディスクアクセスでRoamSwitchの許可が必要です（一覧に無ければ「+」から /Applications/RoamSwitch.app を追加）")
+        case "needsFullDiskAccess":
+            if es == .needsFullDiskAccess { return extensionFullDiskAccessText }
+            return loc("実行記録は利用できません: フルディスクアクセスでRoamSwitchの許可が必要です（一覧に無ければ「+」から /Applications/RoamSwitch.app を追加）")
         case "esloggerMissing": return loc("実行記録は利用できません: /usr/bin/esloggerが見つかりません(macOS 13以降が必要)")
         case "backoff": return loc("esloggerが停止したため、再試行を待っています")
         case "failed": return loc("esloggerを起動できません。時間をおいて自動的に再試行します")
         default: return loc("停止中")
+        }
+    }
+
+    /// Full Disk Access for the extension's own row (the one the extension needs; the app's row is another).
+    static var extensionFullDiskAccessText: String {
+        loc("実行記録は利用できません: フルディスクアクセスで「com.tetsuharu.RoamSwitch.ESClient.systemextension」(RoamSwitchのEndpoint Security拡張の行)をオンにする必要があります(管理者のパスワードが要る。オンにしてから約1分以内に動き出す。一覧に無ければ「+」から追加)")
+    }
+
+    /// While the recorder reads from eslogger and the extension is not in use: why, and what switches it over. nil when
+    /// there is nothing to say (the extension runs, or its state is not known).
+    static func extensionHint(_ s: ExecRecorderStatus?, es: ESEnforcement?) -> String? {
+        guard let s, s.source == "eslogger" || s.state == "needsFullDiskAccess", let es, !es.isActive else { return nil }
+        // The main line already says it.
+        if s.state == "needsFullDiskAccess", es == .needsFullDiskAccess { return nil }
+        switch es {
+        case .active: return nil
+        case .waitingForApproval:
+            return loc("Endpoint Securityの拡張が承認待ちです。システム設定の「一般」→「ログイン項目と機能拡張」で「RoamSwitchESClient」をオンにし、続けてフルディスクアクセスの「com.tetsuharu.RoamSwitch.ESClient.systemextension」もオンにすると、自動でそちらに切り替わります。")
+        case .waitingForReboot:
+            return loc("Endpoint Securityの拡張は、Macを再起動すると有効になります。有効になると、自動でそちらに切り替わります。")
+        case .needsFullDiskAccess:
+            return loc("Endpoint Securityの拡張にフルディスクアクセスが未許可です。システム設定の「プライバシーとセキュリティ」→「フルディスクアクセス」で「com.tetsuharu.RoamSwitch.ESClient.systemextension」をオンにすると、約1分以内に自動でそちらに切り替わります。")
+        case .notEntitled, .tooManyClients, .failed, .notRunning:
+            return loc("Endpoint Securityの拡張を使えていません(開始できないか、状態の報告が届いていません)。使えるようになると、自動でそちらに切り替わります。")
         }
     }
 }
@@ -29,6 +64,11 @@ struct MCPExecRecorderStatePayload: Encodable {
     let enabledInSettings: Bool
     let state: String
     let stateLabel: String
+    /// "es" (the Endpoint Security extension) or "eslogger": where the events come from now. nil: not running.
+    let source: String?
+    /// The state of the extension's client for this recorder (`ESEnforcement` raw value), when the app has told. The reasons are
+    /// those of the guard status list (`es_*`).
+    let endpointSecurity: String?
     let eventsRecorded: UInt64?
     let eventsDropped: UInt64?
     let malformedLines: UInt64?
@@ -209,7 +249,7 @@ enum MCPExecRecorderTools {
 
     static func caveats(scanTruncated: Bool = false) -> [String] {
         var out = [
-            loc("記録はmacOS標準のesloggerによる事後の観測で、実行のブロックはできません。ヘルパー起動前のプロセスや、記録を有効にする前のイベントは含まれません。"),
+            loc("記録は、Endpoint Securityの拡張またはmacOS標準のesloggerによる事後の観測で、実行のブロックはできません。ヘルパー起動前のプロセスや、記録を有効にする前のイベントは含まれません。"),
             loc("コマンドライン引数には機密情報が含まれる場合があります(環境変数は、DYLD_INSERT_LIBRARIES一つを除いて記録されません)。"),
             loc("時刻は記録時のもので、署名区分は platform=Apple / developer=Team ID付き / adhoc=アドホック / unsigned=署名なし です。"),
         ]
@@ -223,10 +263,15 @@ enum MCPExecRecorderTools {
         let enabled = defaults.bool(forKey: MCPResponseFormatting.execRecorderKey)
         let s = ExecRecorderStatus.read()
         let iso = ISO8601DateFormatter()
+        let es = ESEnforcement.read(purpose: ESPurpose.processEvents, defaults: defaults, now: now.timeIntervalSince1970)
+        var label = ExecRecorderText.status(s, enabled: enabled, es: es)
+        if let hint = ExecRecorderText.extensionHint(s, es: es) { label += " " + hint }
         return MCPExecRecorderStatePayload(
             enabledInSettings: enabled,
             state: s?.state ?? (enabled ? "unknown" : "stopped"),
-            stateLabel: ExecRecorderText.status(s, enabled: enabled),
+            stateLabel: label,
+            source: s?.source,
+            endpointSecurity: es?.rawValue,
             eventsRecorded: s?.eventsRecorded,
             eventsDropped: s?.eventsDropped,
             malformedLines: s?.malformedLines,

@@ -53,13 +53,14 @@ CORE=(ProcessWait AppLanguage TrustedNetwork GatewayFingerprint WiFiSecurityMoni
       DecoyPlacement FeedUpdateStatus LinkGuardEnforcement \
       KevCatalog PackageCveExposure PhpEnvironment PhpEnvironmentAudit \
       MCPConfigAuditSarif PackageCveSarif AppActionJournal IncidentChain SystemTimeline MCPCompanionTools \
-      DebugPortRisk SNMPExposure AgentCheck AgentCheckLog)
+      DebugPortRisk SNMPExposure AgentCheck AgentCheckLog ProtectionPresetText PresetScore)
 
 # Sources that live in the app's Shared/ folder (also compiled into the helper).
 SHARED=(RansomwareSnapshotLogic ExecEventModel ExecLogStore ExecProcessTree ExecReadAPI \
         CryptoSecretDetection SafeScanFS ExecCommandMasker LinkFilterEngine SSHGuardCore GuardReaderHealth StrictJSON WatchdogAgentState PFSystemAnchors \
         NotificationHistory NotificationText SensorFindingTextKeys StoredRecordRead WatchdogMessages \
-        AtomicFile ActionJournal CriticalPathFimTargets LinkGuardHosts FwdEgressClassifier ExecAgentExfil)
+        AtomicFile ActionJournal CriticalPathFimTargets LinkGuardHosts FwdEgressClassifier ExecAgentExfil \
+        ESAuthBuild ESExtensionStatus ESGuardRouteState PacketPreroll)
 
 # App test files that only exercise types present in this repo. Their
 # `@testable import RoamSwitch` is rewritten to this package's module name.

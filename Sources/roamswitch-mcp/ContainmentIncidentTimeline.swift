@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.36 (build 215).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.0.0 (build 216).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -42,6 +42,10 @@ public enum ContainmentIncidentSource: String, Codable {
     /// maps to T1539 (Steal Web Session Cookie). Added additively, same as
     /// the cases above.
     case browserCredentialWatch
+    /// `CredentialFileWatchGuard`: a program that is not the usual reader opened a real credential file. T1552.001. Added additively.
+    case credentialFileWatch
+    /// `LogTamperWatchGuard`: a shell history or a system log was removed, emptied or replaced. T1070.003 and T1685.006. Added additively.
+    case logTamperWatch
     /// `ReverseShellWatchGuard`: a shell or relay tool whose input and output are an outward TCP connection. Always T1059.004.
     /// Added additively, same as the cases above.
     case reverseShellWatch
@@ -592,6 +596,10 @@ public enum ContainmentIncidentTimeline {
             return "T1552" // Unsecured Credentials — current callers always pass this explicitly anyway
         case .browserCredentialWatch:
             return "T1539" // Steal Web Session Cookie — current callers always pass this explicitly anyway
+        case .credentialFileWatch:
+            return "T1552.001" // Credentials In Files — current callers always pass this explicitly anyway
+        case .logTamperWatch:
+            return "T1070.003" // Clear Command History — current callers pass the exact technique
         case .sshGuard:
             return "T1110" // Brute Force — current callers always pass this explicitly anyway
         case .reverseShellWatch:

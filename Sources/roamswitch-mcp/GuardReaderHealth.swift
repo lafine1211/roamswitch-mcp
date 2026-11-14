@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.36 (build 215).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.0.0 (build 216).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -390,6 +390,8 @@ public enum GuardReaderHealthStore {
         // The static signature pass runs per batch of downloads; what it could not examine in the last batch is the auxiliary record.
         "webMailDownloadGuard": GuardSources(sources: ["webMailDownloadFSEvents"], auxiliary: ["staticSignatureScan"], idleIsHealthy: false),
         "browserCredentialWatchGuard": GuardSources(sources: ["browserCredentialWatchFSEvents"], auxiliary: [], idleIsHealthy: false),
+        // Endpoint Security only: the extension's events are the input. Without the extension the guard says so through the route record
+        // (`ESGuardRouteState`, `get_guard_status`), not through a reader that is not there.
         // A poll of the process table (libproc) every few seconds; if the table cannot be read the guard sees nothing.
         "reverseShellWatch": GuardSources(sources: ["reverseShellScan"], auxiliary: [], idleIsHealthy: false),
         // A subscription to the system configuration store; if it cannot be set up the guard sees nothing.
@@ -585,6 +587,9 @@ extension GuardReaderHealthStore {
         "portAnomalyGuard": Requirements(pro: true, helper: .partial),               // the listeners of other users come from the helper
         "portScanGuard": Requirements(pro: true, helper: .required),                 // pflog is captured by the helper
         "sshGuard": Requirements(pro: true, helper: .required),                      // the helper reads sshd's log
+        "esAccountWatch": Requirements(pro: true, helper: .required),                // the helper writes the extension's settings
+        "esInjectionWatch": Requirements(pro: true, helper: .required),
+        "esQuarantineWatch": Requirements(pro: true, helper: .required),
         "outboundScanWatch": Requirements(pro: true, helper: .required),             // the helper writes the extension's settings
         "arpSpoofAutoContainment": Requirements(pro: true, helper: .partial),        // detection in the app; the Air-Gap is the helper's
         "usbKeyboardGuard": Requirements(pro: true, helper: .none),
@@ -599,7 +604,10 @@ extension GuardReaderHealthStore {
         "webWorkerCrashWatch": Requirements(pro: true, helper: .none),                   // the alert is Pro; there is no switch
         "agentSetupWatch": Requirements(pro: true, helper: .none),                       // the comparison and the notice are Pro; it needs an accepted state
         "browserCredentialWatchGuard": Requirements(pro: true, helper: .none),
+        "credentialFileWatchGuard": Requirements(pro: true, helper: .none),
+        "logTamperWatchGuard": Requirements(pro: true, helper: .none),
         "reverseShellWatch": Requirements(pro: true, helper: .none),
+        "preExecBlock": Requirements(pro: true, helper: .required),                  // the helper writes the extension's settings
         "networkSettingsWatch": Requirements(pro: true, helper: .none),
         "clickFixGuard": Requirements(pro: true, helper: .partial),
         "execRecorder": Requirements(pro: true, helper: .required),                  // the helper runs eslogger
@@ -617,7 +625,7 @@ extension GuardReaderHealthStore {
         "linkGuard": Requirements(pro: true, helper: .none),
         "linkGuardFeedUpdates": Requirements(pro: true, helper: .none),
         "webRulesFolderScan": Requirements(pro: true, helper: .none),
-    ]
+    ].filter { ESAuthBuild.hasGuard($0.key) }   // `preExecBlock` exists only in a build with ES_AUTH
 
     /// Folds Pro and the helper into the state the reader records gave (`guardLiveState`), and says why.
     /// - the toggle is off: `off`, no reason;

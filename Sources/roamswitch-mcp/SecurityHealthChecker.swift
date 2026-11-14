@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.36 (build 215).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.0.0 (build 216).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -344,7 +344,10 @@ final class SecurityHealthChecker {
         defaults: UserDefaults = .standard,
         /// `listeningPorts == nil` のとき、「まだ一度も測っていない」(true)か「lsof が失敗した」(false)か。
         /// 前者の reason は `not_measured`、後者は `tool_failed`。
-        portListNotMeasuredYet: Bool = false
+        portListNotMeasuredYet: Bool = false,
+        /// 設定のプリセットで切り替わる保護を点数に入れる(理想は最大セキュリティ)。`nil` なら入れない(OS の項目だけ)。
+        /// アプリ本体と MCP が同じ点数になるよう、どちらも `PresetScore.Inputs.current(defaults:)` を渡す。
+        presetScore: PresetScore.Inputs? = nil
     ) -> ComprehensiveSecurityReport {
         let health = checkHealth()
         func unmeasuredReason(_ id: String) -> String? {
@@ -726,8 +729,16 @@ final class SecurityHealthChecker {
         // still has `isApplicable == true` and a pass flag (ARP with no gateway or baseline, an unreliable
         // Wi-Fi reading): its "passed" says nothing, so it must not raise the score or the pass count.
         let applicableItems = items.filter { $0.isApplicable && $0.inconclusiveReason == nil }
-        let passedCount = applicableItems.filter { $0.isPassed }.count
-        let totalCount = applicableItems.count
+        // 設定のプリセットで切り替わる保護も数える(理想は最大セキュリティ)。まとめの 1 行は一覧に足すだけで、数えない。
+        var presetPassed = 0, presetTotal = 0
+        if let presetInputs = presetScore {
+            let evaluated = PresetScore.evaluate(presetInputs)
+            presetPassed = evaluated.passed
+            presetTotal = evaluated.total
+            items.append(PresetScore.summaryItem(evaluated, defaults: presetInputs.defaults))
+        }
+        let passedCount = applicableItems.filter { $0.isPassed }.count + presetPassed
+        let totalCount = applicableItems.count + presetTotal
         // 全項目が測定不能・対象外のときも 0 除算にしない(その場合は 0 点=評価不能として最低ランクに落ちる)。
         let score = totalCount == 0 ? 0 : Int((Double(passedCount) / Double(totalCount)) * 100.0)
 

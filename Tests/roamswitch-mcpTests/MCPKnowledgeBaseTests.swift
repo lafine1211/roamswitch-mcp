@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.36 (build 215). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 2.0.0 (build 216). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -90,7 +90,7 @@ final class MCPKnowledgeBaseTests: XCTestCase {
             "exec.quarantine_stripped_then_exec", "exec.launchd_untrusted_binary", "exec.keychain_access",
             "exec.interpreter_inline_obfuscated", "exec.dyld_insert_libraries", "exec.ransomware_recovery_tampering",
             "exec.honeytoken_path", "exec.offensive_tool_inventory", "exec.offensive_tool_burst", "exec.reverse_shell_argv",
-            "exec.shell_from_service", "exec.agent_sensitive_send", "exec.agent_sensitive_then_send", "exec.ssh_remote_forward", "exec.agent_repeat",
+            "exec.shell_from_service", "exec.agent_sensitive_send", "exec.agent_sensitive_then_send", "exec.ssh_remote_forward", "exec.agent_repeat", "exec.name_masquerade",
         ]
         for code in RoamSwitchKnowledgeBase.supportedLanguageCodes {
             let entries = RoamSwitchKnowledgeBase.localizedEntries(for: code)
@@ -135,7 +135,7 @@ final class MCPKnowledgeBaseTests: XCTestCase {
             ("feat_mcp_server", ["traffic_interception_env"]),
             ("feat_secret_leak_audit_tool", ["include_build_output", "buildOutput"]),
             ("feat_active_vuln_scan", ["webvuln-unauth-admin", "/actuator/env"]),
-            ("feat_forensic_evidence_bundles", ["chain.log", "chainOk", "not_anchored", "F_FULLFSYNC"]),
+            ("feat_forensic_evidence_bundles", ["chain.log", "chainOk", "not_anchored", "F_FULLFSYNC", "anchor_removed", "chainHead", "witness", "durationMs", "process/network", "packet_preroll"]),
             ("feat_security_health_checker", ["trust_anchors", "T1553.004"]),
         ]
         for code in RoamSwitchKnowledgeBase.supportedLanguageCodes {

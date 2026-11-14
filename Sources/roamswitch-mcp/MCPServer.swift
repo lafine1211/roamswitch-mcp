@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.36 (build 215).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.0.0 (build 216).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -270,7 +270,7 @@ enum MCPServer {
             case "get_ransomware_entropy_guard_status":
                 return [result(id: id, callGetRansomwareEntropyGuardStatus())]
             case "get_forensic_evidence_bundles":
-                return [result(id: id, callGetForensicEvidenceBundles())]
+                return [result(id: id, callGetForensicEvidenceBundles(arguments: arguments))]
             case "get_vulnerability_scan_history":
                 return [result(id: id, callGetVulnerabilityScanHistory())]
             case "get_honeytoken_status":
@@ -454,7 +454,8 @@ enum MCPServer {
             wifiReadingUnreliable: MCPResponseFormatting.wifiReadingUnreliable(interfacePresent: interfacePresent, ssidResolved: ssidResolved),
             // この別プロセスの `.standard` はアプリの設定を見ていない(常に既定値になる)ので、ダウンロードガード・
             // DNS保護・USBガードの設定は他のツールと同じ `sharedDefaults` から読む。
-            defaults: sharedDefaults
+            defaults: sharedDefaults,
+            presetScore: PresetScore.Inputs.current(defaults: sharedDefaults)
         )
         return (report, interfacePresent, ssidResolved)
     }
@@ -1078,8 +1079,8 @@ enum MCPServer {
         return textContentResult(payload)
     }
 
-    private static func callGetForensicEvidenceBundles() -> [String: Any] {
-        let payload = ForensicCaptureManager.bundlesPayload()
+    private static func callGetForensicEvidenceBundles(arguments: [String: Any]) -> [String: Any] {
+        let payload = ForensicCaptureManager.bundlesPayload(witness: arguments["witness"] as? String)
         return textContentResult(payload)
     }
 
@@ -1308,10 +1309,12 @@ enum MCPServer {
         let requested = (arguments["limit"] as? Int) ?? 50
         let limit = min(max(requested, 1), 200)
         let events = ContainmentIncidentTimeline.loadRecent(limit: limit)
+        let end = ForensicCaptureManager.chainEndPayload(witness: arguments["witness"] as? String)
         return textContentResult(MCPResponseFormatting.makeIncidentTimelinePayload(
             events: events, fileState: ContainmentIncidentTimeline.fileState(), chain: ContainmentIncidentTimeline.verifyChain(),
             readerHealth: GuardReaderHealthStore.all(defaults: sharedDefaults),
-            evidenceChecks: ForensicCaptureManager.checkEvidenceRefs(events.flatMap(\.evidenceRefs))))
+            evidenceChecks: ForensicCaptureManager.checkEvidenceRefs(events.flatMap(\.evidenceRefs)),
+            chainHead: end.head, chainWitness: end.witness))
     }
 
     /// SENDS NO NETWORK REQUESTS AT ALL — read-only search over the process-exec
@@ -1688,8 +1691,16 @@ enum MCPServer {
         ],
         [
             "name": "get_forensic_evidence_bundles",
-            "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only local disk state under ~/Library/Application Support/RoamSwitch/incident-evidence/. Lists up to the 20 most recent forensic evidence bundles RoamSwitch automatically captured alongside a ransomware/runtime-threat containment (process list snapshot, network connections snapshot, recently-modified files in the watched folders, and the suspected process's open files if one was identified) — each bundle's manifest is integrity-verifiable via per-artifact SHA-256, and every bundle is checked when listed against an anchor chain (chain.log beside the bundles, each line carrying the hash of the one before): `integrity` is verified, manifest_altered, artifact_altered:<name>, artifact_missing:<name> or not_anchored (a bundle captured before the chain existed, or whose line was removed), `chainOk`/`chainBrokenAt` say whether the log itself was edited or truncated, and `missingBundles` names bundles the chain lists that are gone. The chain is tamper-evident, not tamper-proof. This does not include a packet capture or a full process memory/fd snapshot (unlike the Linux/roamswitch-os editions) — macOS has no unprivileged equivalent. No tool captures a NEW bundle on demand; bundles are only created automatically by the containment managers themselves.",
-            "inputSchema": ["type": "object", "properties": [String: Any]()],
+            "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only local disk state under ~/Library/Application Support/RoamSwitch/incident-evidence/. Lists up to the 20 most recent forensic evidence bundles RoamSwitch automatically captured alongside a ransomware/runtime-threat containment (process list snapshot, network connections snapshot, recently-modified files in the watched folders, the suspected process's open files and, for it, the addresses, ports and states of its TCP/UDP sockets (process/network.json) if one was identified; and, only if the person switched on the optional pre-roll of packet headers (off by default), the traffic of the last seconds in packet_preroll/, each packet cut at the end of its headers so that no payload is included) — each bundle's manifest is integrity-verifiable via per-artifact SHA-256, and every bundle is checked when listed against an anchor chain (chain.log beside the bundles, each line carrying the hash of the one before): `integrity` is verified, manifest_altered, artifact_altered:<name>, artifact_missing:<name>, anchor_removed (the chain starts with a start mark, the bundle was captured after it, and its line is gone) or not_anchored (a bundle captured before the chain existed, or the chain has no start mark), `chainOk`/`chainBrokenAt` say whether the log itself was edited or truncated, and `missingBundles` names bundles the chain lists that are gone. `chainHead` ({seq, chain}) is the end of the chain now; keep it outside this Mac and pass it back as `witness` (\"SEQ:HASH\") to get `chainWitness`: consistent, truncated (the chain has fewer lines), diverged (that line differs), invalid or chain_broken. The head of each new line is also written to the system log (tag roamswitch-evidence), and each manifest records durationMs and each artifact elapsedMs. The chain is tamper-evident, not tamper-proof. This does not include a packet capture or a full process memory/fd snapshot (unlike the Linux/roamswitch-os editions) — macOS has no unprivileged equivalent. No tool captures a NEW bundle on demand; bundles are only created automatically by the containment managers themselves.",
+            "inputSchema": [
+                "type": "object",
+                "properties": [
+                    "witness": [
+                        "type": "string",
+                        "description": "Optional. An earlier chain head kept outside this Mac, as SEQ:HASH (SEQ from 1, HASH the 64 hex digits of the chain hash of that line). The result then has chainWitness: consistent, truncated, diverged, invalid or chain_broken.",
+                    ],
+                ],
+            ],
         ],
         [
             "name": "get_vulnerability_scan_history",
@@ -1728,13 +1739,17 @@ enum MCPServer {
         ],
         [
             "name": "get_incident_timeline",
-            "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only a local JSON file. Returns RoamSwitch's unified, chronological containment incident timeline (newest first) across ARP spoofing auto-containment, the Ransomware Canary Guard, Runtime Threat Containment (XProtect Air-Gap) and the Port Anomaly Guard. Each event has timestamp, source (stable id + localized sourceLabel), severity, summary, process name/PID when known, a MITRE ATT&CK technique ID only where confidently mappable (never guessed), the action taken (air_gap / port_block, + localized label) and resolution status (open / released / autoTimeout / allowlisted). An event recorded because of another one (an evidence capture started by a detection) also has parentEventID and rootEventID, and evidenceRefs names the evidence bundles saved for it (bundle folder name, optional file name, optional SHA-256, never content); events without such a link do not have these three fields. When events carry evidenceRefs, `evidenceChecks` lists each bundle with its status against the anchor chain as it is now (matches, bundle_missing, manifest_altered, ref_changed, chain_broken with `chainBrokenAt`, not_anchored, unchecked) and `stale`: true when the reference no longer matches (same names as the Linux edition). ARP spoofing containment is recorded ONLY here — no other tool reports it. Additive to get_canary_status, get_port_anomaly_incidents and get_runtime_threat_status (use those for per-guard detail). Also returns `incidents`, which puts the same events together per incident, newest first: events are joined when they share a cause chain (`rootEventID`, or one is the other's root or parent) or are about the same process (same process id and name) within 15 minutes of each other. Each incident has incidentId, firstTimestamp, lastTimestamp, eventCount, eventIds (oldest first), sources, crossSource (more than one source), processName, processID, severity (the highest, as written), status, attackTechniques, evidenceRefs (at most 8) and summary (of the oldest event with the highest severity); `openIncidentCount` counts the open ones. `status` is decided by the detections only: `open` while any is unresolved, otherwise how the last one ended (`released`, `autoTimeout`, `allowlisted`); records that only note an action or a reminder and are never resolved (an evidence bundle was saved, an expired risk acceptance) do not count, and an incident made only of them is `recorded`. Events are also joined when they are about the same remote address (the SSH guard's source, an incoming port scan's source, a reverse shell's peer; loopback excluded) within 60 minutes of each other, and when they ran in the same SSH session (`sshSession`: `<pid>@<start unix seconds>` of the outermost sshd among the process's ancestors, set when the record was made); incidents list them in `sourceAddresses` and `sshSessions`. An event (and its incident) has `blindNear: true` when the input of the guard that made it was lost within 5 minutes before to 1 minute after it, or is lost now: related activity may have gone unseen. Each record stores `prevHash`, the SHA-256 of the fixed fields of the record before it; `chain` says whether the links check out over the whole file (intact, verifiedCount, legacyCount for records from before the chain, breakEventIds), and a record whose link does not match has `chainBreak: true`. A break means a record was edited or removed; it is a warning, the events are still returned. The chain has no key, so it shows a partial edit, not a determined rewrite of the whole file. The grouping is automatic, not proof that the events are one attack; `events` stay the record. Values in `sources` and `status` are spelled as in `events` (camelCase here, snake_case on the Linux edition). Same name and shape as the Linux edition's get_incident_timeline. Works during an Air-Gap.",
+            "description": "SENDS NO NETWORK REQUESTS AT ALL — reads only a local JSON file. Returns RoamSwitch's unified, chronological containment incident timeline (newest first) across ARP spoofing auto-containment, the Ransomware Canary Guard, Runtime Threat Containment (XProtect Air-Gap) and the Port Anomaly Guard. Each event has timestamp, source (stable id + localized sourceLabel), severity, summary, process name/PID when known, a MITRE ATT&CK technique ID only where confidently mappable (never guessed), the action taken (air_gap / port_block, + localized label) and resolution status (open / released / autoTimeout / allowlisted). An event recorded because of another one (an evidence capture started by a detection) also has parentEventID and rootEventID, and evidenceRefs names the evidence bundles saved for it (bundle folder name, optional file name, optional SHA-256, never content); events without such a link do not have these three fields. When events carry evidenceRefs, `evidenceChecks` lists each bundle with its status against the anchor chain as it is now (matches, bundle_missing, manifest_altered, ref_changed, chain_broken with `chainBrokenAt`, anchor_removed, not_anchored, unchecked) and `stale`: true when the reference no longer matches (same names as the Linux edition). `chainHead` ({seq, chain}) is the end of the evidence chain now (left out when it is empty or broken); keep it outside this Mac and pass it back as `witness` (\"SEQ:HASH\") to get `chainWitness`: consistent, truncated, diverged, invalid or chain_broken. ARP spoofing containment is recorded ONLY here — no other tool reports it. Additive to get_canary_status, get_port_anomaly_incidents and get_runtime_threat_status (use those for per-guard detail). Also returns `incidents`, which puts the same events together per incident, newest first: events are joined when they share a cause chain (`rootEventID`, or one is the other's root or parent) or are about the same process (same process id and name) within 15 minutes of each other. Each incident has incidentId, firstTimestamp, lastTimestamp, eventCount, eventIds (oldest first), sources, crossSource (more than one source), processName, processID, severity (the highest, as written), status, attackTechniques, evidenceRefs (at most 8) and summary (of the oldest event with the highest severity); `openIncidentCount` counts the open ones. `status` is decided by the detections only: `open` while any is unresolved, otherwise how the last one ended (`released`, `autoTimeout`, `allowlisted`); records that only note an action or a reminder and are never resolved (an evidence bundle was saved, an expired risk acceptance) do not count, and an incident made only of them is `recorded`. Events are also joined when they are about the same remote address (the SSH guard's source, an incoming port scan's source, a reverse shell's peer; loopback excluded) within 60 minutes of each other, and when they ran in the same SSH session (`sshSession`: `<pid>@<start unix seconds>` of the outermost sshd among the process's ancestors, set when the record was made); incidents list them in `sourceAddresses` and `sshSessions`. An event (and its incident) has `blindNear: true` when the input of the guard that made it was lost within 5 minutes before to 1 minute after it, or is lost now: related activity may have gone unseen. Each record stores `prevHash`, the SHA-256 of the fixed fields of the record before it; `chain` says whether the links check out over the whole file (intact, verifiedCount, legacyCount for records from before the chain, breakEventIds), and a record whose link does not match has `chainBreak: true`. A break means a record was edited or removed; it is a warning, the events are still returned. The chain has no key, so it shows a partial edit, not a determined rewrite of the whole file. The grouping is automatic, not proof that the events are one attack; `events` stay the record. Values in `sources` and `status` are spelled as in `events` (camelCase here, snake_case on the Linux edition). Same name and shape as the Linux edition's get_incident_timeline. Works during an Air-Gap.",
             "inputSchema": [
                 "type": "object",
                 "properties": [
                     "limit": [
                         "type": "integer",
                         "description": "Maximum number of events to return, newest first (1-200). Defaults to 50.",
+                    ],
+                    "witness": [
+                        "type": "string",
+                        "description": "Optional. An earlier evidence-chain head kept outside this Mac, as SEQ:HASH. The result then has chainWitness: consistent, truncated, diverged, invalid or chain_broken.",
                     ],
                 ],
             ],

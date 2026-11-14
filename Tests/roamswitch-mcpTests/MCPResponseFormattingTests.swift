@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.36 (build 215). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 2.0.0 (build 216). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -113,10 +113,11 @@ final class MCPResponseFormattingTests: XCTestCase {
 
         // `webRulesFolderScan`, `webWorkerCrashWatch` and `agentSetupWatch` are not settings: the first two follow the Pro cache (they have
         // no switch), the third follows whether a state was accepted in the AI agent setup window. They are counted
-        // apart from the 35 toggles.
+        // apart from the toggles.
         let toggles = payload.guards.filter { !["webRulesFolderScan", "agentSetupWatch", "webWorkerCrashWatch", "signedUpdates"].contains($0.key) }
-        XCTAssertEqual(toggles.count, 35)
-        XCTAssertEqual(Set(payload.guards.map(\.key)).count, 39, "guard keys must be unique")
+        // The pre-exec block is one of the 41 toggles only in a build with ES_AUTH (docs/ES_CLIENT.md, "AUTH のスイッチ").
+        XCTAssertEqual(toggles.count, ESAuthBuild.isEnabled ? 41 : 40)
+        XCTAssertEqual(Set(payload.guards.map(\.key)).count, ESAuthBuild.isEnabled ? 45 : 44, "guard keys must be unique")
         XCTAssertTrue(toggles.allSatisfy { !$0.enabledInSettings })
         XCTAssertEqual(payload.guards.first { $0.key == "webRulesFolderScan" }?.enabledInSettings, false, "not Pro in this test's defaults")
         XCTAssertFalse(payload.caveats.isEmpty)

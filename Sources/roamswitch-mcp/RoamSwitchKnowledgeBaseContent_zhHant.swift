@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.36 (build 215).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.0.0 (build 216).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -380,7 +380,7 @@ extension RoamSwitchKnowledgeBase {
                 • 偵測時快照：誘餌檔案被觸發時也會建立，但可能包含已加密的檔案，不建議作為復原來源。
                 • 保留模式：當偵測時快照是最新的快照時（最長 7 天），會暫停建立新的事前快照並暫停清理舊快照，避免加密前的最後一代被擠掉。
                 • 取出：在選單中選擇「勒索軟體復原…」，即可把建議快照（仍然存在的最新事前快照）中的檔案或檔案夾複製到 `~/RoamSwitch-Recovered/<快照ID>/`。不會覆蓋既有檔案，也不提供整體回復。復原一律由人工手動進行。
-                • 限制：macOS 可能會在約 24 小時後自動刪除本機快照（可用空間不足時更早），已經不存在的快照無法使用。取出檔案需要在「完整磁碟取用權限」中允許 RoamSwitch（建立快照不需要）。
+                • 限制：macOS 可能會在約 24 小時後自動刪除本機快照（可用空間不足時更早），已經不存在的快照無法使用。取出檔案需要在「完全取用磁碟」中允許 RoamSwitch（建立快照不需要）。
                 • MCP：唯讀的 `get_ransomware_recovery_snapshots` 可查看清單與建議項（無法執行復原）。
                 • Pro: 此視窗（清單與取出檔案）和 MCP 工具屬於 Pro 功能。快照的建立本身在非 Pro 下也會執行。
                 • 建立快照失敗(`tmutil localsnapshot` 失敗)時,原因會顯示在「勒索軟體復原…」視窗與 `get_ransomware_recovery_snapshots` 的 lastSnapshotError 中。連續失敗 3 次後會發送一則通知。成功後消失。
@@ -422,16 +422,17 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "feat_exec_recorder",
                 title: "程序執行記錄（eslogger，僅通知，Pro，預設關閉）",
-                summary: "透過 Apple 內建的 /usr/bin/eslogger（macOS 13 以上）記錄這台 Mac 上啟動了哪些程式，並在某次啟動符合可疑組合時通知您。它不會阻擋任何執行，也不會切斷網路；記錄只保留在這台 Mac 上。",
+                summary: "透過 RoamSwitch 的 Endpoint Security 延伸功能（無法使用時改用 Apple 內建的 /usr/bin/eslogger；macOS 13 以上）記錄這台 Mac 上啟動了哪些程式，並在某次啟動符合可疑組合時通知您。它不會阻擋任何執行，也不會切斷網路；記錄只保留在這台 Mac 上。",
                 details: """
-                • 原理：特權輔助程式把 `/usr/bin/eslogger exec fork exit` 當作子程序執行並解析其 JSON 串流。eslogger 隨 macOS 提供；RoamSwitch 不使用也不申請 EndpointSecurity 權限（entitlement），因此這是事後觀察，而不是執行前攔截。
-                • 開啟檔案的行程記錄（選用，預設關閉，是本記錄的附屬選項）：在通知中顯示讀取過偽造憑證檔案、或寫入過 AI 代理程式設定檔和自動啟動位置的行程（PID、父行程、指令、簽章）。輔助程式會再執行兩個 eslogger，一個用於 `open`，一個用於 `create rename unlink clone copyfile truncate`。eslogger 無法依路徑過濾，`open` 會輸出 Mac 開啟的所有檔案，所以輔助程式只檢查每一行裡有沒有要監看的路徑，把符合的少數幾行交給沙盒中的解析行程，其餘立即丟棄。保留下來的只有涉及被監看檔案的事件，在記憶體中保存約三分鐘，不寫入磁碟，也不會傳送到外部。它會佔用 CPU：`open` 一側在正常使用中的實測約佔一個核心的 5%；建立、重新命名、刪除一側的事件少得多，幾乎不增加負載。輔助程式分別量測兩者的負載，最近五分鐘的平均值持續超過上限時，只會讓超限的那一個依序停止 15 分鐘、1 小時、6 小時。上限是 `open` 一側為一個核心的 12%（可在「行程執行記錄」視窗中變更），另一側為 3%。狀態和量測到的負載顯示在「行程執行記錄」視窗中。「完整磁碟取用權限」的授權與本記錄相同。無法確定行程時，通知中會寫明原因（關閉、因負載暫停、尚未開始、未執行）。
-                • 前提：macOS 13 以上，並在「完整磁碟取用權限」中允許 RoamSwitch。沒有該權限時，視窗只會顯示「無法使用執行記錄：請在「完整磁碟取用權限」中允許 RoamSwitch（清單中沒有時，用「+」加入 /Applications/RoamSwitch.app）」（或找不到 eslogger），不會改用持續輪詢。啟用記錄之前、輔助程式啟動之前的事件不會被記錄。
+                • 原理：特權輔助程式解析程序啟動的行（JSON）。行有兩個來源，同一時間只運行其中一個。當 RoamSwitch 的 Endpoint Security 延伸功能（RoamSwitchESClient）已建立並執行其用戶端時（延伸功能已獲核准，且已取得完全取用磁碟），讀取延伸功能寫出的、與 eslogger 相同形式的行；否則把 macOS 內建的 `/usr/bin/eslogger exec fork exit` 當作子程序執行並讀取。每 5 秒檢查一次狀態，並自動切換。兩者都是事後觀察，而不是執行前攔截（執行前攔截是另一項功能）。
+                • 開啟檔案的行程記錄（選用，預設關閉，是本記錄的附屬選項）：在通知中顯示讀取過偽造憑證檔案、或寫入過 AI 代理程式設定檔和自動啟動位置的行程（PID、父行程、指令、簽章）。輔助程式會再執行兩個 eslogger，一個用於 `open`，一個用於 `create rename unlink clone copyfile truncate`。eslogger 無法依路徑過濾，`open` 會輸出 Mac 開啟的所有檔案，所以輔助程式只檢查每一行裡有沒有要監看的路徑，把符合的少數幾行交給沙盒中的解析行程，其餘立即丟棄。保留下來的只有涉及被監看檔案的事件，在記憶體中保存約三分鐘，不寫入磁碟，也不會傳送到外部。它會佔用 CPU：`open` 一側在正常使用中的實測約佔一個核心的 5%；建立、重新命名、刪除一側的事件少得多，幾乎不增加負載。輔助程式分別量測兩者的負載，最近五分鐘的平均值持續超過上限時，只會讓超限的那一個依序停止 15 分鐘、1 小時、6 小時。上限是 `open` 一側為一個核心的 12%（可在「行程執行記錄」視窗中變更），另一側為 3%。狀態和量測到的負載顯示在「行程執行記錄」視窗中。「完全取用磁碟」的授權與本記錄相同。無法確定行程時，通知中會寫明原因（關閉、因負載暫停、尚未開始、未執行）。延伸功能執行時，寫入側和 `open` 側分別判斷，各自從延伸功能的用戶端讀取。延伸功能只把您想監視的路徑上的事件傳過來（依名稱尋找的規則，對 `open` 只適用於家目錄、/Volumes、/private/tmp 之下）。上限依延伸功能為這項記錄花費的 CPU 時間來衡量（不含核心端的開銷）。
+                • 前提：macOS 13 以上，並在「完全取用磁碟」中允許 RoamSwitch。沒有該權限時，視窗只會顯示「無法使用執行記錄：請在「完全取用磁碟」中允許 RoamSwitch（清單中沒有時，用「+」加入 /Applications/RoamSwitch.app）」（或找不到 eslogger），不會改用持續輪詢。啟用記錄之前、輔助程式啟動之前的事件不會被記錄。使用延伸功能時需要兩樣東西，兩者齊備後才會運作：（1）在系統設定的「一般」→「登入項目與延伸功能」中，於「端點安全性延伸功能」下開啟「RoamSwitchESClient」（需要管理員密碼；只核准的話，仍缺少完全取用磁碟）；（2）在系統設定的「隱私權與安全性」→「完全取用磁碟」清單中開啟「com.tetsuharu.RoamSwitch.ESClient.systemextension」（延伸功能自己的項目，核准後會自動出現在清單中；需要管理員密碼，開啟後約 1 分鐘內開始運作）；使用 eslogger 時，需要允許清單中的 RoamSwitch（App 的項目）。延伸功能無法使用期間透過 eslogger 記錄，視窗中會顯示原因。
                 • 關聯規則（僅通知，預設保持安靜，每條規則都有固定 ID 和 MITRE ATT&CK 技術編號）：瀏覽器/Office/郵件 App 直接啟動 Shell 或指令碼直譯器（exec.shell_from_app，T1059）；從 /tmp、/private/var/tmp、/var/folders 下的暫存資料夾、/Users/Shared 或帶隔離屬性的位置執行未簽署/臨時簽署的二進位檔（exec.untrusted_location，T1204.002）；將 curl/wget 傳給 Shell 的 `sh -c` 單行指令，並伴有 IP 直連 URL、base64、eval、關閉 TLS 驗證或瀏覽器作為父程序等加重因素（exec.pipe_to_shell，T1059.004）；`osascript -e` 把 do shell script 與 base64/eval 結合（exec.osascript_obfuscated，T1059.002）；`xattr -d com.apple.quarantine` 之後 15 分鐘內執行該檔案（exec.quarantine_stripped_then_exec，T1553.001）；launchd 從最近 24 小時內寫入的 LaunchAgent/LaunchDaemon 啟動未簽署/臨時簽署的二進位檔（exec.launchd_untrusted_binary，T1543.001/.004）；在非 Shell 且非 Apple 簽署的祖先程序之下執行 `security find-generic-password -w` 或 `dump-keychain`（exec.keychain_access，T1555.001）；osascript 以外的裸直譯器執行內嵌的 `-c`/`-e`/`-Command` 單行程式碼，並將 base64/eval 與下載或類似 exec 的呼叫結合（exec.interpreter_inline_obfuscated，T1059）；設定了 DYLD_INSERT_LIBRARIES 的非 Apple 簽署二進位檔被執行（exec.dyld_insert_libraries，T1574.006）；既非 RoamSwitch 自身也非 Apple 程序執行的 `tmutil deletelocalsnapshots`/`thinlocalsnapshots`（exec.ransomware_recovery_tampering，T1490）；指令列直接指定 RoamSwitch 放置的誘餌憑證檔案（如 ~/.aws/credentials、~/.env.backup，內容中帶有標記；真實檔案不會符合，透過函式庫讀取的情況由蜜罐權杖監視負責）（exec.honeytoken_path，T1552.001）。另有兩條規則針對由腳本或 AI 代理驅動的攻擊工具鏈（例如 HexStrike AI 後端）：一個行程在 30 秒內以 which/type 連續查詢 8 種以上不同的滲透測試工具（exec.offensive_tool_inventory，T1595），以及腳本執行環境或 AI 程式設計代理在 2 分鐘內啟動 3 種以上此類不同工具（exec.offensive_tool_burst，T1595）。人在終端機裡輸入相同的指令不會被標記。在「終端機」裡正常輸入的 `curl | sh` 不會被刻意標記。 寫在 `sh -c` 指令列中，或直接啟動的 nc、ncat、socat 指令列中的反向 Shell（含綁定 Shell）形態也會被標記（exec.reverse_shell_argv，T1059.004）：攜帶 Shell 的 /dev/tcp、/dev/udp 重新導向，把 mkfifo 管線接到 nc、telnet、openssl s_client 或 ssh 的形態，`nc -e <Shell>`，socat 的 exec:<Shell>，以及透過管線交給 Shell 的 openssl s_client。`echo > /dev/tcp/host/22` 這類連接埠探測，以及僅在文字中提到這些指令的內容不會被標記。
                 • 服務帳號啟動的 Shell（exec.shell_from_service，T1505.003）：當 Web 伺服器或應用程式服務程序（httpd、nginx、php-fpm、java、tomcat、gunicorn、uwsgi、node 等）以服務帳號（macOS 內建 Apache 的 `_www`、MacPorts 的 `www` 等）直接啟動 Shell（sh、bash、zsh 等），或 python、perl、ruby、node 的 -c / -e 單行指令時發出通知。這是 Web Shell 執行指令時的典型形態。帳號和服務程序兩者都符合才會偵測，因此以自己的帳號執行的開發伺服器、apachectl、brew services 和 cron 不會通知。要新增帳號，請執行 `defaults write com.tetsuharu.RoamSwitch RoamSwitch.ExecRule.ServiceUsers "名稱,名稱"`，然後重新啟動 App，或先關閉再重新開啟程序執行記錄（設定只是向清單新增，`_www` 不會被移除）。`_mysql`、`_postgres` 等資料庫帳號不在預設範圍內，因為資料庫本身會啟動 Shell（例如 archive_command）。不啟動程式、直接在 Web 伺服器程序內部執行程式碼的 Web Shell 無法偵測到。
                 • AI 程式設計代理之下向外傳送的資料（exec.agent_sensitive_send 與 exec.agent_sensitive_then_send，T1048）：當 AI 程式設計代理（claude、codex、gemini、opencode、aider、goose、cursor-agent、openclaw、qwen、crush）啟動的傳輸程式傳送了不應離開這台 Mac 的檔案（SSH 與雲端金鑰、.env 檔案、代理自身的登入檔案、瀏覽器資料、Shell 歷史；不含 .env.example、公開金鑰與 .pem 檔案），或引數中帶有疑似機密的值時，發出通知。傳輸程式包括帶內容或上傳的 curl 與 wget、scp、sftp、rsync、rclone、s3cmd、mc、寫入 s3:// 的 aws s3 cp/mv/sync 與 aws s3api put-object、寫入 gs:// 的 gsutil 與 gcloud storage、az storage blob upload、nc、ncat、socat、telnet 與 ftp。傳送檔案為高嚴重度（顯示橫幅）；僅有疑似機密的值為中（只記錄）。第二條規則（中）：同一代理之下的指令讀取了此類檔案，且 5 分鐘內出現傳送，即使傳送指令沒有寫出檔名（cat ~/.aws/credentials 之後 curl -d @-）也會通知。Authorization 標頭不算洩漏，一般的 curl GET 也不算傳送。限制：只能看到代理作為程序啟動的指令。代理自身的檔案讀取、傳給模型提供者的內容、git push、自行開啟 socket 的指令碼執行環境（python -c、node -e）都看不到；拆分或編碼後的引數可能繞過偵測；程序名稱為 node 的代理無法辨識。僅通知，不會隔離網路。
                 • 沒有終端機的 ssh 通道（exec.ssh_remote_forward，T1572）：當 ssh 要求遠端（-R、RemoteForward）或動態（-D、DynamicForward）轉送，且該程序沒有終端機（macOS 回報沒有控制終端機）或由 launchd 直接啟動時，以中嚴重度通知(此規則在中嚴重度下也會顯示橫幅;不會觸發 Air-Gap 或連接埠阻斷)。遠端轉送會讓外部的人透過這台 Mac 自己建立的連線，進入這台 Mac 或其後方的網路；只阻擋傳入連線的防火牆看不到它。在終端機中由人輸入的 ssh -R 有終端機，不會通知。本機轉送（-L）不在範圍內。限制：ssh 以外的通道（chisel、frp、ngrok 等），以及只寫在 ~/.ssh/config 中的 RemoteForward（不會出現在命令列中），此規則看不到。從其他機器透過 SSH 登入這台 Mac 的人所要求的 -R，不會在這台 Mac 上啟動程式，因此此規則看不到；連接埠異常防護(Pro)會根據該工作階段程序(sshd-session)開啟的監聽(包括 127.0.0.1 上的)發出通知。
                 • AI 代理之下反覆執行同一操作(exec.agent_repeat，T1059；需手動開啟，預設關閉)：當 AI 程式設計代理之下在短時間內多次執行同一類操作時，以中等嚴重度通知。只統計 ssh、sudo 或 doas、存取其他主機的 curl 或 wget、讀取憑證檔案和 git push；同一操作指忽略大小寫、空白和數字後，程式名稱與參數相同(`ssh web01` 與 `ssh web02` 視為同一個)。統計的是同一操作，而不是失敗：不會檢查每次是否成功。開啟方法：`defaults write com.tetsuharu.RoamSwitch RoamSwitch.ExecRule.AgentRepeat -bool true`；次數(3 到 1000，預設 6)為 `RoamSwitch.ExecRule.AgentRepeatCount`，時間視窗秒數(30 到 86400，預設 600)為 `RoamSwitch.ExecRule.AgentRepeatWindowSecs`。然後重新啟動 App，或先關閉再重新開啟程序執行記錄。反覆的測試或建置等一般迴圈不會被統計，但向多台主機部署，或等待遠端工作的迴圈，在數量上屬於同一操作，會發出通知。僅通知，不會進行隔離。
+                • 非 Apple 的程式冒用 Apple 程式的名稱或簽名識別碼執行(exec.name_masquerade，T1036)：簽名識別碼以 com.apple. 開頭，但既不是 Apple 平台二進位檔，也不是 Apple 自己的團隊簽名；或者名稱與系統處理程序(launchd、WindowServer 等)相同的檔案在系統位置之外執行時通知(未簽名或 ad-hoc 簽名為高，否則為中)。系統資料夾、/Applications、/usr/local 與 /opt/homebrew 中不判定。
                 • 相同偵測的重複：同一規則、同一程式、同一父程序的偵測，從第一次起 5 分鐘內不再通知。仍會記錄，並在事件時間軸中加上「（5 分鐘內相同偵測的重複，未通知）」保留。這 5 分鐘內，同一偵測最多保留 20 筆。
                 • 通知：一則通知（Pro）加上事件時間軸中的一筆記錄（來源 execRecorder，處置「僅通知」）。通知本身絕不會觸發 Air-Gap 等隔離。
                 • 儲存：分段的 JSON Lines，位於 /Library/Application Support/RoamSwitch/exec_log（僅 root 可讀：0700/0600，因為命令列可能包含機密；App、檢視器與 MCP 伺服器只能透過具權限的 Helper 讀取），預設 200 MB·14 天（可變更；磁碟剩餘空間超過 5% 且超過 1 GB 時，最近 72 小時的記錄最多保留到此大小的 4 倍），當機安全的輪替。各分段以雜湊鏈相連，可發現被刪除、編輯或截斷的分段（「驗證雜湊鏈」）；這是竄改偵測，而非竄改防護。不會記錄環境變數，但命令列引數中可能包含敏感資訊。
@@ -439,7 +440,7 @@ extension RoamSwitchKnowledgeBase {
                 • exec.offensive_tool_inventory 與 exec.offensive_tool_burst 的攻擊工具名單新增了 chisel、ligolo、ligolo-ng、suo5、stowaway、iox、venom、mimikatz、certipy、rubeus、kerbrute、bloodhound、sharphound、sliver、havoc、godzilla、behinder、antsword、weevely、fscan、gogo、ehole、oneforall、ksubdomain、dnsx、subzy、tlsx、cdncheck 以及 impacket 系列工具。frp、nps、ngrok、ssh 日常也會使用，因此未加入。 exec.offensive_tool_burst 現在也涵蓋可執行檔位於 /Users、/tmp、/private/tmp、/var/folders 等位置的程式（以 Go 或 Rust 撰寫、自行執行這些工具的代理程式）。終端機、ssh、login 下的鏈條仍不在範圍內。
                 • 檢視與匯出：選單 → 惡意軟體防護 →「程序執行記錄…」（搜尋、程序樹、匯出為 JSON Lines）。MCP 工具 `search_exec_events` 和 `get_process_tree`（Pro，唯讀）。 輸出安全：程序路徑、參數與簽章ID可被攻擊者任意構造，因此這些工具會移除控制字元、將每個字串限制在300個字元以內、把已知的金鑰格式與帶有機密名稱的參數值遮蔽為 ****，並在JSON之後附加第二個文字區塊，標明其為不可信的外部資料。搜尋詞（`query`）同樣只與已遮蔽的命令列進行比對（被遮蔽的值無法透過搜尋找到），長度至少為3個字元，且帶搜尋詞的查詢依工作階段限制頻率，因此無法藉由搜尋逐字元探測金鑰。應用程式本身的檢視視窗則會對您自己的日誌進行全文搜尋。
                 """,
-                recommendation: "如果需要用於事件調查的執行歷程，可以啟用，並請先在「完整磁碟取用權限」中允許 RoamSwitch。請把通知當作需要在記錄中查證的線索，而不是入侵的證據。"
+                recommendation: "如果需要用於事件調查的執行歷程，可以啟用，並請先在「完全取用磁碟」中允許 RoamSwitch。請把通知當作需要在記錄中查證的線索，而不是入侵的證據。"
             ),
             LocalizedEntry(
                 id: "feat_persistence_monitor_guard",
@@ -606,10 +607,11 @@ extension RoamSwitchKnowledgeBase {
                 title: "事件證據包與竄改偵測",
                 summary: "對勒索軟體或執行階段威脅被封堵時自動儲存的證據包，事後用保存在證據包之外的鏈記錄檢查它們是否被更動。這是竄改偵測，不是竄改防止。",
                 details: """
-                • 儲存：封堵勒索軟體或執行階段威脅的同時，把行程清單、網路連線、監視資料夾中最近修改的檔案，以及（如果能識別）可疑行程開啟的檔案，儲存為 `~/Library/Application Support/RoamSwitch/incident-evidence/` 下的證據包。manifest.json 中包含每個檔案的 SHA-256。不包含封包擷取與行程記憶體。
+                • 儲存：封堵勒索軟體或執行階段威脅的同時，把行程清單、網路連線、監視資料夾中最近修改的檔案，以及（如果能識別）可疑行程開啟的檔案，儲存為 `~/Library/Application Support/RoamSwitch/incident-evidence/` 下的證據包。manifest.json 中包含每個檔案的 SHA-256。不包含封包擷取與行程記憶體。也會儲存可疑程序的 TCP 與 UDP 通訊端的位址、連接埠與狀態(`process/network.json`,不含傳送的內容)。例外：若開啟選用的「事前擷取封包」（預設關閉，Pro），會保存最近幾十秒的通訊，每個封包都在標頭末尾截斷（不含內容；`packet_preroll/`，附每個檔案的 SHA-256）。擷取本身會把每個封包的前 96 位元組（標頭，較短時還有內容的一小部分）只在最近很短的時間內寫入只有 root 能讀取的資料夾。
                 • 關聯：manifest.json 會寫入觸發本次儲存的偵測記錄的 ID（僅在已知時）。在事件時間軸中，偵測記錄可依名稱指向此證據包。
                 • 鏈：把證據包 manifest 的 SHA-256 連同上一行的雜湊，逐行寫入證據包之外的 `chain.log`（位於同一個 incident-evidence 資料夾，0600）。寫入在刷到磁碟（F_FULLFSYNC）之後才確定。
                 • 檢查：唯讀的 MCP 工具 `get_forensic_evidence_bundles` 會為每個證據包回傳 `integrity`。值為 `verified`、`manifest_altered`、`artifact_altered:<名稱>`、`artifact_missing:<名稱>`、`not_anchored`（鏈建立之前的證據包，或其行被刪除）。還會回傳整條鏈的 `chainOk`、`chainBrokenAt`，以及鏈中記錄但已消失的證據包 `missingBundles`。
+                • 起始標記與鏈頭：新的日誌以起始標記（證據包 `@genesis` 的一行）開頭。在帶有起始標記的日誌中，標記之後擷取卻沒有對應行的證據包會顯示為 `anchor_removed`（該行被從末尾截掉）；標記之前的證據包仍為 `not_anchored`。`get_forensic_evidence_bundles` 和 `get_incident_timeline` 還會回傳鏈頭 `chainHead`（`seq` 為行數，`chain` 為最後一行的雜湊）。請把它保存在這台 Mac 之外，之後作為 `witness`（`SEQ:HASH`）傳回，`chainWitness` 即為 `consistent`、`truncated`（行數比之前少）、`diverged`（該行的雜湊不同）、`invalid` 或 `chain_broken`。每筆新行的鏈頭也會寫入系統日誌（標籤 `roamswitch-evidence`）。manifest 會記錄擷取耗時（`durationMs`）和每項證據完成的時間（`elapsedMs`）。
                 • 已損壞的鏈不會再追加行（以免掩蓋是在哪裡損壞的）。
                 • 限制：這是竄改的「偵測」，不是「防止」。能同時改寫資料夾與日誌的人，可以編造出前後一致的歷史。
                 """,
@@ -816,8 +818,8 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_security_health_checker",
-                title: "Mac 安全稽核（25 個項目、分數與修正步驟）",
-                summary: "檢查六大領域（系統強化、網路防禦、驗證與存取控制、連接埠曝露、惡意軟體防護、實體裝置防護）共 25 個項目，並顯示 0 到 100 分的分數、等級，以及每個未通過項目的修正步驟。免費版即可使用。",
+                title: "Mac 安全稽核（26 個項目、分數與修正步驟）",
+                summary: "檢查六大領域（系統強化、網路防禦、驗證與存取控制、連接埠曝露、惡意軟體防護、實體裝置防護）共 26 個項目，並顯示 0 到 100 分的分數、等級，以及每個未通過項目的修正步驟。免費版即可使用。",
                 details: """
                 • 系統強化：1. FileVault、2. SIP（系統完整性保護）、3. Gatekeeper、4. 自動安全更新、5. Apple XProtect、6. 備份（Time Machine 最近一次備份在 7 天內；不檢查能否還原）。
                 • 網路防禦：7. macOS 防火牆、8. 隱形模式、9. Wi-Fi 加密強度、10. ARP 詐騙監控、11. 閘道 ARP 固定、12. 代理伺服器自動探索 (WPAD / PAC)。
@@ -831,7 +833,8 @@ extension RoamSwitchKnowledgeBase {
                 • 24. 透過 Tailscale 的曝露（`overlay_exposure`，網路防禦）：這台 Mac 加入 tailnet 時，檢查 tailnet 一側能看到什麼。在沒有開啟 Tailscale 入站封鎖（shields up）的情況下，如果有 SSH、檔案共享、遠端控制、資料庫、無驗證的 AI 推論伺服器等高風險連接埠在 tailnet 可達的位置監聽，則不合格。只計算綁定在萬用位址或 tailnet 位址（100.64.0.0/10、fd7a:115c:a1e0::/48）上的監聽，只綁定在區域網路位址或迴路位址上的監聽不計入。ngrok 或 cloudflared 與 Tailscale 同時執行時也不合格（依可執行檔名稱判斷）。作為 Exit Node 或 Subnet 路由對外通告，以及 Tailscale SSH，只顯示狀態，不算不合格。讀取的內容是 `tailscale status --json`（只看是否在執行）、`tailscale debug prefs`（只取 ShieldsUp、AdvertiseRoutes、RunSSH 三項，其餘丟棄，不記錄金鑰等）、監聽連接埠清單和正在執行的程式名稱。不向外部傳送任何內容，也不變更任何設定。找不到 Tailscale 或它沒有執行時，該項不適用，不計入分數。不會讀取 tailnet 的存取控制 (ACL)，因此被 ACL 隱藏的連接埠也會被指出。不會因為有 macOS 防火牆就判為合格。要封鎖入站連線，請執行 `sudo tailscale set --shields-up`（這台 Mac 連向其他裝置的連線不受影響）。
                 • 25. SNMP 曝露（`snmp_exposure`，連接埠曝露）：讀取 macOS 內建的 SNMP 服務（snmpd）的設定。在 /etc/snmp/snmpd.conf 以及 snmpd.conf.d、snmpd.d 中的 *.conf 裡，如果有一行仍使用 SNMP 的預設社群名稱，且沒有限制來源和 OID（rocommunity、rwcommunity，或來源為 default 的 com2sec），則不合格。snmpd 正在監聽（UDP 161 綁定在非迴路位址）時是強烈警告；已停止時，警告的意思是一旦啟用就會曝露。預設設定只限定了一個 OID，所以合格，且 snmpd 出廠時是停用的。僅在監聽但設定沒有問題（例如只用 SNMPv3）時，不判為不合格。只讀取設定檔和 `netstat -an -p udp` 的輸出，不會啟動 snmpd，也不會對外傳送任何通訊。社群名稱不會顯示也不會記錄。snmpd.conf 裡的 include 行不會被跟隨。
                 • 等級：100 分為 S、85 至 99 分為 A、70 至 84 分為 B、低於 70 分為 C。也可透過 MCP 工具 `get_security_report` 取得。
-                • 保護的運作狀態：依防護項目（36 項）列出已開啟的保護是否真正在運作的視窗。可從選單（Mac 安全綜合診斷 > 🛡️ 保護的運作狀態…）開啟，也可用綜合診斷報告頂端卡片（摘要和未運作的保護）上的「顯示所有保護…」開啟。狀態共五種：已生效、部分生效、未生效、關閉、僅限 Pro。未運作的保護會顯示原因代碼（如 `pro_not_active`、`helper_not_connected`、`system_extension_not_approved`）以及說明原因與解決方法的句子；依原因，還會出現「認證 Pro 版…」「核准輔助程式…」「開啟系統設定…」按鈕。每 15 秒以及按下「重新確認」時重新讀取。在沒有 Pro 的 Mac 上，僅因預設值而開啟的 Pro 功能顯示為「僅限 Pro」，不計為故障。有保護未運作時，選單頂端還會出現一行「⚠️ 有保護未生效(N 項)。查看原因…」。判定使用與選單標記、通知和 MCP 的 `get_guard_status` 相同的資料。偵測資料的更新停止時（`state_stale`）不發通知，只顯示在選單和這個視窗中。 每一行都會說明這項保護監看什麼（作用）以及它在選單的哪裡（位置）。沒有運作的行還會顯示原因、對偵測的影響、狀況（哪個輸入停了、重新啟動的次數和時間、無法讀取的檔案名稱及原因）、帶編號的步驟和可以按下的按鈕（開啟「完整磁碟取用權限」設定、重新啟動此項保護、開啟此功能等）。選單提示和通知也以同樣的句子開頭（名稱、作用、輸入、原因、影響）。`get_guard_status` 的 readers 中包含最近一次掃描無法讀取的範例（skippedSamples：路徑和原因，最多 5 個）。
+                • 分數與預設：分數以「最高安全」預設為理想狀態來計算。由設定預設切換的防護，開啟時計為通過，關閉時計為未通過。已由現有項目檢查的防護不會重複計算。需要 Pro 或前提條件未滿足的防護不適用。第 26 項「與預設的差距」(`preset_gap`)不計入分數，它列出目前所選預設與「最高安全」之間的差異。較輕的預設分數較低，是正確的行為。
+                • 保護的運作狀態：依防護項目（36 項）列出已開啟的保護是否真正在運作的視窗。可從選單（Mac 安全綜合診斷 > 🛡️ 保護的運作狀態…）開啟，也可用綜合診斷報告頂端卡片（摘要和未運作的保護）上的「顯示所有保護…」開啟。狀態共五種：已生效、部分生效、未生效、關閉、僅限 Pro。未運作的保護會顯示原因代碼（如 `pro_not_active`、`helper_not_connected`、`system_extension_not_approved`）以及說明原因與解決方法的句子；依原因，還會出現「認證 Pro 版…」「核准輔助程式…」「開啟系統設定…」按鈕。每 15 秒以及按下「重新確認」時重新讀取。在沒有 Pro 的 Mac 上，僅因預設值而開啟的 Pro 功能顯示為「僅限 Pro」，不計為故障。有保護未運作時，選單頂端還會出現一行「⚠️ 有保護未生效(N 項)。查看原因…」。判定使用與選單標記、通知和 MCP 的 `get_guard_status` 相同的資料。偵測資料的更新停止時（`state_stale`）不發通知，只顯示在選單和這個視窗中。 每一行都會說明這項保護監看什麼（作用）以及它在選單的哪裡（位置）。沒有運作的行還會顯示原因、對偵測的影響、狀況（哪個輸入停了、重新啟動的次數和時間、無法讀取的檔案名稱及原因）、帶編號的步驟和可以按下的按鈕（開啟「完全取用磁碟」設定、重新啟動此項保護、開啟此功能等）。選單提示和通知也以同樣的句子開頭（名稱、作用、輸入、原因、影響）。`get_guard_status` 的 readers 中包含最近一次掃描無法讀取的範例（skippedSamples：路徑和原因，最多 5 個）。
                 • 設定被削弱時的通知（Pro，預設開啟）：診斷之後，上次合格（或不適用）而現在不合格的設定，用一則通知告知。涵蓋 10 項不會自行變化的設定（SSH、sudo、SIP、Gatekeeper、自動更新、XProtect、瀏覽器的釣魚防護、配件連線保護、FileVault、備份新舊）。Wi-Fi、ARP、開放連接埠這類隨時變化的內容，以及結果取決於所連網路的防火牆項目不在其內。無法測量的項目不計入。第一次診斷只做記錄，同一項目 24 小時內不重複，通知關閉期間發生的削弱在重新開啟後也不會通知。不會傳送任何資料。可用選單中的「設定被削弱時通知 (Pro)」關閉，狀態顯示在 `get_guard_status` 的 configRegressionNotice 中。Linux 版有相同功能（由常駐程式在每小時的檢查之後執行，不區分 Pro）。
                 • 瀏覽器擴充功能權限檢查(選單中的「🧩 檢查瀏覽器擴充功能的權限…」): 讀取 Chromium 系瀏覽器擴充功能的 manifest.json,依權限的組合分級。debugger 為高;所有網站的存取權限加上 webRequest、cookies、tabs 或 scripting 為中;nativeMessaging、proxy、management,以及之後才請求的強權限為資訊。以開發人員模式載入的擴充功能,或從商店以外更新的擴充功能,會附上註記而不是分級。相對於您標記為已確認的狀態,出現新擴充功能或權限增加時會自動通知(通知為 Pro;僅通知,不會停止任何東西)。不進行網路通訊,清單只保留在這台 Mac 內。不讀取 Firefox。
                 """,
@@ -924,7 +927,7 @@ extension RoamSwitchKnowledgeBase {
                 • 寫入之前，只會出現一次列出變更項目的確認，不會出現各個防護的單獨確認。「最高安全」的確認會逐行列出會增加誤報、導致工作中斷、向外通訊或隔離網路的項目。
                 • 還原：子選單中的「還原套用……」會把最近一次套用恢復為套用之前的值(只能還原一次，無法回到更早的一次)。
                 • 只要手動變更了一項，選單就會顯示「自訂」。
-                • 預設不會變更的內容：網路信任設定(已登記的網路、外出時的保護等級、手動指定)、允許清單、監看資料夾、SSH 門檻、VPN、Sensor 配對與事件轉送。完整磁碟取用權限等權限無法透過預設授予，缺少的項目會在套用後列出。
+                • 預設不會變更的內容：網路信任設定(已登記的網路、外出時的保護等級、手動指定)、允許清單、監看資料夾、SSH 門檻、VPN、Sensor 配對與事件轉送。完全取用磁碟等權限無法透過預設授予，缺少的項目會在套用後列出。
                 • 隔離(Air-Gap)期間不會套用。請先透過選單中的「解除 Air-Gap 隔離」解除。
                 • MCP：`get_guard_status` 中的 `preset` 可讀取目前的預設(`selected`、`matches`、`lockedByLicense`、`differsFromSelected`)。MCP 無法變更。
                 """,
@@ -1448,13 +1451,13 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 • 自動開啟（僅首次啟用 Pro 時一次）：自動封鎖未知監聽連接埠、入站連接埠掃描偵測（含對掃描來源 10 分鐘的自動封鎖）、SSH 暴力破解偵測（僅在遠端登入開啟時運作）、勒索軟體誘餌檔案偵測與熵偵測、憑證蜜罐權杖、偵測到 ARP 詐騙時自動封鎖、XProtect 惡意軟體偵測時自動斷網、自動日誌審計、重要系統檔案竄改監控、相依鎖定檔案竄改監控、反向 Shell 即時偵測，以及網路設定變化監控。開啟 ARP 與 XProtect 斷網功能時，會顯示一次性說明。
                 • Pro 版預設開啟：網頁與郵件保護、自動啟動註冊（LaunchAgent/Daemon）監控、DNS 威脅防護（僅套用於外出網路），以及連結保護（自動攔截明顯的詐騙網站）。
-                • 預設關閉（須自行開啟）：ClickFix 自動封鎖、Docker 風險偵測、BadUSB 實體連接埠防護、USB 儲存裝置自動封鎖、閘道 ARP/NDP 固定、Bluetooth 自動關閉、程序執行記錄、瀏覽器憑證存取監控、VPN 隧道、Sensor 配對、實證型漏洞驗證，以及 npm 簽章驗證。它們各自可能妨礙正常使用（斷網、輸入裝置、外接儲存裝置、聲音）、需要額外的權限或安裝（完整磁碟取用權限、輔助使用、blueutil）、需要許可清單等自行設定，或會與外部伺服器通訊。DNS 威脅防護的供應商由您自行選擇。
+                • 預設關閉（須自行開啟）：ClickFix 自動封鎖、Docker 風險偵測、BadUSB 實體連接埠防護、USB 儲存裝置自動封鎖、閘道 ARP/NDP 固定、Bluetooth 自動關閉、程序執行記錄、瀏覽器憑證存取監控、VPN 隧道、Sensor 配對、實證型漏洞驗證，以及 npm 簽章驗證。它們各自可能妨礙正常使用（斷網、輸入裝置、外接儲存裝置、聲音）、需要額外的權限或安裝（完全取用磁碟、輔助使用、blueutil）、需要許可清單等自行設定，或會與外部伺服器通訊。DNS 威脅防護的供應商由您自行選擇。
                 • 即使在免費版也預設開啟：剪貼簿保護（API 金鑰與 ClickFix 指令）。
                 • 之後版本新增的防護，會為既有的 Pro 使用者套用各自的一次性預設值。您關閉的防護，即使重新啟用授權也會維持關閉。移除授權時，Pro 專屬防護會被關閉；原本開啟的防護會在下次啟用 Pro 時依預設值重新開啟。
                 • 選單標記:✅ 表示設定已開啟且在運作。🟡 表示只有一部分在運作(輔助程式未連線、系統延伸功能等待批准、有無法讀取的檔案)。⚠️ 表示設定已開啟但沒有運作(Pro 未啟用、輔助程式未連線、無法讀取輸入、沒有可監視的對象、誘餌一個都沒放成)。原因顯示在項目尾端的方括號與滑鼠停留的說明中。同樣的狀態就是 `get_guard_status` 中的 liveState 與 liveStateReason。
-                • 啟動時無法驗證授權:如果儲存的授權無法通過驗證(Pro 已過期、為另一台 Mac 簽發、簽章無效),啟動後不久會用一則通知點名那些設定仍開啟但已停止的防護。首次啟用 Pro 之後,也會用一則通知列出已開啟的防護、需要自行開啟的防護,以及仍無法運作的原因(輔助程式批准、系統延伸功能批准、完整磁碟取用權限、登錄監視資料夾)。
+                • 啟動時無法驗證授權:如果儲存的授權無法通過驗證(Pro 已過期、為另一台 Mac 簽發、簽章無效),啟動後不久會用一則通知點名那些設定仍開啟但已停止的防護。首次啟用 Pro 之後,也會用一則通知列出已開啟的防護、需要自行開啟的防護,以及仍無法運作的原因(輔助程式批准、系統延伸功能批准、完全取用磁碟、登錄監視資料夾)。
                 • 自我監控(當機後自動重新啟動):預設關閉。在選單的「自我監控…」中同意後,會把應用程式內的小型監控程式註冊為登入項目(可能需要在系統設定中批准)。狀態顯示在選單與 `get_detection_coverage`(T1685 的 liveState 與 liveStateReason)中。關閉也在同一項目中進行,解除安裝時會一併移除。 核准後，監看程式會從下次登入起開始運作。
-                • 當 macOS 通知未被允許,或通知樣式為「無」時,警告不會顯示在螢幕上(仍保留在通知記錄中)。選單最上方會出現「通知未被允許…」一行,診斷與通知記錄視窗裡會出現橫幅。首次使用指引中也有一頁,說明通知以及之後需要的權限(完整磁碟取用權限、系統延伸功能、輔助使用、定位服務)。
+                • 當 macOS 通知未被允許,或通知樣式為「無」時,警告不會顯示在螢幕上(仍保留在通知記錄中)。選單最上方會出現「通知未被允許…」一行,診斷與通知記錄視窗裡會出現橫幅。首次使用指引中也有一頁,說明通知以及之後需要的權限(完全取用磁碟、系統延伸功能、輔助使用、定位服務)。
                 """,
                 recommendation: "啟用 Pro 後，請檢查選單中的 ✅ 標記。不符合您使用情境的防護（例如未使用 Docker）可維持關閉，並開啟您需要的功能（例如經常使用公共 Wi-Fi 就開啟 VPN）。"
             ),
@@ -1543,7 +1546,7 @@ extension RoamSwitchKnowledgeBase {
                 details: """
                 【免費版】
                 • 依網路自動切換 3 個等級的 PF 封包過濾器，共享服務與 AirDrop 會自動停止並恢復
-                • Mac 安全稽核（25 個項目）、XProtect 狀態，以及檔案／應用程式安全性檢查
+                • Mac 安全稽核（26 個項目）、XProtect 狀態，以及檔案／應用程式安全性檢查
                 • 顯示公開連接埠與 USB 裝置清單
                 • 連結安全性診斷、手動機密資訊／API 金鑰洩露稽核、剪貼簿保護
                 • 套件 CVE 掃描、實證型漏洞驗證、Mac 安全日誌審計、通知歷史

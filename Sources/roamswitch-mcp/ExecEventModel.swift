@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.36 (build 215).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.0.0 (build 216).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -476,11 +476,15 @@ public struct ExecRecorderStatus: Codable, Equatable {
     public var lastError: String?
     /// When eslogger last ended and a restart was scheduled (unix seconds). Nothing is replayed over that gap.
     public var lastRestartAt: Double?
+    /// Where the events come from now: "es" (the Endpoint Security client of the RoamSwitchESClient extension) or
+    /// "eslogger" (Apple's eslogger as a child process). nil: not running, or a helper that only knew eslogger.
+    public var source: String?
 
     public init(
         state: String = "stopped", updatedAt: Double = Date().timeIntervalSince1970, startedAt: Double? = nil,
         eventsRecorded: UInt64 = 0, eventsDropped: UInt64 = 0, malformedLines: UInt64 = 0, alertsRaised: UInt64 = 0,
-        restartCount: Int = 0, nextRetryAt: Double? = nil, lastError: String? = nil, lastRestartAt: Double? = nil
+        restartCount: Int = 0, nextRetryAt: Double? = nil, lastError: String? = nil, lastRestartAt: Double? = nil,
+        source: String? = nil
     ) {
         self.state = state
         self.updatedAt = updatedAt
@@ -493,6 +497,7 @@ public struct ExecRecorderStatus: Codable, Equatable {
         self.nextRetryAt = nextRetryAt
         self.lastError = lastError
         self.lastRestartAt = lastRestartAt
+        self.source = source
     }
 
     public static func read(path: String = ExecRecorderPaths.statusFile) -> ExecRecorderStatus? {
