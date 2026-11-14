@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.35 (build 214). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 1.17.36 (build 215). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -177,6 +177,29 @@ final class MCPKnowledgeBaseTests: XCTestCase {
             }
             let fwd = try XCTUnwrap(entries.first { $0.id == "feat_event_forwarding" })
             XCTAssertFalse(fwd.details.contains("Webhook の内部アドレスの拒否は"), code)
+        }
+    }
+
+    /// 2026-11-13 additions (agent-check, the browser extension audit, SNMP exposure item 25, `exec.agent_repeat`) are stated
+    /// in every language, each in the entry a reader would look in.
+    func testAgentCheckAndTheBrowserExtensionAuditAreDocumentedInEveryLanguage() throws {
+        let checks: [(id: String, needles: [String])] = [
+            ("feat_mcp_server", ["agent-check", "PreToolUse", "--print-hook-config", "agent_check_log.jsonl", "ase64"]),
+            ("feat_security_health_checker", ["manifest.json", "debugger", "webRequest", "Chromium", "snmp_exposure"]),
+            ("feat_exec_recorder", ["exec.agent_repeat", "AgentRepeatCount"]),
+        ]
+        let ja = RoamSwitchKnowledgeBase.localizedEntries(for: "ja")
+        for code in RoamSwitchKnowledgeBase.supportedLanguageCodes {
+            let entries = RoamSwitchKnowledgeBase.localizedEntries(for: code)
+            for check in checks {
+                let entry = try XCTUnwrap(entries.first { $0.id == check.id }, "\(check.id) missing for \(code)")
+                for needle in check.needles {
+                    XCTAssertTrue(entry.details.contains(needle), "\(code): \(check.id) does not mention \(needle)")
+                }
+                if code != "ja", let jaEntry = ja.first(where: { $0.id == check.id }) {
+                    XCTAssertNotEqual(entry.details, jaEntry.details, "\(code): \(check.id) is not translated")
+                }
+            }
         }
     }
 

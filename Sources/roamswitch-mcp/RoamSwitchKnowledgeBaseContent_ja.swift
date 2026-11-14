@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.35 (build 214).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.36 (build 215).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -833,6 +833,7 @@ extension RoamSwitchKnowledgeBase {
                 • ランク: 100点 = S、85〜99点 = A、70〜84点 = B、70点未満 = C。MCPツール `get_security_report` でも取得できます。
                 • 保護の稼働状態: 設定でオンにしている保護が実際に働いているかを、ガードごと(36個)に一覧する窓です。メニュー「Macセキュリティ総合診断」→「🛡️ 保護の稼働状態…」か、総合診断レポートの先頭のカード(要約と、動いていない保護だけ)の「すべての保護を表示…」で開きます。状態は、効いている、一部のみ動作、効いていない、オフ、Proのみ の5つです。動いていない保護には、理由コード(`pro_not_active`、`helper_not_connected`、`system_extension_not_approved` など)と、原因と直し方の文を出し、理由によって「Pro版を認証…」「ヘルパーを承認する…」「システム設定を開く…」のボタンも出ます。15秒ごとと「再確認」で読み直します。Pro版でないMacで、既定がオンなだけのPro機能は「Proのみ」と出し、不具合には数えません。動いていない保護があるあいだは、メニューの上にも「⚠️ 効いていない保護があります (N個)。理由を見る…」の行が出ます。判定は、メニューのマーク・通知・MCPの `get_guard_status` と同じ元データを使います。検知用データの更新が止まったとき(`state_stale`)は、通知にせず、メニューとこの窓だけに出します。 どの行にも、その保護が何を見る機能か(役割)と、メニューのどこにあるか(場所)を出します。動いていない行には、原因、検知への影響、状況(どの入力が止まったか、再起動の回数と時刻、読めなかったファイルの名前と理由)、番号つきの手順と、押せるボタン(フルディスクアクセスの設定を開く、このガードを再起動、この機能を開く など)を出します。メニューの説明と通知も、同じ文(保護の名前、役割、入力、原因、影響)で始まります。`get_guard_status` の readers には、最後の走査で読めなかったものの例(skippedSamples。パスと理由。最大5件)が入ります。
                 • 設定が弱くなったときの通知（Pro、既定オン）: 診断のあと、前回は合格（または対象外）だった設定が不合格になったものを、1通で知らせます。対象は、変わらない設定の10項目（SSH、sudo、SIP、Gatekeeper、自動アップデート、XProtect、ブラウザーのフィッシング対策、アクセサリー接続の保護、FileVault、バックアップの新しさ）です。Wi-Fi、ARP、公開ポートのように場面で変わるものと、接続先のネットワークで結果が変わるファイアウォールの項目は対象外です。測れなかった項目は数えません。最初の診断は記録だけで、同じ項目は24時間以内に繰り返さず、止めている間に起きた悪化は、再開後に知らせません。通信はしません。メニューの「設定が弱くなったら通知 (Pro)」で止められ、状態は `get_guard_status` の configRegressionNotice に出ます。Linux版にも同じ機能があります（デーモンが1時間ごとの診断で行い、Proの区別はありません）。
+                • ブラウザ拡張の権限の点検(メニューの「🧩 ブラウザ拡張の権限を点検…」): Chromium 系ブラウザの拡張機能の manifest.json を読み、権限の組み合わせで段階を付けます。debugger は高、すべてのサイトへの権限と webRequest・cookies・tabs・scripting の組み合わせは中、nativeMessaging・proxy・management と、あとから求められる強い権限は情報です。開発者モードで読み込んだ拡張や、ストア以外から更新される拡張には、段階ではなく注記が付きます。確認済みにした状態から、新しい拡張や権限の増加があれば、自動で知らせます(通知は Pro。通知のみで、何も止めません)。通信はせず、一覧はこの Mac の中にとどまります。Firefox は読みません。
                 """,
                 recommendation: "定期的に「総合診断レポート」を開き、⚠️ の項目を改善手順に沿って対応して、ランクA以上を維持してください。"
             ),
@@ -894,6 +895,7 @@ extension RoamSwitchKnowledgeBase {
                 • audit_mcp_configs の追加の指摘: 認証の設定がない別ホストの https サーバー（remote_no_auth、medium。接続時に OAuth でログインするクライアントなら問題ありません）と、すべてのインターフェースで待ち受けるよう起動するサーバー（`--host 0.0.0.0` など。mcp_wide_bind、high）。
                 • SARIF: `audit_mcp_configs`、`audit_agent_setup`、`run_active_vuln_scan`、`run_package_cve_scan`、`run_package_cve_scan_languages` は、`format: "sarif"` で SARIF 2.1.0 の形でも返します。
                 • get_system_timeline: アプリが1日1回記録した、待ち受け・Homebrew のパッケージ・主な設定のハッシュ（最大90日）と、その差分を返します。`since` に `yyyy-MM-dd` か `7d` を指定できます。設定の中身は保存も出力もしません。Linux版の `roamswitch timeline --since` に当たります。
+                • AI コーディングエージェントの実行前の確認(agent-check): `RoamSwitchMCPServer agent-check` を、Claude Code の PreToolUse フックから呼ぶと、ツールを呼ぶ前に宛先を調べます。クラウドのメタデータのアドレス(169.254.169.254 など)は deny、認証情報のファイル(.ssh、.aws、.env など)と、この端末のネットワークの外への宛先が同じ呼び出しにあるときは ask を返します。ループバックと私設のアドレス、報告することがない呼び出しは何も出力せず終了コード 0 で、エージェント自身の許可の確認はそのまま働きます。`--print-hook-config` は、貼り付ける設定の例を表示するだけで、設定は書き換えません。検知の補助であり、防ぐ壁ではありません。スクリプトファイルの中、変数、コマンド置換、分けて指定したコマンド、base64 は見えず、名前は解決せず、ネットワークにも接続しません。記録(`~/Library/Application Support/RoamSwitch/agent_check_log.jsonl`)には、ツール名と理由のキーだけを残し、値は残しません。
                 """,
                 recommendation: "設定手順は faq_mcp_setup を参照してください。「このMacは今安全？」「この通知はどういう意味？」のように自然な言葉で質問できます。"
             ),

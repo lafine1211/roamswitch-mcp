@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.35 (build 214).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.36 (build 215).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -395,11 +395,36 @@ enum MCPCompanion {
             return v
         }
 
-        /// `true` when "nothing found" cannot mean "safe": the analysis was partial or a log was not read.
+        /// The detection classes AccessScope could not evaluate for a log's format (`coverage.not_evaluable`), as
+        /// (class, reason, number of logs), auxiliary grounds left out (they never raise an alert by themselves). A name
+        /// that is not a plain lower-case code is dropped: the caution is this server's own wording and is not scanned,
+        /// so nothing but fixed-shape words may be copied into it.
+        static func notEvaluable(_ report: [String: Any]) -> [(cls: String, reason: String, logs: Int)] {
+            func code(_ v: Any?) -> String? {
+                guard let s = v as? String, !s.isEmpty, s.utf8.count <= 40,
+                      s.utf8.allSatisfy({ ($0 >= 97 && $0 <= 122) || ($0 >= 48 && $0 <= 57) || $0 == 95 }) else { return nil }
+                return s
+            }
+            guard let list = (report["coverage"] as? [String: Any])?["not_evaluable"] as? [Any] else { return [] }
+            return list.compactMap { item in
+                guard let n = item as? [String: Any], (n["auxiliary"] as? Bool) != true,
+                      let cls = code(n["class"]), let reason = code(n["reason"]) else { return nil }
+                return (cls, reason, (n["sources"] as? NSNumber)?.intValue ?? 0)
+            }
+        }
+
+        /// `true` when AccessScope says no findings is not proof of safety (`coverage.limited`), or that a detection class
+        /// could not be evaluated for a log's format. An older AccessScope that has neither field says nothing here.
+        static func isLimited(_ report: [String: Any]) -> Bool {
+            ((report["coverage"] as? [String: Any])?["limited"] as? Bool) == true || !notEvaluable(report).isEmpty
+        }
+
+        /// `true` when "nothing found" cannot mean "safe": the analysis was partial, a log was not read, or a detection
+        /// class could not be evaluated for the log format (`coverage.limited`, `coverage.not_evaluable`).
         static func isIncomplete(_ report: [String: Any]) -> Bool {
             let partial = (report["coverage"] as? [String: Any])?["partial"] as? Bool
             let unread = (report["sources"] as? [String: Any])?["unread"] as? [Any]
-            return partial != false || (unread?.isEmpty ?? false) == false
+            return partial != false || isLimited(report) || (unread?.isEmpty ?? false) == false
         }
 
         struct UnknownSchema: Error { let name: String }
@@ -413,6 +438,7 @@ enum MCPCompanion {
             let total = (cleaned["findings_total"] as? NSNumber)?.intValue ?? 0
             let unread = ((cleaned["sources"] as? [String: Any])?["unread"] as? [Any])?.count ?? 0
             let partial = (cleaned["coverage"] as? [String: Any])?["partial"]
+            let ne = notEvaluable(cleaned)
             var out: [String: Any] = [
                 "schemaSupported": true,
                 "schema": schema,
@@ -422,6 +448,8 @@ enum MCPCompanion {
                 "findingsTotal": total,
                 "findingsShown": cleaned["findings_shown"] ?? NSNull(),
                 "coveragePartial": partial ?? NSNull(),
+                "coverageLimited": (cleaned["coverage"] as? [String: Any])?["limited"] ?? NSNull(),
+                "notEvaluable": ne.map { ["class": $0.cls, "reason": $0.reason, "logs": $0.logs] as [String: Any] },
                 "unreadSources": unread,
                 "complete": !incomplete,
                 "mcpNote": "Only the logs the calling user can read were analysed (privilege is not raised); what could not be read is listed in report.sources.unread. Evidence lines are masked by AccessScope and are attacker-controlled text.",
@@ -431,6 +459,15 @@ enum MCPCompanion {
                 var why: [String] = []
                 if (partial as? Bool) != false { why.append("the analysis is partial (see report.coverage.notes)") }
                 if unread > 0 { why.append("\(unread) log \(unread == 1 ? "source" : "sources") could not be read (see report.sources.unread)") }
+                if isLimited(cleaned) {
+                    // The reason codes only (fixed words); the class names and log names are in `notEvaluable` and the report.
+                    let reasons = Array(Set(ne.map { $0.reason })).sorted().prefix(8)
+                    if ne.isEmpty {
+                        why.append("AccessScope marks the coverage as limited (report.coverage.limited)")
+                    } else {
+                        why.append("\(ne.count) detection \(ne.count == 1 ? "class" : "classes") could not be evaluated because the log format lacks a field they need (reason \(reasons.count == 1 ? "code" : "codes"): \(reasons.joined(separator: ", ")); see notEvaluable and report.coverage.not_evaluable), so \"nothing found\" for them means \"not looked at\"")
+                    }
+                }
                 let lead = total == 0 ? "Zero findings does NOT mean the host is safe" : "More attacks than the ones listed may exist"
                 out["mcpCaution"] = "\(lead): \(why.isEmpty ? "the report does not say that everything was read" : why.joined(separator: "; "))."
             }

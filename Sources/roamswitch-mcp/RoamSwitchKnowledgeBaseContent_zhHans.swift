@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.35 (build 214).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.36 (build 215).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -833,6 +833,7 @@ extension RoamSwitchKnowledgeBase {
                 • 等级：100 分 = S，85～99 分 = A，70～84 分 = B，低于 70 分 = C。也可通过 MCP 工具 `get_security_report` 获取。
                 • 保护的运行状态：按防护项（36 项）列出已开启的保护是否真正在运行的窗口。可从菜单（Mac 安全综合诊断 > 🛡️ 保护的运行状态…）打开，也可用综合诊断报告顶部卡片（摘要和未运行的保护）上的“显示所有保护…”打开。状态共五种：已生效、部分生效、未生效、关闭、仅限 Pro。未运行的保护会显示原因代码（如 `pro_not_active`、`helper_not_connected`、`system_extension_not_approved`）以及说明原因和解决方法的句子；根据原因，还会出现“认证 Pro 版…”“批准辅助程序…”“打开系统设置…”按钮。每 15 秒以及点击“重新确认”时重新读取。在没有 Pro 的 Mac 上，仅因默认值而开启的 Pro 功能显示为“仅限 Pro”，不计为故障。有保护未运行时，菜单顶部还会出现一行“⚠️ 有保护未生效(N 项)。查看原因…”。判定使用与菜单标记、通知和 MCP 的 `get_guard_status` 相同的数据。检测数据的更新停止时（`state_stale`）不发通知，只显示在菜单和这个窗口中。 每一行都会说明这项保护监视什么（作用）以及它在菜单的哪里（位置）。没有运行的行还会显示原因、对检测的影响、状况（哪个输入停了、重启的次数和时间、无法读取的文件名称及原因）、带编号的步骤和可以点击的按钮（打开“完全磁盘访问权限”设置、重新启动此项保护、打开此功能等）。菜单提示和通知也以同样的句子开头（名称、作用、输入、原因、影响）。`get_guard_status` 的 readers 中包含最近一次扫描无法读取的示例（skippedSamples：路径和原因，最多 5 个）。
                 • 设置被削弱时的通知（Pro，默认开启）：诊断之后，上次合格（或不适用）而现在不合格的设置，用一条通知告知。涵盖 10 项不会自行变化的设置（SSH、sudo、SIP、Gatekeeper、自动更新、XProtect、浏览器的钓鱼防护、配件连接保护、FileVault、备份新旧）。Wi-Fi、ARP、开放端口这类随时变化的内容，以及结果取决于所连网络的防火墙项目不在其内。无法测量的项目不计入。首次诊断只做记录，同一项目 24 小时内不重复，通知关闭期间发生的削弱在重新开启后也不会通知。不会发送任何数据。可用菜单中的“设置被削弱时通知 (Pro)”关闭，状态显示在 `get_guard_status` 的 configRegressionNotice 中。Linux 版有相同功能（由守护进程在每小时的检查之后执行，不区分 Pro）。
+                • 浏览器扩展权限检查(菜单中的“🧩 检查浏览器扩展的权限…”): 读取 Chromium 系浏览器扩展的 manifest.json,按权限的组合分级。debugger 为高;所有网站的访问权限加上 webRequest、cookies、tabs 或 scripting 为中;nativeMessaging、proxy、management,以及之后才请求的强权限为信息。以开发者模式加载的扩展,或从商店以外更新的扩展,会附上注记而不是分级。相对于您标记为已确认的状态,出现新扩展或权限增加时会自动通知(通知为 Pro;仅通知,不会停止任何东西)。不进行网络通信,列表只保留在这台 Mac 内。不读取 Firefox。
                 """,
                 recommendation: "请定期打开「综合诊断报告」，按照改进步骤处理带 ⚠️ 的项目，保持 A 级以上。"
             ),
@@ -894,6 +895,7 @@ extension RoamSwitchKnowledgeBase {
                 • audit_mcp_configs 新增的指摘：配置中没有认证设置的其他主机上的 https 服务器（remote_no_auth，medium；客户端在连接时用 OAuth 登录则没有问题），以及启动时在所有网络接口上监听的服务器（`--host 0.0.0.0` 等；mcp_wide_bind，high）。
                 • SARIF：`audit_mcp_configs`、`audit_agent_setup`、`run_active_vuln_scan`、`run_package_cve_scan`、`run_package_cve_scan_languages` 在指定 `format: "sarif"` 时也以 SARIF 2.1.0 格式返回。
                 • get_system_timeline：返回应用每天记录一次的监听端口、Homebrew 软件包和主要配置的哈希（最多 90 天），以及它们之间的差异。`since` 可指定 `yyyy-MM-dd` 或 `7d`。配置内容既不保存也不输出。相当于 Linux 版的 `roamswitch timeline --since`。
+                • AI 编程代理的执行前检查(agent-check): 在 Claude Code 的 PreToolUse 钩子中调用 `RoamSwitchMCPServer agent-check`,会在工具运行前检查目标地址。云元数据地址(169.254.169.254 等)返回 deny;同一次调用中既有凭据文件(.ssh、.aws、.env 等),又有这台 Mac 网络之外的目标时返回 ask。回环地址、私有地址和没有可报告内容的调用不输出任何内容并以退出码 0 结束,因此代理自身的权限确认照常起作用。`--print-hook-config` 只显示可粘贴的设置示例,不会修改设置。这是检测的辅助,不是拦截的墙:脚本文件内部、变量、命令替换、拆开指定的命令和 base64 都看不到,不解析名称,也不连接网络。记录(`~/Library/Application Support/RoamSwitch/agent_check_log.jsonl`)只保留工具名和原因键,不保留值。
                 """,
                 recommendation: "配置步骤请参见 faq_mcp_setup。可以用自然语言提问，例如「这台 Mac 现在安全吗？」「这个通知是什么意思？」。"
             ),

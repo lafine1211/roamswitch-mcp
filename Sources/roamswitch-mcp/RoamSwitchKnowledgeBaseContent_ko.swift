@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.35 (build 214).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 1.17.36 (build 215).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -833,6 +833,7 @@ extension RoamSwitchKnowledgeBase {
                 • 등급: 100점은 S, 85~99점은 A, 70~84점은 B, 70점 미만은 C입니다. MCP 도구 `get_security_report`로도 확인할 수 있습니다.
                 • 보호 작동 상태: 켜 둔 보호가 실제로 작동하는지를 가드별(36개)로 보여 주는 창입니다. 메뉴(Mac 보안 종합 진단 > 🛡️ 보호 작동 상태…)에서 열거나, 종합 진단 보고서 맨 위 카드(요약과 작동하지 않는 보호만)의 '모든 보호 보기…'로 엽니다. 상태는 작동 중, 일부만 작동, 작동하지 않음, 끄기, Pro 전용의 5가지입니다. 작동하지 않는 보호에는 이유 코드(`pro_not_active`, `helper_not_connected`, `system_extension_not_approved` 등)와 원인·해결 방법 문장이 표시되고, 이유에 따라 'Pro 버전 인증…', '헬퍼 승인…', '시스템 설정 열기…' 버튼도 나타납니다. 15초마다, 그리고 '다시 확인'을 누르면 다시 읽습니다. Pro 버전이 아닌 Mac에서 기본값으로만 켜져 있는 Pro 기능은 'Pro 전용'으로 표시하며 오류로 세지 않습니다. 작동하지 않는 보호가 있는 동안에는 메뉴 맨 위에도 '⚠️ 작동하지 않는 보호가 있습니다(N개). 이유 보기…' 줄이 나타납니다. 판정은 메뉴 표시, 알림, MCP의 `get_guard_status`와 같은 원본 데이터를 씁니다. 탐지 데이터의 업데이트가 멈추었을 때(`state_stale`)는 알림을 보내지 않고 메뉴와 이 창에만 표시합니다. 모든 행에는 그 보호가 무엇을 지켜보는지(역할)와 메뉴의 어디에 있는지가 나옵니다. 동작하지 않는 행에는 원인, 탐지에 미치는 영향, 상황(어느 입력이 멈췄는지, 재시작 횟수와 시각, 읽지 못한 파일의 이름과 이유), 번호가 붙은 순서와 누를 수 있는 버튼(전체 디스크 접근 설정 열기, 이 보호 기능 재시작, 이 기능 열기 등)이 함께 나옵니다. 메뉴의 설명과 알림도 같은 문장(보호 이름, 역할, 입력, 원인, 영향)으로 시작합니다. `get_guard_status`의 readers에는 마지막 검사에서 읽지 못한 것의 예(skippedSamples: 경로와 이유, 최대 5개)가 들어 있습니다.
                 • 설정이 약해졌을 때의 알림(Pro, 기본값 켜짐): 진단 뒤, 지난번에는 합격(또는 해당 없음)이었는데 지금 불합격이 된 설정을 알림 한 건으로 알립니다. 저절로 바뀌지 않는 10개 설정(SSH, sudo, SIP, Gatekeeper, 자동 업데이트, XProtect, 브라우저의 피싱 방어, 액세서리 연결 보호, FileVault, 백업의 최신성)이 대상입니다. Wi-Fi, ARP, 공개 포트처럼 그때그때 달라지는 것과, 연결된 네트워크에 따라 결과가 달라지는 방화벽 항목은 대상이 아닙니다. 측정하지 못한 항목은 세지 않습니다. 첫 진단은 기록만 하고, 같은 항목은 24시간 안에 반복하지 않으며, 알림을 꺼 둔 동안 일어난 약화는 다시 켠 뒤에도 알리지 않습니다. 아무것도 전송하지 않습니다. 메뉴의 '설정이 약해지면 알림 (Pro)'로 끌 수 있고, 상태는 `get_guard_status`의 configRegressionNotice에 나옵니다. Linux 에디션에도 같은 기능이 있습니다(데몬이 1시간마다 하는 진단 뒤에 수행하며 Pro 구분 없음).
+                • 브라우저 확장 프로그램 권한 점검(메뉴의 “🧩 브라우저 확장 프로그램 권한 점검…”): Chromium 계열 브라우저 확장 프로그램의 manifest.json을 읽어 권한의 조합으로 등급을 매깁니다. debugger는 높음, 모든 사이트에 대한 권한과 webRequest, cookies, tabs, scripting의 조합은 중간, nativeMessaging, proxy, management와 나중에 요청하는 강한 권한은 정보입니다. 개발자 모드로 불러온 확장 프로그램이나 스토어 밖에서 업데이트되는 확장 프로그램에는 등급 대신 주석이 붙습니다. 확인 완료로 표시한 상태에서 새 확장 프로그램이나 늘어난 권한이 있으면 자동으로 알립니다(알림은 Pro, 알림만 보내며 아무것도 멈추지 않습니다). 네트워크로는 통신하지 않으며 목록은 이 Mac 안에만 남습니다. Firefox는 읽지 않습니다.
                 """,
                 recommendation: "정기적으로 진단 보고서를 열어 ⚠️로 표시된 항목을 제시된 개선 단계에 따라 처리하고 A 등급 이상을 유지하세요."
             ),
@@ -894,6 +895,7 @@ extension RoamSwitchKnowledgeBase {
                 • audit_mcp_configs의 추가 지적: 인증 설정이 없는 다른 호스트의 https 서버(remote_no_auth, medium. 클라이언트가 연결할 때 OAuth로 로그인하면 문제없음)와, 모든 인터페이스에서 대기하도록 시작하는 서버(`--host 0.0.0.0` 등. mcp_wide_bind, high).
                 • SARIF: `audit_mcp_configs`, `audit_agent_setup`, `run_active_vuln_scan`, `run_package_cve_scan`, `run_package_cve_scan_languages`는 `format: "sarif"`로 SARIF 2.1.0 형식으로도 반환합니다.
                 • get_system_timeline: 앱이 하루 한 번 기록한 대기 포트, Homebrew 패키지, 주요 설정의 해시(최대 90일)와 그 차이를 반환합니다. `since`에 `yyyy-MM-dd` 또는 `7d`를 지정할 수 있습니다. 설정 내용은 저장하지도 출력하지도 않습니다. Linux 버전의 `roamswitch timeline --since`에 해당합니다.
+                • AI 코딩 에이전트의 실행 전 확인(agent-check): Claude Code의 PreToolUse 훅에서 `RoamSwitchMCPServer agent-check`를 호출하면 도구가 실행되기 전에 목적지를 확인합니다. 클라우드 메타데이터 주소(169.254.169.254 등)는 deny, 인증 정보 파일(.ssh, .aws, .env 등)과 이 Mac 네트워크 밖의 목적지가 한 번의 호출에 함께 있으면 ask를 돌려줍니다. 루프백과 사설 주소, 보고할 것이 없는 호출은 아무것도 출력하지 않고 종료 코드 0으로 끝나므로 에이전트 자체의 허가 확인이 그대로 동작합니다. `--print-hook-config`는 붙여 넣을 설정 예시를 보여 줄 뿐 설정을 바꾸지 않습니다. 탐지를 돕는 기능이며 막는 벽이 아닙니다. 스크립트 파일 안, 변수, 명령 치환, 나누어 지정한 명령, base64는 보이지 않고, 이름은 해석하지 않으며, 네트워크에도 연결하지 않습니다. 기록(`~/Library/Application Support/RoamSwitch/agent_check_log.jsonl`)에는 도구 이름과 이유 키만 남기고 값은 남기지 않습니다.
                 """,
                 recommendation: "설정 방법은 faq_mcp_setup을 참고하세요. \u{201C}지금 내 Mac이 안전한가요?\u{201D}나 \u{201C}이 알림은 무슨 뜻인가요?\u{201D}처럼 자연스러운 말로 물어볼 수 있습니다."
             ),
