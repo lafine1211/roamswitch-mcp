@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.1.0 (build 219).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.1.1 (build 220).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -506,7 +506,7 @@ enum AgentSetupAuditor {
             result.scannedFiles.append(file.path)
             switch file.role {
             case .instruction, .memory:
-                result.findings += auditInstructionFile(file)
+                result.findings += auditInstructionFileCached(file)
             case .tasks:
                 // A tasks file that cannot be parsed was not audited.
                 if let found = auditTasksFile(file) { result.findings += found } else { result.unreadableFiles.append(file.path) }
@@ -549,6 +549,31 @@ enum AgentSetupAuditor {
 
     private static let binaryExtensions: Set<String> = ["pyc", "pyo", "pyd", "so", "dylib", "dll", "exe", "node", "class", "jar", "wasm"]
     private static let imageLikeExtensions: Set<String> = ["png", "jpg", "jpeg", "gif", "webp", "ico", "pdf", "svg", "ttf", "otf", "woff", "woff2", "zip", "gz", "tar", "mp3", "mp4", "mov"]
+
+    /// The audit of one text file depends only on its bytes, path, mode and role, so a file that has not changed
+    /// since the last scan keeps its result. A scan of the whole set (skills, agent memory) reads tens of
+    /// thousands of lines; the watcher repeats it at every file event and at launch, and that kept one core busy.
+    /// The key holds the interface language too, because a finding carries its explanation in that language.
+    private static let cacheLock = NSLock()
+    private static var fileCache: [String: [Finding]] = [:]
+    private static let fileCacheLimit = 4000
+
+    static func auditInstructionFileCached(_ file: FileInput) -> [Finding] {
+        guard let digest = file.sha256 else { return auditInstructionFile(file) }
+        let key = [file.path, digest, String(file.data.count), file.mode.map { String($0) } ?? "-",
+                   file.inSkill ? "s" : "-", file.role == .memory ? "m" : "i", String(message("override_instruction").hashValue)]
+            .joined(separator: "\u{0}")
+        cacheLock.lock()
+        let hit = fileCache[key]
+        cacheLock.unlock()
+        if let hit { return hit }
+        let found = auditInstructionFile(file)
+        cacheLock.lock()
+        if fileCache.count >= fileCacheLimit { fileCache.removeAll(keepingCapacity: true) }
+        fileCache[key] = found
+        cacheLock.unlock()
+        return found
+    }
 
     static func auditInstructionFile(_ file: FileInput) -> [Finding] {
         var findings: [Finding] = []
@@ -638,7 +663,7 @@ enum AgentSetupAuditor {
             if matches(encodedExecPatterns, lower) {
                 hits.append(Hit(id: "encoded_payload_exec", severity: "high", line: number, detail: note("decodes text and runs it")))
             }
-            if !hasNegation(lower), matches(credentialPatterns, lower) {
+            if matches(credentialPatterns, lower), !hasNegation(lower) {
                 if credentialLine == nil { credentialLine = number }
                 hits.append(Hit(id: "credential_access", severity: bump("medium"), line: number, detail: note("refers to a credential file or store")))
             }
@@ -648,7 +673,7 @@ enum AgentSetupAuditor {
             } else if matches(uploadPatterns, line), !lower.contains("localhost"), !lower.contains("127.0.0.1") {
                 if exfilLine == nil { exfilLine = number }
             }
-            if !hasNegation(lower), matches(persistencePatterns, lower) {
+            if matches(persistencePatterns, lower), !hasNegation(lower) {
                 hits.append(Hit(id: "persistence_instruction", severity: bump("medium"), line: number, detail: note("sets up something that survives a restart")))
             }
         }
@@ -1142,8 +1167,30 @@ enum AgentSetupAuditor {
         "disallow", "refuse", "not allowed", "禁止", "しないで", "しない", "読まない", "触らない", "触れない", "使わない", "避け",
     ]
 
+    private static let negationNeedles: [[UInt8]] = negationWords.map { Array($0.utf8) }
+
+    /// A byte search, not `String.contains`: Foundation's `contains` compares by canonical equivalence, which
+    /// walks every character and made this check the largest cost of a scan of many long lines. The words are
+    /// already composed, lower-case text, so the bytes decide the same thing.
     private static func hasNegation(_ lowercasedLine: String) -> Bool {
-        negationWords.contains { lowercasedLine.contains($0) }
+        var line = lowercasedLine
+        return line.withUTF8 { hay in
+            negationNeedles.contains { needle in
+                guard !needle.isEmpty, hay.count >= needle.count else { return false }
+                let first = needle[0]
+                let last = hay.count - needle.count
+                var i = 0
+                while i <= last {
+                    if hay[i] == first {
+                        var j = 1
+                        while j < needle.count, hay[i + j] == needle[j] { j += 1 }
+                        if j == needle.count { return true }
+                    }
+                    i += 1
+                }
+                return false
+            }
+        }
     }
 
     // MARK: Helpers
