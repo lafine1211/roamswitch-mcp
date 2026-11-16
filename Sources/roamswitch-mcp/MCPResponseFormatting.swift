@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.1.3 (build 222).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.1.4 (build 223).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -1609,7 +1609,9 @@ public enum MCPResponseFormatting {
                let route = ESGuardRouteState.read(id, defaults: defaults, now: now.timeIntervalSince1970) {
                 out.esRoute = route.state.rawValue
                 out.esRouteReason = route.reason
-                if ESGuardRouteState.hasNoFallback(key: g.key), g.enabledInSettings, out.liveState == "on", route.state == .fallback {
+                // A guard that has just started and whose watch the extension has not taken up yet is starting, not stopped.
+                if ESGuardRouteState.hasNoFallback(key: g.key), g.enabledInSettings, out.liveState == "on", route.state == .fallback,
+                   !ESGuardRouteState.isStarting(route, now: now.timeIntervalSince1970) {
                     out.liveState = "off"
                     out.liveStateReason = route.reason ?? "es_not_active"
                 }

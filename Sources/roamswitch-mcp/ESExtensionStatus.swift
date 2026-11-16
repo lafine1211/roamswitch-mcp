@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.1.3 (build 222).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.1.4 (build 223).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -302,6 +302,15 @@ enum ESStateHistory {
             report = "report of pid \(status.pid), \(age)s old, client \(client)"
         }
         return "\(stamp) \(purpose): \(from?.rawValue ?? "(first)") -> \(to.rawValue); the app's request: \(activation.rawValue); \(report)"
+    }
+
+    /// One line for a guard's route: through the extension, or on its fallback (with the reason, or none: the extension works and the
+    /// watch is not registered yet), and how long the guard has been started.
+    static func routeLine(at: Date, guardID: String, active: Bool, reason: String?, startedAt: Double?, now: Double) -> String {
+        let stamp = ISO8601DateFormatter().string(from: at)
+        let route = active ? "extension" : "fallback" + (reason.map { " (\($0))" } ?? " (no reason: the watch is not registered yet)")
+        let up = startedAt.map { ", started \(Int(now - $0))s ago" } ?? ""
+        return "\(stamp) route \(guardID): \(route)\(up)"
     }
 
     /// Adds `line`, keeping the last `limit` lines.

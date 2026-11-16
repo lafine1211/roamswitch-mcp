@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.1.3 (build 222).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.1.4 (build 223).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -18,16 +18,33 @@ enum ESGuardRouteState: String, Codable, Equatable {
 
     /// The app writes the state for the MCP server (a separate process that cannot read the extension's report through
     /// the system extension manager), one record per guard.
-    static func write(_ state: ESGuardRouteState, reason: String?, guardID: String, now: Double, defaults: UserDefaults = .standard) {
+    /// How long a guard that has just started may be on its fallback with no reason (the extension works; the watch is not
+    /// registered yet) before the status calls it stopped. The helper takes the watches, then the extension takes them up.
+    /// The watches reach the helper within about ten seconds of a launch (2026-11-16); how long the extension takes after
+    /// that is not measured: the route history (`ESStateHistory.routeLine`) records it ("started Ns ago") at the next launch.
+    /// 180 s is a generous bound, not a measurement.
+    static let startGraceSecs: Double = 180
+
+    /// `since` is when the guard started (written while it is on the fallback), so a reader can tell a start in progress
+    /// from a guard that has been without the extension for long.
+    static func write(_ state: ESGuardRouteState, reason: String?, guardID: String, now: Double, since: Double? = nil, defaults: UserDefaults = .standard) {
         var record: [String: Any] = ["route": state.rawValue, "at": now]
         if let reason { record["reason"] = reason }
+        if let since { record["since"] = since }
         defaults.set(record, forKey: defaultsKeyPrefix + guardID)
     }
 
-    static func read(_ guardID: String, defaults: UserDefaults, now: Double) -> (state: ESGuardRouteState, reason: String?)? {
+    static func read(_ guardID: String, defaults: UserDefaults, now: Double) -> (state: ESGuardRouteState, reason: String?, since: Double?)? {
         guard let r = defaults.dictionary(forKey: defaultsKeyPrefix + guardID), let raw = r["route"] as? String,
               let s = ESGuardRouteState(rawValue: raw), let at = r["at"] as? Double, now - at <= freshSecs, at - now <= freshSecs else { return nil }
-        return (s, r["reason"] as? String)
+        return (s, r["reason"] as? String, r["since"] as? Double)
+    }
+
+    /// A guard that has just started, is on its fallback and has no reason: the extension works and the watch is not
+    /// registered yet. Not "stopped" yet.
+    static func isStarting(_ route: (state: ESGuardRouteState, reason: String?, since: Double?), now: Double) -> Bool {
+        guard route.state == .fallback, route.reason == nil, let since = route.since else { return false }
+        return now >= since && now - since < startGraceSecs
     }
 }
 
