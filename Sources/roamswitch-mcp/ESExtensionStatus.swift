@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.1.2 (build 221).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.1.3 (build 222).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -212,11 +212,14 @@ enum ESHealth {
     ///   report of the extension is all it takes.
     static func resolve(activation: ESActivation, status: ESExtensionStatus?, now: Double, purpose: String?) -> ESEnforcement {
         switch activation {
-        case .notRequested, .activating: return .notRunning
+        // This launch has not asked the system yet, or has not heard back: after an update the app starts anew while the
+        // extension keeps running, and the guards ask only when they start. The extension's own fresh report says it is
+        // running; "not asked" must not read as "not running" (the menu said so for the first minutes after an update).
+        // With no fresh report, it is still `notRunning`.
+        case .notRequested, .activating, .activated: break
         case .needsUserApproval: return .waitingForApproval
         case .willCompleteAfterReboot: return .waitingForReboot
         case .failed: return .failed
-        case .activated: break
         }
         guard let status, status.isFresh(now: now) else { return .notRunning }
         guard let purpose else { return .active }
@@ -276,3 +279,39 @@ final class ESClientRunningProbe {
         return value
     }
 }
+
+// MARK: - The history of the extension's state
+
+/// What the app made of the extension, each time it changed for a client: when, what it was, what it became, and what the
+/// app saw at that moment (its own request, the extension's report). The app keeps only the latest reading otherwise, so
+/// after a message such as "the extension is not running" nothing said what the state was a minute earlier (2026-11-16: an
+/// update, a switch turned off and on by hand, and no record of the state before it).
+enum ESStateHistory {
+    static let defaultsKey = "RoamSwitch.ESEnforcementHistory"
+    static let limit = 100
+
+    /// One line. `ageSecs` is how old the extension's report is (nil: there is none).
+    static func line(at: Date, purpose: String, from: ESEnforcement?, to: ESEnforcement, activation: ESActivation,
+                     status: ESExtensionStatus?, now: Double) -> String {
+        let stamp = ISO8601DateFormatter().string(from: at)
+        var report = "no report"
+        if let status {
+            let age = Int(now - status.updatedEpoch)
+            var client = "no such client"
+            if let c = status.client(purpose) { client = "\(c.result.rawValue)" + (c.subscribed ? ", subscribed" : ", not subscribed") }
+            report = "report of pid \(status.pid), \(age)s old, client \(client)"
+        }
+        return "\(stamp) \(purpose): \(from?.rawValue ?? "(first)") -> \(to.rawValue); the app's request: \(activation.rawValue); \(report)"
+    }
+
+    /// Adds `line`, keeping the last `limit` lines.
+    static func append(_ line: String, defaults: UserDefaults = .standard) {
+        var all = defaults.stringArray(forKey: defaultsKey) ?? []
+        all.append(line)
+        if all.count > limit { all.removeFirst(all.count - limit) }
+        defaults.set(all, forKey: defaultsKey)
+    }
+
+    static func lines(defaults: UserDefaults = .standard) -> [String] { defaults.stringArray(forKey: defaultsKey) ?? [] }
+}
+
