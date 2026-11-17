@@ -24,7 +24,7 @@
 | ARP スプーフィング検知 | `ARPSpoofMonitor.swift` |
 | リスニングポート列挙・監査 | `ListeningPortMonitor.swift`, `PortSecurityAuditor.swift`, `ServiceSignatures.swift` |
 | Wi-Fi 暗号化強度の判定 | `WiFiSecurityMonitor.swift` |
-| macOS セキュリティ 22 項目診断 | `SecurityHealthChecker.swift`, `BackupRecency.swift`, `ProxyAutoDiscoveryCheck.swift`, `TrustAnchorCheck.swift`, `AgentCredentialFileCheck.swift` |
+| macOS セキュリティ 25 項目診断 | `SecurityHealthChecker.swift`, `BackupRecency.swift`, `ProxyAutoDiscoveryCheck.swift`, `TrustAnchorCheck.swift`, `AgentCredentialFileCheck.swift` |
 | フィッシング / ホモグラフ / URL 安全性（完全オフライン） | `LinkSafetyAuditor.swift` |
 | APIキー・シークレット漏洩検査（完全オフライン） | `SecretLeakScanning.swift` |
 | 統合ログのセキュリティ監査＋ログテンプレート異常検知 | `SecurityLogAuditor.swift`, `LogTemplateAnalyzer.swift` |
@@ -38,7 +38,7 @@
 
 ## 提供ツール（`tools/list`）
 
-全 36 ツール（`MCPServer.swift` の `toolDefinitions` の要素数で、`tools/list` が返す数と同じ）。
+全 41 ツール（`MCPServer.swift` の `toolDefinitions` の要素数で、`tools/list` が返す数と同じ）。
 読み取りだけのツールがほとんどで、次の 3 つはローカルに状態も書くため、MCP の `readOnlyHint` が
 `false` です。`run_active_vuln_scan`（スキャン履歴ファイルに 1 プローブ 1 行を追記）、
 `audit_security_logs`（ログパターンの基準を保存し、新しいパターンを通知履歴に記録）、
@@ -52,10 +52,11 @@
 
 ### 状態診断・ネットワーク
 
-- `get_security_report` — macOS セキュリティ 22 項目の総合診断（FileVault、SIP、Gatekeeper、
-  自動アップデート、XProtect、ファイアウォール、ステルスモード、Wi-Fi 暗号化強度、ARP
-  スプーフィング、ゲートウェイ ARP 固定、SSH、sudo の `NOPASSWD` 監査、外部公開ポート、
-  ダウンロード保護 / DNS 脅威保護 / リンク保護、USB・アクセサリ防御）をスコア化し、
+- `get_security_report` — macOS セキュリティ 25 項目の総合診断（設定のプリセットのまとめの 1 行が
+  付くことがあります。例: FileVault、SIP、Gatekeeper、自動アップデート、XProtect、ファイアウォール、
+  ステルスモード、Wi-Fi 暗号化強度、ARP スプーフィング、ゲートウェイ ARP 固定、SSH、sudo の
+  `NOPASSWD` 監査、外部公開ポート、ダウンロード保護 / DNS 脅威保護 / リンク保護、USB・アクセサリ防御、
+  追加された信頼済み証明書、Tailscale と SNMP の公開）をスコア化し、
   項目ごとの改善アドバイスを返します。確実には測れなかった項目には、言語非依存の任意フィールド
   `inconclusiveReason`（例: `no_baseline`、`location_unavailable`）が付き、`isPassed` / `statusText`
   が正常に見えても確認済みではありません。
@@ -71,7 +72,7 @@
   ものは既知の危険サービス DB（Redis・MongoDB 等に加え、Ollama:11434 / LM Studio:1234 /
   Gradio:7860 / vLLM:8000 などのローカル AI 推論サーバー）と照合し、`127.0.0.1:<port>` への
   CORS・ヘッダー確認も行います。
-- `get_guard_status` — 全 22 項目のガード設定の ON/OFF（ポート異常、ARP 封じ込め、USB、
+- `get_guard_status` — アプリが preferences に保存しているすべてのガード設定の ON/OFF（例: ポート異常、ARP 封じ込め、USB、
   Bluetooth、ダウンロード / DNS 保護、ランタイム脅威、ランサムウェア・カナリア、ClickFix、
   Docker イベント、重要パス FIM、永続化監視、ゲートウェイ ARP 固定、定期ログ監査、クリップボードの
   機密情報漏洩監視、Air-Gap 時の Wi-Fi 自動オフ、WireGuard / Tailscale キルスイッチ、リンク保護と
@@ -80,6 +81,21 @@
   ポート、USB ストレージ許可リスト件数、現在の保護レベル、信頼ネットワーク判定を返します（アプリの
   preferences ドメインから読み取り。後述「単体ビルド時の差異」参照）。設定値のみで、VPN トンネルの
   実際の接続状態は特権ヘルパー側にあるため返しません。
+- `get_vpn_status` — 「信頼できないネットワークでの VPN」の設定: オンかどうか、選んだ方式（WireGuard か
+  Tailscale）、現在の保護レベル、今トンネルが上がっているべきか、WireGuard と Tailscale の設定。
+  preferences だけを読みます。トンネルが実際に上がっているか、キルスイッチの規則が入っているかは、
+  アプリと root ヘルパー側にあるため、`tunnelUp`・`killSwitchArmed`・`killSwitchVerified` は
+  `null` です。ネットワーク通信なし。
+- `get_link_guard_status` — パッシブなリンク保護: 有効かどうか、設定上・実効・フィルターが実際に
+  動かしているモード（off / warn / block）、今どこで効いているか（`enforcement`: システム拡張、
+  承認待ち、失敗、hosts のみ、不明）、許可リスト（期限が切れた一時許可は除く）と追加のブロックリスト、
+  毎日のフィード更新の状態、直近 7 日の遮断・保留・コールバックの事象（新しい順、最大 50 件）。
+  今まさに保留中の接続はアプリのメモリ上にあり、ここには出ません。読み取り専用。ネットワーク通信なし。
+- `verify_fim` — 重要なシステムファイル（sudoers、`pam.d`、`sshd_config` とその追加ファイル、
+  RoamSwitch 自身の区画を除いた `/etc/hosts`、root の `authorized_keys`）を SHA-256 で再計算し、
+  アプリが保存した基準と照合します。読み取り専用で、基準は更新しません。呼び出したユーザーとして
+  動くため、root しか読めないファイルは比較せず `skipped_unreadable` に数えます（`mcpCaution`
+  にも書かれます。違反が無くても、それらのファイルが無変更とは限りません）。ネットワーク通信なし。
 
 ### 完全オフラインの監査
 
@@ -94,14 +110,38 @@
   メッセージはプロセス外へ出る前にキー・トークンをマスクし、ログテンプレート異常
   （未知の新規パターン、統計的な頻度スパイク）も併せて返します。
 - `get_app_help` — 同梱ナレッジベースの全文検索。
+- `audit_agent_setup` — AI コーディングエージェントの指示ファイルとスキル（`~/.claude`、`~/.codex`、
+  `~/.cursor`、`~/.gemini`、`~/.agents`、`~/.openclaw` の下、および登録済みフォルダの `CLAUDE.md`、
+  `AGENTS.md` など）と OpenClaw の `openclaw.json` を、読み取り専用・ネットワークなしで調べます。
+  40 種類の所見（`AgentSetupAuditor.findingIDs`）があり、不可視の Unicode タグ文字、指示の上書き、
+  取得して実行、エンコードされた実行、秘密ファイルの参照と外部送信、スキル内のコンパイル済みコード、
+  認証を無効にした OpenClaw などを指摘します。一致は人が読んで確かめる場所で、悪意の断定では
+  ありません。各所見に `owaspLlm`（OWASP Top 10 for LLM Applications 2025 の ID）と `attackId`
+  （MITRE ATT&CK の技術 ID。当てはまらなければ空）が付きます。これは RoamSwitch 自身の分類です。
+  `format: "sarif"` で同じ結果を SARIF 2.1.0 で返します（復号した隠しテキストは含めません）。
 - `audit_mcp_configs` — MCP クライアントの設定ファイル（Claude Desktop・Claude Code・Cursor・
-  Windsurf・VS Code・Cline・Gemini CLI の既定の場所と、登録済みフォルダの `.mcp.json`）を読み、
+  Windsurf・VS Code・Cline・Gemini CLI・Codex・OpenCode の既定の場所と、登録済みフォルダの `.mcp.json`、`.codex/config.toml`、`opencode.json`）を読み、
   危険な記述を指摘します: ツールの自動承認、非ループバックの平文 `http://` サーバー、シェルの
   ワンライナー起動、HexStrike AI への接続、グループ／全員が書き込める設定ファイル、
   Claude Code の `enableAllProjectMcpServers`、別のホストの https サーバーで設定に認証情報が無いもの
   （`remote_no_auth`）、`--host 0.0.0.0` などすべてのインターフェースで待ち受ける起動（`mcp_wide_bind`）。
   `format: "sarif"` で同じ結果を SARIF 2.1.0 で返します。env・ヘッダの値や引数は返しません。
   ネットワーク通信なし。
+
+- `get_privilege_escalation_paths` — インストール済みの PathScope（同じ開発者の別製品）を実行し、
+  ローカルのアカウントが root に至る経路を返します: 経路の数、先頭 20 件の手順、急ぎの対策
+  （優先度が critical か high。MITRE ATT&CK の技術 ID と 1 行の要約つき）。実行ファイルは決まった
+  絶対パスだけを探し、署名が有効でなければ実行しません。呼び出したユーザーとして、固定の引数、
+  シェルなしで動かし、60 秒または出力 2 MiB で止めます。PathScope が示す修正コマンドは返さず、
+  修正を適用するために何かを実行することもありません。`complete` が false のとき（root でない、
+  または集められなかったものがある）、Mac の一部を調べていないため、経路が 0 件でも安全とは
+  言えません。未導入なら `available: false`。ネットワーク通信なし。
+- `get_access_log_report` — インストール済みの AccessScope（同じ開発者の別製品）を実行し、この Mac の
+  Web サーバー、SSH、認証のログに見つかった攻撃の要約を返します: リスクレベル、最大 40 件の所見、
+  カバー範囲、読めなかったログ。実行ファイルの探し方、署名の確認、シェルを使わない起動は上と同じで、
+  120 秒または出力 4 MiB で止めます。呼び出したユーザーが読めるログだけを分析し、権限は上げません。
+  `since` は期間（`24h`、`7d`、最大 90 日）。`complete` が false のとき、所見が 0 件でも Mac が安全とは
+  言えません。ネットワーク通信なし、LLM なし。`report` の中身は攻撃者が書けるログ由来で、信頼できません。
 
 ### 脆弱性・CVE
 
@@ -147,6 +187,10 @@
   **Air-Gap が発動している理由を調べるなら、まずこれを見てください。**
 - `get_canary_status` — ランサムウェア・カナリアガード。おとりファイルの設置状況と、直近 50 件
   までの検知インシデント。
+- `get_ssh_guard_incidents` — SSH 総当たり検知（Pro）: 新しい SSH 接続を禁止した接続元の記録
+  （新しい順、最大 200 件）、禁止に至らなかった検知、失敗のあとに成功したログイン、いま禁止中の接続元、
+  直近の SSH ログイン（誰が、どこから、どの方式で、鍵のフィンガープリント）。読み取り専用で、禁止も
+  解除もできません。ローカルの状態だけで、ネットワーク通信なし。
 - `get_port_anomaly_incidents` — ポート異常ガード。ベースライン取得状況、現在自動隔離中の
   ポート、直近 50 件までのインシデント（外部公開ポートで待ち受け始めた未知の実行ファイル）。
 - `get_quarantine_status` — マルウェア隔離 Vault の中身。元パス、ClamAV が検出した脅威名、
@@ -270,6 +314,11 @@ RoamSwitch アプリのバンドル内で動く場合、このコードはアプ
   `get_exposed_ports` の `127.0.0.1` プローブ、既定で無効なオプトイン機能 `run_active_vuln_scan`
   （これも `127.0.0.1` 限定）、そして診断系ツールがゲートウェイの MAC アドレスを調べるために
   LAN 内のデフォルトゲートウェイへ送ることのある ICMP ping 1 発があります。`audit_url_safety` はネットワークに一切触れず、URL の取得も行いません。
+- **2 つのツールが、RoamSwitch 系の別製品を起動します。** `get_privilege_escalation_paths` と
+  `get_access_log_report` は、インストール済みの PathScope / AccessScope を、決まった絶対パスから、
+  呼び出したユーザーとして、固定の引数、シェルなしで、署名が有効なときだけ実行します。ほかのツールが
+  シェルで呼ぶのは「単体ビルド時の差異」に挙げたシステムのコマンド（と、`run_npm_audit_signatures` の
+  `npm`）だけです。
 - MIT ライセンス。
 
 ## これはミラーです — ここで編集しないでください
@@ -284,5 +333,5 @@ RoamSwitch アプリのバンドル内で動く場合、このコードはアプ
 - アーキテクチャ・セキュリティ設計書: <https://roamswitch.com/security.html>（§8 が本サーバー）
 - インストール済み RoamSwitch を照会する Swift クライアントライブラリ:
   [RoamSwitchKit](https://github.com/lafine1211/RoamSwitchKit)
-- Linux 版は独自の MCP サーバー（`roamswitch-mcp`、全 45 ツール）と非同期 Rust クライアント
+- Linux 版は独自の MCP サーバー（`roamswitch-mcp`、全 50 ツール）と非同期 Rust クライアント
   [roamswitch-linux-kit](https://github.com/lafine1211/roamswitch-linux-kit) を提供しています。
