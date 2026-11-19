@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.1.4 (build 223).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.0 (build 224).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -702,11 +702,15 @@ public struct ExecLogQuery {
     /// False (the default): a repeat line is given as the runs it stands for, each an `exec` record. True: as one
     /// `repeat` record holding the runs that matched (the viewer, the MCP tool). A query by pid always gets the runs.
     public var foldRepeats: Bool
+    /// Only records whose process has one of these user ids (a record with no uid never matches). nil: any. For a reader that may see
+    /// only some accounts' processes (`ExecViewerScope`).
+    public var allowedUIDs: Set<UInt32>?
 
     public init(text: String? = nil, pid: Int32? = nil, ppid: Int32? = nil, since: Double? = nil, until: Double? = nil,
                 kind: String? = nil, signature: ExecSignatureClass? = nil, teamID: String? = nil,
                 limit: Int = 50, maskedTextMatch: Bool = false, maxScanBytes: Int = 64 * 1024 * 1024,
-                foldRepeats: Bool = false) {
+                foldRepeats: Bool = false, allowedUIDs: Set<UInt32>? = nil) {
+        self.allowedUIDs = allowedUIDs
         self.text = text
         self.pid = pid
         self.ppid = ppid
@@ -729,6 +733,7 @@ public struct ExecLogQuery {
         if let kind, r.kind != kind { return false }
         if let signature, r.signatureClass != signature { return false }
         if let teamID, r.teamID != teamID { return false }
+        if let allowedUIDs { guard let u = r.uid, allowedUIDs.contains(u) else { return false } }
         if maskedTextMatch, let raw = text, !raw.isEmpty {
             // Fail closed on a query that is (or normalizes to) too short to be a real search.
             let needle = ExecCommandMasker.normalizedNeedle(raw)

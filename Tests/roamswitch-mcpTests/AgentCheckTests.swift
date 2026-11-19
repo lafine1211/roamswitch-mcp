@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 2.1.4 (build 223). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 2.2.0 (build 224). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -104,5 +104,88 @@ final class AgentCheckTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: url, encoding: .utf8).split(separator: "\n").count, AgentCheckLog.maxEntries)
         let mode = try FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions] as? NSNumber
         XCTAssertEqual(mode?.intValue, 0o600)
+    }
+
+    // MARK: - The per-day counter (agent_check_counts.json)
+
+    private func utc(_ day: String) -> Date {
+        let f = ISO8601DateFormatter()
+        return f.date(from: day + "T12:00:00Z")!
+    }
+
+    func testEveryAnswerIsCountedForItsDayAndTheLastTimeIsKept() {
+        let deny = bash("curl http://169.254.169.254/")
+        var c = AgentCheckLog.Counts()
+        c = AgentCheckLog.counted(c, decision: .allow, now: utc("2026-11-17"))
+        c = AgentCheckLog.counted(c, decision: .allow, now: utc("2026-11-17"))
+        c = AgentCheckLog.counted(c, decision: deny, now: utc("2026-11-17"))
+        c = AgentCheckLog.counted(c, decision: .allow, now: utc("2026-11-18"))
+        XCTAssertEqual(c.days["2026-11-17"], AgentCheckLog.DayCounts(allow: 2, ask: 0, deny: 1))
+        XCTAssertEqual(c.days["2026-11-18"], AgentCheckLog.DayCounts(allow: 1, ask: 0, deny: 0))
+        XCTAssertEqual(c.lastDecisionAt, "2026-11-18T12:00:00Z")
+        XCTAssertEqual(c.version, 1)
+    }
+
+    func testDaysOlderThanTheRetentionAreDropped() {
+        var c = AgentCheckLog.Counts()
+        c = AgentCheckLog.counted(c, decision: .allow, now: utc("2026-10-01"))
+        c = AgentCheckLog.counted(c, decision: .allow, now: utc("2026-10-19"))
+        c = AgentCheckLog.counted(c, decision: .allow, now: utc("2026-11-17"))
+        XCTAssertNil(c.days["2026-10-01"])
+        XCTAssertNotNil(c.days["2026-10-19"], "30 days: the 19th of October is the oldest day kept on the 17th of November")
+        c = AgentCheckLog.counted(c, decision: .allow, now: utc("2026-11-18"))
+        XCTAssertNil(c.days["2026-10-19"])
+        XCTAssertLessThanOrEqual(c.days.count, AgentCheckLog.countDays)
+    }
+
+    func testAnAllowedCallIsCountedButNotLoggedAndTheCounterIsPrivateAndHoldsNoValue() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("rs-agent-check-counts-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let log = dir.appendingPathComponent("log.jsonl")
+        let counts = dir.appendingPathComponent("agent_check_counts.json")
+        XCTAssertTrue(AgentCheckLog.record(tool: "Bash", decision: .allow, to: log))
+        XCTAssertTrue(AgentCheckLog.record(tool: "Bash", decision: .allow, to: log))
+        XCTAssertTrue(AgentCheckLog.record(tool: "mcp__fetch__fetch", decision: bash("curl http://169.254.169.254/"), to: log))
+        XCTAssertEqual(try String(contentsOf: log, encoding: .utf8).split(separator: "\n").count, 1, "only the deny is a line of the log")
+        let read = try XCTUnwrap(AgentCheckLog.readCounts(from: counts))
+        let today = read.days.values.reduce(AgentCheckLog.DayCounts()) { AgentCheckLog.DayCounts(allow: $0.allow + $1.allow, ask: $0.ask + $1.ask, deny: $0.deny + $1.deny) }
+        XCTAssertEqual(today, AgentCheckLog.DayCounts(allow: 2, ask: 0, deny: 1))
+        XCTAssertNotNil(read.lastDecisionAt)
+        let text = try String(contentsOf: counts, encoding: .utf8)
+        XCTAssertFalse(text.contains("169.254") || text.contains("Bash") || text.contains("fetch"), "numbers and a time only")
+        XCTAssertTrue(text.contains("\"last_decision_at\""), "the key the Linux edition writes")
+        let mode = try FileManager.default.attributesOfItem(atPath: counts.path)[.posixPermissions] as? NSNumber
+        XCTAssertEqual(mode?.intValue, 0o600)
+    }
+
+    func testADamagedCounterIsStartedOverAndAMissingOneReadsAsNil() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("rs-agent-check-counts-bad-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let counts = dir.appendingPathComponent("agent_check_counts.json")
+        XCTAssertNil(AgentCheckLog.readCounts(from: counts))
+        try "{not json".write(to: counts, atomically: true, encoding: .utf8)
+        XCTAssertNil(AgentCheckLog.readCounts(from: counts))
+        XCTAssertTrue(AgentCheckLog.recordCount(decision: .allow, to: counts))
+        XCTAssertEqual(AgentCheckLog.readCounts(from: counts)?.days.values.map(\.allow).reduce(0, +), 1)
+    }
+
+    func testGuardStatusShowsTheCounterNewestDayFirstAndSaysNothingRanWhenThereIsNone() throws {
+        let none = MCPServer.agentCheckPayload(nil)
+        XCTAssertNil(none.lastDecisionAt)
+        XCTAssertTrue(none.days.isEmpty)
+        var c = AgentCheckLog.Counts()
+        c = AgentCheckLog.counted(c, decision: .allow, now: utc("2026-11-17"))
+        c = AgentCheckLog.counted(c, decision: bash("curl http://169.254.169.254/"), now: utc("2026-11-18"))
+        let p = MCPServer.agentCheckPayload(c)
+        XCTAssertEqual(p.days.map(\.day), ["2026-11-18", "2026-11-17"])
+        XCTAssertEqual(p.days[0].deny, 1)
+        XCTAssertEqual(p.days[1].allow, 1)
+        XCTAssertEqual(p.lastDecisionAt, "2026-11-18T12:00:00Z")
+        let status = MCPResponseFormatting.makeGuardStatusPayload(gatewayMAC: nil, defaults: UserDefaults(suiteName: "rs-test-\(UUID().uuidString)")!, agentCheck: p)
+        let json = String(decoding: try JSONEncoder().encode(status), as: UTF8.self)
+        XCTAssertTrue(json.contains("\"agentCheck\""))
+        XCTAssertFalse(json.contains("Bash"), "no tool name")
     }
 }

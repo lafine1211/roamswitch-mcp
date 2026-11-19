@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.1.4 (build 223).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.0 (build 224).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -173,15 +173,12 @@ enum NpmAuditSignatures {
         }
 
         // Watchdog: SIGTERM at the deadline, SIGKILL 3 s later if it lingers.
-        let pid = process.processIdentifier
         let lock = NSLock()
         var timedOut = false
         let watchdog = DispatchWorkItem {
             lock.lock(); timedOut = true; lock.unlock()
-            process.terminate()
-            DispatchQueue.global().asyncAfter(deadline: .now() + 3) {
-                if process.isRunning { kill(pid, SIGKILL) }
-            }
+            // The child and what it started (`node`, install scripts), SIGKILL after 3 s.
+            ChildProcessTree.end(process, grace: 3)
         }
         DispatchQueue.global().asyncAfter(deadline: .now() + timeoutSeconds, execute: watchdog)
 

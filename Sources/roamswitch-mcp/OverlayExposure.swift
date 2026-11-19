@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.1.4 (build 223).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.0 (build 224).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -205,39 +205,9 @@ enum OverlayExposure {
     /// A command with a time limit, so a Tailscale service that does not answer cannot hold the audit.
     /// nil when it could not start or did not finish in time.
     static func runWithTimeout(_ path: String, _ arguments: [String], timeout: TimeInterval = 5) -> CommandOutput? {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: path)
-        p.arguments = arguments
-        let out = Pipe(), err = Pipe()
-        p.standardOutput = out
-        p.standardError = err
-        p.standardInput = FileHandle.nullDevice
-        let finished = DispatchSemaphore(value: 0)
-        p.terminationHandler = { _ in finished.signal() }
-        do { try p.run() } catch { return nil }
-        let box = OutputBox()
-        let group = DispatchGroup()
-        group.enter()
-        DispatchQueue.global().async { box.setOut(out.fileHandleForReading.readDataToEndOfFile()); group.leave() }
-        group.enter()
-        DispatchQueue.global().async { box.setErr(err.fileHandleForReading.readDataToEndOfFile()); group.leave() }
-        if finished.wait(timeout: .now() + timeout) == .timedOut {
-            p.terminate()
-            _ = group.wait(timeout: .now() + 1)
-            return nil
-        }
-        group.wait()
-        let status: Int32 = p.terminationReason == .uncaughtSignal ? -1 : p.terminationStatus
-        let (o, e) = box.get()
-        return CommandOutput(status: status, stdout: String(decoding: o, as: UTF8.self), stderr: String(decoding: e, as: UTF8.self))
-    }
-
-    private final class OutputBox: @unchecked Sendable {
-        private let lock = NSLock()
-        private var out = Data(), err = Data()
-        func setOut(_ d: Data) { lock.lock(); out = d; lock.unlock() }
-        func setErr(_ d: Data) { lock.lock(); err = d; lock.unlock() }
-        func get() -> (Data, Data) { lock.lock(); defer { lock.unlock() }; return (out, err) }
+        guard let r = TimedProcess.run(path, arguments, timeout: timeout, outputLimit: 4 << 20, stderrLimit: 4 << 20, grace: 2),
+              !r.timedOut else { return nil }
+        return CommandOutput(status: r.status, stdout: r.stdoutText, stderr: r.stderrText)
     }
 
     /// The text Tailscale prints when its service is not up. Only this, in a failed `status`, means "not running";

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.1.4 (build 223).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.0 (build 224).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -13,6 +13,9 @@ public enum LogEventCategory: String, CaseIterable, Identifiable, Codable {
     case gatekeeper
     case xprotect
     case auth
+    /// Lines from the system itself that the log audit reads for a named kind (`LogAuditKind`): privacy permissions
+    /// (tccd), the kernel, the disk, crash reports and Wi-Fi authentication.
+    case system
     /// Synthetic category for `LogTemplateAnomaly` results, folded into the
     /// same filterable/searchable list as everything else in
     /// `SecurityLogAuditView` instead of being visible only via the
@@ -32,6 +35,7 @@ public enum LogEventCategory: String, CaseIterable, Identifiable, Codable {
         case .gatekeeper: return loc("Gatekeeper遮断")
         case .xprotect: return loc("XProtect検知")
         case .auth: return loc("ログイン/認証")
+        case .system: return loc("システム/OS")
         case .templateAnomaly: return loc("テンプレート異常")
         }
     }
@@ -44,6 +48,7 @@ public enum LogEventCategory: String, CaseIterable, Identifiable, Codable {
         case .gatekeeper: return "shield.slash.fill"
         case .xprotect: return "cross.case.fill"
         case .auth: return "lock.fill"
+        case .system: return "gearshape.fill"
         case .templateAnomaly: return "puzzlepiece.extension.fill"
         }
     }
@@ -78,14 +83,22 @@ public struct SecurityLogEvent: Identifiable, Equatable, Codable {
     /// individual message text. Defaults to `""` for the handful of
     /// synthetic/test events that have no real unified-log entry behind them.
     public let subsystem: String
+    /// The full path of the process that wrote the line (`processImagePath`), for reading its signature. `""` when the
+    /// log did not give one.
+    public let processPath: String
+    /// The kind of line a person can judge (`LogAuditKind`); nil for a line that is only a statistic.
+    public let kind: LogAuditKind?
 
-    public init(timestamp: Date, process: String, category: LogEventCategory, severity: LogEventSeverity, message: String, subsystem: String = "") {
+    public init(timestamp: Date, process: String, category: LogEventCategory, severity: LogEventSeverity, message: String, subsystem: String = "",
+                processPath: String = "", kind: LogAuditKind? = nil) {
         self.timestamp = timestamp
         self.process = process
         self.category = category
         self.severity = severity
         self.message = message
         self.subsystem = subsystem
+        self.processPath = processPath
+        self.kind = kind
     }
 }
 
@@ -106,6 +119,8 @@ public struct SecurityLogReadStatus: Equatable {
     /// JSON but could not be parsed (not examined).
     public var linesLossy = 0
     public var linesUnparsable = 0
+    /// The kernel and disk lines were read over this many hours, fewer than `hoursQueried` (0 = the same window).
+    public var kernelStageHours = 0
     /// Events parsed from the output.
     public var eventsRead = 0
 
@@ -116,7 +131,8 @@ public struct SecurityLogReadStatus: Equatable {
     public var windowClamped: Bool { hoursRequested != 0 && hoursRequested != hoursQueried }
     /// Part of the log was not examined.
     public var limited: Bool { !unreadable && (failureReason != nil || timedOut || outputTruncated) }
-    public var skippedAnything: Bool { unreadable || limited || windowClamped || linesLossy > 0 || linesUnparsable > 0 }
+    public var kernelWindowShortened: Bool { kernelStageHours != 0 }
+    public var skippedAnything: Bool { unreadable || limited || windowClamped || kernelWindowShortened || linesLossy > 0 || linesUnparsable > 0 }
 
     /// The reason code kept in `GuardReaderHealth` when the log could not be read.
     public var healthReason: String {
@@ -150,6 +166,9 @@ public struct SecurityLogReadStatus: Equatable {
         if windowClamped {
             out.append(locFormat("指定の %d 時間は範囲外のため、直近 %d 時間を調べました。", hoursRequested, hoursQueried))
         }
+        if kernelWindowShortened {
+            out.append(locFormat("カーネルとディスクのログは、重いため、直近 %d 時間分だけを調べました。", kernelStageHours))
+        }
         if linesLossy > 0 {
             out.append(locFormat("読めない文字を含む行が %d 件ありました(文字を置き換えて調べました)。", linesLossy))
         }
@@ -178,12 +197,9 @@ public struct SecurityLogAuditReport: Equatable {
     public let xprotectDetections: Int
     public let events: [SecurityLogEvent]
     public let templateAnomalies: [LogTemplateAnomaly]
-    /// The subset of `templateAnomalies` whose example line came from an event
-    /// with a non-`info` severity (failed sudo/ssh/login, Gatekeeper denial,
-    /// XProtect hit, ...). Only these may notify or land in the notification
-    /// history; the rest stay visible in the audit view but never page
-    /// (alert-fatigue fix, 2026-09-30).
-    public var notifiableTemplateAnomalies: [LogTemplateAnomaly] = []
+    /// What the anomalies come to: findings whose line belongs to a kind a person can judge (`LogAuditKind`: they
+    /// may notify), and the anomalies that belong to none (they are kept in the history and never notify).
+    public var outcome = LogAuditOutcome()
     /// What the log read could not deliver (see `SecurityLogReadStatus`).
     public var readStatus = SecurityLogReadStatus()
 
@@ -193,13 +209,25 @@ public struct SecurityLogAuditReport: Equatable {
     }
 }
 
+/// What one audit run writes to the notification history on its own. The scheduled guard delivers its notice itself
+/// (which records it), so it asks the audit not to record the same findings a second time.
+enum LogAuditHistoryPolicy: Equatable {
+    /// The findings' notice and the record of the unclassified patterns (manual audit, MCP).
+    case all
+    /// The unclassified record only: the guard delivers (and so records) the findings.
+    case leaveNoticesToNotifier
+    /// The findings' notice only: the guard's first scan after a launch learns the baseline, and the launch's own
+    /// narration is not worth a history entry.
+    case firstScanQuiet
+}
+
 final class SecurityLogAuditor {
     static let shared = SecurityLogAuditor()
 
     /// App-side asynchronous audit: records what the read could not deliver in the reader health.
     func performAudit(timeWindowHours: Int = 24, completion: @escaping (SecurityLogAuditReport) -> Void) {
         DispatchQueue.global(qos: .userInitiated).async {
-            let report = self.buildReport(timeWindowHours: timeWindowHours)
+            let report = self.buildReport(timeWindowHours: timeWindowHours, history: .all)
             Self.recordReadHealth(report.readStatus)
             DispatchQueue.main.async {
                 completion(report)
@@ -213,8 +241,9 @@ final class SecurityLogAuditor {
     /// through `performAudit`'s `DispatchQueue.main.async` completion there
     /// would deadlock since nothing ever drains the main queue).
     /// `recordHealth` is for the app's own callers; the MCP server process has no reader-health store of its own.
-    func performAuditSync(timeWindowHours: Int = 24, recordHealth: Bool = false) -> SecurityLogAuditReport {
-        let report = buildReport(timeWindowHours: timeWindowHours)
+    /// `history`: what the audit writes to the notification history itself (see `LogAuditHistoryPolicy`).
+    func performAuditSync(timeWindowHours: Int = 24, recordHealth: Bool = false, history: LogAuditHistoryPolicy = .all) -> SecurityLogAuditReport {
+        let report = buildReport(timeWindowHours: timeWindowHours, history: history)
         if recordHealth { Self.recordReadHealth(report.readStatus) }
         return report
     }
@@ -238,7 +267,7 @@ final class SecurityLogAuditor {
         }
     }
 
-    private func buildReport(timeWindowHours: Int) -> SecurityLogAuditReport {
+    private func buildReport(timeWindowHours: Int, history: LogAuditHistoryPolicy) -> SecurityLogAuditReport {
         let (events, readStatus) = fetchSecurityLogs(hours: timeWindowHours)
 
         // A log that could not be read at all must not move the template baseline: an empty window would count as
@@ -257,18 +286,46 @@ final class SecurityLogAuditor {
         let gkBlocks = events.filter { $0.category == .gatekeeper && $0.severity != .info }.count
         let xpCount = events.filter { $0.category == .xprotect && $0.severity != .info }.count
 
+        let scan = evaluateScan(events: events, hoursQueried: readStatus.hoursQueried, history: history)
+
+        var report = SecurityLogAuditReport(
+            auditDate: Date(),
+            timeWindowHours: readStatus.hoursQueried,
+            totalEvents: events.count,
+            sudoFailures: sudoFails,
+            sshAttempts: sshCount,
+            gatekeeperBlocks: gkBlocks,
+            xprotectDetections: xpCount,
+            events: events,
+            templateAnomalies: scan.anomalies,
+            outcome: scan.outcome
+        )
+        report.readStatus = readStatus
+        return report
+    }
+
+    /// The analysis of one scan, apart from reading the log: template anomalies against the persisted baseline, the
+    /// kinds of line they belong to, the kind frequency history, and what goes to the notification history.
+    /// `defaults` is the store for the baselines and the history (nil: the app's own; tests pass a scratch suite).
+    func evaluateScan(
+        events: [SecurityLogEvent],
+        hoursQueried: Int,
+        history: LogAuditHistoryPolicy,
+        defaults: UserDefaults? = nil,
+        signer: (String) -> LogAuditSigner = LogAuditSigner.lookup(path:)
+    ) -> (anomalies: [LogTemplateAnomaly], outcome: LogAuditOutcome) {
         // `events` is newest-first (see `fetchSecurityLogs`'s sort); the
         // cursor logic needs chronological order to find where the
         // previous run left off. Only events after that cursor are
         // eligible for anomaly scoring — `totalEvents`/`sudoFailures`/etc.
-        // above deliberately still reflect the *full* requested window,
+        // (the caller) deliberately still reflect the *full* requested window,
         // since a human asking "what happened in the past N hours" wants
         // everything, not just what's new since the last scheduled scan.
         // Slicing on the full `SecurityLogEvent` (not just its message)
         // keeps category/severity attached, since `isKnownBenignNoise`
         // needs both.
         let chronologicalEvents = Array(events.reversed())
-        let baseline = LogTemplateAnalyzer.loadBaseline()
+        let baseline = LogTemplateAnalyzer.loadBaseline(defaults: defaults)
         // Matched on `.message` directly rather than via
         // `LogTemplateAnalyzer.itemsSinceCursor` — `SecurityLogEvent`'s
         // synthesized `Equatable` includes its random per-instance `id`
@@ -280,8 +337,9 @@ final class SecurityLogAuditor {
         } else {
             newSinceCursor = chronologicalEvents
         }
+        let examined = newSinceCursor.filter { !Self.isKnownBenignNoise($0) }
         let (anomalies, updatedKnown, updatedHistory) = LogTemplateAnalyzer.analyze(
-            messages: newSinceCursor.filter { !Self.isKnownBenignNoise($0) }.map(\.message),
+            messages: examined.map(\.message),
             knownTemplates: baseline.known,
             baselineCaptured: baseline.captured,
             frequencyHistory: baseline.frequencyHistory
@@ -289,75 +347,30 @@ final class SecurityLogAuditor {
         LogTemplateAnalyzer.saveBaseline(
             known: updatedKnown,
             frequencyHistory: updatedHistory,
-            lastProcessedMessage: chronologicalEvents.last?.message ?? baseline.lastProcessedMessage
+            lastProcessedMessage: chronologicalEvents.last?.message ?? baseline.lastProcessedMessage,
+            defaults: defaults
         )
 
-        // `isNew` anomalies are a one-shot detection — once `saveBaseline`
-        // above absorbs the template into `known`, it structurally can
-        // never be flagged again (see `LogTemplateAnalyzer.analyze`'s doc
-        // comment), so this is the only chance to keep a durable record of
-        // it. Found from a live user report: the "テンプレート異常" count
-        // dropping from 1 back to 0 on the next scan/reopen looked like the
-        // anomaly had vanished with no way to look back at what it was.
-        // Recorded here (this function, not `ScheduledLogAuditGuard`) so it
-        // covers every path that reaches `buildReport` — the audit window's
-        // own manual rescan included, not just the scheduled background
-        // scan — and unconditionally (unlike `SecurityNotifier
-        // .sendThreatAlert`, this isn't Pro-gated): a Free user gets the
-        // same durable record, just without the live banner/sound.
-        // Only anomalies whose source line was itself a warning/critical
-        // security event may notify or enter the history. Everything else the
-        // template analyzer flags (loginwindow/syspolicy narration, XPC
-        // teardown, app-group container lookups) is routine OS chatter that
-        // turned this into a boy-who-cried-wolf alert; it stays in the audit
-        // view's `templateAnomalies`.
-        let relevantMessages = Set(newSinceCursor.filter { $0.severity != .info }.map(\.message))
-        let notifiable = anomalies.filter { relevantMessages.contains($0.example) }
-        for anomaly in notifiable where anomaly.isNew {
-            NotificationHistory.record(
-                title: "🧩 " + loc("新規ログパターンを検出"),
-                body: anomaly.example
-            )
-        }
-        // Frequency spikes were deliberately NOT recorded here for a long
-        // time (they can recur across a template's first few runs while its
-        // own baseline is still maturing, unlike `isNew`'s one-shot nature),
-        // on the assumption a spike would still be visible afterward via
-        // this same `buildReport`'s own `templateAnomalies` output. That
-        // assumption is false: `lastProcessedMessage` above already
-        // advanced past every line this spike was computed from, and
-        // `updatedHistory` already folded its count into the template's
-        // mean/stddev — so the *next* call to `buildReport` (whether the
-        // next scheduled scan or a human opening the audit view moments
-        // later) can structurally never see these same lines again, let
-        // alone re-flag them. A live user report: `ScheduledLogAuditGuard`
-        // fired a spike notification, and opening the audit detail view
-        // right after showed "no anomalies detected" with no way to look
-        // back at what had just been flagged. Recording here (a handful of
-        // near-duplicate entries while a template's baseline matures, at
-        // most `LogTemplateAnalyzer.minObservationsForOwnBaseline` of them)
-        // is a better trade than a notification with zero durable trail.
-        for anomaly in notifiable where !anomaly.isNew {
-            NotificationHistory.record(
-                title: "📈 " + String(format: loc("ログの発生頻度が急増 (z=%.1f)"), anomaly.zScore),
-                body: anomaly.example
-            )
-        }
-
-        var report = SecurityLogAuditReport(
-            auditDate: Date(),
-            timeWindowHours: readStatus.hoursQueried,
-            totalEvents: events.count,
-            sudoFailures: sudoFails,
-            sshAttempts: sshCount,
-            gatekeeperBlocks: gkBlocks,
-            xprotectDetections: xpCount,
-            events: events,
-            templateAnomalies: anomalies,
-            notifiableTemplateAnomalies: notifiable
+        // What a new or frequent pattern comes to is decided by the kind of its line (`LogAuditKind`: fixed rules over
+        // the process, subsystem and message), never by how unusual the statistic is. A pattern whose line belongs to a
+        // kind a person can judge is a finding, with the kind, the program and the kind's own past frequency; any other
+        // pattern is a statistic nobody can act on, and goes to the notification history without a notice.
+        let kindStats = LogAuditFindings.loadKindStats(defaults: defaults)
+        let (outcome, updatedKindStats) = LogAuditFindings.evaluate(
+            anomalies: anomalies, events: examined, hours: hoursQueried, kindStats: kindStats, signer: signer
         )
-        report.readStatus = readStatus
-        return report
+        LogAuditFindings.saveKindStats(updatedKindStats, defaults: defaults)
+
+        // Recorded here (not only by the scheduled guard) so every path that reaches this function leaves the same
+        // durable trail, Pro or not. A new pattern cannot be flagged again once the baseline above absorbed it, and a
+        // spike's lines are behind the cursor, so this is the only chance to keep what was found.
+        if history != .firstScanQuiet, let record = LogAuditNotice.composeUnclassified(outcome.unclassified) {
+            NotificationHistory.record(title: record.title, body: record.body, defaults: defaults)
+        }
+        if history != .leaveNoticesToNotifier, let notice = LogAuditNotice.compose(outcome.findings) {
+            NotificationHistory.record(title: notice.title, body: notice.body, defaults: defaults)
+        }
+        return (anomalies, outcome)
     }
 
     /// Wall-clock ceiling for one `log show` query.
@@ -365,18 +378,27 @@ final class SecurityLogAuditor {
     /// Output kept from one query (excess is drained and dropped).
     static let maxLogOutputBytes = 64 * 1024 * 1024
 
-    /// Predicate targeting critical security subsystems and processes. macOS 26 (OpenSSH 10) writes the login lines
-    /// from `sshd-session` instead of `sshd`, so both are listed (exact names: a prefix match would also pull in
-    /// unrelated `sshd-*` helpers and their noise).
+    /// Predicate targeting critical security subsystems and processes. The first part reads every line of the processes it
+    /// names (the subsystems of macOS 26.6.2, checked in a VM: `com.apple.syspolicy.exec` for Gatekeeper's decisions,
+    /// `com.apple.XProtectFramework.Plugin` for the Remediator's plug-ins; the names an earlier macOS used are kept, and
+    /// read nothing where they do not exist); the rest
+    /// (`LogAuditKind.predicateClauses(stage: .main)`) reads a line of authd, opendirectoryd, tccd and ReportCrash only when
+    /// its message has a word of a rule, so the volume stays small. The kernel is read by `kernelLogPredicate`.
+    /// macOS 26 (OpenSSH 10) writes the login lines from `sshd-session` instead of `sshd`, so both are listed (exact
+    /// names: a prefix match would also pull in unrelated `sshd-*` helpers and their noise).
     static let securityLogPredicate = """
     process == "sudo" OR \
     process == "sshd" OR \
     process == "sshd-session" OR \
     process == "loginwindow" OR \
+    subsystem == "com.apple.syspolicy.exec" OR \
     subsystem == "com.apple.security.syspolicy" OR \
-    subsystem == "com.apple.XProtectFramework.PluginService" OR \
-    process == "XProtectRemediator"
-    """
+    subsystem == "com.apple.XProtectFramework.Plugin" OR \
+    subsystem == "com.apple.XProtectFramework.PluginService"
+    """ + " OR " + LogAuditKind.predicateClauses(stage: .main).joined(separator: " OR ")
+
+    /// The kernel stage: the kernel's and the disk daemon's lines that have a word of a rule (`LogAuditKind.otherRules`).
+    static let kernelLogPredicate = LogAuditKind.predicateClauses(stage: .kernel).joined(separator: " OR ")
 
     /// A flag set from the watchdog's queue and read after the child has exited.
     private final class Flag {
@@ -386,16 +408,39 @@ final class SecurityLogAuditor {
         var isSet: Bool { lock.lock(); defer { lock.unlock() }; return value }
     }
 
+    /// The audit's read: the main query, then the kernel stage over a shorter window (`kernelStageMaxHours`). The kernel's
+    /// lines cost several times more to filter than the rest together, and a query that outlasts `logQueryTimeoutSeconds`
+    /// is cut, so the kernel has a query of its own: a slow or failed stage leaves the main stage's events in place and
+    /// says what was not read (`SecurityLogReadStatus`).
     private func fetchSecurityLogs(hours requested: Int) -> (events: [SecurityLogEvent], status: SecurityLogReadStatus) {
-        var status = SecurityLogReadStatus()
-        var results: [SecurityLogEvent] = []
-
-        let predicate = Self.securityLogPredicate
-
         // Defence in depth: never query more than 7 days, whatever the caller passed.
         let hours = min(max(requested, 1), 168)
+        var (events, status) = runLogShow(predicate: Self.securityLogPredicate, hours: hours)
         status.hoursRequested = requested
         status.hoursQueried = hours
+
+        let kernelHours = min(hours, Self.kernelStageMaxHours)
+        let kernel = runLogShow(predicate: Self.kernelLogPredicate, hours: kernelHours)
+        events += kernel.events
+        status.timedOut = status.timedOut || kernel.status.timedOut
+        status.outputTruncated = status.outputTruncated || kernel.status.outputTruncated
+        if status.failureReason == nil { status.failureReason = kernel.status.failureReason; status.exitStatus = kernel.status.exitStatus }
+        status.linesLossy += kernel.status.linesLossy
+        status.linesUnparsable += kernel.status.linesUnparsable
+        status.kernelStageHours = kernelHours < hours ? kernelHours : 0
+        events.sort { $0.timestamp > $1.timestamp }
+        status.eventsRead = events.count
+        return (events, status)
+    }
+
+    /// Hours of the kernel stage at most. A 24-hour audit reads the kernel's last 6 hours; the scheduled audit (1 hour) is
+    /// not cut. Measured in a VM (2026-11-18): the kernel's 5 words were the heaviest part of one query.
+    static let kernelStageMaxHours = 6
+
+    /// One `log show` over `hours` with `predicate`. `status.hoursRequested`/`hoursQueried` are the caller's.
+    private func runLogShow(predicate: String, hours: Int) -> (events: [SecurityLogEvent], status: SecurityLogReadStatus) {
+        var status = SecurityLogReadStatus()
+        var results: [SecurityLogEvent] = []
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/log")
@@ -409,7 +454,8 @@ final class SecurityLogAuditor {
 
         let pipe = Pipe()
         process.standardOutput = pipe
-        process.standardError = Pipe()
+        // Not read: a Pipe here would stop `log show` once 64 KB of its warnings were in it.
+        process.standardError = FileHandle.nullDevice
 
         let timedOut = Flag()
         do {
@@ -418,13 +464,9 @@ final class SecurityLogAuditor {
             // Hard ceiling so a wedged/very slow `log show` can't stall the caller: SIGTERM
             // at the deadline, SIGKILL shortly after. Killing the process closes its pipe, so
             // the read loop below ends.
-            let pid = process.processIdentifier
             let watchdog = DispatchWorkItem {
                 timedOut.set()
-                process.terminate()
-                DispatchQueue.global().asyncAfter(deadline: .now() + 3) {
-                    if process.isRunning { kill(pid, SIGKILL) }
-                }
+                ChildProcessTree.end(process, grace: 3)
             }
             DispatchQueue.global().asyncAfter(deadline: .now() + Self.logQueryTimeoutSeconds, execute: watchdog)
 
@@ -482,6 +524,7 @@ final class SecurityLogAuditor {
         var events: [SecurityLogEvent] = []
         var lossy = 0
         var unparsable = 0
+        var unreadableTimes = 0
         var lines = data.split(separator: 0x0A, omittingEmptySubsequences: true)
         if startsMidLine, !lines.isEmpty { lines.removeFirst() }
         for raw in lines {
@@ -493,14 +536,25 @@ final class SecurityLogAuditor {
                 text = String(decoding: line, as: UTF8.self)
                 lossy += 1
             }
-            if let event = parseNdjsonLine(text) {
+            switch parseNdjson(text) {
+            case .event(let event):
                 events.append(event)
                 continue
+            case .unreadableTime:
+                unparsable += 1
+                unreadableTimes += 1
+                continue
+            case .notAnEvent:
+                break
             }
             if let first = line.first(where: { $0 != 0x20 && $0 != 0x09 && $0 != 0x0D }), first == UInt8(ascii: "{"),
                (try? JSONSerialization.jsonObject(with: line)) as? [String: Any] == nil {
                 unparsable += 1
             }
+        }
+        if unreadableTimes > 0 {
+            // stderr, never stdout: in `RoamSwitchMCPServer` stdout IS the JSON-RPC channel.
+            FileHandle.standardError.write(Data("[SecurityLogAuditor] \(unreadableTimes) log lines have a time that cannot be read and were not used\n".utf8))
         }
         return (events, lossy, unparsable)
     }
@@ -692,80 +746,73 @@ final class SecurityLogAuditor {
         return lower.contains("observevalueforkeypath") && lower.contains("firstresponder changed")
     }
 
-    /// Not `private`: `RuntimeThreatContainmentManager` shares this exact
-    /// categorization so its autonomous Air-Gap trigger and this manual
-    /// report always agree on what counts as a critical XProtect/Gatekeeper
-    /// event.
-    func parseNdjsonLine(_ line: String) -> SecurityLogEvent? {
+    /// How one ndjson line reads.
+    enum NdjsonParse {
+        case event(SecurityLogEvent)
+        /// Valid JSON that is not an event the audit keeps (a process and a message no rule accepts).
+        case notAnEvent
+        /// An event whose `timestamp` cannot be read. It is not used: a time guessed as "now" would put an old line in the
+        /// present (found 2026-11-18: every line of `log show --style ndjson` has `2026-11-18 00:53:31.749589+0000`, which
+        /// an ISO 8601 reader refuses, so every event was dated now).
+        case unreadableTime
+    }
+
+    /// The time of a line as `log show --style ndjson` writes it (`2026-11-18 00:53:31.749589+0000`: no `T`, the zone
+    /// as `+0000`), and the ISO 8601 forms (with or without fractional seconds, `T`, `Z`) that earlier builds and test
+    /// lines use. Nil when none fits.
+    static func parseLogTimestamp(_ text: String) -> Date? {
+        for formatter in timestampFormatters {
+            if let date = formatter.date(from: text) { return date }
+        }
+        for options: ISO8601DateFormatter.Options in [[.withInternetDateTime, .withFractionalSeconds], [.withInternetDateTime]] {
+            let iso = ISO8601DateFormatter()
+            iso.formatOptions = options
+            if let date = iso.date(from: text) { return date }
+        }
+        return nil
+    }
+
+    /// Fixed locale and a numeric zone: the user's language and calendar do not change what the log wrote.
+    private static let timestampFormatters: [DateFormatter] = ["yyyy-MM-dd HH:mm:ss.SSSSSSZ", "yyyy-MM-dd HH:mm:ssZ"].map { format in
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.calendar = Calendar(identifier: .gregorian)
+        f.timeZone = TimeZone(secondsFromGMT: 0)
+        f.dateFormat = format
+        return f
+    }
+
+    /// `liveStream`: the line comes from `log stream` and is read the moment it is written, so a time that cannot be read is
+    /// "now" and true (the Air-Gap and Gatekeeper notice of `RuntimeThreatContainmentManager`). A line read from `log show`
+    /// has its own time, and one that cannot be read is not used.
+    func parseNdjson(_ line: String, liveStream: Bool = false) -> NdjsonParse {
         guard let data = line.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            return nil
+            return .notAnEvent
         }
 
         let process = json["processImagePath"] as? String ?? json["process"] as? String ?? ""
         let procName = URL(fileURLWithPath: process).lastPathComponent
+        let processPath = process.hasPrefix("/") ? process : ""
         let msg = json["eventMessage"] as? String ?? ""
-        guard !msg.isEmpty else { return nil }
+        guard !msg.isEmpty else { return .notAnEvent }
         let subsystem = json["subsystem"] as? String ?? ""
 
-        let timestampStr = json["timestamp"] as? String ?? ""
-        let date: Date = {
-            let iso = ISO8601DateFormatter()
-            iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            return iso.date(from: timestampStr) ?? Date()
-        }()
+        // What the line is: its category, its severity and the kind a person can judge (`LogAuditKind.classify`).
+        guard let classified = LogAuditKind.classify(process: procName, subsystem: subsystem, message: msg) else {
+            return .notAnEvent
+        }
+        let category = classified.category
+        let severity = classified.severity
+        let kind = classified.kind
 
-        // Categorize & Assess Severity
-        let category: LogEventCategory
-        let severity: LogEventSeverity
-
-        if procName.contains("sudo") {
-            category = .sudo
-            if msg.localizedCaseInsensitiveContains("incorrect password") ||
-               msg.localizedCaseInsensitiveContains("authentication error") ||
-               msg.localizedCaseInsensitiveContains("fail") {
-                severity = .critical
-            } else {
-                severity = .info
-            }
-        } else if procName.contains("sshd") {
-            category = .ssh
-            if msg.localizedCaseInsensitiveContains("Failed") ||
-               msg.localizedCaseInsensitiveContains("Invalid") {
-                severity = .critical
-            } else if msg.localizedCaseInsensitiveContains("Accepted") {
-                severity = .warning
-            } else {
-                severity = .info
-            }
-        } else if procName.contains("syspolicy") || json["subsystem"] as? String == "com.apple.security.syspolicy" {
-            category = .gatekeeper
-            if msg.localizedCaseInsensitiveContains("deny") ||
-               msg.localizedCaseInsensitiveContains("block") ||
-               msg.localizedCaseInsensitiveContains("reject") {
-                severity = .warning
-            } else {
-                severity = .info
-            }
-        } else if procName.contains("XProtect") || json["subsystem"] as? String == "com.apple.XProtectFramework.PluginService" {
-            category = .xprotect
-            if msg.localizedCaseInsensitiveContains("infected") ||
-               msg.localizedCaseInsensitiveContains("remediated") ||
-               msg.localizedCaseInsensitiveContains("malware") {
-                severity = .critical
-            } else {
-                severity = .info
-            }
-        } else if procName.contains("loginwindow") {
-            category = .auth
-            if msg.localizedCaseInsensitiveContains("fail") ||
-               msg.localizedCaseInsensitiveContains("reject") {
-                severity = .warning
-            } else {
-                severity = .info
-            }
+        let date: Date
+        if let parsed = Self.parseLogTimestamp(json["timestamp"] as? String ?? "") {
+            date = parsed
+        } else if liveStream {
+            date = Date()
         } else {
-            return nil
+            return .unreadableTime
         }
 
         // Redacted here — the single construction site for every
@@ -773,13 +820,24 @@ final class SecurityLogAuditor {
         // the "copy report" clipboard flow, and the MCP JSON payload all see
         // a masked `message` with no separate redaction pass needed at each
         // of those call sites.
-        return SecurityLogEvent(
+        return .event(SecurityLogEvent(
             timestamp: date,
             process: procName,
             category: category,
             severity: severity,
             message: SecretLeakScanning.redact(msg),
-            subsystem: subsystem
-        )
+            subsystem: subsystem,
+            processPath: processPath,
+            kind: kind
+        ))
+    }
+
+    /// Not `private`: `RuntimeThreatContainmentManager` shares this exact
+    /// categorization so its autonomous Air-Gap trigger and this manual
+    /// report always agree on what counts as a critical XProtect/Gatekeeper
+    /// event. Nil for a line that is no event, or whose time cannot be read (see `parseNdjson`).
+    func parseNdjsonLine(_ line: String, liveStream: Bool = false) -> SecurityLogEvent? {
+        if case .event(let event) = parseNdjson(line, liveStream: liveStream) { return event }
+        return nil
     }
 }

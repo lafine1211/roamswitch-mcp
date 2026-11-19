@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.1.4 (build 223).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.0 (build 224).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -159,23 +159,15 @@ final class ListeningPortMonitor {
         }
     }
 
+    /// `lsof` を止めるまでの秒数。数百 ms から数秒で終わるので、これを超えたものは止まっている。
+    static let lsofTimeout: TimeInterval = 20
+
     /// Bound (non-connected) UDP sockets. Kept separate from
     /// `scanListeningPorts()` so the many TCP-only consumers are unaffected.
     func scanUDPListeners() -> [ListeningPortInfo] {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
-        process.arguments = ["+c", "0", "-iUDP", "-n", "-P"]
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = Pipe()
-        do {
-            try process.run()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExitWithoutRunLoop()
-            return parseLsofOutput(String(data: data, encoding: .utf8) ?? "", proto: "udp")
-        } catch {
-            return []
-        }
+        // 時間切れ(止まった lsof)は、起動できなかったときと同じ「取れなかった」(空)として返す。
+        guard let r = TimedProcess.run("/usr/sbin/lsof", ["+c", "0", "-iUDP", "-n", "-P"], timeout: Self.lsofTimeout), !r.timedOut else { return [] }
+        return parseLsofOutput(r.stdoutText, proto: "udp")
     }
 
     /// The first non-flag argument on a process's command line — usually the
@@ -225,23 +217,13 @@ final class ListeningPortMonitor {
     /// `ps` fails. Shared by the dangerous-port-exposure alert and
     /// `PortAnomalyGuard`'s TCP/UDP notices.
     static func processElapsedTime(pid: Int) -> String? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/ps")
-        process.arguments = ["-o", "etime=", "-p", "\(pid)"]
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = Pipe()
-        do {
-            try process.run()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExitWithoutRunLoop()
-            guard process.terminationStatus == 0 else { return nil }
-            let out = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
-            return (out?.isEmpty == false) ? out : nil
-        } catch {
-            return nil
-        }
+        // 5 s: `ps` for one process answers from the kernel's table at once; one that does not is ended with what it started.
+        guard let r = TimedProcess.run("/bin/ps", ["-o", "etime=", "-p", "\(pid)"], timeout: Self.psTimeout, outputLimit: 4096), r.succeeded else { return nil }
+        let out = r.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return out.isEmpty ? nil : out
     }
+
+    static let psTimeout: TimeInterval = 5
 
     func getProcessPath(pid: Int) -> String? {
         // libproc first: no process spawn, so scanning every few seconds stays
@@ -250,23 +232,9 @@ final class ListeningPortMonitor {
         if proc_pidpath(Int32(pid), &buffer, UInt32(buffer.count)) > 0 {
             return String(cString: buffer)
         }
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/ps")
-        process.arguments = ["-p", "\(pid)", "-o", "comm="]
-
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = Pipe()
-
-        do {
-            try process.run()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExitWithoutRunLoop()
-            let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
-            return output?.isEmpty == false ? output : nil
-        } catch {
-            return nil
-        }
+        guard let r = TimedProcess.run("/bin/ps", ["-p", "\(pid)", "-o", "comm="], timeout: Self.psTimeout, outputLimit: 16 * 1024), !r.timedOut else { return nil }
+        let output = r.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return output.isEmpty ? nil : output
     }
 
     /// Parses `lsof -iTCP -sTCP:LISTEN -n -P` output. `internal` (not `private`)

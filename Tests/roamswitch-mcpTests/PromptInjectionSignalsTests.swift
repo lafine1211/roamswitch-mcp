@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 2.1.4 (build 223). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 2.2.0 (build 224). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -205,7 +205,7 @@ final class PromptInjectionSignalsOwnTextTests: XCTestCase {
         let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .appendingPathComponent("RoamSwitch/Localizable.xcstrings")
         // The standalone roamswitch-mcp mirror has no app resources to sweep.
-        try XCTSkipUnless(FileManager.default.fileExists(atPath: url.path), "Localizable.xcstrings is not part of this source tree")
+        try SourceTree.require(FileManager.default.fileExists(atPath: url.path), "Localizable.xcstrings is not part of this source tree")
         let data = try Data(contentsOf: url)
         let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         let strings = try XCTUnwrap(root["strings"] as? [String: Any])

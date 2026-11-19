@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.1.4 (build 223).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.0 (build 224).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -79,18 +79,9 @@ enum NmapNSE {
     @discardableResult
     static func updateScriptDB() -> Bool {
         guard let nmapPath = resolveNmapPath() else { return false }
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: nmapPath)
-        process.arguments = ["--script-updatedb"]
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        do {
-            try process.run()
-        } catch {
-            return false
-        }
-        process.waitUntilExitWithoutRunLoop()
-        return process.terminationStatus == 0
+        // 30 s: a scan of the local script directory. One that does not finish is ended with what it started
+        // (TimedProcess) and counts as failed (false), the same as a failing command.
+        return TimedProcess.run(nmapPath, ["--script-updatedb"], timeout: 30, outputLimit: 64 * 1024)?.succeeded ?? false
     }
 
     /// Runs the restricted NSE script set against `ports` and parses the
@@ -144,7 +135,8 @@ enum NmapNSE {
         while process.isRunning {
             if Date() >= deadline {
                 timedOut = true
-                process.terminate()
+                // `nmap` and the scripts and tools it started; SIGKILL after 3 s.
+                ChildProcessTree.end(process, grace: 3)
                 break
             }
             Thread.sleep(forTimeInterval: 0.1)

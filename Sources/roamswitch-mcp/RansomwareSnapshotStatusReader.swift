@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.1.4 (build 223).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.0 (build 224).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -10,17 +10,23 @@ import Foundation
 /// without root and without Time Machine being set up (checked on a real Mac,
 /// macOS 27). Dependency-free so `RoamSwitchMCPServer` can use it too.
 enum TmutilRunner {
+    /// Creating or deleting a local snapshot flushes the volume: 120 s. Listing them reads the snapshot list: 30 s. A call that
+    /// does not finish is ended with what it started (TimedProcess) and is a failure (status -1) with a text that says so, never
+    /// a success. stdout and stderr are one text, as before.
+    static func timeout(for arguments: [String]) -> TimeInterval {
+        switch arguments.first {
+        case "localsnapshot", "deletelocalsnapshots": return 120
+        default: return 30
+        }
+    }
+
     static func run(_ arguments: [String]) -> (status: Int32, output: String) {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/tmutil")
-        p.arguments = arguments
-        let pipe = Pipe()
-        p.standardOutput = pipe
-        p.standardError = pipe
-        do { try p.run() } catch { return (-1, "\(error)") }
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        p.waitUntilExitWithoutRunLoop()
-        return (p.terminationStatus, String(data: data, encoding: .utf8) ?? "")
+        let limit = timeout(for: arguments)
+        guard let r = TimedProcess.run("/usr/bin/tmutil", arguments, mergeStderr: true, timeout: limit, outputLimit: 1 << 20) else {
+            return (-1, "could not start /usr/bin/tmutil")
+        }
+        if r.timedOut { return (-1, r.stdoutText + "\ntmutil did not finish in \(Int(limit)) s and was ended") }
+        return (r.status, r.stdoutText)
     }
 
     /// Ids of the local snapshots that exist right now, or nil if `tmutil` failed.

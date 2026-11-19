@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.1.4 (build 223).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.0 (build 224).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -46,6 +46,10 @@ public struct ExecSearchRequest: Codable, Equatable {
     /// that matched (the viewer and the MCP tool show it that way). nil/false: as one `exec` record per run, which is
     /// what a reader that predates repeat lines expects (an older helper ignores the field and has no repeat lines).
     public var foldRepeats: Bool?
+    /// Set by the app for a request that came through the MCP mailbox: the user id of the account that asked. The reply then holds only that
+    /// account's processes (`ExecViewerScope`). Optional so an older app's request still decodes; an older helper ignores it, which is why the
+    /// app asks only a helper of its own build (`ExecMCPBridge`).
+    public var viewerUID: UInt32?
 
     /// Hard cap on events per reply (the app's export uses the maximum; the MCP
     /// tools ask for at most 200).
@@ -53,7 +57,8 @@ public struct ExecSearchRequest: Codable, Equatable {
 
     public init(text: String? = nil, pid: Int32? = nil, ppid: Int32? = nil, since: Double? = nil, until: Double? = nil,
                 kind: String? = nil, signature: String? = nil, teamID: String? = nil, limit: Int = 50,
-                maskedTextMatch: Bool? = nil, foldRepeats: Bool? = nil) {
+                maskedTextMatch: Bool? = nil, foldRepeats: Bool? = nil, viewerUID: UInt32? = nil) {
+        self.viewerUID = viewerUID
         self.text = text
         self.pid = pid
         self.ppid = ppid
@@ -109,8 +114,11 @@ public struct ExecProcessTreeRequest: Codable, Equatable {
     public var at: Double?
     /// 1...168.
     public var lookbackHours: Int
+    /// As in `ExecSearchRequest`: the account that asked through the MCP mailbox; the tree is given only for that account's process.
+    public var viewerUID: UInt32?
 
-    public init(pid: Int32, at: Double? = nil, lookbackHours: Int = 24) {
+    public init(pid: Int32, at: Double? = nil, lookbackHours: Int = 24, viewerUID: UInt32? = nil) {
+        self.viewerUID = viewerUID
         self.pid = pid
         self.at = at
         self.lookbackHours = lookbackHours
@@ -140,7 +148,24 @@ public enum ExecReadService {
     /// found as soon as it happened.
     public static func search(_ req: ExecSearchRequest, dir: URL, now: Date = Date(),
                               pending: [ExecEventRecord] = []) -> ExecSearchReply {
-        let res = ExecLogReader.search(dir: dir, query: req.toQuery(), pending: pending)
+        var res: ExecLogSearchResult
+        if let viewer = req.viewerUID {
+            // A request from the MCP mailbox: only the asking account's processes (and root's, when one of the account's started them).
+            var q = req.toQuery()
+            let wanted = q.limit
+            q.allowedUIDs = ExecViewerScope.firstPassUIDs(viewer)
+            q.limit = ExecSearchRequest.maxLimit
+            let first = ExecLogReader.search(dir: dir, query: q, pending: pending)
+            let history = first.events.contains(where: { $0.uid == 0 })
+                ? ExecLogReader.search(dir: dir, query: ExecLogQuery(since: (first.events.map(\.time).min() ?? 0) - ExecViewerScope.lookbackSecs,
+                                                                  limit: ExecSearchRequest.maxLimit, allowedUIDs: ExecViewerScope.firstPassUIDs(viewer)),
+                                       pending: pending).events
+                : []
+            res = first
+            res.events = Array(ExecViewerScope.visible(first.events, viewer: viewer, history: history).prefix(wanted))
+        } else {
+            res = ExecLogReader.search(dir: dir, query: req.toQuery(), pending: pending)
+        }
         var events: [ExecEventRecord] = []
         var bytes = 0
         var cut = false
@@ -159,8 +184,18 @@ public enum ExecReadService {
         let lookback = Double(min(max(req.lookbackHours, 1), 168)) * 3600
         let anchor = req.at ?? now.timeIntervalSince1970
         // Each run of a repeat line is its own process here (the default of the query).
-        let res = ExecLogReader.search(dir: dir, query: ExecLogQuery(since: anchor - lookback, limit: ExecSearchRequest.maxLimit),
+        var res = ExecLogReader.search(dir: dir, query: ExecLogQuery(since: anchor - lookback, limit: ExecSearchRequest.maxLimit,
+                                                                     allowedUIDs: req.viewerUID.map(ExecViewerScope.firstPassUIDs)),
                                        pending: pending)
+        if let viewer = req.viewerUID {
+            // The asking account's own process, or one that one of its processes started as root; and only its own and root's around it.
+            let all = res.events
+            guard ExecViewerScope.ownsProcess(pid: req.pid, at: req.at ?? anchor, viewer: viewer, history: all) else {
+                return ExecProcessTreeReply(readable: res.readable, truncatedScan: res.truncatedScan,
+                                            tree: ExecProcessTree(ancestors: [], node: nil, descendants: [], truncated: false))
+            }
+            res.events = all
+        }
         let tree = ExecProcessTreeBuilder.build(records: res.events, pid: req.pid, at: req.at.map { $0 + 1 })
         return ExecProcessTreeReply(readable: res.readable, truncatedScan: res.truncatedScan || tree.truncated, tree: tree)
     }
@@ -327,5 +362,61 @@ public enum ExecMCPMailbox {
         guard isValidID(response.id), prepare(dir: dir),
               let data = try? JSONEncoder().encode(response), data.count <= maxResponseBytes else { return }
         _ = writeAtomic(data, to: responseURL(response.id, dir: dir))
+    }
+}
+
+// MARK: - What an account may see of the log
+
+/// The exec log is root-only and holds every account's processes. A request that came through the MCP mailbox (any process of the account can
+/// put one there, `ExecMCPBridge`) gets only the asking account's own:
+///  - a record whose process has the account's user id;
+///  - a record of root's (uid 0: `sudo` itself is setuid root, and what it runs) only when one of its ancestors, at that time, was the
+///    account's own process: the account's own `sudo` and what it ran, not another administrator's.
+/// Every other account's processes, and root's that the account did not start, are left out. The ancestors are looked for in the log of the
+/// last `lookbackSecs` before the first record; one that began earlier is not found and its root children are left out (the safe side).
+public enum ExecViewerScope {
+    public static let lookbackSecs: Double = 6 * 3600
+    public static let maxDepth = 32
+
+    public static func firstPassUIDs(_ viewer: UInt32) -> Set<UInt32> { [viewer, 0] }
+
+    /// The record of `pid` in force at `time`: the newest one not after it.
+    private static func latest(pid: Int32, at time: Double, in byPid: [Int32: [ExecEventRecord]]) -> ExecEventRecord? {
+        byPid[pid]?.last { $0.time <= time }
+    }
+
+    private static func index(_ history: [ExecEventRecord]) -> [Int32: [ExecEventRecord]] {
+        var m: [Int32: [ExecEventRecord]] = [:]
+        for r in history where r.kind == "exec" || r.kind == "fork" || r.kind == "repeat" { m[r.pid, default: []].append(r) }
+        for k in m.keys { m[k]?.sort { ($0.time, $0.seq) < ($1.time, $1.seq) } }
+        return m
+    }
+
+    private static func ancestorIsViewers(of r: ExecEventRecord, viewer: UInt32, index: [Int32: [ExecEventRecord]]) -> Bool {
+        var current = r.ppid
+        var at = r.time
+        for _ in 0..<maxDepth {
+            guard current > 1, let rec = latest(pid: current, at: at, in: index) else { return false }
+            if rec.uid == viewer { return true }
+            current = rec.ppid
+            at = rec.time
+        }
+        return false
+    }
+
+    public static func visible(_ events: [ExecEventRecord], viewer: UInt32, history: [ExecEventRecord]) -> [ExecEventRecord] {
+        let idx = index(history + events)
+        return events.filter { r in
+            if r.uid == viewer { return true }
+            return r.uid == 0 && ancestorIsViewers(of: r, viewer: viewer, index: idx)
+        }
+    }
+
+    /// The process `pid` (at `time`) is the account's own, or root's and started by one of the account's.
+    public static func ownsProcess(pid: Int32, at time: Double, viewer: UInt32, history: [ExecEventRecord]) -> Bool {
+        let idx = index(history)
+        guard let rec = latest(pid: pid, at: time + 1, in: idx) else { return false }
+        if rec.uid == viewer { return true }
+        return rec.uid == 0 && ancestorIsViewers(of: rec, viewer: viewer, index: idx)
     }
 }

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.1.4 (build 223).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.0 (build 224).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -457,8 +457,8 @@ public struct ExecRecorderConfig: Codable, Equatable {
     }
 }
 
-/// Written by the helper (atomic, world-readable, contains no secrets), read by
-/// the app UI and the MCP server.
+/// Written by the helper (atomic, root-only, mode 0600, contains no secrets: counters and times). The app UI and the MCP server read it
+/// through the snapshot the app asks the helper for (`HelperHealthMirror`).
 public struct ExecRecorderStatus: Codable, Equatable {
     /// "stopped" | "starting" | "running" | "needsFullDiskAccess" |
     /// "esloggerMissing" | "backoff" | "failed"

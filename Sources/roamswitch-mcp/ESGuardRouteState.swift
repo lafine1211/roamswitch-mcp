@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.1.4 (build 223).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.0 (build 224).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -20,10 +20,9 @@ enum ESGuardRouteState: String, Codable, Equatable {
     /// the system extension manager), one record per guard.
     /// How long a guard that has just started may be on its fallback with no reason (the extension works; the watch is not
     /// registered yet) before the status calls it stopped. The helper takes the watches, then the extension takes them up.
-    /// The watches reach the helper within about ten seconds of a launch (2026-11-16); how long the extension takes after
-    /// that is not measured: the route history (`ESStateHistory.routeLine`) records it ("started Ns ago") at the next launch.
-    /// 180 s is a generous bound, not a measurement.
-    static let startGraceSecs: Double = 180
+    /// Measured on a launch of 2.1.4 (2026-11-16): the guards started 2 s after the launch and were on the extension 10 to
+    /// 12 s later, all of them at about the same time. 60 s is five times that.
+    static let startGraceSecs: Double = 60
 
     /// `since` is when the guard started (written while it is on the fallback), so a reader can tell a start in progress
     /// from a guard that has been without the extension for long.

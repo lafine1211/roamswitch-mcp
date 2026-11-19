@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.1.4 (build 223).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.0 (build 224).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -113,7 +113,7 @@ extension RoamSwitchKnowledgeBase {
                 • WireGuard：需要 Homebrew 的 `wireguard-tools`（`brew install wireguard-tools`）。通过「导入 WireGuard 配置 (.conf)…」导入配置文件。配置文件需由用户自行准备（Mullvad、IVPN、Proton VPN、自建服务器、公司提供等）。RoamSwitch 不提供 VPN 服务器。
                 • WireGuard 终止开关：在 pf 的 `block drop all` 基础上仅放行「lo / 隧道接口 / 到端点的 UDP 握手 / DHCP / ICMP」。即使隧道断开期间，明文流量也不会泄露。
                 • Tailscale：面向已在使用 Tailscale 的用户。RoamSwitch 不负责安装和登录，只读取 `tailscale status` 并执行 `tailscale set --exit-node=<节点>`。必须选择出口节点（所有流量经由该节点）。所选节点离线时会在状态显示中提示。
-                • Tailscale 推荐使用 CLI 版（standalone）：`brew install tailscale` → `sudo tailscaled install-system-daemon` → `sudo tailscale up`。App Store 版（GUI）无法从应用外部执行 `tailscale set`，因此请在 Tailscale 应用中选择出口节点，RoamSwitch 仅负责状态显示和终止开关。
+                • Tailscale 只能使用 Homebrew 版的 CLI：`brew install tailscale` → `sudo tailscaled install-system-daemon` → `sudo tailscale up`。应用版（App Store 版和官网下载的应用版）无法从应用外部执行 `tailscale set`，因此请在 Tailscale 应用中选择出口节点，RoamSwitch 仅负责状态显示和终止开关。
                 • Tailscale 终止开关（默认关闭，需手动启用）：在 pf 中仅放行「lo / Tailscale 的 utun / CGNAT 100.64.0.0/10 / DNS / STUN 3478 / 41641 / DERP tcp 443 / DHCP / ICMP」。这是比 WireGuard 宽松的「不易泄露」级别，在某些环境下可能妨碍 Tailscale 自身的连接，因此为可选项。
                 • 自动应用：在不受信任的网络上连接隧道／出口节点，在受信任的网络上断开。许可证失效时会自动解除隧道和终止开关。
                 """,
@@ -390,14 +390,15 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "feat_runtime_threat_containment",
                 title: "与 XProtect 恶意软件检测联动的自动断网 (Pro)",
-                summary: "当 Apple 内置的 XProtect / XProtect Remediator 实际检测到或清除恶意软件时，立即紧急全面断网。对于 Gatekeeper 拦截未签名应用的情况不会断网，仅发出通知。",
+                summary: "当 Apple 内置的 XProtect 实际检测到或清除恶意软件时，立即紧急全面断网。只有当 RoamSwitch 的 Endpoint Security 扩展收到 XProtect 的检测或清除事件时，才会断网。对于 Gatekeeper 拦截未签名应用的情况不会断网，仅发出通知。",
                 details: """
-                • 信号来源：以 ndjson 格式持续订阅 `/usr/bin/log stream`（采用等待式而非轮询，空闲时 CPU 负载几乎为零），监视与 XProtect 相关的系统日志。
-                • 阻断条件：仅当 XProtect 记录了严重（critical）的恶意软件检测时，才执行气隙隔离（包括关闭 Wi-Fi 无线）。无论网络的信任级别如何都会触发。
+                • 信号来源：RoamSwitch 的 Endpoint Security 扩展收到的 XProtect 检测或清除事件（带有恶意软件名称、路径、签名版本和事件标识的结构化事件）。没有恶意软件名称的事件不会断网。同一事件只断网一次。
+                • 扩展未运行时（尚未批准、macOS 低于 13 等）：不会断网。作为备用，通过 `/usr/bin/log stream` 读取 Gatekeeper 的判定日志，若有 XProtect 的检测结果行（带有恶意软件名称和文件），则发出显示该名称和文件的高重要度通知。仅凭日志中的一行，不会断网。扩展运行时，日志行会等待 60 秒，若没有收到事件，则发出同样的通知。
+                • 阻断条件：仅当收到上述事件时，才执行气隙隔离（包括关闭 Wi-Fi 无线）。无论网络的信任级别如何都会触发。
                 • 与 Gatekeeper 的区别：开发者自行构建的未签名应用被阻止启动等日常发生的 Gatekeeper 事件，只会发出「Gatekeeper 已阻止未签名应用运行」的通知。
                 • 判定一致性：与手动的「Mac 安全日志审计」共享同一套分类逻辑。
-                • 由于设计上不使用 EndpointSecurity 权限（entitlement），因此不是执行前的拦截，而是「检测后立即隔离」。
-                • 默认值：首次激活 Pro 许可证时自动开启（届时会提示一次已启用自动阻断）。状态可通过 MCP 的 `get_runtime_threat_status` 查看，并可通过「🚨 恶意软件检测联动 Air-Gap 模拟（功能测试）…」进行测试。
+                • 这不是执行前的拦截，而是「检测后立即隔离」。
+                • 默认值：首次激活 Pro 许可证时自动开启（届时会提示一次已启用自动阻断）。状态可通过 MCP 的 `get_runtime_threat_status` 查看，并可通过「🚨 恶意软件检测联动 Air-Gap 模拟（功能测试）…」进行测试。所用的 Endpoint Security 扩展需要在系统设置中批准。
                 """,
                 recommendation: "请将其作为与 Apple 内置恶意软件防护联动的自动防御保持启用。即使在经常运行未签名自制应用的环境中，仅 Gatekeeper 的拦截也不会触发断网。"
             ),
@@ -561,15 +562,17 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_scheduled_log_audit",
-                title: "自动日志审计（定期学习新模式与频率异常） (Pro)",
-                summary: "每小时在后台执行一次日志审计的模板异常检测，持续学习本 Mac 平常的日志趋势。检测到新模式或频率激增时，会附上实际日志行示例和通俗说明发出通知。",
+                title: "定期日志审计 (Pro)",
+                summary: "每小时在后台运行一次日志审计。只通知种类和处理方式都明确的日志，例如认证失败和权限变更；无法判断种类的统计异常不会通知，只记录在通知历史中。",
                 details: """
-                • 执行间隔：每小时分析最近 1 小时的日志。启用约 10 秒后执行首次扫描，但由于其中包含应用自身的启动日志，该次仅进行学习而不发出通知。
-                • 通知内容：异常数量（新模式与频率激增的明细）、最多 3 条实际日志行、学习状态说明，以及面向非专业人士的解释。包含频率激增时会在通知中心显示提醒；仅有新模式时则不会弹出提醒，只记录到通知历史中。新模式记录一次后即被视为「已知」，同样的内容不会再次记录。频率激增在该模式学习完成后将不再提醒。
-                • 与手动审计的关系：与手动的「Mac 安全日志审计」及 MCP 的 `audit_security_logs` 共享相同的分析和学习数据。
-                • 默认值：首次激活 Pro 许可证时自动开启。菜单「恶意软件防护」→「自动日志审计(定期学习新模式与频率异常) (Pro)」。
+                • 运行间隔：每小时分析最近一小时。启用约 10 秒后进行首次扫描，但这次包含应用自身的启动日志，因此只学习，不通知。
+                • 会通知的种类：sudo 被拒绝（密码错误等）、SSH 登录失败与成功、管理员认证失败、隐私权限被重置、Gatekeeper 拦截、内核警告（panic、watchdog）、磁盘和文件系统错误、应用反复崩溃（同一应用在一次分析中 3 次以上）。严重程度按种类固定，不随统计值的大小而变化。
+                • 通知内容：依次为结论、处理方式、原因，然后是相关进程及其签名、首次出现时间、同类日志过去的频率，以及显示这些日志的 `log show` 命令。
+                • 只记录在通知历史中：以管理员权限运行（如管理员认证成功）。无法判断种类的新模式和频率激增，合并为“日志审计：无法分类的新模式：N”一条记录，不发通知。
+                • 与手动审计的关系：与手动的“Mac 安全日志审计”以及 MCP 的 `audit_security_logs` 共用同一套分析和学习数据。
+                • 默认值：首次激活 Pro 许可时自动开启。菜单：“恶意软件防护”→“定期日志审计 (Pro)”。
                 """,
-                recommendation: "刚开始使用时新模式的通知会稍多一些，随着学习的推进会逐渐减少。如果包含陌生的应用名称或 IP 地址，请在日志审计界面中查看详情。"
+                recommendation: "收到通知后，把“确认”一行的命令粘贴到“终端”，即可查看对应的日志行。如果是您自己的操作（自己的 sudo、自己的登录失败），无需处理。"
             ),
             LocalizedEntry(
                 id: "feat_containment_incident_timeline",
@@ -907,7 +910,7 @@ extension RoamSwitchKnowledgeBase {
                 title: "Pro 永久许可证（一次性买断·最多 2 台）",
                 summary: "Pro 版为一次性买断的永久许可证（¥2,980 / $19.99），一个许可证最多可在 2 台 Mac 上使用。许可证令牌经 Ed25519 电子签名并在本机验证，因此激活后可离线运行。",
                 details: """
-                • Pro 可用功能：菜单中标有「(Pro)」的自动防御（勒索软件诱饵文件检测、XProtect 联动阻断、未知端口自动阻止与开发服务器隔离、ARP 欺骗自动阻断、网关 ARP/NDP 固定、VPN 隧道、BadUSB / USB 存储防护、网页与邮件保护、DNS 威胁防护、链接保护、Bluetooth 自动关闭、ClickFix 防护、自动启动注册监控、Docker 风险检测、重要文件篡改监控、自动日志审计）、实时威胁通知、自主巡查的警告与定期扫描、日志 CSV 导出等。
+                • Pro 可用功能：菜单中标有「(Pro)」的自动防御（勒索软件诱饵文件检测、XProtect 联动阻断、未知端口自动阻止与开发服务器隔离、ARP 欺骗自动阻断、网关 ARP/NDP 固定、VPN 隧道、BadUSB / USB 存储防护、网页与邮件保护、DNS 威胁防护、链接保护、Bluetooth 自动关闭、ClickFix 防护、自动启动注册监控、Docker 风险检测、重要文件篡改监控、定期日志审计）、实时威胁通知、自主巡查的警告与定期扫描、日志 CSV 导出等。
                 • 许可证类型：Pro 永久许可证（2 台）、Team 永久许可证（5 台）。
                 • 激活：通过菜单中的「💎 激活 / 购买 Pro 版…」输入许可证密钥（ROAM-XXXX-…）。应用使用内置公钥验证服务器签发的签名令牌，并保存到钥匙串中。
                 • 解除设备：从激活界面解除后，会删除本 Mac 上的许可证并释放服务器上的使用名额（即使通信失败，本机端的解除也一定会执行）。
@@ -1347,16 +1350,16 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "alert_log_audit_anomaly",
-                title: "🔔 日志审计：检测到异常模式",
-                summary: "自动日志审计检测到本 Mac 上首次出现的日志模式（[新增]），或比平时大幅增加的日志（[激增 z=…]）时发出的通知。",
+                title: "🔔 日志审计：检测到可判断种类的日志",
+                summary: "定期日志审计发现种类和处理方式都明确的日志（例如认证失败和权限变更）时发送的通知。标题会显示种类和数量。",
                 details: """
-                • 触发原因：大多是连接新设备或应用、系统更新带来的预期内变化，但也可能是可疑的登录尝试或未知进程的活动。
-                • 通知内容：数量明细、实际日志行示例（最多 3 条）、学习状态（例如：频率学习中，已观测 2/3 次）、通俗说明。
+                • 发生原因：按种类写在通知的“原因”一行中（例如 sudo 密码错误、SSH 登录被拒绝、Gatekeeper 拦截）。
+                • 通知内容：结论、处理方式、原因、相关进程及其签名、首次出现时间、同类日志过去的频率、确认命令。严重程度按种类固定。
                 • 自动防御：无（仅通知）。
                 """,
                 recommendation: """
-                1. 如果只有新模式，且不包含陌生的应用名称或 IP 地址，则无需处理。
-                2. 如果频率激增与您未进行的操作时间重合，请通过「📜 Mac 安全日志审计…」查看详情。
+                1. 如果是您自己的操作（自己的 sudo、自己的登录失败），无需处理。
+                2. 如果没有印象，请按通知中的“处理”操作，并用“确认”命令查看对应的日志行。
                 3. 如果难以判断，可以使用「复制供 AI 咨询的材料」向 AI 助手咨询。
                 """
             ),
@@ -1449,7 +1452,7 @@ extension RoamSwitchKnowledgeBase {
                 title: "激活 Pro 时自动开启的防护与需手动启用的防护",
                 summary: "首次激活 Pro 许可证时，以通知为主、误报少且无需额外权限或设置的自主防御防护会自动开启。可能妨碍正常使用的防护，以及需要额外权限、设置或对外通信的防护，仍需手动启用。此后会尊重用户对各项防护选择的开启 / 关闭状态。",
                 details: """
-                • 自动开启（仅在首次激活 Pro 时执行一次）：自动阻止未知监听端口、入站端口扫描检测（含对扫描来源 10 分钟的自动封锁）、SSH 暴力破解检测（仅在远程登录开启时工作）、勒索软件诱饵文件检测与熵检测、凭据蜜罐令牌、检测到 ARP 欺骗时自动阻止、XProtect 检测到恶意软件时自动断网、自动日志审计、重要系统文件篡改监控、依赖锁定文件篡改监控、反向Shell实时检测、网络设置变化监控。ARP 与 XProtect 的自动阻断开启时，会显示一次相关提示。
+                • 自动开启（仅在首次激活 Pro 时执行一次）：自动阻止未知监听端口、入站端口扫描检测（含对扫描来源 10 分钟的自动封锁）、SSH 暴力破解检测（仅在远程登录开启时工作）、勒索软件诱饵文件检测与熵检测、凭据蜜罐令牌、检测到 ARP 欺骗时自动阻止、XProtect 检测到恶意软件时自动断网、定期日志审计、重要系统文件篡改监控、依赖锁定文件篡改监控、反向Shell实时检测、网络设置变化监控。ARP 与 XProtect 的自动阻断开启时，会显示一次相关提示。
                 • Pro 默认开启：网页与邮件保护、监控自动启动注册(LaunchAgent/Daemon)、DNS 威胁防护（仅在外出网络中应用）、链接保护（自动拦截明显的欺诈网站）。
                 • 默认关闭（需手动启用）：ClickFix 防护的自动阻断、Docker 风险检测、BadUSB 物理端口防护、USB 存储设备自动阻止、网关 ARP/NDP 固定、Bluetooth 自动关闭、进程执行记录、浏览器凭据访问监控、VPN 隧道、Sensor 配对、实证型漏洞验证、npm 签名验证。它们要么可能妨碍正常使用（断网、输入设备、外接存储、声音），要么需要额外的权限或安装（完全磁盘访问、辅助功能、blueutil），要么需要许可列表等自行设置，要么会与外部服务器通信。DNS 威胁防护的服务商选择为可选项。
                 • 免费版也默认开启：剪贴板保护（API 密钥、ClickFix 命令）。
@@ -1558,7 +1561,7 @@ extension RoamSwitchKnowledgeBase {
                 • ARP 欺骗自动阻断、网关 ARP/NDP 固定、VPN 隧道（WireGuard / Tailscale）、Evil Twin 警告
                 • BadUSB 键盘防护、USB 存储设备自动阻止
                 • 网页与邮件保护（自动扫描、隔离、Pickle 警告）、DNS 威胁防护、链接保护
-                • 自动启动注册监控、Docker 风险检测、重要文件篡改监控、自动日志审计
+                • 自动启动注册监控、Docker 风险检测、重要文件篡改监控、定期日志审计
                 • Bluetooth 自动关闭、实时威胁通知、自主巡查的警告、病毒库更新与定期扫描、日志 CSV 导出
                 """,
                 recommendation: "如果需要自动隔离、实时防御或后台监控，请选择 Pro 版。"
@@ -1740,14 +1743,14 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "faq_log_audit_repeated_alerts",
                 title: "日志审计的通知反复出现",
-                summary: "自动日志审计会一边学习本 Mac 平常的日志趋势一边运行。刚开始使用或大型更新之后通知会增多，但随着学习的推进会自然减少。",
+                summary: "同一种类的通知持续出现，是因为该种类的日志持续出现。无法判断种类的统计异常不会通知。",
                 details: """
-                • 新模式：已通知过一次的模式会成为「已知」，同样的内容不会再次通知。
-                • 频率激增：每种模式在观测 3 次后完成学习，之后如果数量处于平常水平就不会通知。通知中显示「频率学习中：已观测 2/3 次」等字样时，表示仍在学习中。
-                • 常见原因：macOS 或应用更新、连接新设备、暂时性高负载。
-                • 如果想停止：请关闭菜单「自动日志审计(定期学习新模式与频率异常) (Pro)」（手动日志审计仍可继续使用）。
+                • 同一种类持续出现时：通知中的“同类日志过去的频率”可以看出与平时的差别。过去的频率经 3 次检查后学习完成。
+                • 不会通知的内容：无法判断种类的新模式和频率激增。可在通知历史的“日志审计：无法分类的新模式：N”中查看。
+                • 常见原因：sudo 或登录密码输错、来自外部的 SSH 密码尝试、更新后应用崩溃。
+                • 想要停止时：请在菜单中关闭“定期日志审计 (Pro)”（手动日志审计仍可使用）。
                 """,
-                recommendation: "只要不包含陌生的应用名称、IP 地址或 sudo 失败，可以先观察一段时间。"
+                recommendation: "如果 SSH 登录失败持续出现，且不需要远程登录，请在“系统设置”>“通用”>“共享”中关闭它。"
             ),
             LocalizedEntry(
                 id: "faq_zero_telemetry",

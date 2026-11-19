@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 2.1.4 (build 223). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 2.2.0 (build 224). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -51,7 +51,7 @@ final class DetectionCoverageTests: XCTestCase {
         }
         // Sources named in the code: forApp(source: "x") and friends. The app's sources are not in the mirror.
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-        try XCTSkipUnless(FileManager.default.fileExists(atPath: root.appendingPathComponent("RoamSwitch").path), "app sources not present")
+        try SourceTree.require(FileManager.default.fileExists(atPath: root.appendingPathComponent("RoamSwitch").path), "app sources not present")
         let regex = try NSRegularExpression(pattern: #"(?:forApp\(source:|GuardReaderHealthRecorder\(source:|writeApp\(source:|writeHelper\(source:)\s*"([A-Za-z]+)""#)
         var used: Set<String> = []
         for dir in ["RoamSwitch", "RoamSwitchHelper", "Shared"] {

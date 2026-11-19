@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.1.4 (build 223).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.0 (build 224).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -785,9 +785,14 @@ public struct MCPGuardEntryPayload: Codable, Equatable {
     public var liveState: String? = nil
     /// Why `liveState` is not the state of the readers: `pro_not_active` (the guard needs Pro and Pro is not active),
     /// `helper_not_connected` (it needs the helper, or part of it does, and the app says the helper is not connected) or
-    /// `helper_status_unknown` (it needs the helper and the app has not reported lately, so it may not be running).
+    /// `helper_status_unknown` (it needs the helper and the app has not reported lately, so it may not be running) or
+    /// `secure_dns_unreachable` (the DNS threat guard: this network does not reach the provider's servers, so the network's own DNS
+    /// is in use and nothing is blocked at the name lookup; the guard says `off` until another network, or a reachable one).
     /// Absent when `liveState` is just the toggle and the readers.
     public var liveStateReason: String? = nil
+    /// What `liveStateReason` is about, when it names a thing: for `secure_dns_unreachable`, the provider and its servers
+    /// (`Quad9 (9.9.9.9 / 149.112.112.112)`). Absent otherwise.
+    public var liveStateDetail: String? = nil
     /// For a guard that reads a stream or a file: what its reader(s) have lost. Absent for the others.
     public var readers: [MCPReaderHealthPayload]? = nil
     /// For a guard that can use the Endpoint Security extension: `es` when the extension delivers what it watches (the program that
@@ -829,6 +834,8 @@ public struct MCPReaderHealthPayload: Codable, Equatable {
     /// Examples of what the last scan could not examine, with the reason for each (`permission_denied`, `not_permitted`,
     /// `type_unreadable`, `too_large`, `not_found`, `other`); at most 5, replaced by every scan. The path is on this Mac.
     public var skippedSamples: [GuardSkippedItem]? = nil
+    /// When a line or an event was last dropped (ISO 8601). nil where nothing was ever dropped.
+    public var lastDropAt: String? = nil
 }
 
 /// Every field added after the original five is optional so older
@@ -856,6 +863,34 @@ public struct MCPGuardStatusPayload: Codable, Equatable {
     public var feedUpdates: [MCPFeedUpdatePayload]? = nil
     /// The protection preset in force (Pro): which one the settings match. Read only: this server never changes it.
     public var preset: MCPPresetPayload? = nil
+    /// What the `agent-check` PreToolUse hook judged on this account (`AgentCheckLog`'s counter): absent when this server
+    /// did not read it.
+    public var agentCheck: MCPAgentCheckPayload? = nil
+}
+
+/// The hook's counter for `get_guard_status`. `lastDecisionAt` nil with no `days` means no call has been judged on this
+/// account: the hook is not installed, not turned on in the agent's settings, or the counter was removed. Allowed calls
+/// are counted here but not written to `agent_check_log.jsonl`, which holds the ask and deny answers.
+public struct MCPAgentCheckPayload: Codable, Equatable {
+    public struct Day: Codable, Equatable {
+        public let day: String
+        public let allow: Int
+        public let ask: Int
+        public let deny: Int
+    }
+    /// RFC 3339 UTC.
+    public let lastDecisionAt: String?
+    /// Newest first, UTC days, at most 30.
+    public let days: [Day]
+    public let note: String
+
+    static let fixedNote = "Calls the agent-check PreToolUse hook judged on this account, per UTC day, the last 30 days. lastDecisionAt null and no days: no call has been judged here (the hook is not installed, not turned on in the agent's settings, or the counter was removed). Allowed calls are counted here but not written to agent_check_log.jsonl, which holds the ask and deny answers."
+
+    static func make(lastDecisionAt: String?, days: [(day: String, allow: Int, ask: Int, deny: Int)]) -> MCPAgentCheckPayload {
+        MCPAgentCheckPayload(lastDecisionAt: lastDecisionAt,
+                             days: days.sorted { $0.day > $1.day }.map { Day(day: $0.day, allow: $0.allow, ask: $0.ask, deny: $0.deny) },
+                             note: fixedNote)
+    }
 }
 
 /// `get_guard_status`'s protection preset (RoamSwitch.Preset.*; the table is `ProtectionPresetTable`).
@@ -1108,6 +1143,7 @@ public enum MCPResponseFormatting {
     static let esQuarantineWatchKey = "RoamSwitch.ESQuarantineWatchEnabled"         // ESQuarantineWatchGuard — false; opt-in even for Pro (needs the Endpoint Security extension)
     static let esAccountWatchKey = "RoamSwitch.ESAccountWatchEnabled"               // ESAccountWatchGuard — false; opt-in even for Pro (needs the Endpoint Security extension)
     static let outboundScanWatchKey = "RoamSwitch.OutboundScanWatchEnabled"           // OutboundScanWatch — false; opt-in even for Pro (needs the system extension)
+    static let beaconPeriodicityWatchKey = "RoamSwitch.BeaconPeriodicityWatchEnabled" // BeaconPeriodicityWatch — false; opt-in even for Pro (needs the system extension)
     static let portScanGuardKey = "RoamSwitch.PortScanGuardEnabled"                   // PortScanGuard — false; Pro default-on
     static let sshGuardKey = "RoamSwitch.SSHGuardEnabled"                             // SSHGuard — false; Pro default-on (works only while Remote Login is on)
     static let persistenceMonitorKey = "RoamSwitch.PersistenceMonitorEnabled"         // PersistenceMonitorGuard — true
@@ -1463,7 +1499,8 @@ public enum MCPResponseFormatting {
         readerHealth: [String: GuardReaderHealth]? = nil,
         now: Date = Date(),
         environment: GuardEnvironment = .unchecked,
-        agentSetupBaselineAccepted: Bool = false
+        agentSetupBaselineAccepted: Bool = false,
+        agentCheck: MCPAgentCheckPayload? = nil
     ) -> MCPGuardStatusPayload {
         let level = resolveActiveSecurityLevel(gatewayMAC: gatewayMAC, defaults: defaults)
         let health = readerHealth ?? GuardReaderHealthStore.all(defaults: defaults)
@@ -1487,7 +1524,8 @@ public enum MCPResponseFormatting {
                                            linesDropped: $0.linesDropped, oversizeDropped: $0.oversizeDropped,
                                            filesUnreadable: $0.filesUnreadable, filesUnreadableAt: time($0.filesUnreadableAt),
                                            foldersUnreadable: $0.foldersUnreadable, filesTruncated: $0.filesTruncated,
-                                           scopeLimited: $0.scopeLimited, skippedSamples: $0.skippedSamples)
+                                           scopeLimited: $0.scopeLimited, skippedSamples: $0.skippedSamples,
+                                           lastDropAt: time($0.lastDropAt))
                 }
             }
         }
@@ -1499,6 +1537,7 @@ public enum MCPResponseFormatting {
         guards.append(entry("portAnomalyGuard", portAnomalyGuardKey, defaultWhenUnset: false))
         guards.append(entry("portScanGuard", portScanGuardKey, defaultWhenUnset: false))
         guards.append(entry("outboundScanWatch", outboundScanWatchKey, defaultWhenUnset: false))
+        guards.append(entry("beaconPeriodicityWatch", beaconPeriodicityWatchKey, defaultWhenUnset: false))
         guards.append(entry("sshGuard", sshGuardKey, defaultWhenUnset: false))
         guards.append(entry("arpSpoofAutoContainment", arpSpoofAutoContainmentKey, defaultWhenUnset: false))
         guards.append(entry("usbKeyboardGuard", usbKeyboardGuardKey, defaultWhenUnset: false))
@@ -1588,10 +1627,18 @@ public enum MCPResponseFormatting {
             out.liveStateReason = folded.reason ?? g.liveStateReason
             if g.key == "agentSetupWatch", !g.enabledInSettings, agentWatchSwitch { out.liveStateReason = "no_baseline" }
             // The outbound scan notices are counted by the content-filter system extension: without it the switch does nothing.
-            if g.key == "outboundScanWatch", g.enabledInSettings, out.liveState == "on",
+            if (g.key == "outboundScanWatch" || g.key == "beaconPeriodicityWatch"), g.enabledInSettings, out.liveState == "on",
                let enforcement = LinkGuardEnforcement.read(defaults: defaults, now: now.timeIntervalSince1970), enforcement != .systemExtension {
                 out.liveState = "off"
                 out.liveStateReason = enforcement == .waitingForApproval ? "system_extension_not_approved" : "system_extension_not_active"
+            }
+            // The DNS threat guard sets the provider's servers only where the network reaches them. Where it does not, the network's
+            // own DNS is in use: the guard is on in the settings and blocks nothing here.
+            if g.key == "dnsThreatGuard", g.enabledInSettings, out.liveState == "on",
+               let reach = SecureDNSReach.read(defaults: defaults, now: now.timeIntervalSince1970), reach.unreachable {
+                out.liveState = "off"
+                out.liveStateReason = SecureDNSReach.reasonCode
+                out.liveStateDetail = SecureDNSReach.detail(provider: reach.provider)
             }
             #if ES_AUTH
             // The pre-exec block is the Endpoint Security extension: with the switch on but the extension not approved, not
@@ -1672,7 +1719,8 @@ public enum MCPResponseFormatting {
             feedUpdates: FeedUpdateStatusStore.all.map { name in
                 MCPFeedUpdatePayload.make(feed: name, record: FeedUpdateStatusStore.read(name, defaults: defaults), stale: staleNow.contains { $0.feed == name })
             },
-            preset: presetPayload(defaults: defaults)
+            preset: presetPayload(defaults: defaults),
+            agentCheck: agentCheck
         )
     }
 

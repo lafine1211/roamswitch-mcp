@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.1.4 (build 223).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.0 (build 224).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -113,7 +113,7 @@ extension RoamSwitchKnowledgeBase {
                 • WireGuard：需要 Homebrew 的 `wireguard-tools`（`brew install wireguard-tools`）。以「匯入 WireGuard 設定 (.conf)…」載入設定檔。設定檔須由您自行準備（Mullvad、IVPN、Proton VPN、自架伺服器、公司提供等）；RoamSwitch 不提供 VPN 伺服器。
                 • WireGuard 終止開關：pf 執行「block drop all」，僅放行 lo、隧道介面、與端點的 UDP 交握、DHCP 與 ICMP。隧道中斷時完全不會外洩明文。
                 • Tailscale：適合已在使用 Tailscale 的使用者。RoamSwitch 不會安裝或登入，只會讀取 `tailscale status` 並執行 `tailscale set --exit-node=<節點>`。必須選擇出口節點（所有流量都會經過該節點）。若所選出口節點離線，會顯示在狀態列中。
-                • 建議使用 Tailscale CLI（獨立版）：`brew install tailscale` → `sudo tailscaled install-system-daemon` → `sudo tailscale up`。App Store（GUI）版本無法從應用程式外部以 `tailscale set` 控制，因此請在 Tailscale App 內選擇出口節點，RoamSwitch 僅負責顯示狀態與終止開關。
+                • Tailscale 只能使用 Homebrew 版的 CLI：`brew install tailscale` → `sudo tailscaled install-system-daemon` → `sudo tailscale up`。App 版（App Store 版和官網下載的 App 版）無法從應用程式外部以 `tailscale set` 控制，因此請在 Tailscale App 內選擇出口節點，RoamSwitch 僅負責顯示狀態與終止開關。
                 • Tailscale 終止開關（預設關閉，須自行開啟）：pf 僅放行 lo、Tailscale 的 utun、CGNAT 100.64.0.0/10、DNS、STUN 3478、41641、DERP tcp 443、DHCP 與 ICMP。比 WireGuard 寬鬆（屬於「不易外洩」而非完全防洩），且在某些環境下可能干擾 Tailscale 自身的連線，因此設為選用。
                 • 自動化：在不受信任的網路上建立隧道／出口節點，在受信任的網路上中斷。授權過期時，隧道與終止開關會自動解除。
                 """,
@@ -390,14 +390,15 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "feat_runtime_threat_containment",
                 title: "XProtect 偵測到惡意軟體時自動斷網 (Pro)",
-                summary: "當 Apple 內建的 XProtect / XProtect Remediator 實際偵測或移除惡意軟體的當下，會以緊急氣隙方式斷網。Gatekeeper 對未簽署應用程式的封鎖並不會斷網，只會發出通知。",
+                summary: "當 Apple 內建的 XProtect 實際偵測到或清除惡意軟體時，立即緊急全面斷網。只有當 RoamSwitch 的 Endpoint Security 擴充功能收到 XProtect 的偵測或清除事件時，才會斷網。對於 Gatekeeper 封鎖未簽署 App 的情況不會斷網，僅發出通知。",
                 details: """
-                • 訊號來源：以 ndjson 格式長期訂閱 `/usr/bin/log stream`（採阻塞式等待而非輪詢，因此閒置時 CPU 消耗趨近於零），監控與 XProtect 相關的系統日誌。
-                • 觸發條件：只有當 XProtect 記錄重大惡意軟體判定時，才會啟動氣隙圍堵（包含關閉 Wi-Fi 無線電），且與網路的信任等級無關。
+                • 訊號來源：RoamSwitch 的 Endpoint Security 擴充功能收到的 XProtect 偵測或清除事件（帶有惡意軟體名稱、路徑、簽署版本與事件識別碼的結構化事件）。沒有惡意軟體名稱的事件不會斷網。同一事件只斷網一次。
+                • 擴充功能未執行時（尚未核准、macOS 低於 13 等）：不會斷網。作為備用，透過 `/usr/bin/log stream` 讀取 Gatekeeper 的判定記錄，若有 XProtect 的偵測結果行（帶有惡意軟體名稱與檔案），則發出顯示該名稱與檔案的高重要度通知。僅憑記錄中的一行，不會斷網。擴充功能執行時，記錄行會等待 60 秒，若沒有收到事件，則發出同樣的通知。
+                • 阻斷條件：僅當收到上述事件時，才執行氣隙隔離（包括關閉 Wi-Fi 無線）。無論網路的信任等級為何都會觸發。
                 • 與 Gatekeeper 的差異：日常的 Gatekeeper 事件，例如封鎖開發者自己建置的未簽署程式，只會發出「Gatekeeper 已封鎖未簽署應用程式的執行」通知。
                 • 一致性：與手動的「Mac 安全日誌審計」共用相同的分類邏輯。
-                • 未使用 EndpointSecurity 授權，因此這是偵測後的立即圍堵，而非執行前的封鎖。
-                • 預設值：首次啟用 Pro 時自動開啟（並會顯示一次性提示，說明自動斷網已啟用）。狀態可透過 MCP 工具 `get_runtime_threat_status` 取得，並可用「模擬惡意軟體偵測連動氣隙（測試）」測試。
+                • 這不是執行前的攔截，而是「偵測後立即隔離」。
+                • 預設值：首次啟用 Pro 時自動開啟（並會顯示一次性提示，說明自動斷網已啟用）。狀態可透過 MCP 工具 `get_runtime_threat_status` 取得，並可用「模擬惡意軟體偵測連動氣隙（測試）」測試。所用的 Endpoint Security 擴充功能需要在系統設定中核准。
                 """,
                 recommendation: "請保持開啟，作為與 Apple 自身惡意軟體引擎連動的自動防禦。經常執行自己開發的未簽署應用程式也不會觸發，因為單純的 Gatekeeper 封鎖絕不會斷網。"
             ),
@@ -561,15 +562,17 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_scheduled_log_audit",
-                title: "自動日誌審計（定期學習新模式與頻率異常）(Pro)",
-                summary: "在背景每小時執行一次日誌審計的範本異常偵測，持續學習這台 Mac 平常的日誌行為。發現新模式或頻率激增時，會附上真實日誌行與白話說明通知您。",
+                title: "定期記錄稽核 (Pro)",
+                summary: "每小時在背景執行一次日誌審計。只通知種類與處理方式都明確的日誌，例如驗證失敗與權限變更；無法判斷種類的統計異常不會通知，只記錄在通知記錄中。",
                 details: """
-                • 排程：每小時分析上一小時的資料。啟用後約 10 秒會執行第一次掃描，但由於其中包含應用程式自身的啟動日誌，該次執行只會學習，不會發出通知。
-                • 通知內容：異常件數（分為新模式與激增）、最多 3 行真實日誌、學習進度說明，以及非專業使用者也能理解的解釋。包含頻率激增時會在通知中心顯示提醒；僅有新模式時則不會彈出提醒，只會記錄到通知歷史中。新模式記錄一次後就會成為「已知」，同樣內容不會再重複記錄；一旦該範本自身的基準線學習完成，激增也會停止警告。
-                • 與手動審計共用：與手動的「Mac 安全日誌審計」及 MCP 工具 `audit_security_logs` 使用相同的分析與已學習基準線。
-                • 預設值：首次啟用 Pro 時自動開啟。選單：「惡意軟體防護」→「自動記錄稽核(定期學習新模式與頻率異常) (Pro)」。
+                • 執行間隔：每小時分析最近一小時。啟用約 10 秒後進行首次掃描，但這次包含 App 自身的啟動日誌，因此只學習，不通知。
+                • 會通知的種類：sudo 被拒絕（密碼錯誤等）、SSH 登入失敗與成功、管理員驗證失敗、隱私權限被重設、Gatekeeper 阻擋、核心警告（panic、watchdog）、磁碟與檔案系統錯誤、App 反覆當機（同一個 App 在一次分析中 3 次以上）。嚴重程度依種類固定，不會隨統計值的大小而變。
+                • 通知內容：依序為結論、處理方式、原因，接著是相關程序及其簽署、首次出現時間、同類記錄過去的頻率，以及顯示這些記錄的 `log show` 指令。
+                • 只記錄在通知記錄中：以管理員權限執行（如管理員驗證成功）。無法判斷種類的新模式與頻率暴增，合併為「記錄稽核：無法分類的新模式：N」一筆記錄，不發通知。
+                • 與手動審計的關係：與手動的「Mac 安全日誌審計」以及 MCP 的 `audit_security_logs` 共用同一套分析與學習資料。
+                • 預設值：首次啟用 Pro 授權時自動開啟。選單：「惡意軟體防護」→「定期記錄稽核 (Pro)」。
                 """,
-                recommendation: "剛設定完成時，新模式的通知會稍微多一些，隨著學習進行會逐漸減少。若警告中出現不熟悉的應用程式名稱或 IP 位址，請開啟日誌審計視窗查看詳情。"
+                recommendation: "收到通知後，把「確認」那一行的指令貼到「終端機」，即可查看對應的日誌行。如果是您自己的操作（自己的 sudo、自己的登入失敗），不需要處理。"
             ),
             LocalizedEntry(
                 id: "feat_containment_incident_timeline",
@@ -907,7 +910,7 @@ extension RoamSwitchKnowledgeBase {
                 title: "Pro 永久授權（單次購買，最多 2 台 Mac）",
                 summary: "Pro 是一次性購買的永久授權（¥2,980 / $19.99），最多可用於 2 台 Mac。以 Ed25519 簽署的授權權杖會在裝置端驗證，因此啟用後 Pro 也能離線運作。",
                 details: """
-                • Pro 功能：選單中標示 (Pro) 的自動防禦（勒索軟體誘餌檔案偵測、XProtect 連動斷網、未知連接埠自動封鎖與開發伺服器隔離、ARP 詐騙自動封鎖、閘道 ARP/NDP 固定、VPN 隧道、BadUSB 與 USB 儲存裝置防護、網頁與郵件保護、DNS 威脅防護、連結保護、Bluetooth 自動關閉、ClickFix 防護、自動啟動註冊監控、Docker 風險偵測、重要檔案竄改監控、自動日誌審計）、即時威脅通知、巡邏警告與排程掃描、日誌 CSV 匯出等。
+                • Pro 功能：選單中標示 (Pro) 的自動防禦（勒索軟體誘餌檔案偵測、XProtect 連動斷網、未知連接埠自動封鎖與開發伺服器隔離、ARP 詐騙自動封鎖、閘道 ARP/NDP 固定、VPN 隧道、BadUSB 與 USB 儲存裝置防護、網頁與郵件保護、DNS 威脅防護、連結保護、Bluetooth 自動關閉、ClickFix 防護、自動啟動註冊監控、Docker 風險偵測、重要檔案竄改監控、定期日誌審計）、即時威脅通知、巡邏警告與排程掃描、日誌 CSV 匯出等。
                 • 授權類型：Pro 永久授權（2 台 Mac）與 Team 永久授權（5 台 Mac）。
                 • 啟用方式：從「💎 啟用 / 購買 Pro 版…」輸入授權金鑰（ROAM-XXXX-…）。伺服器核發的簽署權杖會以應用程式內建的公開金鑰驗證，並儲存於 Keychain。
                 • 解除授權：從授權視窗操作，會從這台 Mac 移除授權並釋放伺服器上的名額（即使網路請求失敗，本機解除授權仍一定會生效）。
@@ -1347,16 +1350,16 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "alert_log_audit_anomaly",
-                title: "🔔 日誌審計：偵測到異常模式",
-                summary: "當自動日誌審計發現這台 Mac 從未見過的日誌模式（[新增]），或頻率遠高於平常的日誌（[激增 z=…]）時發出的通知。",
+                title: "🔔 日誌審計：偵測到可判斷種類的日誌",
+                summary: "定期日誌審計發現種類與處理方式都明確的日誌（例如驗證失敗與權限變更）時發送的通知。標題會顯示種類與數量。",
                 details: """
-                • 原因：多半是連接新裝置或應用程式／macOS 更新所帶來的預期變化，但有時也可能是可疑的登入嘗試或未知程序活動。
-                • 內容：件數細目、最多 3 行真實日誌、學習進度（例如頻率學習中：目前已觀測 2/3 次），以及白話解釋。
-                • 自動防禦：無（僅發出通知）。
+                • 發生原因：依種類寫在通知的「原因」那一行（例如 sudo 密碼錯誤、SSH 登入被拒絕、Gatekeeper 阻擋）。
+                • 通知內容：結論、處理方式、原因、相關程序及其簽署、首次出現時間、同類記錄過去的頻率、確認指令。嚴重程度依種類固定。
+                • 自動防禦：無（僅通知）。
                 """,
                 recommendation: """
-                1. 若只有新模式，且沒有不熟悉的應用程式名稱或 IP 位址，不需要進一步處理。
-                2. 若頻率激增與您沒有進行過的操作時間重疊，請開啟「📜 Mac 安全日誌審計…」查看詳情。
+                1. 如果是您自己的操作（自己的 sudo、自己的登入失敗），不需要處理。
+                2. 如果沒有印象，請依通知中的「處理」操作，並用「確認」指令查看對應的日誌行。
                 3. 若不確定，可使用「複製供 AI 諮詢的資料」向 AI 助理諮詢。
                 """
             ),
@@ -1449,7 +1452,7 @@ extension RoamSwitchKnowledgeBase {
                 title: "啟用 Pro 時自動開啟的防護，與需自行開啟的防護",
                 summary: "首次啟用 Pro 授權時，以通知為主、誤報少且不需額外權限或設定的自主防禦防護會自動開啟。可能妨礙正常使用的防護，以及需要額外權限、設定或對外通訊的防護，仍須自行開啟。此後會依您對各項防護所做的開／關選擇來執行。",
                 details: """
-                • 自動開啟（僅首次啟用 Pro 時一次）：自動封鎖未知監聽連接埠、入站連接埠掃描偵測（含對掃描來源 10 分鐘的自動封鎖）、SSH 暴力破解偵測（僅在遠端登入開啟時運作）、勒索軟體誘餌檔案偵測與熵偵測、憑證蜜罐權杖、偵測到 ARP 詐騙時自動封鎖、XProtect 惡意軟體偵測時自動斷網、自動日誌審計、重要系統檔案竄改監控、相依鎖定檔案竄改監控、反向 Shell 即時偵測，以及網路設定變化監控。開啟 ARP 與 XProtect 斷網功能時，會顯示一次性說明。
+                • 自動開啟（僅首次啟用 Pro 時一次）：自動封鎖未知監聽連接埠、入站連接埠掃描偵測（含對掃描來源 10 分鐘的自動封鎖）、SSH 暴力破解偵測（僅在遠端登入開啟時運作）、勒索軟體誘餌檔案偵測與熵偵測、憑證蜜罐權杖、偵測到 ARP 詐騙時自動封鎖、XProtect 惡意軟體偵測時自動斷網、定期日誌審計、重要系統檔案竄改監控、相依鎖定檔案竄改監控、反向 Shell 即時偵測，以及網路設定變化監控。開啟 ARP 與 XProtect 斷網功能時，會顯示一次性說明。
                 • Pro 版預設開啟：網頁與郵件保護、自動啟動註冊（LaunchAgent/Daemon）監控、DNS 威脅防護（僅套用於外出網路），以及連結保護（自動攔截明顯的詐騙網站）。
                 • 預設關閉（須自行開啟）：ClickFix 自動封鎖、Docker 風險偵測、BadUSB 實體連接埠防護、USB 儲存裝置自動封鎖、閘道 ARP/NDP 固定、Bluetooth 自動關閉、程序執行記錄、瀏覽器憑證存取監控、VPN 隧道、Sensor 配對、實證型漏洞驗證，以及 npm 簽章驗證。它們各自可能妨礙正常使用（斷網、輸入裝置、外接儲存裝置、聲音）、需要額外的權限或安裝（完全取用磁碟、輔助使用、blueutil）、需要許可清單等自行設定，或會與外部伺服器通訊。DNS 威脅防護的供應商由您自行選擇。
                 • 即使在免費版也預設開啟：剪貼簿保護（API 金鑰與 ClickFix 指令）。
@@ -1558,7 +1561,7 @@ extension RoamSwitchKnowledgeBase {
                 • ARP 詐騙自動封鎖、閘道 ARP/NDP 固定、VPN 隧道（WireGuard / Tailscale）、邪惡雙胞胎警告
                 • BadUSB 鍵盤防護、USB 儲存裝置自動封鎖
                 • 網頁與郵件保護（自動掃描、隔離、Pickle 警告）、DNS 威脅防護、連結保護
-                • 自動啟動註冊監控、Docker 風險偵測、重要檔案竄改監控、自動日誌審計
+                • 自動啟動註冊監控、Docker 風險偵測、重要檔案竄改監控、定期日誌審計
                 • Bluetooth 自動關閉、即時威脅通知、巡邏警告、特徵庫更新與排程掃描、日誌 CSV 匯出
                 """,
                 recommendation: "若您需要自動圍堵、即時防禦與背景監控，請選擇 Pro 版。"
@@ -1740,14 +1743,14 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "faq_log_audit_repeated_alerts",
                 title: "日誌審計通知一直出現",
-                summary: "自動日誌審計會在執行過程中學習這台 Mac 平常的日誌行為。剛設定完成或進行重大更新後，通知會較多，隨著學習進行會自然減少。",
+                summary: "同一種類的通知持續出現，是因為該種類的日誌持續出現。無法判斷種類的統計異常不會通知。",
                 details: """
-                • 新模式：一經回報就會成為已知，同樣內容不會再重複通知。
-                • 頻率激增：每個範本的學習會在觀測 3 次後完成，之後正常的量就不會再警告。當通知顯示類似「頻率學習中: 目前已觀測 2/3 次」時，表示仍在學習中。
-                • 常見原因：macOS 或應用程式更新、連接新裝置、暫時的高負載。
-                • 如何停止：在選單中關閉「自動記錄稽核(定期學習新模式與頻率異常) (Pro)」（手動日誌審計仍可正常使用）。
+                • 同一種類持續出現時：通知中的「同類記錄過去的頻率」可看出與平常的差別。過去的頻率經 3 次檢查後學習完成。
+                • 不會通知的內容：無法判斷種類的新模式與頻率暴增。可在通知記錄的「記錄稽核：無法分類的新模式：N」中查看。
+                • 常見原因：sudo 或登入密碼輸錯、來自外部的 SSH 密碼嘗試、更新後 App 當機。
+                • 想要停止時：請在選單中關閉「定期記錄稽核 (Pro)」（手動日誌審計仍可使用）。
                 """,
-                recommendation: "除非警告中包含不熟悉的應用程式名稱、IP 位址或 sudo 失敗，否則可以先觀察一段時間。"
+                recommendation: "如果 SSH 登入失敗持續發生，且不需要遠端登入，請在「系統設定」>「一般」>「共享」中關閉它。"
             ),
             LocalizedEntry(
                 id: "faq_zero_telemetry",

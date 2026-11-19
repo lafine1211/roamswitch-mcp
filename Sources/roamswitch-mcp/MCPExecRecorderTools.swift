@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.1.4 (build 223).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.0 (build 224).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -261,7 +261,8 @@ enum MCPExecRecorderTools {
 
     static func recorderState(defaults: UserDefaults, now: Date = Date()) -> MCPExecRecorderStatePayload {
         let enabled = defaults.bool(forKey: MCPResponseFormatting.execRecorderKey)
-        let s = ExecRecorderStatus.read()
+        // The status file is root-only: the app keeps the helper's snapshot in the preferences (`HelperHealthMirror`); nil when the app has not.
+        let s = HelperHealthMirror.read(defaults: defaults, now: now.timeIntervalSince1970)?.execStatus
         let iso = ISO8601DateFormatter()
         let es = ESEnforcement.read(purpose: ESPurpose.processEvents, defaults: defaults, now: now.timeIntervalSince1970)
         var label = ExecRecorderText.status(s, enabled: enabled, es: es)

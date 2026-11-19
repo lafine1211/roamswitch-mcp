@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.1.4 (build 223).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.0 (build 224).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -198,10 +198,11 @@ enum DetectionCoverage {
               sources: [guardSource("esAccountWatch")],
               blindSpot: "Opt-in, Pro, notify only, and it needs the Endpoint Security extension on macOS 14 or later. A user added to the admin groups, a password change, and a few risky directory attributes (user ID 0, the root group, a hidden account, an unusual login shell) are notified with the process that asked. Other attribute changes, and changes made without Open Directory, are not seen."),
         // T1098.004. RoamSwitchHelper/HelperTool.swift criticalPathFimTargets: root's authorized_keys and
-        // sshd_config (plus sshd_config.d) are hashed.
+        // sshd_config (plus sshd_config.d) are hashed. The person's own ~/.ssh/authorized_keys is watched through the Endpoint
+        // Security extension only (CriticalPathFimGuard.isUserAuthorizedKeysChange, esWatches, 913e91b8).
         Entry(technique: "T1098.004", name: "Account Manipulation: SSH Authorized Keys", coverage: .partial,
               sources: [guardSource("criticalPathFim")],
-              blindSpot: "Only root's authorized_keys and the sshd configuration are hashed. Users' own ~/.ssh/authorized_keys files are not."),
+              blindSpot: "Root's authorized_keys and the sshd configuration are hashed. The signed-in person's own ~/.ssh/authorized_keys (a key added, the file replaced or removed) is notified with the program that did it, but only while the Endpoint Security extension runs: without it, that file is not looked at. Other users' ~/.ssh/authorized_keys files are not watched, and a key added in a file sshd reads from elsewhere (AuthorizedKeysFile in sshd_config) is not seen."),
         // T1110.001. RoamSwitch/SSHGuard.swift and Shared/SSHGuardCore.swift (run by RoamSwitchHelper/SSHGuardDetector.swift):
         // failed sshd logins are read from the Endpoint Security extension's NOTIFY_OPENSSH_LOGIN events when it runs
         // (Shared/ESSSHRules.swift), else from the unified log, and counted per source in a sliding window (default 6 failures
@@ -289,6 +290,14 @@ enum DetectionCoverage {
         Entry(technique: "T1572", name: "Protocol Tunneling", coverage: .partial,
               sources: [guardSource("execRecorder"), rule("exec.ssh_remote_forward"), guardSource("portAnomalyGuard")],
               blindSpot: "ssh only, and only a forward written on its command line: a RemoteForward set in ~/.ssh/config, and tunnels made by other programs (chisel, frp, ngrok, a VPN client), are not seen. An ssh -R typed by a person in a terminal is not flagged. The exec recorder is opt-in. A remote forward asked for by someone logged in to this Mac over SSH is told from its listener by the Port Anomaly Guard (Pro, checked every few seconds; a listener of another account's session needs the privileged helper)."),
+        // T1071. Two things, both partial. RoamSwitch/BeaconPeriodicityWatch.swift; RoamSwitchLinkFilter/BeaconSensor.swift (the
+        // content-filter system extension) counts the new outbound TCP flows per (program, destination) and
+        // Shared/BeaconPeriodicity.swift judges the series: at least 12 intervals, mean 20 to 900 seconds, coefficient of
+        // variation at most 0.2. Notify only, opt-in, says only that the series is periodic. And the link guard
+        // (RoamSwitch/LinkGuardManager.swift): a destination whose host name or TLS server name is in the feed is blocked.
+        Entry(technique: "T1071", name: "Application Layer Protocol", coverage: .partial,
+              sources: [guardSource("beaconPeriodicityWatch"), guardSource("linkGuard")],
+              blindSpot: "Periodicity is seen only when the program opens a new connection each time: a program that keeps one connection open and talks on it at intervals makes no series, and UDP (QUIC) is not counted. Intervals with a large spread (a coefficient of variation above 0.2, for example a uniform jitter beyond about plus or minus 35 percent) and human-like intervals are not flagged, and a series needs 12 intervals (3 hours at the longest period). Update checks, sync and health checks are periodic too: browsers, sync, mail, messaging and the system's own services are never reported, and the notices the person stops for a program stay stopped until the person resumes them (no expiry). RoamSwitch's own programs (same signer, valid signature) are not reported. The detection is opt-in, Pro, notify only, and needs the link guard's system extension. The link guard matches only host names and TLS server names against its feed: a destination typed as an IP address, a domain that is not in the feed, and plain HTTP (whose Host header is not read) are not blocked."),
         // T1566.002. RoamSwitch/LinkGuardManager.swift: outbound connections to hosts in the phishing and scam feed are
         // blocked or paused for an answer (hosts sinkhole, plus the content-filter extension when it is active).
         Entry(technique: "T1566.002", name: "Phishing: Spearphishing Link", coverage: .partial,

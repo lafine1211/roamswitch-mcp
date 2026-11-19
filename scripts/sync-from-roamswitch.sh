@@ -53,14 +53,16 @@ CORE=(ProcessWait AppLanguage TrustedNetwork GatewayFingerprint WiFiSecurityMoni
       DecoyPlacement FeedUpdateStatus LinkGuardEnforcement \
       KevCatalog PackageCveExposure PhpEnvironment PhpEnvironmentAudit \
       MCPConfigAuditSarif PackageCveSarif AppActionJournal IncidentChain SystemTimeline MCPCompanionTools \
-      DebugPortRisk SNMPExposure AgentCheck AgentCheckLog ProtectionPresetText PresetScore)
+      DebugPortRisk SNMPExposure AgentCheck AgentCheckLog ProtectionPresetText PresetScore \
+      LogAuditFindings LogAuditKind SecureDNSReach)
 
 # Sources that live in the app's Shared/ folder (also compiled into the helper).
 SHARED=(RansomwareSnapshotLogic ExecEventModel ExecLogStore ExecProcessTree ExecReadAPI \
         CryptoSecretDetection SafeScanFS ExecCommandMasker LinkFilterEngine SSHGuardCore GuardReaderHealth StrictJSON WatchdogAgentState PFSystemAnchors \
         NotificationHistory NotificationText SensorFindingTextKeys StoredRecordRead WatchdogMessages \
         AtomicFile ActionJournal CriticalPathFimTargets LinkGuardHosts FwdEgressClassifier ExecAgentExfil \
-        ESAuthBuild ESExtensionStatus ESGuardRouteState PacketPreroll)
+        ESAuthBuild ESExtensionStatus ESGuardRouteState PacketPreroll \
+        ChildProcessTree ESDropAccounting FileActorModel LinkEventsMirror TimedProcess)
 
 # App test files that only exercise types present in this repo. Their
 # `@testable import RoamSwitch` is rewritten to this package's module name.
@@ -75,7 +77,7 @@ TESTS=(LinkSafetyAuditorTests CryptoSecretDetectionTests MCPKnowledgeBaseTests M
        ProbeCatalogTests MCPToolAnnotationsTests \
        FrontendBundleScanTests ForensicChainTests TrustAnchorCheckTests ReflectedXssProbeTests \
        OverlayExposureTestSupport IncidentChainTests SystemTimelineTests PackageCveSarifTests AtomicFileTests \
-       DebugPortRiskTests AgentCheckTests)
+       DebugPortRiskTests AgentCheckTests SourceTree)
 
 # Sources that only the app's `RoamSwitchMCPServer/` folder compiles into the MCP server target (not into the app):
 # `main.swift` (the stdin->stdout pump) and the `agent-check` subcommand that `main.swift` calls first.

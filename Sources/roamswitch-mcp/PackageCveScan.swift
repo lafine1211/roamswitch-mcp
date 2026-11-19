@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.1.4 (build 223).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.0 (build 224).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -486,23 +486,19 @@ enum PackageCveScan {
         return (brew.packages + extra, state)
     }
 
+    /// `brew list --versions` reads a folder and finishes in a second or two; this is for a `brew` that is stuck.
+    static let brewListTimeout: TimeInterval = 90
+
     private static func enumerateBrewOnly() -> (packages: [InstalledPackage], state: InventoryState) {
         let brewPath = resolveBrewPath()
         guard let brewPath else { return ([], classifyInventory(brewPath: nil, exitStatus: nil, packageCount: 0)) }
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: brewPath)
-        process.arguments = ["list", "--versions"]
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = Pipe()
-        do {
-            try process.run()
-        } catch {
+        // A `brew` that does not answer in time is ended with the Ruby and git it started and counts as failed (`.brewFailed`),
+        // not as an empty list.
+        guard let result = TimedProcess.run(brewPath, ["list", "--versions"], timeout: brewListTimeout) else {
             return ([], classifyInventory(brewPath: brewPath, exitStatus: nil, packageCount: 0))
         }
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExitWithoutRunLoop()
-        guard process.terminationStatus == 0 else { return ([], classifyInventory(brewPath: brewPath, exitStatus: process.terminationStatus, packageCount: 0)) }
+        guard result.succeeded else { return ([], classifyInventory(brewPath: brewPath, exitStatus: result.timedOut || result.truncated ? nil : result.status, packageCount: 0)) }
+        let data = result.stdout
 
         var packages: [InstalledPackage] = []
         for line in String(decoding: data, as: UTF8.self).split(separator: "\n") {

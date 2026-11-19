@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.1.4 (build 223).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.0 (build 224).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -391,38 +391,22 @@ enum ForensicCaptureManager {
     // MARK: - Capture primitives (unprivileged subprocess snapshots)
 
     private static func runProcessList() -> String? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/ps")
-        process.arguments = ["-axo", "pid,ppid,user,%cpu,%mem,comm"]
-        return runAndCaptureOutput(process)
+        runAndCaptureOutput("/bin/ps", ["-axo", "pid,ppid,user,%cpu,%mem,comm"])
     }
 
     private static func runLsofNetworkSnapshot() -> String? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
-        process.arguments = ["-a", "-u", NSUserName(), "-i"]
-        return runAndCaptureOutput(process)
+        runAndCaptureOutput("/usr/sbin/lsof", ["-a", "-u", NSUserName(), "-i"])
     }
 
     private static func runLsofForPID(_ pid: Int32) -> String? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
-        process.arguments = ["-p", String(pid)]
-        return runAndCaptureOutput(process)
+        runAndCaptureOutput("/usr/sbin/lsof", ["-p", String(pid)])
     }
 
-    private static func runAndCaptureOutput(_ process: Process) -> String? {
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = Pipe()
-        do {
-            try process.run()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExitWithoutRunLoop()
-            return String(data: data, encoding: .utf8)
-        } catch {
-            return nil
-        }
+    /// A program that does not answer in time (a stuck `lsof`) is ended with what it started and gives nothing, as one that
+    /// could not be started does.
+    private static func runAndCaptureOutput(_ path: String, _ arguments: [String]) -> String? {
+        guard let r = TimedProcess.run(path, arguments, timeout: ListeningPortMonitor.lsofTimeout), !r.timedOut else { return nil }
+        return r.stdoutText
     }
 
     private static func suspiciousTargetDirectories() -> [String] {

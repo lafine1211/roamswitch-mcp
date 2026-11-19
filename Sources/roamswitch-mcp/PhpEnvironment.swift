@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.1.4 (build 223).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.0 (build 224).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -180,7 +180,7 @@ enum PhpEnvironment {
         p.terminationHandler = { _ in done.signal() }
         do { try p.run() } catch { return nil }
         if done.wait(timeout: .now() + 5) == .timedOut {
-            p.terminate()
+            ChildProcessTree.end(p, grace: 2)
             return nil
         }
         let data = out.fileHandleForReading.readDataToEndOfFile()

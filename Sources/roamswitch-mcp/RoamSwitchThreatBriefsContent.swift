@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.1.4 (build 223).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.0 (build 224).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -209,7 +209,7 @@ enum RoamSwitchThreatBriefsContent {
     aliases: [APT-C-43]
     macos_realism: "confirmed: ESET documents Machete as having a legitimate macOS implant build, used in Latin America"
     entry_vector: "USB/removable-media propagation, spearphish"
-    roamswitch_coverage: "USB storage guard (BadUSB) is the most relevant existing control"
+    roamswitch_coverage: "USB storage guard (an unlisted external drive is mounted read-only and asked about) is the most relevant existing control for propagation by removable media; the USB keyboard guard (BadUSB, a device posing as a keyboard) is a different control"
     scenario_on_personal_mac: |-
       A USB drive shared within an organization carries a self-propagating payload between Macs.
     reference_report_paths:
@@ -272,7 +272,7 @@ enum RoamSwitchThreatBriefsContent {
     aliases: [SunBurst, Cozy Bear, NOBELIUM]
     macos_realism: "not confirmed on macOS in this corpus — primarily a Windows/cloud-identity actor"
     entry_vector: "software-supply-chain (SolarWinds-style), malleable-C2 URI fingerprints (e.g. Nobelium's /jquery-3.3.1.min.js path)"
-    roamswitch_coverage: "package/dependency CVE scan is the closest existing control; relevant mainly as a TTP reference, not a direct macOS threat"
+    roamswitch_coverage: "npm supply watch and the lockfile tamper guard are the closest existing controls for a compromised dependency; the package/dependency CVE scan only finds known vulnerabilities, not a tampered release. Relevant mainly as a TTP reference, not a direct macOS threat"
     scenario_on_personal_mac: |-
       Included for TTP-reference completeness; no credible direct personal-Mac scenario is documented in this corpus.
     reference_report_paths:
@@ -293,9 +293,9 @@ enum RoamSwitchThreatBriefsContent {
     aliases: [Static Kitten, Seedworm]
     macos_realism: "not confirmed on macOS — Windows-focused (DNS tunneling via MORI malware)"
     entry_vector: "spearphish leading to MORI DNS-tunneling malware"
-    roamswitch_coverage: "DNS threat guard is the directly relevant existing control (DNS-tunnel detection)"
+    roamswitch_coverage: "no DNS-tunnel detection exists: the DNS threat guard only switches the Mac's DNS servers to a filtering resolver (Quad9, Cloudflare Security, AdGuard, CleanBrowsing), and blocking is done by that resolver; RoamSwitch does not look at query length, rate or entropy"
     scenario_on_personal_mac: |-
-      Included as a DNS-tunneling TTP reference for the DNS threat guard's detection logic, not as a direct macOS threat.
+      Included as a DNS-tunneling TTP reference only. A tunnel to a domain the chosen resolver blocks is stopped by the resolver, not seen by RoamSwitch; not a direct macOS threat.
     reference_report_paths:
       - "muddywater/ (MORI DNS tunneling reporting)"
     verification_procedure:
@@ -356,7 +356,7 @@ enum RoamSwitchThreatBriefsContent {
     aliases: [Snake, Venomous Bear]
     macos_realism: "not confirmed on macOS — has a Linux (Penguin/Turla) variant but no documented macOS build in this corpus"
     entry_vector: "USB-borne worm (Agent.BTZ lineage), compromised satellite-uplink C2"
-    roamswitch_coverage: "roamswitch-sensor's passive capture is the relevant existing control for the Linux variant"
+    roamswitch_coverage: "none in the Mac app: roamswitch-sensor (a separate product, passive network capture) is the relevant control for the Linux variant, and it is not part of this app"
     scenario_on_personal_mac: |-
       Included for Linux-variant TTP reference (Sensor deployments); no macOS claim is made.
     reference_report_paths:

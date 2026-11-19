@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.1.4 (build 223).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.0 (build 224).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -113,7 +113,7 @@ extension RoamSwitchKnowledgeBase {
                 • WireGuard: richiede `wireguard-tools` di Homebrew (`brew install wireguard-tools`). Importa una configurazione con «Importa config WireGuard (.conf)…». Fornisci tu la configurazione (Mullvad, IVPN, Proton VPN, un tuo server, il tuo datore di lavoro); RoamSwitch non fornisce server VPN.
                 • Kill switch di WireGuard: pf applica «block drop all» con eccezioni solo per lo, l'interfaccia del tunnel, l'handshake UDP verso l'endpoint, DHCP e ICMP. Nulla trapela in chiaro mentre il tunnel è giù.
                 • Tailscale: per chi usa già Tailscale. RoamSwitch non lo installa né effettua l'accesso; legge `tailscale status` ed esegue `tailscale set --exit-node=<nodo>`. È richiesto un exit node (tutto il traffico passa da lì). Un exit node offline è mostrato nella riga di stato.
-                • Si consiglia la CLI di Tailscale (standalone): `brew install tailscale` → `sudo tailscaled install-system-daemon` → `sudo tailscale up`. La versione App Store (interfaccia grafica) non può essere pilotata con `tailscale set` dall'esterno dell'app; scegli allora l'exit node nell'app Tailscale, mentre RoamSwitch gestisce solo la visualizzazione dello stato e il kill switch.
+                • Si può usare solo la CLI di Tailscale di Homebrew: `brew install tailscale` → `sudo tailscaled install-system-daemon` → `sudo tailscale up`. Le app Tailscale (la versione App Store e l'app dal sito di Tailscale) non possono essere pilotate con `tailscale set` dall'esterno dell'app; scegli allora l'exit node nell'app Tailscale, mentre RoamSwitch gestisce solo la visualizzazione dello stato e il kill switch.
                 • Kill switch di Tailscale (disattivato per impostazione predefinita, opzionale): pf lascia passare solo lo, l'utun di Tailscale, il CGNAT 100.64.0.0/10, il DNS, STUN 3478, 41641, DERP tcp 443, DHCP e ICMP. Meno rigoroso di WireGuard («difficile da far trapelare» anziché a tenuta stagna), e su alcune reti può interferire con la connettività di Tailscale stessa, per questo è opzionale.
                 • Automatico: il tunnel/exit node si attiva sulle reti non attendibili, si disattiva su quelle attendibili. Se la licenza scade, il tunnel e il kill switch vengono rilasciati automaticamente.
                 """,
@@ -390,14 +390,15 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "feat_runtime_threat_containment",
                 title: "Disconnessione di rete automatica al rilevamento di malware da XProtect (Pro)",
-                summary: "Nell'istante in cui XProtect / XProtect Remediator, integrato in macOS, rileva o rimuove realmente un malware, la rete viene interrotta con un Air-Gap di emergenza. Un blocco di Gatekeeper su un'app non firmata non interrompe la rete; invia solo una notifica.",
+                summary: "Nel momento in cui XProtect, integrato in macOS, rileva o rimuove effettivamente un malware, la rete viene interrotta con un Air-Gap di emergenza. L'interruzione avviene solo quando l'estensione Endpoint Security di RoamSwitch riceve l'evento di rilevamento o rimozione di XProtect. Un blocco di Gatekeeper su un'app non firmata non interrompe la rete; invia solo una notifica.",
                 details: """
-                • Origine del segnale: un abbonamento di lunga durata a `/usr/bin/log stream` in formato ndjson (attesa bloccante anziché polling, quindi un costo CPU quasi nullo a riposo) sorveglia i log di sistema relativi a XProtect.
-                • Attivazione: solo quando XProtect registra un rilevamento critico di malware si attiva il contenimento Air-Gap (compresa la disattivazione del Wi-Fi), indipendentemente dal livello di attendibilità della rete.
+                • Origine del segnale: l'evento di rilevamento o rimozione di XProtect, ricevuto dall'estensione Endpoint Security di RoamSwitch (un evento strutturato con il nome del malware, il percorso, la versione delle firme e un identificatore dell'incidente). Un evento senza nome del malware non interrompe la rete. Un incidente la interrompe una volta.
+                • Se l'estensione non è in esecuzione (prima dell'approvazione, macOS precedente alla 13): la rete non viene interrotta. In alternativa, una sottoscrizione a `/usr/bin/log stream` legge il registro delle decisioni di Gatekeeper, e una riga di verdetto di XProtect (con il nome di un malware e un file) genera una notifica ad alta gravità con quel nome e quel file. Una sola riga del registro non interrompe mai la rete. Se l'estensione è in esecuzione, una riga del registro attende 60 secondi e, se l'evento non arriva, genera la stessa notifica.
+                • Attivazione: solo quando arriva l'evento sopra scatta il contenimento Air-Gap (incluso lo spegnimento della radio Wi-Fi), indipendentemente dal livello di fiducia della rete.
                 • Differenza con Gatekeeper: gli eventi quotidiani di Gatekeeper, come il blocco di una build non firmata dello sviluppatore stesso, generano solo la notifica «Gatekeeper ha impedito l'esecuzione di un'app non firmata».
                 • Coerenza: condivide la stessa logica di classificazione dell'Audit registro di sicurezza Mac manuale.
-                • Non usando il permesso EndpointSecurity, si tratta di un contenimento immediato dopo il rilevamento, non di un blocco prima dell'esecuzione.
-                • Predefinito: si attiva automaticamente alla prima attivazione di Pro (con un avviso unico che la disconnessione automatica è attiva). Lo stato è disponibile tramite lo strumento MCP `get_runtime_threat_status`; provalo con «Simulazione Air-Gap collegata al rilevamento malware (test)».
+                • È un contenimento immediato dopo il rilevamento, non un blocco prima dell'esecuzione.
+                • Predefinito: si attiva automaticamente alla prima attivazione di Pro (con un avviso unico che la disconnessione automatica è attiva). Lo stato è disponibile tramite lo strumento MCP `get_runtime_threat_status`; provalo con «Simulazione Air-Gap collegata al rilevamento malware (test)». L'estensione Endpoint Security usata deve essere approvata in Impostazioni di Sistema.
                 """,
                 recommendation: "Tienila attiva come difesa automatica collegata al motore anti-malware di Apple stesso. Eseguire spesso le tue app non firmate non la attiverà, perché un semplice blocco di Gatekeeper non interrompe mai la rete."
             ),
@@ -561,15 +562,17 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_scheduled_log_audit",
-                title: "Controllo automatico dei log (apprende nuovi pattern e anomalie di frequenza secondo una pianificazione) (Pro)",
-                summary: "Esegue ogni ora, in background, il rilevamento delle anomalie di modello dell'audit dei log, apprendendo continuamente il comportamento normale dei log di questo Mac. Quando trova nuovi pattern o picchi di frequenza, ti avvisa con righe di log reali e una spiegazione in linguaggio semplice.",
+                title: "Controllo periodico dei log (Pro)",
+                summary: "Esegue l'audit dei log in background ogni ora. Notifica solo le righe di cui tipo e azione sono chiari, come errori di autenticazione e modifiche ai permessi. Le anomalie statistiche di cui non si può stabilire il tipo non vengono notificate; sono registrate nella cronologia delle notifiche.",
                 details: """
-                • Pianificazione: ogni ora, analizzando l'ultima ora. La prima scansione viene eseguita circa 10 secondi dopo l'attivazione, ma poiché include i log di avvio dell'app stessa, quell'esecuzione si limita ad apprendere senza mai notificare.
-                • Notifica: il conteggio delle anomalie (suddiviso in nuovi pattern e picchi), fino a 3 righe di log reali, una nota sul progresso dell'apprendimento, e una spiegazione per i non esperti. Un lotto che include un picco di frequenza mostra un avviso nel Centro Notifiche; un lotto composto solo da nuovi pattern viene registrato nella cronologia delle notifiche senza mostrare alcun avviso. Un nuovo pattern diventa «noto» una volta registrato e non viene più ri-registrato per lo stesso contenuto; un picco smette di allertare non appena viene appresa la base di riferimento propria di quel pattern.
-                • Condiviso con l'audit manuale: usa la stessa analisi e la stessa base di riferimento appresa dell'Audit registro di sicurezza Mac manuale e dello strumento MCP `audit_security_logs`.
-                • Predefinito: si attiva automaticamente alla prima attivazione di Pro. Menu: Protezione da malware → «Controllo automatico dei log (apprende nuovi pattern e anomalie di frequenza secondo una pianificazione) (Pro)».
+                • Pianificazione: ogni ora, analizzando l'ultima ora. La prima scansione parte circa 10 secondi dopo l'attivazione; poiché include i log di avvio dell'app stessa, quella esecuzione apprende soltanto e non notifica.
+                • Tipi notificati: rifiuti di sudo (password errata e simili), accessi SSH non riusciti e riusciti, autenticazioni dell'amministratore non riuscite, reimpostazioni dei permessi di privacy, blocchi di Gatekeeper, avvisi del kernel (panic, watchdog), errori del disco e del file system e arresti anomali ripetuti di un'app (3 o più volte in un'analisi). La gravità è fissa per tipo e non dipende dalla dimensione di una statistica.
+                • Notifica: la conclusione, cosa fare e la causa, poi il programma e la sua firma, la prima comparsa, la frequenza passata di quel tipo e il comando `log show` che mostra le righe.
+                • Solo nella cronologia delle notifiche: le esecuzioni con diritti di amministratore (ad esempio un'autenticazione dell'amministratore riuscita). I nuovi schemi e i picchi di frequenza di cui non si può stabilire il tipo sono registrati come un solo elemento, «Audit dei registri: nuovi schemi non classificati: N», senza notifica.
+                • Condiviso con l'audit manuale: usa la stessa analisi e la stessa base appresa dell'audit manuale dei registri di sicurezza del Mac e dello strumento MCP `audit_security_logs`.
+                • Predefinito: si attiva automaticamente alla prima attivazione di Pro. Menu: Protezione da malware → «Controllo periodico dei log (Pro)».
                 """,
-                recommendation: "Aspettati un po' più avvisi di nuovi pattern subito dopo la configurazione; si stabilizzano man mano che l'apprendimento procede. Se un avviso menziona un'app o un IP sconosciuto, apri la finestra di audit dei log per maggiori dettagli."
+                recommendation: "Quando arriva una notifica, incolla in Terminale il comando della riga «Verifica» per vedere le righe. Se era una tua azione (il tuo sudo, il tuo errore di accesso), non serve fare nulla."
             ),
             LocalizedEntry(
                 id: "feat_containment_incident_timeline",
@@ -907,7 +910,7 @@ extension RoamSwitchKnowledgeBase {
                 title: "Licenza Pro a vita (acquisto unico, fino a 2 Mac)",
                 summary: "Pro è una licenza a vita ad acquisto unico (2.980 ¥ / 19,99 $) utilizzabile su fino a 2 Mac. Il token di licenza firmato con Ed25519 viene verificato sul dispositivo, quindi Pro continua a funzionare offline dopo l'attivazione.",
                 details: """
-                • Funzioni Pro: le difese automatiche contrassegnate con (Pro) nel menu (rilevamento ransomware tramite file esca, interruzione collegata a XProtect, blocco automatico di porta sconosciuta e isolamento server di sviluppo, blocco automatico spoofing ARP, blocco ARP/NDP del gateway, tunnel VPN, protezioni BadUSB e archiviazione USB, Protezione Web ed e-mail, Protezione dalle minacce DNS, Protezione link, spegnimento automatico Bluetooth, difesa ClickFix, monitoraggio delle registrazioni di avvio automatico, rilevamento rischi Docker, monitoraggio manomissione file critici, controllo automatico dei log), notifiche di minaccia in tempo reale, avvisi di pattugliamento e scansioni pianificate, esportazione CSV dei log, e altro.
+                • Funzioni Pro: le difese automatiche contrassegnate con (Pro) nel menu (rilevamento ransomware tramite file esca, interruzione collegata a XProtect, blocco automatico di porta sconosciuta e isolamento server di sviluppo, blocco automatico spoofing ARP, blocco ARP/NDP del gateway, tunnel VPN, protezioni BadUSB e archiviazione USB, Protezione Web ed e-mail, Protezione dalle minacce DNS, Protezione link, spegnimento automatico Bluetooth, difesa ClickFix, monitoraggio delle registrazioni di avvio automatico, rilevamento rischi Docker, monitoraggio manomissione file critici, controllo periodico dei log), notifiche di minaccia in tempo reale, avvisi di pattugliamento e scansioni pianificate, esportazione CSV dei log, e altro.
                 • Tipi di licenza: Pro a vita (2 Mac) e Team a vita (5 Mac).
                 • Attivazione: inserisci la tua chiave di licenza (ROAM-XXXX-…) da «💎 Attiva / Acquista Pro…». Il token firmato emesso dal server viene verificato con la chiave pubblica inclusa nell'app e salvato nel portachiavi.
                 • Disattivazione: dalla finestra della licenza. Rimuove la licenza da questo Mac e libera il posto sul server (la disattivazione locale avviene sempre anche se la richiesta di rete fallisce).
@@ -1347,16 +1350,16 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "alert_log_audit_anomaly",
-                title: "🔔 Audit dei log: rilevati pattern anomali",
-                summary: "Inviato dal controllo automatico dei log quando trova pattern di log mai visti su questo Mac ([nuovo]) oppure log molto più frequenti del solito ([picco z=…]).",
+                title: "🔔 Audit dei log: rilevate righe di un tipo noto",
+                summary: "Inviata dal controllo periodico dei log quando trova righe di cui tipo e azione sono chiari, come errori di autenticazione e modifiche ai permessi. Il titolo mostra il tipo e il numero.",
                 details: """
-                • Causa: solitamente cambiamenti attesi dovuti al collegamento di un nuovo dispositivo o ad aggiornamenti di app o di macOS, ma a volte tentativi di accesso sospetti o attività di processi sconosciuti.
-                • Contenuto: la ripartizione del conteggio, fino a 3 righe di log reali, il progresso dell'apprendimento (ad esempio apprendimento della frequenza in corso: 2/3 osservazioni), e una spiegazione in linguaggio semplice.
+                • Causa: scritta per tipo nella riga «Causa» della notifica (ad esempio una password sudo errata, un accesso SSH rifiutato o un blocco di Gatekeeper).
+                • Contenuto: la conclusione, cosa fare, la causa, il programma e la sua firma, la prima comparsa, la frequenza passata di quel tipo e il comando di verifica. La gravità è fissa per tipo.
                 • Difesa automatica: nessuna (solo notifica).
                 """,
                 recommendation: """
-                1. Se ci sono solo nuovi pattern senza nomi di app o indirizzi IP sconosciuti, non è necessaria alcuna azione.
-                2. Se un picco di frequenza coincide con qualcosa che non hai fatto, apri «📜 Audit registro di sicurezza Mac…» per maggiori dettagli.
+                1. Se era una tua azione (il tuo sudo, il tuo errore di accesso), non serve alcuna azione.
+                2. Se non la riconosci, segui l'azione indicata dalla notifica e guarda le righe con il suo comando di verifica.
                 3. In caso di dubbio, usa «Copia materiali per consulenza IA» per chiedere a un assistente IA.
                 """
             ),
@@ -1449,7 +1452,7 @@ extension RoamSwitchKnowledgeBase {
                 title: "Protezioni attivate automaticamente con Pro, e protezioni opzionali",
                 summary: "Alla prima attivazione di una licenza Pro, le protezioni di difesa autonoma che per lo più si limitano a notificare, danno pochi falsi allarmi e non richiedono permessi o configurazioni aggiuntivi vengono attivate automaticamente. Ciò che potrebbe ostacolare l'uso normale, o che richiede permessi, configurazioni o comunicazioni esterne aggiuntivi, resta facoltativo. In seguito, viene rispettata la scelta di attivazione/disattivazione che fai per ogni protezione.",
                 details: """
-                • Attivate automaticamente (una volta, alla prima attivazione di Pro): blocco automatico delle porte di ascolto sconosciute, rilevamento delle scansioni delle porte in entrata (compreso il blocco automatico di 10 minuti della sorgente della scansione), rilevamento della forza bruta SSH (attivo solo con l'accesso remoto attivo), rilevamento ransomware tramite file esca e tramite entropia, honeytoken delle credenziali, blocco automatico al rilevamento di spoofing ARP, disconnessione di rete automatica al rilevamento di malware da XProtect, controllo automatico dei log, monitoraggio delle manomissioni dei file di sistema critici, monitoraggio delle manomissioni dei lockfile delle dipendenze, rilevamento di reverse shell e monitoraggio delle modifiche alle impostazioni di rete. Quando vengono attivate le interruzioni ARP e XProtect, appare un avviso unico che lo spiega.
+                • Attivate automaticamente (una volta, alla prima attivazione di Pro): blocco automatico delle porte di ascolto sconosciute, rilevamento delle scansioni delle porte in entrata (compreso il blocco automatico di 10 minuti della sorgente della scansione), rilevamento della forza bruta SSH (attivo solo con l'accesso remoto attivo), rilevamento ransomware tramite file esca e tramite entropia, honeytoken delle credenziali, blocco automatico al rilevamento di spoofing ARP, disconnessione di rete automatica al rilevamento di malware da XProtect, controllo periodico dei log, monitoraggio delle manomissioni dei file di sistema critici, monitoraggio delle manomissioni dei lockfile delle dipendenze, rilevamento di reverse shell e monitoraggio delle modifiche alle impostazioni di rete. Quando vengono attivate le interruzioni ARP e XProtect, appare un avviso unico che lo spiega.
                 • Attive per impostazione predefinita con Pro: Protezione Web ed e-mail, monitoraggio delle registrazioni di avvio automatico (LaunchAgent/Daemon), Protezione dalle minacce DNS (applicata solo nelle reti fuori casa) e Protezione link (blocco automatico dei siti palesemente fraudolenti).
                 • Disattivate per impostazione predefinita (opzionali): blocco automatico ClickFix, rilevamento rischi Docker, protezione fisica della porta BadUSB, blocco automatico dell'archiviazione USB, blocco ARP/NDP del gateway, spegnimento automatico Bluetooth, registro di esecuzione dei processi, monitoraggio dell'accesso alle credenziali del browser, tunnel VPN, abbinamento del Sensor, verifica attiva delle vulnerabilità e verifica delle firme npm. Ciascuna può interrompere l'uso normale (interruzione della rete, dispositivi di input, unità esterne, audio), richiede un permesso o un'installazione aggiuntivi (Accesso completo al disco, Accessibilità, blueutil), richiede impostazioni personali come una lista di elementi consentiti, oppure contatta un server esterno. Il provider della Protezione dalle minacce DNS è una tua scelta.
                 • Attiva per impostazione predefinita anche nell'edizione gratuita: protezione degli appunti (chiavi API e comandi ClickFix).
@@ -1558,7 +1561,7 @@ extension RoamSwitchKnowledgeBase {
                 • Blocco automatico dello spoofing ARP, blocco ARP/NDP del gateway, tunnel VPN (WireGuard / Tailscale), avvisi di gemello malvagio
                 • Protezione tastiera BadUSB, blocco automatico dell'archiviazione USB
                 • Protezione Web ed e-mail (scansione automatica, quarantena, avvisi Pickle), Protezione dalle minacce DNS, Protezione link
-                • Monitoraggio delle registrazioni di avvio automatico, rilevamento rischi Docker, monitoraggio manomissione file critici, controllo automatico dei log
+                • Monitoraggio delle registrazioni di avvio automatico, rilevamento rischi Docker, monitoraggio manomissione file critici, controllo periodico dei log
                 • Spegnimento automatico Bluetooth, notifiche di minaccia in tempo reale, avvisi di pattugliamento, aggiornamenti delle definizioni e scansioni pianificate, esportazione CSV dei log
                 """,
                 recommendation: "Scegli Pro se hai bisogno di contenimento automatico, difesa in tempo reale e monitoraggio in background."
@@ -1740,14 +1743,14 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "faq_log_audit_repeated_alerts",
                 title: "Le notifiche dell'audit dei log continuano ad arrivare",
-                summary: "Il controllo automatico dei log apprende il comportamento normale dei log di questo Mac man mano che viene eseguito. Gli avvisi aumentano subito dopo la configurazione o un aggiornamento importante e diminuiscono naturalmente man mano che l'apprendimento procede.",
+                summary: "Le notifiche dello stesso tipo continuano perché continuano le righe di quel tipo. Le anomalie statistiche di cui non si può stabilire il tipo non vengono notificate.",
                 details: """
-                • Nuovi pattern: una volta segnalato, un pattern diventa noto e non viene più rinotificato per lo stesso contenuto.
-                • Picchi di frequenza: l'apprendimento di ogni pattern si completa dopo 3 osservazioni; dopodiché, un volume normale non genera avvisi. Finché la notifica mostra ancora qualcosa come «apprendimento della frequenza in corso: 2/3 osservazioni», l'apprendimento continua.
-                • Cause comuni: aggiornamenti di macOS o delle app, collegamento di nuovi dispositivi, carico elevato temporaneo.
-                • Per fermarlo: disattiva nel menu «Controllo automatico dei log (apprende nuovi pattern e anomalie di frequenza secondo una pianificazione) (Pro)» (l'audit manuale dei log resta disponibile).
+                • Quando un tipo continua: la riga sulla frequenza passata mostra la differenza rispetto al solito. La frequenza passata si apprende in 3 controlli.
+                • Cosa non viene notificato: i nuovi schemi e i picchi di frequenza di cui non si può stabilire il tipo. Compaiono nella cronologia delle notifiche come «Audit dei registri: nuovi schemi non classificati: N».
+                • Cause comuni: password di sudo o di accesso digitate male, tentativi di password via SSH dall'esterno, arresti anomali di app dopo un aggiornamento.
+                • Per fermarlo: disattiva «Controllo periodico dei log (Pro)» nel menu (l'audit manuale resta disponibile).
                 """,
-                recommendation: "Finché gli avvisi non includono nomi di app o indirizzi IP sconosciuti, o fallimenti sudo, va bene aspettare un po'."
+                recommendation: "Se gli errori di accesso SSH continuano e non ti serve l'accesso remoto, disattivalo in Impostazioni di Sistema > Generali > Condivisione."
             ),
             LocalizedEntry(
                 id: "faq_zero_telemetry",

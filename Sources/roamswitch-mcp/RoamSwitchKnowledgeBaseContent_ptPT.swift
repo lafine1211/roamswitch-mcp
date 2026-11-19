@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.1.4 (build 223).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.0 (build 224).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -113,7 +113,7 @@ extension RoamSwitchKnowledgeBase {
                 • WireGuard: requer `wireguard-tools` do Homebrew (`brew install wireguard-tools`). Importe uma configuração com «Importar configuração WireGuard (.conf)…». Fornece você a configuração (Mullvad, IVPN, Proton VPN, um servidor próprio, a sua entidade patronal); o RoamSwitch não fornece servidores VPN.
                 • Kill switch do WireGuard: o pf aplica «block drop all» com exceções apenas para lo, a interface do túnel, o handshake UDP com o ponto final, DHCP e ICMP. Nada é exposto em texto simples enquanto o túnel está inativo.
                 • Tailscale: para quem já usa Tailscale. O RoamSwitch não o instala nem inicia sessão; lê `tailscale status` e executa `tailscale set --exit-node=<nó>`. É necessário um nó de saída (todo o tráfego passa por ele). Um nó de saída offline é mostrado na linha de estado.
-                • Recomenda-se a CLI do Tailscale (autónoma): `brew install tailscale` → `sudo tailscaled install-system-daemon` → `sudo tailscale up`. A versão da App Store (interface gráfica) não pode ser controlada com `tailscale set` a partir de fora da app; nesse caso, escolha o nó de saída na app Tailscale, e o RoamSwitch trata apenas da apresentação do estado e do kill switch.
+                • Só se pode usar a CLI do Tailscale do Homebrew: `brew install tailscale` → `sudo tailscaled install-system-daemon` → `sudo tailscale up`. As apps do Tailscale (a versão da App Store e a app do site do Tailscale) não podem ser controladas com `tailscale set` a partir de fora da app; nesse caso, escolha o nó de saída na app Tailscale, e o RoamSwitch trata apenas da apresentação do estado e do kill switch.
                 • Kill switch do Tailscale (desligado por predefinição, opcional): o pf deixa passar apenas lo, a utun do Tailscale, o CGNAT 100.64.0.0/10, DNS, STUN 3478, 41641, DERP tcp 443, DHCP e ICMP. Menos rigoroso que o do WireGuard («difícil de deixar fugas» em vez de estanque), e em algumas redes pode interferir com a conetividade do próprio Tailscale, por isso é opcional.
                 • Automático: o túnel/nó de saída ativa-se em redes não fiáveis e desativa-se em redes fiáveis. Se a licença expirar, o túnel e o kill switch são libertados automaticamente.
                 """,
@@ -390,14 +390,15 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "feat_runtime_threat_containment",
                 title: "Desconexão automática da rede na deteção de malware pelo XProtect (Pro)",
-                summary: "No instante em que o XProtect / XProtect Remediator, integrado no macOS, deteta ou remove realmente malware, a rede é cortada num Air-Gap de emergência. Um bloqueio do Gatekeeper a uma app não assinada não corta a rede; envia apenas uma notificação.",
+                summary: "No momento em que o XProtect integrado no macOS deteta ou remove efetivamente malware, a rede é cortada com um Air-Gap de emergência. O corte só acontece quando a extensão Endpoint Security do RoamSwitch recebe o evento de deteção ou remoção do XProtect. O bloqueio de uma app não assinada pelo Gatekeeper não corta a rede; apenas envia uma notificação.",
                 details: """
-                • Origem do sinal: uma subscrição de longa duração a `/usr/bin/log stream` em formato ndjson (espera bloqueante em vez de sondagem, pelo que o custo de CPU em repouso é quase nulo) vigia os registos do sistema relacionados com o XProtect.
-                • Acionamento: apenas quando o XProtect regista uma deteção crítica de malware é que a contenção Air-Gap é acionada (incluindo a desativação do Wi-Fi), independentemente do nível de confiança da rede.
+                • Origem do sinal: o evento de deteção ou remoção do XProtect, recebido pela extensão Endpoint Security do RoamSwitch (um evento estruturado com o nome do malware, o caminho, a versão das assinaturas e um identificador do incidente). Um evento sem nome de malware não corta a rede. Um incidente corta-a uma vez.
+                • Se a extensão não estiver em execução (antes da aprovação, macOS anterior ao 13): a rede não é cortada. Como alternativa, uma subscrição de `/usr/bin/log stream` lê o registo de decisões do Gatekeeper, e uma linha de veredicto do XProtect (com o nome de um malware e um ficheiro) gera uma notificação de gravidade elevada com esse nome e esse ficheiro. Uma única linha do registo nunca corta a rede. Se a extensão estiver em execução, uma linha do registo espera 60 segundos e, se o evento não chegar, gera a mesma notificação.
+                • Disparo: só quando chega o evento acima é acionada a contenção Air-Gap (incluindo desligar o rádio Wi-Fi), independentemente do nível de confiança da rede.
                 • Diferença em relação ao Gatekeeper: eventos quotidianos do Gatekeeper, como bloquear uma compilação não assinada do próprio programador, apenas geram a notificação «O Gatekeeper impediu a execução de uma app não assinada».
                 • Consistência: partilha a mesma lógica de classificação da Auditoria de registos de segurança do Mac manual.
-                • Por não usar a permissão EndpointSecurity, trata-se de uma contenção imediata após a deteção, e não de um bloqueio antes da execução.
-                • Predefinição: ativa-se automaticamente na primeira ativação da Pro (com um aviso único de que a desconexão automática está ativa). O estado está disponível através da ferramenta MCP `get_runtime_threat_status`; teste com «Simulação de Air-Gap por deteção de malware (teste)».
+                • É uma contenção imediata após a deteção, não um bloqueio antes da execução.
+                • Predefinição: ativa-se automaticamente na primeira ativação da Pro (com um aviso único de que a desconexão automática está ativa). O estado está disponível através da ferramenta MCP `get_runtime_threat_status`; teste com «Simulação de Air-Gap por deteção de malware (teste)». A extensão Endpoint Security usada tem de estar aprovada em Definições do Sistema.
                 """,
                 recommendation: "Mantenha-a ativa como defesa automática ligada ao próprio motor anti-malware da Apple. Executar frequentemente as suas próprias apps não assinadas não a irá acionar, porque um simples bloqueio do Gatekeeper nunca corta a rede."
             ),
@@ -561,15 +562,17 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_scheduled_log_audit",
-                title: "Auditoria automática de registos (aprende novos padrões e anomalias de frequência de forma agendada) (Pro)",
-                summary: "Executa de hora a hora, em segundo plano, a deteção de anomalias de modelo da auditoria de registos, aprendendo continuamente o comportamento normal dos registos deste Mac. Quando encontra novos padrões ou picos de frequência, avisa-o com linhas de registo reais e uma explicação em linguagem simples.",
+                title: "Auditoria periódica de registos (Pro)",
+                summary: "Executa a auditoria de registos em segundo plano de hora a hora. Só notifica as linhas cujo tipo e próximo passo são claros, como falhas de autenticação e alterações de permissões. As anomalias estatísticas cujo tipo não é possível determinar não são notificadas; ficam registadas no histórico de notificações.",
                 details: """
-                • Calendário: de hora a hora, analisando a última hora. A primeira análise é executada cerca de 10 segundos após a ativação, mas como inclui os próprios registos de arranque da app, essa execução apenas aprende e nunca notifica.
-                • Notificação: a contagem de anomalias (dividida em novos padrões e picos), até 3 linhas de registo reais, uma nota sobre o progresso da aprendizagem, e uma explicação para não especialistas. Um lote que inclua um pico de frequência mostra um alerta na Central de Notificações; um lote composto apenas por novos padrões é registado no histórico de notificações sem mostrar qualquer alerta. Um novo padrão torna-se «conhecido» assim que é registado e nunca mais é reregistado pelo mesmo conteúdo; um pico deixa de alertar assim que a referência própria desse padrão for aprendida.
-                • Partilhada com a auditoria manual: usa a mesma análise e a mesma referência aprendida que a Auditoria de registos de segurança do Mac manual e a ferramenta MCP `audit_security_logs`.
-                • Predefinição: ativa-se automaticamente na primeira ativação da Pro. Menu: Proteção contra malware → «Auditoria automática de registos (aprende novos padrões e anomalias de frequência de forma agendada) (Pro)».
+                • Agendamento: de hora a hora, analisando a última hora. A primeira análise corre cerca de 10 segundos depois de ativar; como inclui os registos de arranque da própria app, essa execução só aprende e nunca notifica.
+                • Tipos notificados: recusas do sudo (palavra-passe errada, etc.), inícios de sessão SSH falhados e bem-sucedidos, falhas de autenticação de administrador, reposições de permissões de privacidade, bloqueios do Gatekeeper, avisos do kernel (panic, watchdog), erros de disco e do sistema de ficheiros e falhas repetidas de uma app (3 ou mais vezes numa análise). A gravidade está fixada por tipo e não depende do tamanho de uma estatística.
+                • Notificação: a conclusão, o que fazer e a causa, e depois o programa e a sua assinatura, quando apareceu pela primeira vez, a frequência anterior desse tipo e o comando `log show` que mostra as linhas.
+                • Só no histórico de notificações: as execuções com direitos de administrador (por exemplo uma autenticação de administrador bem-sucedida). Os novos padrões e picos de frequência cujo tipo não é possível determinar são registados como um único item, «Auditoria de registos: novos padrões sem classificação: N», sem notificação.
+                • Partilhado com a auditoria manual: usa a mesma análise e a mesma base aprendida que a auditoria manual de registos de segurança do Mac e a ferramenta MCP `audit_security_logs`.
+                • Predefinição: ativa-se automaticamente na primeira ativação do Pro. Menu: Proteção contra malware → «Auditoria periódica de registos (Pro)».
                 """,
-                recommendation: "Espere um pouco mais de alertas de novos padrões logo após a configuração; estabilizam à medida que a aprendizagem avança. Se um alerta mencionar uma app ou um IP desconhecido, abra a janela de auditoria de registos para mais detalhes."
+                recommendation: "Quando chegar uma notificação, cole no Terminal o comando da linha «Verificar» para ver as linhas. Se foi uma ação sua (o seu sudo, a sua falha de início de sessão), não é preciso fazer nada."
             ),
             LocalizedEntry(
                 id: "feat_containment_incident_timeline",
@@ -907,7 +910,7 @@ extension RoamSwitchKnowledgeBase {
                 title: "Licença Pro vitalícia (compra única, até 2 Macs)",
                 summary: "A Pro é uma licença vitalícia de compra única (2.980 ¥ / 19,99 $) utilizável em até 2 Macs. O token de licença assinado com Ed25519 é verificado no dispositivo, pelo que a Pro continua a funcionar offline após a ativação.",
                 details: """
-                • Funcionalidades Pro: as defesas automáticas marcadas com (Pro) no menu (deteção de ransomware através de ficheiros-isco, corte ligado ao XProtect, bloqueio automático de porta desconhecida e isolamento de servidor de desenvolvimento, bloqueio automático de falsificação de ARP, fixação ARP/NDP da gateway, túnel VPN, proteções BadUSB e de armazenamento USB, Proteção Web e E-mail, Proteção contra ameaças DNS, Proteção de links, desativação automática do Bluetooth, defesa ClickFix, monitorização de registos de início automático, deteção de riscos do Docker, monitorização de adulteração de ficheiros críticos, auditoria automática de registos), notificações de ameaça em tempo real, avisos de patrulha e verificações agendadas, exportação CSV de registos, e mais.
+                • Funcionalidades Pro: as defesas automáticas marcadas com (Pro) no menu (deteção de ransomware através de ficheiros-isco, corte ligado ao XProtect, bloqueio automático de porta desconhecida e isolamento de servidor de desenvolvimento, bloqueio automático de falsificação de ARP, fixação ARP/NDP da gateway, túnel VPN, proteções BadUSB e de armazenamento USB, Proteção Web e E-mail, Proteção contra ameaças DNS, Proteção de links, desativação automática do Bluetooth, defesa ClickFix, monitorização de registos de início automático, deteção de riscos do Docker, monitorização de adulteração de ficheiros críticos, auditoria periódica de registos), notificações de ameaça em tempo real, avisos de patrulha e verificações agendadas, exportação CSV de registos, e mais.
                 • Tipos de licença: Pro vitalícia (2 Macs) e Team vitalícia (5 Macs).
                 • Ativação: introduza a sua chave de licença (ROAM-XXXX-…) em «💎 Ativar / Comprar Pro…». O token assinado emitido pelo servidor é verificado com a chave pública incluída na app e guardado no porta-chaves.
                 • Desativação: a partir da janela de licença. Remove a licença deste Mac e liberta o lugar no servidor (a desativação local acontece sempre, mesmo que o pedido de rede falhe).
@@ -1347,16 +1350,16 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "alert_log_audit_anomaly",
-                title: "🔔 Auditoria de registos: padrões anómalos detetados",
-                summary: "Enviada pela auditoria automática de registos quando encontra padrões de registo nunca vistos neste Mac ([novo]) ou registos muito mais frequentes do que o habitual ([pico z=…]).",
+                title: "🔔 Auditoria de registos: linhas de um tipo conhecido detetadas",
+                summary: "Enviada pela auditoria periódica de registos quando encontra linhas cujo tipo e próximo passo são claros, como falhas de autenticação e alterações de permissões. O título mostra o tipo e o número.",
                 details: """
-                • Causa: normalmente alterações esperadas devido à ligação de um novo dispositivo ou a atualizações de apps ou do macOS, mas por vezes tentativas de início de sessão suspeitas ou atividade de processos desconhecida.
-                • Conteúdo: a repartição da contagem, até 3 linhas de registo reais, o progresso da aprendizagem (por exemplo, aprendizagem de frequência em curso: 2/3 observações), e uma explicação em linguagem simples.
+                • Causa: escrita por tipo na linha «Causa» da notificação (por exemplo uma palavra-passe de sudo errada, um início de sessão SSH recusado ou um bloqueio do Gatekeeper).
+                • Conteúdo: a conclusão, o que fazer, a causa, o programa e a sua assinatura, quando apareceu pela primeira vez, a frequência anterior desse tipo e o comando de verificação. A gravidade está fixada por tipo.
                 • Defesa automática: nenhuma (apenas notificação).
                 """,
                 recommendation: """
-                1. Se houver apenas novos padrões e nenhuma app ou endereço IP desconhecido, não é necessária nenhuma ação.
-                2. Se um pico de frequência coincidir com algo que não fez, abra «📜 Auditoria de registos de segurança do Mac…» para mais detalhes.
+                1. Se foi uma ação sua (o seu sudo, a sua falha de início de sessão), não é necessária nenhuma ação.
+                2. Se não reconhece, siga a ação da notificação e veja as linhas com o respetivo comando de verificação.
                 3. Em caso de dúvida, use «Copiar materiais para consulta com IA» para perguntar a um assistente de IA.
                 """
             ),
@@ -1449,7 +1452,7 @@ extension RoamSwitchKnowledgeBase {
                 title: "Proteções ativadas automaticamente com a Pro, e proteções opcionais",
                 summary: "Na primeira ativação de uma licença Pro, as proteções de defesa autónoma que sobretudo notificam, geram poucos falsos alarmes e não precisam de permissões nem de configuração adicionais são ativadas automaticamente. O que possa atrapalhar a utilização normal, ou que exija permissões, configuração ou comunicação externa adicionais, continua opcional. Depois disso, a escolha de ativar/desativar que fizer para cada proteção é respeitada.",
                 details: """
-                • Ativadas automaticamente (uma vez, na primeira ativação da Pro): bloqueio automático de portas de escuta desconhecidas, deteção de varrimento de portas de entrada (incluindo o bloqueio automático de 10 minutos da origem do varrimento), deteção de força bruta SSH (só atua com o início de sessão remoto ativado), deteção de ransomware através de ficheiros-isco e por entropia, honeytokens de credenciais, bloqueio automático ao detetar ARP spoofing, corte automático da rede ao detetar malware pelo XProtect, auditoria automática de registos, monitorização de adulteração de ficheiros críticos do sistema, monitorização de adulteração de lockfiles de dependências, deteção de shell reverso e monitorização de alterações às definições de rede. Ao ativar os cortes de ARP e XProtect, surge um aviso único a explicar.
+                • Ativadas automaticamente (uma vez, na primeira ativação da Pro): bloqueio automático de portas de escuta desconhecidas, deteção de varrimento de portas de entrada (incluindo o bloqueio automático de 10 minutos da origem do varrimento), deteção de força bruta SSH (só atua com o início de sessão remoto ativado), deteção de ransomware através de ficheiros-isco e por entropia, honeytokens de credenciais, bloqueio automático ao detetar ARP spoofing, corte automático da rede ao detetar malware pelo XProtect, auditoria periódica de registos, monitorização de adulteração de ficheiros críticos do sistema, monitorização de adulteração de lockfiles de dependências, deteção de shell reverso e monitorização de alterações às definições de rede. Ao ativar os cortes de ARP e XProtect, surge um aviso único a explicar.
                 • Ativas por predefinição com a Pro: Proteção Web e E-mail, monitorização de registos de início automático (LaunchAgent/Daemon), Proteção contra ameaças DNS (aplicada apenas em redes fora de casa) e Proteção de Ligações (bloqueio automático de sites claramente fraudulentos).
                 • Desligadas por predefinição (opcionais): bloqueio automático ClickFix, deteção de riscos do Docker, proteção física da porta BadUSB, bloqueio automático de armazenamento USB, fixação ARP/NDP da gateway, desativação automática do Bluetooth, registo de execução de processos, monitorização de acesso às credenciais do navegador, túnel VPN, emparelhamento do Sensor, verificação ativa de vulnerabilidades e verificação de assinaturas npm. Cada uma pode interromper a utilização normal (corte da rede, dispositivos de entrada, unidades externas, áudio), precisa de uma permissão ou instalação adicional (Acesso Total ao Disco, Acessibilidade, blueutil), exige definições próprias, como uma lista de permissões, ou contacta um servidor externo. O fornecedor da Proteção contra ameaças DNS é uma escolha sua.
                 • Ativa por predefinição mesmo na edição gratuita: proteção da área de transferência (chaves de API e comandos ClickFix).
@@ -1558,7 +1561,7 @@ extension RoamSwitchKnowledgeBase {
                 • Bloqueio automático de falsificação de ARP, fixação ARP/NDP da gateway, túnel VPN (WireGuard / Tailscale), avisos de gémeo maligno
                 • Proteção de teclado BadUSB, bloqueio automático de armazenamento USB
                 • Proteção Web e E-mail (verificação automática, quarentena, avisos Pickle), Proteção contra ameaças DNS, Proteção de links
-                • Monitorização de registos de início automático, deteção de riscos do Docker, monitorização de adulteração de ficheiros críticos, auditoria automática de registos
+                • Monitorização de registos de início automático, deteção de riscos do Docker, monitorização de adulteração de ficheiros críticos, auditoria periódica de registos
                 • Desativação automática do Bluetooth, notificações de ameaça em tempo real, avisos de patrulha, atualizações de definições e verificações agendadas, exportação CSV de registos
                 """,
                 recommendation: "Escolha a Pro se precisar de contenção automática, defesa em tempo real e monitorização em segundo plano."
@@ -1740,14 +1743,14 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "faq_log_audit_repeated_alerts",
                 title: "As notificações da auditoria de registos não param de chegar",
-                summary: "A auditoria automática de registos aprende o comportamento normal dos registos deste Mac à medida que é executada. Os alertas aumentam logo após a configuração ou uma atualização importante e diminuem naturalmente à medida que a aprendizagem avança.",
+                summary: "As notificações do mesmo tipo continuam porque continuam a aparecer linhas desse tipo. As anomalias estatísticas cujo tipo não é possível determinar não são notificadas.",
                 details: """
-                • Novos padrões: uma vez notificado, um padrão torna-se conhecido e não é renotificado pelo mesmo conteúdo.
-                • Picos de frequência: a aprendizagem de cada padrão completa-se após 3 observações; depois disso, um volume normal não gera alertas. Enquanto a notificação continuar a mostrar algo como «aprendizagem de frequência em curso: 2/3 observações», a aprendizagem continua.
-                • Causas comuns: atualizações do macOS ou de apps, ligação de novos dispositivos, carga elevada temporária.
-                • Para o parar: desligue no menu «Auditoria automática de registos (aprende novos padrões e anomalias de frequência de forma agendada) (Pro)» (a auditoria manual de registos continua disponível).
+                • Quando um tipo continua: a linha da frequência anterior mostra a diferença em relação ao habitual. A frequência anterior é aprendida em 3 verificações.
+                • O que não é notificado: os novos padrões e picos de frequência cujo tipo não é possível determinar. Aparecem no histórico de notificações como «Auditoria de registos: novos padrões sem classificação: N».
+                • Causas comuns: palavras-passe de sudo ou de início de sessão mal escritas, tentativas de palavra-passe por SSH vindas de fora, falhas de apps após uma atualização.
+                • Para parar: desative «Auditoria periódica de registos (Pro)» no menu (a auditoria manual continua disponível).
                 """,
-                recommendation: "Enquanto os alertas não incluírem nomes de apps ou endereços IP desconhecidos, nem falhas de sudo, pode aguardar um pouco."
+                recommendation: "Se as falhas de início de sessão SSH continuarem e não precisar do início de sessão remoto, desative-o em Definições do Sistema > Geral > Partilha."
             ),
             LocalizedEntry(
                 id: "faq_zero_telemetry",

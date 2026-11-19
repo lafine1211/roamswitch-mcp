@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.1.4 (build 223).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.0 (build 224).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -1068,10 +1068,13 @@ public struct CommandOutput: Equatable {
     public let status: Int32
     public let stdout: String
     public let stderr: String
-    public init(status: Int32, stdout: String, stderr: String = "") {
+    /// 時間切れで止めた(`status` は -1)。呼び出し側は「測れなかった」として扱う。
+    public let timedOut: Bool
+    public init(status: Int32, stdout: String, stderr: String = "", timedOut: Bool = false) {
         self.status = status
         self.stdout = stdout
         self.stderr = stderr
+        self.timedOut = timedOut
     }
 }
 
@@ -1079,37 +1082,19 @@ public struct CommandOutput: Equatable {
 typealias CommandRunner = (_ path: String, _ arguments: [String]) -> CommandOutput?
 
 enum SystemCommand {
+    /// 時間切れの既定(秒)。診断のコマンドは数秒で終わる。止まったものは、子孫ごと止めて「測れなかった」にする。
+    static let defaultTimeout: TimeInterval = 30
+
     /// stdout と stderr を別々に、同時に読む(片方が詰まって子プロセスが止まらないように)。
+    /// `timeout` 秒で終わらなければ、子とその子孫を止める(`TimedProcess`)。そのとき `status` は -1、`timedOut` は true。
     static func run(_ path: String, _ arguments: [String]) -> CommandOutput? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: path)
-        process.arguments = arguments
-        let outPipe = Pipe()
-        let errPipe = Pipe()
-        process.standardOutput = outPipe
-        process.standardError = errPipe
-        do {
-            try process.run()
-        } catch {
-            return nil
-        }
-        var outData = Data()
-        var errData = Data()
-        let group = DispatchGroup()
-        group.enter()
-        DispatchQueue.global().async {
-            outData = outPipe.fileHandleForReading.readDataToEndOfFile()
-            group.leave()
-        }
-        group.enter()
-        DispatchQueue.global().async {
-            errData = errPipe.fileHandleForReading.readDataToEndOfFile()
-            group.leave()
-        }
-        group.wait()
-        process.waitUntilExitWithoutRunLoop()
-        let status: Int32 = process.terminationReason == .uncaughtSignal ? -1 : process.terminationStatus
-        return CommandOutput(status: status, stdout: String(decoding: outData, as: UTF8.self), stderr: String(decoding: errData, as: UTF8.self))
+        runWithTimeout(path, arguments, timeout: defaultTimeout)
+    }
+
+    static func runWithTimeout(_ path: String, _ arguments: [String], timeout: TimeInterval) -> CommandOutput? {
+        // stderr is kept in full up to 4 MB, as before (a diagnostic can print a long warning list).
+        guard let r = TimedProcess.run(path, arguments, timeout: timeout, stderrLimit: 4 << 20) else { return nil }
+        return CommandOutput(status: r.status, stdout: r.stdoutText, stderr: r.stderrText, timedOut: r.timedOut)
     }
 }
 

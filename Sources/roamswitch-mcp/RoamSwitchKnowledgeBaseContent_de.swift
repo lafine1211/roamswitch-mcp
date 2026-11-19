@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.1.4 (build 223).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.0 (build 224).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -113,7 +113,7 @@ extension RoamSwitchKnowledgeBase {
                 • WireGuard: Benötigt `wireguard-tools` von Homebrew (`brew install wireguard-tools`). Konfiguration mit „WireGuard-Konfiguration (.conf) importieren…“ laden. Die Konfiguration stellen Sie selbst bereit (Mullvad, IVPN, Proton VPN, eigener Server, Arbeitgeber); RoamSwitch stellt keine VPN-Server bereit.
                 • WireGuard-Kill-Switch: pf setzt „block drop all“ mit Durchlässen nur für lo, die Tunnelschnittstelle, den UDP-Handshake zum Endpunkt, DHCP und ICMP. Solange der Tunnel unten ist, wird nichts im Klartext übertragen.
                 • Tailscale: Für Personen, die Tailscale bereits nutzen. RoamSwitch installiert es nicht und meldet sich nicht an; es liest `tailscale status` und führt `tailscale set --exit-node=<Node>` aus. Ein Exit-Node ist erforderlich (der gesamte Verkehr läuft darüber). Ein offline befindlicher Exit-Node wird in der Statuszeile angezeigt.
-                • Empfohlen wird die Tailscale-CLI (eigenständig): `brew install tailscale` → `sudo tailscaled install-system-daemon` → `sudo tailscale up`. Die App-Store-Version (GUI) lässt sich nicht per `tailscale set` von außen steuern; wählen Sie den Exit-Node dann in der Tailscale-App, RoamSwitch übernimmt nur Statusanzeige und Kill-Switch.
+                • Nutzbar ist nur die Homebrew-CLI von Tailscale: `brew install tailscale` → `sudo tailscaled install-system-daemon` → `sudo tailscale up`. Die Tailscale-Apps (die App-Store-Version und die App von der Tailscale-Website) lassen sich nicht per `tailscale set` von außen steuern; wählen Sie den Exit-Node dann in der Tailscale-App, RoamSwitch übernimmt nur Statusanzeige und Kill-Switch.
                 • Tailscale-Kill-Switch (standardmäßig aus, Opt-in): pf lässt nur lo, Tailscales utun, CGNAT 100.64.0.0/10, DNS, STUN 3478, 41641, DERP tcp 443, DHCP und ICMP durch. Weniger strikt als WireGuard („schwer undicht zu machen“ statt völlig dicht), und in manchen Netzwerken kann er Tailscales eigene Konnektivität stören, daher optional.
                 • Automatisch: Tunnel/Exit-Node wird in nicht vertrauenswürdigen Netzwerken aktiviert, in vertrauenswürdigen deaktiviert. Läuft die Lizenz ab, werden Tunnel und Kill-Switch automatisch aufgehoben.
                 """,
@@ -390,14 +390,15 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "feat_runtime_threat_containment",
                 title: "Automatische Netzwerktrennung bei XProtect-Malware-Erkennung (Pro)",
-                summary: "In dem Moment, in dem das in macOS integrierte XProtect / XProtect Remediator tatsächlich Malware erkennt oder entfernt, wird das Netzwerk in einem Notfall-Air-Gap getrennt. Eine Gatekeeper-Blockierung einer unsignierten App trennt das Netzwerk nicht; sie löst nur eine Benachrichtigung aus.",
+                summary: "In dem Moment, in dem das in macOS integrierte XProtect tatsächlich Malware erkennt oder entfernt, wird das Netzwerk in einem Notfall-Air-Gap getrennt. Die Trennung erfolgt nur, wenn die Endpoint-Security-Erweiterung von RoamSwitch das Erkennungs- oder Bereinigungsereignis von XProtect erhält. Eine Gatekeeper-Blockierung einer unsignierten App trennt das Netzwerk nicht; sie löst nur eine Benachrichtigung aus.",
                 details: """
-                • Signalquelle: Ein lang laufendes `/usr/bin/log stream`-Abonnement im ndjson-Format (blockierendes Warten statt Abfragen, daher nahezu keine CPU-Last im Leerlauf) überwacht XProtect-bezogene Systemprotokolle.
-                • Auslöser: Nur wenn XProtect einen kritischen Malware-Fund protokolliert, greift die Air-Gap-Eindämmung (einschließlich WLAN-Funk aus), unabhängig von der Vertrauensstufe des Netzwerks.
+                • Signalquelle: das Erkennungs- oder Bereinigungsereignis von XProtect, das die Endpoint-Security-Erweiterung von RoamSwitch empfängt (ein strukturiertes Ereignis mit Malware-Name, Pfad, Signaturversion und Vorfallskennung). Ein Ereignis ohne Malware-Namen trennt das Netzwerk nicht. Ein Vorfall trennt es einmal.
+                • Läuft die Erweiterung nicht (vor der Freigabe, macOS älter als 13): Das Netzwerk wird nicht getrennt. Als Ersatz liest ein `/usr/bin/log stream`-Abonnement das Entscheidungsprotokoll von Gatekeeper; eine XProtect-Ergebniszeile (mit Malware-Name und Datei) löst eine Benachrichtigung hoher Dringlichkeit mit diesem Namen und der Datei aus. Eine einzelne Protokollzeile trennt das Netzwerk nie. Läuft die Erweiterung, wartet eine Protokollzeile 60 Sekunden und löst bei ausbleibendem Ereignis dieselbe Benachrichtigung aus.
+                • Auslöser: Nur wenn das genannte Ereignis eintrifft, greift die Air-Gap-Eindämmung (einschließlich WLAN-Funk aus), unabhängig von der Vertrauensstufe des Netzwerks.
                 • Unterschied zu Gatekeeper: Alltägliche Gatekeeper-Ereignisse, etwa das Blockieren eines eigenen unsignierten Entwickler-Builds, lösen nur die Benachrichtigung „Gatekeeper hat eine unsignierte App am Ausführen gehindert“ aus.
                 • Konsistenz: Nutzt dieselbe Klassifizierungslogik wie das manuelle Mac-Sicherheitsprotokoll-Audit.
-                • Da keine EndpointSecurity-Berechtigung genutzt wird, handelt es sich um unmittelbare Eindämmung nach der Erkennung, nicht um Blockierung vor der Ausführung.
-                • Standard: Wird bei erstmaliger Aktivierung von Pro automatisch eingeschaltet (mit einem einmaligen Hinweis, dass automatische Trennung aktiviert ist). Der Status ist über das MCP-Tool `get_runtime_threat_status` abrufbar; testen Sie mit „Air-Gap-Simulation bei Malware-Erkennung (Test)“.
+                • Es handelt sich um unmittelbare Eindämmung nach der Erkennung, nicht um Blockierung vor der Ausführung.
+                • Standard: Wird bei erstmaliger Aktivierung von Pro automatisch eingeschaltet (mit einem einmaligen Hinweis, dass automatische Trennung aktiviert ist). Der Status ist über das MCP-Tool `get_runtime_threat_status` abrufbar; testen Sie mit „Air-Gap-Simulation bei Malware-Erkennung (Test)“. Die dafür genutzte Endpoint-Security-Erweiterung muss in den Systemeinstellungen freigegeben sein.
                 """,
                 recommendation: "Lassen Sie diese Funktion als automatische Verteidigung im Verbund mit Apples eigener Malware-Engine aktiviert. Häufiges Ausführen eigener unsignierter Apps löst sie nicht aus, da eine reine Gatekeeper-Blockierung das Netzwerk niemals trennt."
             ),
@@ -561,15 +562,17 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_scheduled_log_audit",
-                title: "Automatische Protokollprüfung (lernt neue Muster & Häufigkeitsanomalien nach Zeitplan) (Pro)",
-                summary: "Führt die Vorlagen-Anomalie-Erkennung des Protokoll-Audits stündlich im Hintergrund aus und lernt so kontinuierlich das normale Protokollverhalten dieses Mac. Findet sie neue Muster oder Häufigkeitsspitzen, benachrichtigt sie mit echten Protokollzeilen und einer verständlichen Erklärung.",
+                title: "Geplante Protokollprüfung (Pro)",
+                summary: "Führt das Protokoll-Audit stündlich im Hintergrund aus. Es meldet nur Einträge, deren Art und nächster Schritt klar sind, etwa Authentifizierungsfehler und Berechtigungsänderungen. Statistische Auffälligkeiten ohne bestimmbare Art werden nicht gemeldet, sondern im Benachrichtigungsverlauf festgehalten.",
                 details: """
                 • Zeitplan: Stündlich, analysiert die letzte Stunde. Der erste Lauf erfolgt etwa 10 Sekunden nach der Aktivierung; da er die eigenen Startprotokolle der App enthält, lernt dieser Lauf nur, ohne zu benachrichtigen.
-                • Benachrichtigung: Anzahl der Anomalien (aufgeteilt in neue Muster und Spitzen), bis zu 3 echte Protokollzeilen, ein Hinweis zum Lernfortschritt sowie eine Erklärung für Laien. Enthält eine Charge eine Häufigkeitsspitze, erscheint eine Meldung im Mitteilungszentrum; besteht sie nur aus neuen Mustern, wird sie ohne Pop-up nur im Benachrichtigungsverlauf festgehalten. Ein neues Muster gilt nach der Erfassung als „bekannt“ und wird für denselben Inhalt nie erneut erfasst; eine Spitze wird nicht mehr gemeldet, sobald die eigene Basislinie dieses Musters gelernt wurde.
+                • Gemeldete Arten: abgelehnte sudo-Versuche (falsches Kennwort u. Ä.), fehlgeschlagene und erfolgreiche SSH-Anmeldungen, fehlgeschlagene Administrator-Authentifizierung, zurückgesetzte Datenschutzberechtigungen, Gatekeeper-Sperren, Kernel-Warnungen (Panic, Watchdog), Festplatten- und Dateisystemfehler und wiederholte App-Abstürze (dieselbe App 3-mal oder öfter in einer Analyse). Die Schwere steht pro Art fest und hängt nicht von der Größe einer Statistik ab.
+                • Meldung: Ergebnis, Maßnahme und Ursache, dann das Programm mit Signatur, das erste Auftreten, die bisherige Häufigkeit dieser Art und der Befehl `log show`, der die Zeilen zeigt.
+                • Nur im Benachrichtigungsverlauf: Ausführungen mit Administratorrechten (etwa eine erfolgreiche Administrator-Authentifizierung). Neue Muster und Häufigkeitsspitzen ohne bestimmbare Art werden als ein Eintrag „Protokoll-Audit: nicht einordenbare neue Muster: N“ festgehalten, ohne Meldung.
                 • Geteilt mit manuellem Audit: Nutzt dieselbe Analyse und gelernte Basislinie wie das manuelle Mac-Sicherheitsprotokoll-Audit und das MCP-Tool `audit_security_logs`.
-                • Standard: Wird bei erstmaliger Aktivierung von Pro automatisch eingeschaltet. Menü: Malware-Schutz → „Automatische Protokollprüfung (lernt neue Muster & Häufigkeitsanomalien nach Zeitplan) (Pro)“.
+                • Standard: Wird bei erstmaliger Aktivierung von Pro automatisch eingeschaltet. Menü: Malware-Schutz → „Geplante Protokollprüfung (Pro)“.
                 """,
-                recommendation: "Erwarten Sie direkt nach der Einrichtung etwas mehr Meldungen zu neuen Mustern; sie klingen ab, sobald der Lernprozess fortschreitet. Erwähnt eine Meldung eine unbekannte App oder IP-Adresse, öffnen Sie das Protokoll-Audit-Fenster für Details."
+                recommendation: "Kommt eine Meldung, fügen Sie den Befehl der Zeile „Prüfen“ ins Terminal ein, um die Zeilen zu sehen. Waren Sie es selbst (eigenes sudo, eigene fehlgeschlagene Anmeldung), ist nichts zu tun."
             ),
             LocalizedEntry(
                 id: "feat_containment_incident_timeline",
@@ -907,7 +910,7 @@ extension RoamSwitchKnowledgeBase {
                 title: "Pro-Dauerlizenz (Einmalkauf, bis zu 2 Macs)",
                 summary: "Pro ist eine einmalig erworbene Dauerlizenz (¥2.980 / 19,99 $) für bis zu 2 Macs. Das mit Ed25519 signierte Lizenz-Token wird auf dem Gerät verifiziert, sodass Pro nach der Aktivierung auch offline weiterläuft.",
                 details: """
-                • Pro-Funktionen: Die im Menü mit (Pro) markierten automatischen Schutzmaßnahmen (Ransomware-Köderdatei-Erkennung, XProtect-gebundene Trennung, automatische Blockierung unbekannter Ports und Isolation von Entwicklungsservern, ARP-Spoofing-Auto-Blockierung, Gateway-ARP/NDP-Fixierung, VPN-Tunnel, BadUSB- und USB-Speicherschutz, Web- & E-Mail-Schutz, DNS-Bedrohungsschutz, Link-Schutz, automatisches Bluetooth-Aus, ClickFix-Schutz, Überwachung von Autostart-Registrierungen, Docker-Risikoerkennung, Überwachung wichtiger Dateien auf Manipulation, automatische Protokollprüfung), Echtzeit-Bedrohungsbenachrichtigungen, Patrouillenwarnungen und geplante Scans, CSV-Export von Protokollen und mehr.
+                • Pro-Funktionen: Die im Menü mit (Pro) markierten automatischen Schutzmaßnahmen (Ransomware-Köderdatei-Erkennung, XProtect-gebundene Trennung, automatische Blockierung unbekannter Ports und Isolation von Entwicklungsservern, ARP-Spoofing-Auto-Blockierung, Gateway-ARP/NDP-Fixierung, VPN-Tunnel, BadUSB- und USB-Speicherschutz, Web- & E-Mail-Schutz, DNS-Bedrohungsschutz, Link-Schutz, automatisches Bluetooth-Aus, ClickFix-Schutz, Überwachung von Autostart-Registrierungen, Docker-Risikoerkennung, Überwachung wichtiger Dateien auf Manipulation, geplante Protokollprüfung), Echtzeit-Bedrohungsbenachrichtigungen, Patrouillenwarnungen und geplante Scans, CSV-Export von Protokollen und mehr.
                 • Lizenztypen: Pro-Dauerlizenz (2 Macs) und Team-Dauerlizenz (5 Macs).
                 • Aktivierung: Geben Sie Ihren Lizenzschlüssel (ROAM-XXXX-…) unter „💎 Pro aktivieren / kaufen…“ ein. Das vom Server ausgestellte signierte Token wird mit dem in der App eingebetteten öffentlichen Schlüssel verifiziert und im Schlüsselbund gespeichert.
                 • Deaktivierung: Über das Lizenzfenster. Entfernt die Lizenz von diesem Mac und gibt den Platz auf dem Server frei (die lokale Deaktivierung erfolgt immer, auch wenn die Netzwerkanfrage fehlschlägt).
@@ -1347,16 +1350,16 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "alert_log_audit_anomaly",
-                title: "🔔 Protokoll-Audit: anomale Muster erkannt",
-                summary: "Wird von der automatischen Protokollprüfung gesendet, wenn sie auf diesem Mac noch nie gesehene Protokollmuster ([neu]) oder deutlich häufigere Protokolle als üblich ([Spitze z=…]) findet.",
+                title: "🔔 Protokoll-Audit: Einträge mit bekannter Art erkannt",
+                summary: "Wird von der automatischen Protokollprüfung gesendet, wenn sie Einträge findet, deren Art und nächster Schritt klar sind, etwa Authentifizierungsfehler und Berechtigungsänderungen. Der Titel zeigt Art und Anzahl.",
                 details: """
-                • Ursache: Meist erwartete Änderungen durch den Anschluss eines neuen Geräts oder App-/macOS-Updates, gelegentlich aber auch verdächtige Anmeldeversuche oder unbekannte Prozessaktivität.
-                • Inhalt: Aufschlüsselung der Anzahl, bis zu 3 echte Protokollzeilen, Lernfortschritt (z. B. Häufigkeits-Baseline lernt noch: bisher 2/3 Beobachtungen) sowie eine verständliche Erklärung.
+                • Ursache: Steht je Art in der Zeile „Ursache“ der Meldung (zum Beispiel ein falsches sudo-Kennwort, eine abgelehnte SSH-Anmeldung oder eine Gatekeeper-Sperre).
+                • Inhalt: Ergebnis, Maßnahme, Ursache, Programm mit Signatur, erstes Auftreten, bisherige Häufigkeit dieser Art und Prüfbefehl. Die Schwere steht pro Art fest.
                 • Automatische Abwehr: Keine (nur Benachrichtigung).
                 """,
                 recommendation: """
-                1. Sind es nur neue Muster ohne unbekannte App-Namen oder IP-Adressen, ist keine Aktion nötig.
-                2. Fällt eine Häufigkeitsspitze mit etwas zusammen, das Sie nicht getan haben, öffnen Sie „📜 Mac-Sicherheitsprotokoll-Audit…“ für Details.
+                1. Waren Sie es selbst (eigenes sudo, eigene fehlgeschlagene Anmeldung), ist keine Aktion nötig.
+                2. Erkennen Sie es nicht, folgen Sie der Maßnahme der Meldung und sehen Sie sich die Zeilen mit dem Prüfbefehl an.
                 3. Sind Sie unsicher, nutzen Sie „Material für KI-Beratung kopieren“, um einen KI-Assistenten zu fragen.
                 """
             ),
@@ -1449,7 +1452,7 @@ extension RoamSwitchKnowledgeBase {
                 title: "Mit Pro automatisch aktivierte Schutzfunktionen und optionale Schutzfunktionen",
                 summary: "Beim ersten Aktivieren einer Pro-Lizenz werden die autonomen Verteidigungsfunktionen automatisch eingeschaltet, die überwiegend nur benachrichtigen, selten Fehlalarme auslösen und weder zusätzliche Berechtigungen noch eine Einrichtung brauchen. Alles, was die normale Nutzung stören könnte oder zusätzliche Berechtigungen, Einrichtung oder externe Kommunikation erfordert, bleibt Opt-in. Danach wird die von Ihnen für jede Funktion getroffene Ein-/Aus-Wahl respektiert.",
                 details: """
-                • Automatisch eingeschaltet (einmalig, bei erster Pro-Aktivierung): Automatische Blockierung unbekannter Listening-Ports, Erkennung eingehender Portscans (einschließlich der 10-minütigen automatischen Blockierung der Scan-Quelle), SSH-Brute-Force-Erkennung (arbeitet nur bei aktiver Fernanmeldung), Ransomware-Köderdatei-Erkennung und Entropie-Erkennung, Anmeldedaten-Honeytokens, automatische Blockierung bei ARP-Spoofing, automatische Netzwerktrennung bei XProtect-Malware-Erkennung, automatische Protokollprüfung, Manipulationsüberwachung wichtiger Systemdateien, Manipulationsüberwachung von Abhängigkeits-Lockfiles, Reverse-Shell-Erkennung und Überwachung von Netzwerkeinstellungen. Beim Einschalten der ARP- und XProtect-Trennungen erscheint ein einmaliger erklärender Hinweis.
+                • Automatisch eingeschaltet (einmalig, bei erster Pro-Aktivierung): Automatische Blockierung unbekannter Listening-Ports, Erkennung eingehender Portscans (einschließlich der 10-minütigen automatischen Blockierung der Scan-Quelle), SSH-Brute-Force-Erkennung (arbeitet nur bei aktiver Fernanmeldung), Ransomware-Köderdatei-Erkennung und Entropie-Erkennung, Anmeldedaten-Honeytokens, automatische Blockierung bei ARP-Spoofing, automatische Netzwerktrennung bei XProtect-Malware-Erkennung, geplante Protokollprüfung, Manipulationsüberwachung wichtiger Systemdateien, Manipulationsüberwachung von Abhängigkeits-Lockfiles, Reverse-Shell-Erkennung und Überwachung von Netzwerkeinstellungen. Beim Einschalten der ARP- und XProtect-Trennungen erscheint ein einmaliger erklärender Hinweis.
                 • Bei Pro standardmäßig aktiv: Web- & E-Mail-Schutz, Überwachung von Autostart-Registrierungen (LaunchAgent/Daemon), DNS-Bedrohungsschutz (nur in unterwegs genutzten Netzwerken angewendet) und Link-Schutz (automatische Blockierung eindeutig betrügerischer Seiten).
                 • Standardmäßig deaktiviert (Opt-in): ClickFix-Auto-Blockierung, Docker-Risikoerkennung, physischer BadUSB-Portschutz, automatische Blockierung von USB-Speicher, Gateway-ARP/NDP-Fixierung, automatisches Bluetooth-Aus, Prozessstart-Protokoll, Überwachung des Browser-Anmeldedatenzugriffs, VPN-Tunnel, Sensor-Kopplung, aktive Schwachstellenverifizierung und npm-Signaturprüfung. Jede davon kann die normale Nutzung unterbrechen (Netzwerktrennung, Eingabegeräte, externe Laufwerke, Ton), braucht eine zusätzliche Berechtigung oder Installation (Festplattenvollzugriff, Bedienungshilfen, blueutil), erfordert eigene Einstellungen wie eine Positivliste oder kontaktiert einen externen Server. Der Anbieter des DNS-Bedrohungsschutzes ist Ihre Wahl.
                 • Auch in der kostenlosen Version standardmäßig aktiv: Zwischenablage-Schutz (API-Schlüssel und ClickFix-Befehle).
@@ -1558,7 +1561,7 @@ extension RoamSwitchKnowledgeBase {
                 • ARP-Spoofing-Auto-Blockierung, Gateway-ARP/NDP-Fixierung, VPN-Tunnel (WireGuard / Tailscale), Evil-Twin-Warnungen
                 • BadUSB-Tastaturschutz, automatische Blockierung von USB-Speicher
                 • Web- & E-Mail-Schutz (automatisches Scannen, Quarantäne, Pickle-Warnungen), DNS-Bedrohungsschutz, Link-Schutz
-                • Überwachung von Autostart-Registrierungen, Docker-Risikoerkennung, Überwachung wichtiger Dateien auf Manipulation, automatische Protokollprüfung
+                • Überwachung von Autostart-Registrierungen, Docker-Risikoerkennung, Überwachung wichtiger Dateien auf Manipulation, geplante Protokollprüfung
                 • Automatisches Bluetooth-Aus, Echtzeit-Bedrohungsbenachrichtigungen, Patrouillenwarnungen, Definitionsaktualisierungen und geplante Scans, CSV-Export von Protokollen
                 """,
                 recommendation: "Wählen Sie Pro, wenn Sie automatische Eindämmung, Echtzeitschutz und Hintergrundüberwachung benötigen."
@@ -1740,14 +1743,14 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "faq_log_audit_repeated_alerts",
                 title: "Benachrichtigungen der Protokollprüfung kommen ständig",
-                summary: "Die automatische Protokollprüfung lernt während des Laufens das normale Protokollverhalten dieses Mac. Direkt nach der Einrichtung oder einem größeren Update nehmen Meldungen zu und klingen mit fortschreitendem Lernen von selbst ab.",
+                summary: "Meldungen derselben Art kommen weiter, weil Einträge dieser Art weiter auftreten. Statistische Auffälligkeiten ohne bestimmbare Art werden nicht gemeldet.",
                 details: """
-                • Neue Muster: Einmal gemeldet, gilt ein Muster als bekannt und wird für denselben Inhalt nicht erneut gemeldet.
-                • Häufigkeitsspitzen: Das Lernen jedes Musters ist nach 3 Beobachtungen abgeschlossen; danach löst normales Aufkommen keinen Alarm mehr aus. Zeigt die Benachrichtigung noch etwas wie „Häufigkeits-Baseline lernt noch: bisher 2/3 Beobachtungen“, wird noch gelernt.
-                • Häufige Ursachen: macOS- oder App-Updates, das Anschließen neuer Geräte, vorübergehend hohe Last.
-                • Zum Stoppen: Deaktivieren Sie im Menü „Automatische Protokollprüfung (lernt neue Muster & Häufigkeitsanomalien nach Zeitplan) (Pro)“ (die manuelle Protokollprüfung bleibt verfügbar).
+                • Wenn eine Art anhält: Die Zeile zur bisherigen Häufigkeit zeigt, wie sich das zum Üblichen verhält. Die bisherige Häufigkeit wird über 3 Prüfungen gelernt.
+                • Nicht gemeldet wird: Neue Muster und Häufigkeitsspitzen ohne bestimmbare Art. Sie stehen im Benachrichtigungsverlauf als „Protokoll-Audit: nicht einordenbare neue Muster: N“.
+                • Häufige Ursachen: vertippte sudo- oder Anmeldekennwörter, Kennwortversuche über SSH von außen, App-Abstürze nach einem Update.
+                • Zum Stoppen: Deaktivieren Sie im Menü „Geplante Protokollprüfung (Pro)“ (die manuelle Protokollprüfung bleibt verfügbar).
                 """,
-                recommendation: "Solange Meldungen keine unbekannten App-Namen, IP-Adressen oder sudo-Fehlversuche enthalten, können Sie ruhig eine Weile abwarten."
+                recommendation: "Halten SSH-Fehlanmeldungen an und brauchen Sie die Remote-Anmeldung nicht, schalten Sie sie in den Systemeinstellungen unter „Allgemein“ > „Teilen“ aus."
             ),
             LocalizedEntry(
                 id: "faq_zero_telemetry",

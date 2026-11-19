@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.1.4 (build 223).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.0 (build 224).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -113,7 +113,7 @@ extension RoamSwitchKnowledgeBase {
                 • WireGuard : nécessite `wireguard-tools` de Homebrew (`brew install wireguard-tools`). Importez une configuration avec « Importer une config WireGuard (.conf)… ». Vous fournissez vous-même la configuration (Mullvad, IVPN, Proton VPN, votre propre serveur, votre employeur) ; RoamSwitch ne fournit pas de serveurs VPN.
                 • Coupe-circuit WireGuard : pf applique « block drop all » avec des exceptions uniquement pour lo, l'interface du tunnel, la poignée de main UDP vers le point de terminaison, le DHCP et l'ICMP. Rien ne fuit en clair pendant que le tunnel est coupé.
                 • Tailscale : pour les personnes qui utilisent déjà Tailscale. RoamSwitch ne l'installe pas et ne se connecte pas ; il lit `tailscale status` et exécute `tailscale set --exit-node=<nœud>`. Un nœud de sortie est requis (tout le trafic y passe). Un nœud de sortie hors ligne est indiqué dans la ligne d'état.
-                • La CLI Tailscale (autonome) est recommandée : `brew install tailscale` → `sudo tailscaled install-system-daemon` → `sudo tailscale up`. La version App Store (interface graphique) ne peut pas être pilotée avec `tailscale set` depuis l'extérieur de l'app ; choisissez alors le nœud de sortie dans l'app Tailscale, RoamSwitch se chargeant uniquement de l'affichage de l'état et du coupe-circuit.
+                • Seule la CLI Tailscale de Homebrew est utilisable : `brew install tailscale` → `sudo tailscaled install-system-daemon` → `sudo tailscale up`. Les apps Tailscale (la version App Store et l'app du site de Tailscale) ne peuvent pas être pilotées avec `tailscale set` depuis l'extérieur de l'app ; choisissez alors le nœud de sortie dans l'app Tailscale, RoamSwitch se chargeant uniquement de l'affichage de l'état et du coupe-circuit.
                 • Coupe-circuit Tailscale (désactivé par défaut, optionnel) : pf laisse passer uniquement lo, l'interface utun de Tailscale, le CGNAT 100.64.0.0/10, le DNS, STUN 3478, 41641, DERP tcp 443, le DHCP et l'ICMP. Plus permissif que WireGuard (« difficile à faire fuir » plutôt qu'étanche), et peut sur certains réseaux gêner la connectivité propre de Tailscale, d'où son caractère optionnel.
                 • Automatique : le tunnel/nœud de sortie s'active sur les réseaux non fiables, se désactive sur les réseaux fiables. Si la licence expire, le tunnel et le coupe-circuit sont libérés automatiquement.
                 """,
@@ -390,14 +390,15 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "feat_runtime_threat_containment",
                 title: "Déconnexion réseau automatique lors d'une détection de malware par XProtect (Pro)",
-                summary: "Dès l'instant où le XProtect / XProtect Remediator intégré à Apple détecte ou supprime réellement un malware, le réseau est coupé par un Air-Gap d'urgence. Un blocage Gatekeeper d'une app non signée ne coupe pas le réseau ; il envoie seulement une notification.",
+                summary: "Dès l'instant où XProtect, intégré à macOS, détecte ou supprime réellement un malware, le réseau est coupé par un Air-Gap d'urgence. La coupure n'a lieu que lorsque l'extension Endpoint Security de RoamSwitch reçoit l'événement de détection ou de suppression d'XProtect. Un blocage Gatekeeper d'une app non signée ne coupe pas le réseau ; il envoie seulement une notification.",
                 details: """
-                • Source du signal : un abonnement de longue durée à `/usr/bin/log stream` au format ndjson (attente bloquante plutôt qu'interrogation, donc un coût CPU quasi nul au repos) surveille les journaux système liés à XProtect.
-                • Déclenchement : seul un enregistrement critique de XProtect engage le confinement Air-Gap (y compris la désactivation du Wi-Fi), quel que soit le niveau de confiance du réseau.
+                • Source du signal : l'événement de détection ou de suppression d'XProtect, reçu par l'extension Endpoint Security de RoamSwitch (un événement structuré avec le nom du malware, le chemin, la version des signatures et un identifiant d'incident). Un événement sans nom de malware ne coupe pas le réseau. Un incident le coupe une fois.
+                • Si l'extension ne tourne pas (avant l'approbation, macOS antérieur à 13) : le réseau n'est pas coupé. En secours, un abonnement `/usr/bin/log stream` lit le journal des décisions de Gatekeeper, et une ligne de verdict d'XProtect (avec un nom de malware et un fichier) déclenche une notification de gravité élevée indiquant ce nom et ce fichier. Une seule ligne de journal ne coupe jamais le réseau. Si l'extension tourne, une ligne de journal attend 60 secondes et, si aucun événement n'arrive, déclenche la même notification.
+                • Déclenchement : seul l'événement ci-dessus engage le confinement Air-Gap (y compris la désactivation du Wi-Fi), quel que soit le niveau de confiance du réseau.
                 • Différence avec Gatekeeper : les événements Gatekeeper quotidiens, comme le blocage d'une compilation non signée créée par un développeur lui-même, ne déclenchent que la notification « Gatekeeper a empêché l'exécution d'une app non signée ».
                 • Cohérence : partage la même logique de classification que l'Audit des journaux de sécurité Mac manuel.
-                • N'utilisant pas d'autorisation EndpointSecurity, il s'agit d'un confinement immédiat après détection, et non d'un blocage avant exécution.
-                • Par défaut : activé automatiquement lors de la première activation de Pro (avec un avis unique indiquant que la coupure automatique est activée). État disponible via l'outil MCP `get_runtime_threat_status` ; testez avec « Simulation de l'Air-Gap lié à la détection de malware (test) ».
+                • Il s'agit d'un confinement immédiat après détection, et non d'un blocage avant exécution.
+                • Par défaut : activé automatiquement lors de la première activation de Pro (avec un avis unique indiquant que la coupure automatique est activée). État disponible via l'outil MCP `get_runtime_threat_status` ; testez avec « Simulation de l'Air-Gap lié à la détection de malware (test) ». L'extension Endpoint Security utilisée doit être approuvée dans Réglages Système.
                 """,
                 recommendation: "Gardez cette fonction activée comme défense automatique liée au propre moteur anti-malware d'Apple. Exécuter fréquemment vos propres apps non signées ne la déclenchera pas, car un simple blocage Gatekeeper ne coupe jamais le réseau."
             ),
@@ -561,15 +562,17 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_scheduled_log_audit",
-                title: "Audit automatique des journaux (apprend les nouveaux motifs et anomalies de fréquence selon un calendrier) (Pro)",
-                summary: "Exécute toutes les heures en arrière-plan la détection d'anomalies de modèle de l'audit des journaux, apprenant en continu le comportement normal des journaux de ce Mac. Lorsqu'elle trouve de nouveaux motifs ou des pics de fréquence, elle vous avertit avec de vraies lignes de journal et une explication en langage clair.",
+                title: "Audit périodique des journaux (Pro)",
+                summary: "Lance l'audit des journaux en arrière-plan toutes les heures. Il ne notifie que les lignes dont le type et la marche à suivre sont clairs, comme les échecs d'authentification et les changements d'autorisations. Les anomalies purement statistiques dont le type est indéterminé ne sont pas notifiées ; elles sont enregistrées dans l'historique des notifications.",
                 details: """
-                • Calendrier : toutes les heures, en analysant la dernière heure. La première analyse s'exécute environ 10 secondes après l'activation, mais comme elle inclut les propres journaux de démarrage de l'app, cette exécution ne fait qu'apprendre, sans notifier.
-                • Notification : le nombre d'anomalies (réparti en nouveaux motifs et pics), jusqu'à 3 vraies lignes de journal, une note sur la progression de l'apprentissage, et une explication pour les non-experts. Un lot comportant un pic de fréquence affiche une alerte dans le Centre de notifications ; un lot composé uniquement de nouveaux motifs est enregistré dans l'historique des notifications sans afficher d'alerte. Un nouveau motif devient « connu » une fois enregistré et n'est plus jamais réenregistré pour le même contenu ; un pic cesse d'alerter une fois que la référence propre à ce motif a été apprise.
-                • Partagé avec l'audit manuel : utilise la même analyse et la même référence apprise que l'Audit des journaux de sécurité Mac manuel et l'outil MCP `audit_security_logs`.
-                • Par défaut : activé automatiquement lors de la première activation de Pro. Menu : Protection contre les malwares → « Audit automatique des journaux (apprend les nouveaux motifs et anomalies de fréquence selon un calendrier) (Pro) ».
+                • Calendrier : toutes les heures, sur la dernière heure. La première analyse a lieu environ 10 secondes après l'activation ; comme elle contient les journaux de démarrage de l'app, elle apprend seulement et ne notifie jamais.
+                • Types notifiés : refus de sudo (mauvais mot de passe, etc.), échecs et réussites de connexion SSH, échecs d'authentification administrateur, réinitialisations d'autorisations de confidentialité, blocages de Gatekeeper, avertissements du noyau (panic, watchdog), erreurs de disque et de système de fichiers, et plantages répétés d'une app (3 fois ou plus dans une analyse). La gravité est fixée par type et ne dépend pas de la taille d'une statistique.
+                • Notification : la conclusion, l'action et la cause, puis le programme et sa signature, la première occurrence, la fréquence passée de ce type et la commande `log show` qui affiche les lignes.
+                • Seulement dans l'historique des notifications : les exécutions avec les droits d'administrateur (par exemple une authentification administrateur réussie). Les nouveaux motifs et pics de fréquence dont le type est indéterminé sont enregistrés en un seul élément, « Audit des journaux : nouveaux motifs non classés : N », sans notification.
+                • Partagé avec l'audit manuel : utilise la même analyse et la même base apprise que l'audit manuel des journaux de sécurité du Mac et l'outil MCP `audit_security_logs`.
+                • Par défaut : activé automatiquement à la première activation de Pro. Menu : Protection contre les malwares → « Audit périodique des journaux (Pro) ».
                 """,
-                recommendation: "Attendez-vous à un peu plus d'alertes de nouveaux motifs juste après la configuration ; elles se stabilisent à mesure que l'apprentissage progresse. Si une alerte mentionne une app ou une adresse IP inconnue, ouvrez la fenêtre d'audit des journaux pour plus de détails."
+                recommendation: "Quand une notification arrive, collez la commande de sa ligne « Vérifier » dans le Terminal pour voir les lignes. Si c'était votre action (votre sudo, votre échec de connexion), rien à faire."
             ),
             LocalizedEntry(
                 id: "feat_containment_incident_timeline",
@@ -907,7 +910,7 @@ extension RoamSwitchKnowledgeBase {
                 title: "Licence Pro à vie (achat unique, jusqu'à 2 Mac)",
                 summary: "Pro est une licence à vie à achat unique (2 980 ¥ / 19,99 $) utilisable sur jusqu'à 2 Mac. Le jeton de licence signé Ed25519 est vérifié sur l'appareil, donc Pro continue de fonctionner hors ligne après activation.",
                 details: """
-                • Fonctionnalités Pro : les défenses automatiques marquées (Pro) dans le menu (détection par fichiers leurres de rançongiciel, coupure liée à XProtect, blocage automatique de port inconnu et isolement de serveur de développement, blocage automatique d'usurpation ARP, épinglage ARP/NDP de la passerelle, tunnel VPN, protections BadUSB et stockage USB, Protection Web et E-mail, Protection DNS contre les menaces, Protection des liens, désactivation automatique du Bluetooth, protection ClickFix, surveillance des enregistrements de démarrage automatique, détection des risques Docker, surveillance de l'altération des fichiers critiques, audit automatique des journaux), notifications de menace en temps réel, avertissements de patrouille et analyses planifiées, export CSV des journaux, et plus.
+                • Fonctionnalités Pro : les défenses automatiques marquées (Pro) dans le menu (détection par fichiers leurres de rançongiciel, coupure liée à XProtect, blocage automatique de port inconnu et isolement de serveur de développement, blocage automatique d'usurpation ARP, épinglage ARP/NDP de la passerelle, tunnel VPN, protections BadUSB et stockage USB, Protection Web et E-mail, Protection DNS contre les menaces, Protection des liens, désactivation automatique du Bluetooth, protection ClickFix, surveillance des enregistrements de démarrage automatique, détection des risques Docker, surveillance de l'altération des fichiers critiques, audit périodique des journaux), notifications de menace en temps réel, avertissements de patrouille et analyses planifiées, export CSV des journaux, et plus.
                 • Types de licence : Pro à vie (2 Mac) et Team à vie (5 Mac).
                 • Activation : saisissez votre clé de licence (ROAM-XXXX-…) depuis « 💎 Activer / Acheter Pro… ». Le jeton signé émis par le serveur est vérifié avec la clé publique intégrée à l'app et stocké dans le trousseau.
                 • Désactivation : depuis la fenêtre de licence. Retire la licence de ce Mac et libère la place sur le serveur (la désactivation locale se produit toujours, même en cas d'échec de la requête réseau).
@@ -1347,16 +1350,16 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "alert_log_audit_anomaly",
-                title: "🔔 Audit des journaux : motifs anormaux détectés",
-                summary: "Envoyée par l'audit automatique des journaux lorsqu'il trouve des motifs de journal jamais vus sur ce Mac ([nouveau]) ou des journaux bien plus fréquents que d'habitude ([pic z=…]).",
+                title: "🔔 Audit des journaux : lignes d'un type connu détectées",
+                summary: "Envoyée par l'audit périodique des journaux quand il trouve des lignes dont le type et la marche à suivre sont clairs, comme des échecs d'authentification et des changements d'autorisations. Le titre indique le type et le nombre.",
                 details: """
-                • Cause : généralement des changements attendus liés au branchement d'un nouvel appareil ou à des mises à jour d'apps ou de macOS, mais parfois des tentatives de connexion suspectes ou une activité de processus inconnue.
-                • Contenu : la répartition du nombre, jusqu'à 3 vraies lignes de journal, la progression de l'apprentissage (par exemple apprentissage de la fréquence en cours : 2/3 observations), et une explication en langage clair.
+                • Cause : indiquée par type sur la ligne « Cause » de la notification (par exemple un mauvais mot de passe sudo, une connexion SSH refusée ou un blocage de Gatekeeper).
+                • Contenu : la conclusion, l'action, la cause, le programme et sa signature, la première occurrence, la fréquence passée de ce type et la commande de vérification. La gravité est fixée par type.
                 • Défense automatique : aucune (notification uniquement).
                 """,
                 recommendation: """
-                1. S'il n'y a que de nouveaux motifs et aucune app ou adresse IP inconnue, aucune action n'est nécessaire.
-                2. Si un pic de fréquence coïncide avec quelque chose que vous n'avez pas fait, ouvrez « 📜 Audit des journaux de sécurité Mac… » pour plus de détails.
+                1. Si c'était votre action (votre sudo, votre échec de connexion), aucune action n'est nécessaire.
+                2. Si vous ne reconnaissez pas l'activité, suivez l'action de la notification et regardez les lignes avec sa commande de vérification.
                 3. En cas de doute, utilisez « Copier les éléments pour consultation IA » pour interroger un assistant IA.
                 """
             ),
@@ -1449,7 +1452,7 @@ extension RoamSwitchKnowledgeBase {
                 title: "Protections activées automatiquement avec Pro, et protections optionnelles",
                 summary: "Lors de la première activation d'une licence Pro, les protections de défense autonome qui se contentent surtout de notifier, déclenchent rarement de fausses alertes et ne demandent ni autorisation ni réglage supplémentaire sont activées automatiquement. Tout ce qui peut gêner l'usage normal, ou qui demande des autorisations, une configuration ou une communication externe supplémentaires, reste optionnel. Ensuite, le choix d'activation/désactivation que vous faites pour chaque protection est respecté.",
                 details: """
-                • Activées automatiquement (une fois, lors de la première activation de Pro) : blocage automatique des ports d'écoute inconnus, détection des scans de ports entrants (y compris le blocage automatique de 10 minutes de la source du scan), détection de la force brute SSH (active seulement quand la connexion à distance est activée), détection par fichiers leurres de rançongiciel et détection par entropie, honeytokens d'identifiants, blocage automatique à la détection d'usurpation ARP, déconnexion réseau automatique lors d'une détection de malware par XProtect, audit automatique des journaux, surveillance de l'altération des fichiers système critiques, surveillance de l'altération des fichiers de verrouillage de dépendances, détection des reverse shells et surveillance des changements de réglages réseau. Lorsque les coupures ARP et XProtect sont activées, un avis unique explique la fonction.
+                • Activées automatiquement (une fois, lors de la première activation de Pro) : blocage automatique des ports d'écoute inconnus, détection des scans de ports entrants (y compris le blocage automatique de 10 minutes de la source du scan), détection de la force brute SSH (active seulement quand la connexion à distance est activée), détection par fichiers leurres de rançongiciel et détection par entropie, honeytokens d'identifiants, blocage automatique à la détection d'usurpation ARP, déconnexion réseau automatique lors d'une détection de malware par XProtect, audit périodique des journaux, surveillance de l'altération des fichiers système critiques, surveillance de l'altération des fichiers de verrouillage de dépendances, détection des reverse shells et surveillance des changements de réglages réseau. Lorsque les coupures ARP et XProtect sont activées, un avis unique explique la fonction.
                 • Activées par défaut avec Pro : Protection Web et E-mail, surveillance des enregistrements de démarrage automatique (LaunchAgent/Daemon), Protection DNS contre les menaces (appliquée uniquement sur les réseaux hors domicile) et Protection des liens (blocage automatique des sites manifestement frauduleux).
                 • Désactivées par défaut (optionnelles) : blocage automatique ClickFix, détection des risques Docker, protection physique du port BadUSB, blocage automatique du stockage USB, épinglage ARP/NDP de la passerelle, désactivation automatique du Bluetooth, journal d'exécution des processus, surveillance de l'accès aux identifiants du navigateur, tunnel VPN, appairage du Sensor, vérification active des vulnérabilités et vérification des signatures npm. Chacune peut interrompre l'usage normal (coupure réseau, périphériques de saisie, disques externes, audio), demande une autorisation ou une installation supplémentaire (Accès complet au disque, Accessibilité, blueutil), exige des réglages personnels comme une liste d'autorisations, ou contacte un serveur externe. Le fournisseur de la Protection DNS contre les menaces est votre choix.
                 • Activée par défaut même dans l'édition gratuite : protection du presse-papiers (clés API et commandes ClickFix).
@@ -1558,7 +1561,7 @@ extension RoamSwitchKnowledgeBase {
                 • Blocage automatique d'usurpation ARP, épinglage ARP/NDP de la passerelle, tunnel VPN (WireGuard / Tailscale), avertissements de jumeau maléfique
                 • Protection de clavier BadUSB, blocage automatique du stockage USB
                 • Protection Web et E-mail (analyse auto, quarantaine, avertissements Pickle), Protection DNS contre les menaces, Protection des liens
-                • Surveillance des enregistrements de démarrage automatique, détection des risques Docker, surveillance de l'altération des fichiers critiques, audit automatique des journaux
+                • Surveillance des enregistrements de démarrage automatique, détection des risques Docker, surveillance de l'altération des fichiers critiques, audit périodique des journaux
                 • Désactivation automatique du Bluetooth, notifications de menace en temps réel, avertissements de patrouille, mises à jour des définitions et analyses planifiées, export CSV des journaux
                 """,
                 recommendation: "Choisissez Pro si vous avez besoin de confinement automatique, de défense en temps réel et de surveillance en arrière-plan."
@@ -1740,14 +1743,14 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "faq_log_audit_repeated_alerts",
                 title: "Les notifications de l'audit des journaux n'arrêtent pas d'arriver",
-                summary: "L'audit automatique des journaux apprend le comportement normal des journaux de ce Mac au fur et à mesure de son exécution. Les alertes augmentent juste après la configuration ou une mise à jour majeure et diminuent naturellement à mesure que l'apprentissage progresse.",
+                summary: "Les notifications d'un même type continuent parce que les lignes de ce type continuent. Les anomalies purement statistiques dont le type est indéterminé ne sont pas notifiées.",
                 details: """
-                • Nouveaux motifs : une fois signalé, un motif devient connu et n'est plus renotifié pour le même contenu.
-                • Pics de fréquence : l'apprentissage de chaque motif se termine après 3 observations ; ensuite, un volume normal ne déclenche pas d'alerte. Tant que la notification affiche encore quelque chose comme « apprentissage de la fréquence en cours : 2/3 observations », l'apprentissage se poursuit.
-                • Causes courantes : mises à jour de macOS ou des apps, connexion de nouveaux appareils, charge élevée temporaire.
-                • Pour l'arrêter : désactivez dans le menu « Audit automatique des journaux (apprend les nouveaux motifs et anomalies de fréquence selon un calendrier) (Pro) » (l'audit manuel des journaux reste disponible).
+                • Quand un type continue : la ligne de fréquence passée montre la différence avec l'habitude. La fréquence passée est apprise sur 3 vérifications.
+                • Ce qui n'est pas notifié : les nouveaux motifs et pics de fréquence dont le type est indéterminé. Ils figurent dans l'historique des notifications sous « Audit des journaux : nouveaux motifs non classés : N ».
+                • Causes fréquentes : mots de passe sudo ou de connexion mal saisis, tentatives de mot de passe SSH depuis l'extérieur, plantages d'apps après une mise à jour.
+                • Pour l'arrêter : désactivez « Audit périodique des journaux (Pro) » dans le menu (l'audit manuel reste disponible).
                 """,
-                recommendation: "Tant que les alertes ne contiennent pas de nom d'app inconnu, d'adresse IP ou d'échecs sudo, il est acceptable d'attendre un peu."
+                recommendation: "Si les échecs de connexion SSH continuent et que vous n'avez pas besoin de la connexion à distance, désactivez-la dans Réglages Système > Général > Partage."
             ),
             LocalizedEntry(
                 id: "faq_zero_telemetry",

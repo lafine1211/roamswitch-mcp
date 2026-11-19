@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.1.4 (build 223).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.0 (build 224).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -155,6 +155,8 @@ public enum ProtectionPresetTable {
               risks: [.falsePositive], warning: "自分でシェルの履歴やログを消したときも、通知が出ます。"),
         optIn("outboundScanWatch", "OutboundScanWatchEnabled", "内部ネットワークへの走査の検知", [false, false, false, true],
               risks: [.falsePositive], warning: "管理者や一括実行のツールが意図して走査したときも、通知が出ます。"),
+        optIn("beaconPeriodicityWatch", "BeaconPeriodicityWatchEnabled", "周期的な通信の検知", [false, false, false, true],
+              risks: [.falsePositive], warning: "更新の確認、同期、ヘルスチェックのような、周期的な通信でも通知が出ます。通知が出たら、プログラムの通知を止められます。"),
         // The detections that exist only through Endpoint Security events: no Linux counterpart and no measured rate of false
         // alarms (sudo, TCC and profiles are routine), so off in every preset but the maximum, notify only.
         optIn("esAccountWatch", "ESAccountWatchEnabled", "認証・権限・アカウントの変更の監視", [false, false, false, true],
@@ -265,6 +267,9 @@ public enum ProtectionPresetTable {
         "RoamSwitch.ReverseShellWatch.AllowedV1", "RoamSwitch.WebMailGuardCustomWatchedPaths",             // the person's own lists
         "RoamSwitch.DNSThreatGuardProvider", "RoamSwitch.PackageCveWatchedFolders",
         "RoamSwitch.AirGapAutoWiFiKillEnabled", "RoamSwitch.ProSecurityDefaultsApplied",
+        // The person's own choice: a preset that turned it on would open a door by its name alone, and one that turned it off would
+        // cut the SSH over Tailscale of someone who chose it. The folders the person excluded from ransomware detection are their own list.
+        "RoamSwitch.TailscaleInboundAllowed", "RoamSwitch.RansomwareExcludedFolders",
     ]
 
     // MARK: - Reading and comparing

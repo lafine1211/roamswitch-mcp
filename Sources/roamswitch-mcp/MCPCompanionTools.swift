@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.1.4 (build 223).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.0 (build 224).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -147,13 +147,11 @@ enum MCPCompanion {
             process.standardInput = FileHandle.nullDevice
             do { try process.run() } catch { return .failure(.couldNotStart(clip(error.localizedDescription, 120))) }
 
-            let pid = process.processIdentifier
             let lock = NSLock()
             var timedOut = false
             let watchdog = DispatchWorkItem {
                 lock.lock(); timedOut = true; lock.unlock()
-                process.terminate()
-                DispatchQueue.global().asyncAfter(deadline: .now() + 3) { if process.isRunning { kill(pid, SIGKILL) } }
+                ChildProcessTree.end(process, grace: 3)
             }
             DispatchQueue.global().asyncAfter(deadline: .now() + runner.timeout, execute: watchdog)
 
@@ -174,7 +172,7 @@ enum MCPCompanion {
             let reader = outPipe.fileHandleForReading
             while let chunk = try? reader.read(upToCount: 64 * 1024), !chunk.isEmpty {
                 data.append(chunk)
-                if data.count > runner.maxOutputBytes { tooLarge = true; process.terminate(); break }
+                if data.count > runner.maxOutputBytes { tooLarge = true; ChildProcessTree.end(process, grace: 3); break }
             }
             process.waitUntilExitWithoutRunLoop()
             watchdog.cancel()
@@ -574,7 +572,11 @@ enum MCPCompanion {
             input.feedVersion = defaults.string(forKey: feedVersionKey)
             input.enforcement = enforcement
             input.publishedMode = (try? String(contentsOfFile: stateDir + "/mode", encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines)
-            input.eventsLog = readTail(path: stateDir + "/events.log")
+            // The real log is root-only: the app keeps the lines the helper hands over (`LinkEventsMirror`). A folder that is not the filter's
+            // (a test) is read as a file.
+            input.eventsLog = stateDir == LinkFilterEngine.stateDir
+                ? LinkEventsMirror.text(defaults: defaults, now: now.timeIntervalSince1970)
+                : readTail(path: stateDir + "/events.log")
             return input
         }
 

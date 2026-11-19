@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.1.4 (build 223).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.0 (build 224).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -98,23 +98,12 @@ enum GatewayFingerprint {
         runShell("/usr/sbin/arp", ["-an"])
     }
 
+    /// 10 s: `arp -an` reads the kernel's neighbour table. One that does not finish is ended with what it started
+    /// (TimedProcess) and the answer is "not read" (nil), the same as a `arp` that could not be started.
+    static let shellTimeout: TimeInterval = 10
+
     private static func runShell(_ launchPath: String, _ arguments: [String]) -> String? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: launchPath)
-        process.arguments = arguments
-
-        let outputPipe = Pipe()
-        process.standardOutput = outputPipe
-        process.standardError = Pipe()
-
-        do {
-            try process.run()
-        } catch {
-            return nil
-        }
-        process.waitUntilExitWithoutRunLoop()
-
-        let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
-        return String(data: data, encoding: .utf8)
+        guard let r = TimedProcess.run(launchPath, arguments, timeout: shellTimeout), !r.timedOut else { return nil }
+        return r.stdoutText
     }
 }

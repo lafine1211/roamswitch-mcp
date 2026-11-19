@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 2.1.4 (build 223). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 2.2.0 (build 224). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -136,7 +136,7 @@ final class GuardReaderHealthTests: XCTestCase {
         NSTemporaryDirectory() + "reader-health-\(UUID().uuidString).json"
     }
 
-    func testHelperFileRoundTripsAndIsWorldReadable() throws {
+    func testHelperFileRoundTripsAndIsRootOnly() throws {
         let path = tempPath()
         defer { try? FileManager.default.removeItem(atPath: path) }
         var a = GuardReaderHealth(); a.markUnreadable(reason: "launch_failed", now: 5)
@@ -147,7 +147,7 @@ final class GuardReaderHealthTests: XCTestCase {
         XCTAssertEqual(read["portScanTcpdump"], a)
         XCTAssertEqual(read["linkSource"], b)
         let mode = (try FileManager.default.attributesOfItem(atPath: path)[.posixPermissions] as? NSNumber)?.intValue
-        XCTAssertEqual(mode, 0o644, "the app and the MCP server run as the user and read it")
+        XCTAssertEqual(mode, 0o600, "root-only: the app and the MCP server read the snapshot the helper hands over (HelperHealthMirror)")
         XCTAssertTrue(GuardReaderHealthStore.readHelper(path: "/nonexistent/x.json").isEmpty)
     }
 

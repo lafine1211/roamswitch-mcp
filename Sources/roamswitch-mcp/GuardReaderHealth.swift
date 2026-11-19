@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.1.4 (build 223).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.0 (build 224).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -120,6 +120,9 @@ public struct GuardReaderHealth: Codable, Equatable {
     public var reason: String?
     public var linesDropped: UInt64?
     public var oversizeDropped: UInt64?
+    /// When a line was last dropped, or an oversize buffer thrown away, or events were lost on the way (unix seconds). The
+    /// counts alone only ever grow; this is what lets a loss in the last day mark the guard `partial` and an old one stop doing so.
+    public var lastDropAt: Double?
     /// Files the last scan or batch could not open or read and so skipped (nil for a source that has no such step).
     public var filesUnreadable: Int?
     /// When a scan last skipped at least one file (unix seconds).
@@ -140,7 +143,7 @@ public struct GuardReaderHealth: Codable, Equatable {
     public init() {}
 
     private enum CodingKeys: String, CodingKey {
-        case active, restarts, lastRestartAt, gaps, lastGapAt, inGap, unreadable, reason, linesDropped, oversizeDropped
+        case active, restarts, lastRestartAt, gaps, lastGapAt, inGap, unreadable, reason, linesDropped, oversizeDropped, lastDropAt
         case filesUnreadable, filesUnreadableAt, foldersUnreadable, filesTruncated, scopeLimited, skippedSamples, updatedAt
     }
 
@@ -156,6 +159,7 @@ public struct GuardReaderHealth: Codable, Equatable {
         reason = try c.decodeIfPresent(String.self, forKey: .reason)
         linesDropped = try c.decodeIfPresent(UInt64.self, forKey: .linesDropped)
         oversizeDropped = try c.decodeIfPresent(UInt64.self, forKey: .oversizeDropped)
+        lastDropAt = try c.decodeIfPresent(Double.self, forKey: .lastDropAt)
         filesUnreadable = try c.decodeIfPresent(Int.self, forKey: .filesUnreadable)
         filesUnreadableAt = try c.decodeIfPresent(Double.self, forKey: .filesUnreadableAt)
         foldersUnreadable = try c.decodeIfPresent(Int.self, forKey: .foldersUnreadable)
@@ -173,6 +177,12 @@ public struct GuardReaderHealth: Codable, Equatable {
         gaps += 1
         lastGapAt = now
     }
+
+    /// The record says the reader is not (yet) reading: it is stopped, it cannot read, or a gap is still open. A reader
+    /// that decides again and again whether it is fine calls `markStarted` when this is true. A gap is open after a
+    /// restart of the process that owned the record (`markLostWhileProcessWasDown` leaves `active` true), so
+    /// `!active || unreadable` alone would never close it.
+    public var needsStart: Bool { !active || unreadable || inGap }
 
     /// The reader began reading. Closes an open gap.
     public mutating func markStarted(now: Double) {
@@ -218,11 +228,26 @@ public struct GuardReaderHealth: Codable, Equatable {
     public mutating func addDropped(_ lines: Int, now: Double) {
         guard lines > 0 else { return }
         linesDropped = (linesDropped ?? 0) + UInt64(lines)
+        lastDropAt = now
         updatedAt = now
     }
 
     public mutating func addOversize(now: Double) {
         oversizeDropped = (oversizeDropped ?? 0) + 1
+        lastDropAt = now
+        updatedAt = now
+    }
+
+    /// Events were lost on the way to this reader while it kept running (the kernel dropped them for the Endpoint Security client,
+    /// the extension's queue was full, a batch could not be written). `events` is how many were lost, 0 when only the fact is known.
+    /// Counts one gap that is already closed: nothing is replayed, and the guard is `partial` for the next day.
+    public mutating func recordLoss(events: UInt64, now: Double) {
+        gaps += 1
+        lastGapAt = now
+        if events > 0 {
+            linesDropped = (linesDropped ?? 0) &+ events
+            lastDropAt = now
+        }
         updatedAt = now
     }
 
@@ -278,9 +303,79 @@ public struct GuardReaderHealth: Codable, Equatable {
     }
 }
 
-/// Persists the records. The helper writes one world-readable file (same folder and mode as the exec
-/// recorder's status file); the app writes its own readers to the shared preferences. The MCP server
-/// reads both.
+/// What the helper (root) knows about its own readers, for the app and the MCP server, which are not root.
+///
+/// The files the helper writes (`reader_health.json`, `exec_recorder_status.json`, `file_actor_status.json`) are **root-only, mode 0600**:
+/// the times a guard was blind, how many lines it dropped and when it restarted say when the Mac was not watched, and another account
+/// has no business reading that. The app asks the helper (`HelperProtocol.getHelperHealthSnapshot`) every few seconds and keeps the
+/// answer in its preferences (the same shared preferences that already carry the app's own records); the app's screens and the MCP server
+/// read it there. Nothing in a reader reads the root's files.
+///
+/// **Where it is kept, and who can read it.** In the preferences of the account that runs the app (`~/Library/Preferences/com.tetsuharu.RoamSwitch.plist`,
+/// owner the account, mode 0600, inside `~/Library`, which is 0700). Another account cannot open it. The MCP server is started by the person's
+/// AI client as that same account and reads the same preferences (`AppLanguage.sharedDefaults`, the suite `com.tetsuharu.RoamSwitch`, which is
+/// the app's own domain). A process of the same account can read it, as it can read everything else of that account's.
+///
+/// A helper that cannot answer (an older one, or none): the app reads the files as the account can (an older helper has not narrowed them;
+/// with a newer one the open is refused). A snapshot older than `freshSecs` counts for nothing. The guards that depend on the helper's
+/// records then show as unknown, never as healthy.
+public struct HelperHealthSnapshot: Codable {
+    /// The helper's clock, when it read the files.
+    public var fetchedAt: Double
+    public var readerHealth: [String: GuardReaderHealth]
+    public var execStatus: ExecRecorderStatus?
+    public var fileActorStatus: FileActorStatus?
+
+    public init(fetchedAt: Double, readerHealth: [String: GuardReaderHealth], execStatus: ExecRecorderStatus?, fileActorStatus: FileActorStatus?) {
+        self.fetchedAt = fetchedAt; self.readerHealth = readerHealth; self.execStatus = execStatus; self.fileActorStatus = fileActorStatus
+    }
+}
+
+public enum HelperHealthMirror {
+    public static let defaultsKey = "RoamSwitch.HelperHealthMirrorV1"
+    /// Older than this (the app is not running, or the helper does not answer), the snapshot is not evidence of anything.
+    public static let freshSecs: Double = 600
+
+    public static func store(_ snapshot: HelperHealthSnapshot, defaults: UserDefaults = .standard, appNow: Double = Date().timeIntervalSince1970) {
+        // The time on this side is what is judged: the helper's clock and the reader's are the same Mac's, but a stored copy has an age.
+        // Sorted keys: the same answer encodes to the same bytes, which is how "the same" is told.
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        var copy = snapshot
+        copy.fetchedAt = 0
+        guard let body = try? encoder.encode(copy) else { return }
+        // The preferences file is large and every write rewrites it: an answer that is the same as the last one is written again only
+        // when the last write is getting old (a quarter of the time it is believed).
+        if let last = defaults.data(forKey: defaultsKey), let prior = try? JSONDecoder().decode(HelperHealthSnapshot.self, from: last),
+           appNow - prior.fetchedAt < freshSecs / 4, appNow >= prior.fetchedAt {
+            var same = prior
+            same.fetchedAt = 0
+            if (try? encoder.encode(same)) == body { return }
+        }
+        copy.fetchedAt = appNow
+        if let data = try? JSONEncoder().encode(copy) { defaults.set(data, forKey: defaultsKey) }
+    }
+
+    /// What the helper (root) answers: its three files, read now. For the helper; no other process can read them.
+    public static func snapshotFromFiles(now: Double = Date().timeIntervalSince1970,
+                                         helperPath: String = GuardReaderHealthStore.helperFile,
+                                         execStatusPath: String = ExecRecorderPaths.statusFile,
+                                         fileActorPath: String = FileActorStatus.path) -> HelperHealthSnapshot {
+        HelperHealthSnapshot(fetchedAt: now, readerHealth: GuardReaderHealthStore.readHelper(path: helperPath),
+                             execStatus: ExecRecorderStatus.read(path: execStatusPath), fileActorStatus: FileActorStatus.read(path: fileActorPath))
+    }
+
+    /// The last snapshot, nil when there is none or it is stale.
+    public static func read(defaults: UserDefaults, now: Double = Date().timeIntervalSince1970) -> HelperHealthSnapshot? {
+        guard let data = defaults.data(forKey: defaultsKey),
+              let s = try? JSONDecoder().decode(HelperHealthSnapshot.self, from: data),
+              now - s.fetchedAt <= freshSecs, s.fetchedAt - now <= freshSecs else { return nil }
+        return s
+    }
+}
+
+/// Persists the records. The helper writes one root-only file (`reader_health.json`, mode 0600); the app writes its own readers to the
+/// shared preferences. The app and the MCP server read the helper's through `HelperHealthMirror`.
 public enum GuardReaderHealthStore {
     public static let stateDir = "/Library/Application Support/RoamSwitch"
     public static let helperFile = stateDir + "/reader_health.json"
@@ -290,6 +385,7 @@ public enum GuardReaderHealthStore {
 
     struct File: Codable { var sources: [String: GuardReaderHealth] = [:] }
 
+    /// Reads the helper's file: **root only** (mode 0600). For the helper itself; the app and the MCP server use `HelperHealthMirror`.
     public static func readHelper(path: String = helperFile) -> [String: GuardReaderHealth] {
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
               let file = try? JSONDecoder().decode(File.self, from: data) else { return [:] }
@@ -303,8 +399,7 @@ public enum GuardReaderHealthStore {
         guard let data = try? JSONEncoder().encode(file) else { return }
         let dir = (path as NSString).deletingLastPathComponent
         try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-        try? AtomicFile.write(data, to: URL(fileURLWithPath: path), mode: 0o644)
-        chmod(path, 0o644)
+        try? AtomicFile.write(data, to: URL(fileURLWithPath: path), mode: 0o600)
     }
 
     public static func readApp(defaults: UserDefaults) -> [String: GuardReaderHealth] {
@@ -342,12 +437,16 @@ public enum GuardReaderHealthStore {
         return h
     }
 
-    /// Every record the app or the MCP server can see, by source id.
-    public static func all(defaults: UserDefaults, helperPath: String = helperFile,
-                           execStatusPath: String = ExecRecorderPaths.statusFile) -> [String: GuardReaderHealth] {
-        var out = readHelper(path: helperPath)
+    /// Every record the app or the MCP server can see, by source id: the app's own, and the helper's from the snapshot the app keeps
+    /// (`HelperHealthMirror`). With `helperPath` and `execStatusPath` (a test, or the helper) the files are read instead.
+    public static func all(defaults: UserDefaults, now: Double = Date().timeIntervalSince1970,
+                           helperPath: String? = nil, execStatusPath: String? = nil) -> [String: GuardReaderHealth] {
+        var out: [String: GuardReaderHealth] = [:]
+        let snapshot = (helperPath == nil && execStatusPath == nil) ? HelperHealthMirror.read(defaults: defaults, now: now) : nil
+        out = helperPath.map { readHelper(path: $0) } ?? snapshot?.readerHealth ?? [:]
         for (k, v) in readApp(defaults: defaults) { out[k] = v }
-        if let exec = health(fromExecRecorder: ExecRecorderStatus.read(path: execStatusPath)) { out["execRecorder"] = exec }
+        let exec = execStatusPath.map { ExecRecorderStatus.read(path: $0) } ?? snapshot?.execStatus
+        if let exec = health(fromExecRecorder: exec) { out["execRecorder"] = exec }
         return out
     }
 
@@ -363,7 +462,25 @@ public enum GuardReaderHealthStore {
     }
 
     /// The guards of `get_guard_status` that read a stream or a file, and which health records belong to them.
-    public static let guardSources: [String: GuardSources] = [
+    public static let guardSources: [String: GuardSources] = withEndpointSecurityClients(baseGuardSources)
+
+    /// A guard that reads events of the Endpoint Security extension also depends on the client that delivers them: a loss in
+    /// that client (`ESDropWatch`) is a gap of the guard, shown as `partial` for the next day. The records are auxiliary: a
+    /// guard that has no fallback and whose extension does not run is `off` by the route record, not by these.
+    static func withEndpointSecurityClients(_ base: [String: GuardSources]) -> [String: GuardSources] {
+        var out = base
+        for (key, clients) in ESDropAccounting.clientSourcesByGuard {
+            if let def = out[key] {
+                out[key] = GuardSources(sources: def.sources, auxiliary: def.auxiliary + clients.filter { !def.auxiliary.contains($0) && !def.sources.contains($0) },
+                                        idleIsHealthy: def.idleIsHealthy)
+            } else {
+                out[key] = GuardSources(sources: [], auxiliary: clients, idleIsHealthy: true)
+            }
+        }
+        return out
+    }
+
+    private static let baseGuardSources: [String: GuardSources] = [
         "sshGuard": GuardSources(sources: ["sshLogStream"], auxiliary: [], idleIsHealthy: true),
         // pflog0 is the input; the second capture only checks whether a source address is forged.
         "portScanGuard": GuardSources(sources: ["portScanTcpdump"], auxiliary: ["linkSource"], idleIsHealthy: false),
@@ -444,6 +561,7 @@ public enum GuardReaderHealthStore {
         // Input lost recently, or the last scan had to skip files it could not read.
         func lostRecently(_ h: GuardReaderHealth) -> Bool {
             h.inGap || (h.lastGapAt.map { now - $0 <= gapWindowSecs } ?? false)
+                || (h.lastDropAt.map { now - $0 <= gapWindowSecs } ?? false)
                 || (h.filesUnreadable ?? 0) > 0 || (h.foldersUnreadable ?? 0) > 0 || (h.filesTruncated ?? 0) > 0
                 || h.scopeLimited == true
         }
@@ -489,6 +607,15 @@ public final class GuardReaderHealthRecorder {
     }
 
     public var snapshot: GuardReaderHealth { lock.lock(); defer { lock.unlock() }; return health }
+
+    /// For a reader whose own check says "it is fine now": starts the record when it is stopped, unreadable or still in a gap
+    /// (the first check after a restart closes the gap the restart left). Returns whether anything was written.
+    @discardableResult
+    public func ensureStarted(now: Double = Date().timeIntervalSince1970) -> Bool {
+        guard snapshot.needsStart else { return false }
+        update(now: now, force: true) { h, t in h.markStarted(now: t) }
+        return true
+    }
 
     public func update(now: Double = Date().timeIntervalSince1970, force: Bool = false, _ change: (inout GuardReaderHealth, Double) -> Void) {
         lock.lock()
@@ -591,6 +718,7 @@ extension GuardReaderHealthStore {
         "esInjectionWatch": Requirements(pro: true, helper: .required),
         "esQuarantineWatch": Requirements(pro: true, helper: .required),
         "outboundScanWatch": Requirements(pro: true, helper: .required),             // the helper writes the extension's settings
+        "beaconPeriodicityWatch": Requirements(pro: true, helper: .required),        // the helper writes the extension's settings
         "arpSpoofAutoContainment": Requirements(pro: true, helper: .partial),        // detection in the app; the Air-Gap is the helper's
         "usbKeyboardGuard": Requirements(pro: true, helper: .none),
         "usbStorageGuard": Requirements(pro: true, helper: .none),

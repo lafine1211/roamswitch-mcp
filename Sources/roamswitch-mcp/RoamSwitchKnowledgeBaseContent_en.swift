@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.1.4 (build 223).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.0 (build 224).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -112,7 +112,7 @@ extension RoamSwitchKnowledgeBase {
                 • WireGuard: requires Homebrew's `wireguard-tools` (`brew install wireguard-tools`). Import a config with "Import WireGuard config (.conf)…". You supply the config (Mullvad, IVPN, Proton VPN, your own server, your employer); RoamSwitch does not provide VPN servers.
                 • WireGuard kill switch: pf `block drop all` with passes only for lo, the tunnel interface, the UDP handshake to the endpoint, DHCP, and ICMP. Nothing leaks in cleartext while the tunnel is down.
                 • Tailscale: for people who already use Tailscale. RoamSwitch doesn't install it or log in; it reads `tailscale status` and runs `tailscale set --exit-node=<node>`. An exit node is required (all traffic goes through it). An offline exit node is shown in the status line.
-                • Tailscale CLI (standalone) recommended: `brew install tailscale` → `sudo tailscaled install-system-daemon` → `sudo tailscale up`. The App Store (GUI) version can't be driven with `tailscale set` from outside the app, so pick the exit node in the Tailscale app and RoamSwitch handles status display and the kill switch only.
+                • Only the Homebrew CLI of Tailscale works: `brew install tailscale` → `sudo tailscaled install-system-daemon` → `sudo tailscale up`. The Tailscale apps (the App Store version and the app from Tailscale's own site) can't be driven with `tailscale set` from outside the app, so pick the exit node in the Tailscale app and RoamSwitch handles status display and the kill switch only.
                 • Tailscale kill switch (off by default, opt-in): pf passes only lo, Tailscale's utun, CGNAT 100.64.0.0/10, DNS, STUN 3478, 41641, DERP tcp 443, DHCP, and ICMP. Looser than WireGuard's ("hard to leak" rather than leak-proof), and on some networks it can interfere with Tailscale's own connectivity, hence optional.
                 • Automatic: tunnel / exit node up on untrusted networks, down on trusted ones. If the license lapses, the tunnel and kill switch are released automatically.
                 """,
@@ -389,14 +389,15 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "feat_runtime_threat_containment",
                 title: "Auto-Disconnect Network on XProtect Malware Detection (Pro)",
-                summary: "The moment Apple's built-in XProtect / XProtect Remediator actually detects or removes malware, the network is cut in an emergency air-gap. A Gatekeeper block of an unsigned app does not cut the network; it only sends a notification.",
+                summary: "The moment Apple's built-in XProtect actually detects or removes malware, the network is cut in an emergency air-gap. The cut-off works only when RoamSwitch's Endpoint Security extension receives XProtect's detection or removal event. A Gatekeeper block of an unsigned app does not cut the network; it only sends a notification.",
                 details: """
-                • Signal source: a long-running `/usr/bin/log stream` subscription in ndjson format (blocking wait rather than polling, so idle CPU cost is near zero) watches XProtect-related system logs.
-                • Trigger: only when XProtect logs a critical malware finding does air-gap containment (including Wi-Fi radio off) engage, regardless of the network's trust level.
+                • Signal source: XProtect's detection or removal event, received by RoamSwitch's Endpoint Security extension (a structured event with the malware's name, the path, the signature version and an incident identifier). An event without a malware name does not cut the network. One incident cuts it once.
+                • While the extension is not running (before approval, macOS older than 13): the network is not cut. As a fallback, a `/usr/bin/log stream` subscription reads Gatekeeper's decision log, and an XProtect verdict line (one that names a malware and a file) gives a high-severity notification with that name and file. A single log line never cuts the network. While the extension runs, a log line waits 60 seconds, and if no event arrives it gives the same notification.
+                • Trigger: only when the event above arrives does air-gap containment (including Wi-Fi radio off) engage, regardless of the network's trust level.
                 • Versus Gatekeeper: everyday Gatekeeper events, such as blocking a developer's own unsigned build, only raise the notification "Gatekeeper blocked an unsigned app from running".
                 • Consistency: it shares its classification logic with the manual Mac Security Log Audit.
-                • It doesn't use an EndpointSecurity entitlement, so this is immediate containment after detection, not pre-execution blocking.
-                • Default: turned on automatically the first time Pro is activated (with a one-time notice that automatic cutoff is enabled). Status via the MCP tool `get_runtime_threat_status`; test with "Simulate Malware-Detection Air-Gap (Test)".
+                • This is immediate containment after detection, not pre-execution blocking.
+                • Default: turned on automatically the first time Pro is activated (with a one-time notice that automatic cutoff is enabled). Status via the MCP tool `get_runtime_threat_status`; test with "Simulate Malware-Detection Air-Gap (Test)". The Endpoint Security extension it uses must be approved in System Settings.
                 """,
                 recommendation: "Keep it on as automatic defense linked to Apple's own malware engine. Frequently running your own unsigned apps won't trigger it, because Gatekeeper blocks alone never cut the network."
             ),
@@ -560,15 +561,17 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "feat_scheduled_log_audit",
-                title: "Automatic Log Audit (Learns New Patterns & Frequency Anomalies on a Schedule) (Pro)",
-                summary: "Runs the log audit's template anomaly detection in the background every hour, continuously learning this Mac's normal log behavior. When it finds new patterns or frequency spikes, it notifies you with real log lines and a plain-language explanation.",
+                title: "Scheduled Log Audit (Pro)",
+                summary: "Runs the log audit in the background every hour. It notifies you only about log lines whose kind and next step are clear, such as authentication failures and permission changes. Statistical anomalies whose kind cannot be determined are not notified; they are recorded in notification history.",
                 details: """
                 • Schedule: every hour, analyzing the last hour. The first scan runs about 10 seconds after enabling, but because it includes the app's own startup logs, that run only learns and never notifies.
-                • Notification: the anomaly count (split into new patterns and spikes), up to 3 real log lines, a learning-progress note, and an explanation for non-experts. A batch that includes a frequency spike shows a Notification Center alert; a batch of new patterns only is recorded to notification history without a popup. A new pattern becomes "known" once recorded and is never re-recorded for the same content; a spike stops alerting once that pattern's own baseline has been learned.
+                • Kinds that notify: refused sudo attempts (a wrong password and the like), SSH login failures and successes, failed administrator authentication, privacy permission resets, Gatekeeper blocks, kernel warnings (panic, watchdog), disk and file system errors, and repeated app crashes (the same app 3 or more times in one analysis). The severity is fixed per kind and does not depend on how large a statistic is.
+                • Notification: the conclusion, what to do, and the cause, then the program and its signature, when it first appeared, how often this kind occurred before, and the `log show` command that shows the lines.
+                • Recorded in notification history only: runs with administrator rights (such as a successful administrator authentication). New patterns and frequency spikes whose kind cannot be determined are recorded as one item, "Log audit: unclassified new patterns: N", with no notification.
                 • Shared with manual audit: uses the same analysis and learned baseline as the manual Mac Security Log Audit and the MCP tool `audit_security_logs`.
-                • Default: turned on automatically the first time Pro is activated. Menu: Malware Protection → "Automatic Log Audit (learns new patterns & frequency anomalies on a schedule) (Pro)".
+                • Default: turned on automatically the first time Pro is activated. Menu: Malware Protection → "Scheduled Log Audit (Pro)".
                 """,
-                recommendation: "Expect somewhat more new-pattern alerts right after setup; they settle as learning progresses. If an alert mentions an unfamiliar app or IP address, open the log audit window for details."
+                recommendation: "When a notice arrives, paste the command on its Check line into Terminal to see the log lines. If it was your own action (your own sudo, your own failed login), nothing needs to be done."
             ),
             LocalizedEntry(
                 id: "feat_containment_incident_timeline",
@@ -906,7 +909,7 @@ extension RoamSwitchKnowledgeBase {
                 title: "Pro Lifetime License (One-Time Purchase, Up to 2 Macs)",
                 summary: "Pro is a one-time lifetime license (¥2,980 / $19.99) usable on up to 2 Macs. The Ed25519-signed license token is verified on the device, so Pro keeps working offline after activation.",
                 details: """
-                • Pro features: the automatic defenses marked (Pro) in the menu (ransomware bait-file detection, XProtect-linked cutoff, unknown-port auto-block and dev server isolation, ARP spoofing auto-block, gateway ARP/NDP pinning, VPN tunnel, BadUSB and USB storage guards, Web & Mail Protection, DNS Threat Protection, Link Guard, Bluetooth auto-off, ClickFix defense, auto-launch registration monitoring, Docker risk detection, critical file tampering monitor, automatic log audit), real-time threat notifications, patrol warnings and scheduled scans, CSV export of logs, and more.
+                • Pro features: the automatic defenses marked (Pro) in the menu (ransomware bait-file detection, XProtect-linked cutoff, unknown-port auto-block and dev server isolation, ARP spoofing auto-block, gateway ARP/NDP pinning, VPN tunnel, BadUSB and USB storage guards, Web & Mail Protection, DNS Threat Protection, Link Guard, Bluetooth auto-off, ClickFix defense, auto-launch registration monitoring, Docker risk detection, critical file tampering monitor, scheduled log audit), real-time threat notifications, patrol warnings and scheduled scans, CSV export of logs, and more.
                 • License types: Pro Lifetime (2 Macs) and Team Lifetime (5 Macs).
                 • Activation: enter your license key (ROAM-XXXX-…) from "💎 Activate / Buy Pro…". The signed token issued by the server is verified with the public key inside the app and stored in the Keychain.
                 • Deactivation: from the license window. It removes the license from this Mac and frees the seat on the server (local deactivation always happens even if the network request fails).
@@ -1346,16 +1349,16 @@ extension RoamSwitchKnowledgeBase {
             ),
             LocalizedEntry(
                 id: "alert_log_audit_anomaly",
-                title: "🔔 Log Audit: anomalous patterns detected",
-                summary: "Sent by the automatic log audit when it finds log patterns never seen on this Mac ([new]) or logs far more frequent than usual ([spike z=…]).",
+                title: "🔔 Log Audit: log lines of a known kind detected",
+                summary: "Sent by the scheduled log audit when it finds log lines whose kind and next step are clear, such as authentication failures and permission changes. The title shows the kind and the count.",
                 details: """
-                • Cause: usually expected changes from connecting a new device or updating apps or macOS, but sometimes suspicious login attempts or unknown process activity.
-                • Contents: the count breakdown, up to 3 real log lines, learning progress (e.g. frequency baseline still learning: 2/3 observations), and a plain-language explanation.
+                • Cause: written per kind on the notice's Cause line (for example a wrong sudo password, a refused SSH login, or a Gatekeeper block).
+                • Contents: the conclusion, what to do, the cause, the program and its signature, when it first appeared, how often this kind occurred before, and the check command. The severity is fixed per kind.
                 • Automatic defense: none (notification only).
                 """,
                 recommendation: """
-                1. If there are only new patterns and no unfamiliar app names or IP addresses, no action is needed.
-                2. If a frequency spike coincides with something you didn't do, open "📜 Mac Security Log Audit…" for details.
+                1. If it was your own action (your own sudo, your own failed login), no action is needed.
+                2. If you do not recognize it, follow the notice's action and look at the log lines with its check command.
                 3. If unsure, use "Copy Materials for AI Consultation" to ask an AI assistant.
                 """
             ),
@@ -1448,7 +1451,7 @@ extension RoamSwitchKnowledgeBase {
                 title: "Guards Turned On Automatically with Pro, and Opt-In Guards",
                 summary: "The first time a Pro license is activated, the autonomous defense guards that mostly notify, rarely misfire and need no extra permission or setup are turned on automatically. Anything that could get in the way of normal use, or that needs extra permissions, setup or outside communication, stays opt-in. After that, the on/off choice you make for each guard is respected.",
                 details: """
-                • Turned on automatically (once, at first Pro activation): auto-block of unknown listening ports, incoming port scan detection (including the 10-minute auto-block of the scanning source), SSH brute-force detection (works only while Remote Login is on), ransomware bait-file detection and entropy-based detection, credential honeytokens, auto-block on ARP spoofing, automatic network cutoff on XProtect malware detection, automatic log audit, critical system file tamper monitoring, dependency lockfile tamper monitoring, live reverse-shell detection, and network settings change monitoring. When the ARP and XProtect cutoffs are turned on, a one-time notice explains this.
+                • Turned on automatically (once, at first Pro activation): auto-block of unknown listening ports, incoming port scan detection (including the 10-minute auto-block of the scanning source), SSH brute-force detection (works only while Remote Login is on), ransomware bait-file detection and entropy-based detection, credential honeytokens, auto-block on ARP spoofing, automatic network cutoff on XProtect malware detection, scheduled log audit, critical system file tamper monitoring, dependency lockfile tamper monitoring, live reverse-shell detection, and network settings change monitoring. When the ARP and XProtect cutoffs are turned on, a one-time notice explains this.
                 • On by default with Pro: Web & Mail Protection, auto-launch registration (LaunchAgent/Daemon) monitoring, DNS Threat Protection (applied on away networks only), and Link Guard (auto-block of clearly fraudulent sites).
                 • Off by default (opt-in): ClickFix auto-block, Docker risk detection, BadUSB physical port guard, USB storage auto-block, gateway ARP/NDP pinning, Bluetooth auto-off, process execution log, browser credential access monitoring, VPN tunnel, Sensor pairing, active vulnerability verification, and npm signature verification. Each of them can interrupt normal use (network cutoff, input devices, external drives, audio), needs an extra permission or install (Full Disk Access, Accessibility, blueutil), needs settings of your own such as an allow-list, or contacts an outside server. The DNS Threat Protection provider is your choice.
                 • On by default even in the free edition: clipboard protection (API keys and ClickFix commands).
@@ -1557,7 +1560,7 @@ extension RoamSwitchKnowledgeBase {
                 • ARP spoofing auto-block, gateway ARP/NDP pinning, VPN tunnel (WireGuard / Tailscale), Evil Twin warnings
                 • BadUSB keyboard guard, USB storage auto-block
                 • Web & Mail Protection (auto-scan, quarantine, Pickle warnings), DNS Threat Protection, Link Guard
-                • Auto-launch registration monitoring, Docker risk detection, critical file tampering monitor, automatic log audit
+                • Auto-launch registration monitoring, Docker risk detection, critical file tampering monitor, scheduled log audit
                 • Bluetooth auto-off, real-time threat notifications, patrol warnings, definition updates and scheduled scans, CSV export of logs
                 """,
                 recommendation: "Choose Pro if you need automatic containment, real-time defense, and background monitoring."
@@ -1739,14 +1742,14 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "faq_log_audit_repeated_alerts",
                 title: "Log Audit Notifications Keep Coming",
-                summary: "The automatic log audit learns this Mac's normal log behavior as it runs. Alerts increase right after setup or a major update and taper off naturally as learning progresses.",
+                summary: "Notices of the same kind keep coming because log lines of that kind keep coming. Statistical anomalies whose kind cannot be determined are not notified.",
                 details: """
-                • New patterns: once reported, a pattern becomes known and isn't re-notified for the same content.
-                • Frequency spikes: each pattern's learning completes after 3 observations; after that, normal volume doesn't alert. While the notification shows something like "frequency baseline still learning: 2/3 observations", it's still learning.
-                • Common causes: macOS or app updates, connecting new devices, temporary heavy load.
-                • To stop it: turn off "Automatic Log Audit (learns new patterns & frequency anomalies on a schedule) (Pro)" in the menu (the manual log audit remains available).
+                • When one kind continues: the notice's past-frequency line shows how this compares with usual. The past frequency is learned over 3 checks.
+                • What is not notified: new patterns and frequency spikes whose kind cannot be determined. They appear in notification history as "Log audit: unclassified new patterns: N".
+                • Common causes: mistyped sudo or login passwords, password attempts over SSH from outside, app crashes after an update.
+                • To stop it: turn off "Scheduled Log Audit (Pro)" in the menu (the manual log audit stays available).
                 """,
-                recommendation: "Unless alerts include unfamiliar app names, IP addresses, or sudo failures, it's fine to wait a while."
+                recommendation: "If SSH login failures continue and you do not need Remote Login, turn it off in System Settings > General > Sharing."
             ),
             LocalizedEntry(
                 id: "faq_zero_telemetry",
