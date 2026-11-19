@@ -62,7 +62,8 @@ SHARED=(RansomwareSnapshotLogic ExecEventModel ExecLogStore ExecProcessTree Exec
         NotificationHistory NotificationText SensorFindingTextKeys StoredRecordRead WatchdogMessages \
         AtomicFile ActionJournal CriticalPathFimTargets LinkGuardHosts FwdEgressClassifier ExecAgentExfil \
         ESAuthBuild ESExtensionStatus ESGuardRouteState PacketPreroll \
-        ChildProcessTree ESDropAccounting FileActorModel LinkEventsMirror TimedProcess)
+        ChildProcessTree ESDropAccounting FileActorModel LinkEventsMirror TimedProcess \
+        SensorStateMirror GuardInputLoss)
 
 # App test files that only exercise types present in this repo. Their
 # `@testable import RoamSwitch` is rewritten to this package's module name.
