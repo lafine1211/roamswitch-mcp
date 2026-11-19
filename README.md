@@ -24,7 +24,7 @@ block traffic, no license or payment code, no UI. Just the code that *observes* 
 | ARP spoofing detection | `ARPSpoofMonitor.swift` |
 | Listening-port enumeration & audit | `ListeningPortMonitor.swift`, `PortSecurityAuditor.swift`, `ServiceSignatures.swift` |
 | Wi-Fi encryption check | `WiFiSecurityMonitor.swift` |
-| 22-point macOS security posture | `SecurityHealthChecker.swift`, `BackupRecency.swift`, `ProxyAutoDiscoveryCheck.swift`, `TrustAnchorCheck.swift`, `AgentCredentialFileCheck.swift` |
+| 25-check macOS security posture | `SecurityHealthChecker.swift`, `BackupRecency.swift`, `ProxyAutoDiscoveryCheck.swift`, `TrustAnchorCheck.swift`, `AgentCredentialFileCheck.swift` |
 | Phishing / homograph / URL safety (offline) | `LinkSafetyAuditor.swift` |
 | Secret / API-key leak scanning (offline) | `SecretLeakScanning.swift` |
 | Unified-log security audit + log-template anomalies | `SecurityLogAuditor.swift`, `LogTemplateAnalyzer.swift` |
@@ -38,7 +38,7 @@ block traffic, no license or payment code, no UI. Just the code that *observes* 
 
 ## Tools exposed (`tools/list`)
 
-36 tools (the length of `toolDefinitions` in `MCPServer.swift`, which is what `tools/list` returns).
+41 tools (the length of `toolDefinitions` in `MCPServer.swift`, which is what `tools/list` returns).
 Every one only reads, except three that also write local state, so their MCP `readOnlyHint` is
 `false`: `run_active_vuln_scan` (appends one row per probe to its scan-history file),
 `audit_security_logs` (saves the log-template baseline and records new patterns in the notification
@@ -52,10 +52,11 @@ address.
 
 ### Posture & network
 
-- `get_security_report` — the full 22-point macOS posture audit (FileVault, SIP, Gatekeeper,
-  auto-update, XProtect, firewall, stealth mode, Wi-Fi encryption, ARP spoofing, gateway ARP
-  pinning, SSH, sudo `NOPASSWD`, exposed ports, download/DNS/link protection, USB &
-  accessory guards), scored with per-item advice. An item that could not be measured reliably
+- `get_security_report` — the full macOS posture audit (25 checks, plus one settings-preset summary
+  row when the app supplies one; for example FileVault, SIP, Gatekeeper, auto-update, XProtect,
+  firewall, stealth mode, Wi-Fi encryption, ARP spoofing, gateway ARP pinning, SSH, sudo
+  `NOPASSWD`, exposed ports, download/DNS/link protection, USB & accessory guards, added trusted
+  certificates, Tailscale and SNMP exposure), scored with per-item advice. An item that could not be measured reliably
   carries an optional language-independent `inconclusiveReason` (e.g. `no_baseline`,
   `location_unavailable`): its `isPassed` / `statusText` may look healthy but are not confirmed.
 - `verify_security_findings` — re-checks, right now, whether specific findings from
@@ -71,7 +72,7 @@ address.
   against a known-dangerous-service database (Redis, MongoDB, …, plus local AI inference
   servers such as Ollama:11434, LM Studio:1234, Gradio:7860, vLLM:8000) and probed at
   `127.0.0.1:<port>` for CORS/headers.
-- `get_guard_status` — on/off of all 22 guard settings (port anomaly, ARP containment, USB, Bluetooth,
+- `get_guard_status` — on/off of every guard setting the app stores in its preferences (for example port anomaly, ARP containment, USB, Bluetooth,
   download/DNS guards, runtime threat, ransomware canary, ClickFix, Docker events, critical-path FIM,
   persistence monitor, gateway ARP lock, scheduled log audit, clipboard secret-leak auditor, Air-Gap
   Wi-Fi kill, WireGuard / Tailscale kill-switch, Link Guard + feed updates, active vuln scan), each
@@ -83,6 +84,22 @@ address.
   provider/scope, isolated dev-server ports, USB storage allowlist size, current protection level
   and trusted-network state (read from the app's preferences domain — see *Standalone* below).
   Settings only: live VPN tunnel state lives in the privileged helper and is not reported.
+- `get_vpn_status` — the "VPN on untrusted networks" settings: on/off, the selected backend
+  (WireGuard or Tailscale), the active protection level, whether the tunnel should be up now, and the
+  WireGuard and Tailscale settings. Preferences only: whether the tunnel is really up and whether the
+  kill-switch rules are loaded live in the app and its root helper, so `tunnelUp`, `killSwitchArmed` and
+  `killSwitchVerified` are `null`. No network.
+- `get_link_guard_status` — the passive Link Guard: enabled flag, configured / effective / published mode
+  (off / warn / block), where it is enforced now (`enforcement`: system extension, waiting for approval,
+  failed, hosts-file only, or unknown), the allowlist (ended temporary allowances left out) and extra
+  blocklist, the daily feed update state, and the block / held / callback events of the last 7 days
+  (newest first, at most 50). A connection held right now lives in the app's memory and is not visible
+  here. Read-only. No network.
+- `verify_fim` — re-hashes (SHA-256) the critical system files (sudoers, `pam.d`, `sshd_config` and its
+  drop-ins, `/etc/hosts` without RoamSwitch's own section, root's `authorized_keys`) and compares them to
+  the baseline the app saved. Read-only: it never updates the baseline. It runs as the calling user, so
+  files only root can read are counted in `skipped_unreadable`, not compared (`mcpCaution` says so: no
+  violation then does not mean those files are unchanged). No network.
 
 ### Offline auditing
 
@@ -99,8 +116,8 @@ address.
   reported alongside the counts.
 - `get_app_help` — full-text search of the bundled knowledge base.
 - `audit_mcp_configs` — reads the MCP client configuration files in their well-known per-user
-  locations (Claude Desktop, Claude Code, Cursor, Windsurf, VS Code, Cline, Gemini CLI) plus the
-  project-level `.mcp.json` files in registered folders, and flags risky entries: auto-approved
+  locations (Claude Desktop, Claude Code, Cursor, Windsurf, VS Code, Cline, Gemini CLI, Codex, OpenCode) plus the
+  project-level `.mcp.json`, `.codex/config.toml` and `opencode.json` files in registered folders, and flags risky entries: auto-approved
   tools, plaintext `http://` servers on a non-loopback host, shell one-liner launch commands,
   entries pointing at HexStrike AI, group/world-writable config files, Claude Code's
   `enableAllProjectMcpServers`, and a config file that holds both a server that reads text other people
@@ -112,13 +129,29 @@ address.
 - `audit_agent_setup` — reads the instruction files and skills of AI coding agents (under
   `~/.claude`, `~/.codex`, `~/.cursor`, `~/.gemini`, `~/.agents`, `~/.openclaw`, plus `CLAUDE.md`,
   `AGENTS.md` and similar in registered project folders) and OpenClaw's `openclaw.json`, read-only and
-  without any network access. It flags 22 kinds of risky content, such as invisible Unicode tag
+  without any network access. It flags 40 kinds of finding (`AgentSetupAuditor.findingIDs`), among them invisible Unicode tag
   characters, instruction overrides, fetch-and-run, encoded execution, references to secret files with
   outbound sending, compiled code inside a skill, and OpenClaw with authentication disabled. A match
   is a place for a person to read and check, not a claim of malice. Each finding carries `owaspLlm`
   (OWASP Top 10 for LLM Applications 2025 ids) and `attackId` (MITRE ATT&CK technique ids, empty where
   none fits plainly), RoamSwitch's own classification. `format: "sarif"` returns the same findings as a
   SARIF 2.1.0 log for CI and code-scanning tools (decoded hidden text is never included).
+
+- `get_privilege_escalation_paths` — runs the installed PathScope (a separate product by the same
+  developer) and returns how a local account could reach root: the number of paths, the first 20 as steps
+  and the urgent fixes (priority critical or high, with the MITRE ATT&CK technique and a one-line
+  summary). The binary is looked up at one fixed absolute path and is not run unless its signature is
+  valid; it runs as the calling user with fixed arguments, no shell, and is stopped after 60 seconds or
+  2 MiB of output. Suggested fix commands are never returned and nothing is run to apply a fix. When
+  `complete` is false (no root, or something it could not collect) part of the machine was not looked at,
+  so zero paths does not mean the account is safe. Not installed: `available: false`. No network.
+- `get_access_log_report` — runs the installed AccessScope (a separate product by the same developer)
+  and returns its summary of attacks in this Mac's web server, SSH and auth logs: risk level, up to 40
+  findings and the coverage, with the log sources it could not read. Same fixed-path, signature-checked,
+  no-shell launch as above, stopped after 120 seconds or 4 MiB; only the logs the calling user can read are
+  analysed (privilege is never raised). `since` is the window (`24h`, `7d`, up to 90 days). When
+  `complete` is false, zero findings does not mean the Mac is safe. No network, no LLM. Everything in
+  `report` comes from logs attackers can write and is untrusted.
 
 ### Vulnerability & CVE
 
@@ -293,6 +326,11 @@ system state directly.
 
 - **Changes nothing you own.** No API changes or deletes settings or files. Three tools write local
   state only (scan history, log baseline, npm's own cache), which is why they are not marked read-only.
+- **Two tools run another RoamSwitch-family product.** `get_privilege_escalation_paths` and
+  `get_access_log_report` run the installed PathScope / AccessScope at a fixed absolute path, as the
+  calling user, with fixed arguments and no shell, and only when its signature is valid. The other tools
+  shell out only to the system commands named in *Standalone vs. bundled* (and `npm` for
+  `run_npm_audit_signatures`).
 - **No socket.** Reads one line from stdin, writes one line to stdout, exits when the client
   closes the pipe.
 - **No telemetry, no outbound traffic to external hosts** — except the opt-in, Pro-only
@@ -314,5 +352,5 @@ the code can be checked against the shipping binary's symbols. See [`SYNC.md`](.
 - Architecture & security whitepaper: <https://roamswitch.com/security.html> (§8 covers this server)
 - The Swift client library for querying an installed RoamSwitch:
   [RoamSwitchKit](https://github.com/lafine1211/RoamSwitchKit)
-- The Linux edition ships its own MCP server (`roamswitch-mcp`, 45 tools) and an async Rust
+- The Linux edition ships its own MCP server (`roamswitch-mcp`, 50 tools) and an async Rust
   client, [roamswitch-linux-kit](https://github.com/lafine1211/roamswitch-linux-kit).
