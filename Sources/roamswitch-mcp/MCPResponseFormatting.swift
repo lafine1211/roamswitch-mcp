@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.0 (build 224).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.1 (build 225).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -787,7 +787,9 @@ public struct MCPGuardEntryPayload: Codable, Equatable {
     /// `helper_not_connected` (it needs the helper, or part of it does, and the app says the helper is not connected) or
     /// `helper_status_unknown` (it needs the helper and the app has not reported lately, so it may not be running) or
     /// `secure_dns_unreachable` (the DNS threat guard: this network does not reach the provider's servers, so the network's own DNS
-    /// is in use and nothing is blocked at the name lookup; the guard says `off` until another network, or a reachable one).
+    /// is in use and nothing is blocked at the name lookup; the guard says `off` until another network, or a reachable one) or
+    /// `input_lost_recently` (`partial` only because input was lost within the last 24 hours; `liveStateDetail` says when the last loss was
+    /// and how much was lost in all; the guard reads `on` again after 24 hours without a new loss).
     /// Absent when `liveState` is just the toggle and the readers.
     public var liveStateReason: String? = nil
     /// What `liveStateReason` is about, when it names a thing: for `secure_dns_unreachable`, the provider and its servers
@@ -1625,6 +1627,13 @@ public enum MCPResponseFormatting {
             var out = g
             out.liveState = folded.state
             out.liveStateReason = folded.reason ?? g.liveStateReason
+            // `partial` with no other reason: input was lost within the last day. Say when, and how much, so that a reader can tell a
+            // moment of lost lines in a burst from a guard that is blind (2026-11-19: 11 guards read `partial` for a day after 173 lost lines).
+            if out.liveState == "partial", out.liveStateReason == nil,
+               let loss = GuardInputLoss.summary(forGuard: g.key, records: health, now: now.timeIntervalSince1970) {
+                out.liveStateReason = GuardInputLoss.reasonCode
+                out.liveStateDetail = loss
+            }
             if g.key == "agentSetupWatch", !g.enabledInSettings, agentWatchSwitch { out.liveStateReason = "no_baseline" }
             // The outbound scan notices are counted by the content-filter system extension: without it the switch does nothing.
             if (g.key == "outboundScanWatch" || g.key == "beaconPeriodicityWatch"), g.enabledInSettings, out.liveState == "on",

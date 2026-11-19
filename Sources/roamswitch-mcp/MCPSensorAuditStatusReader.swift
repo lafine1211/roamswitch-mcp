@@ -1,47 +1,49 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.0 (build 224).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.1 (build 225).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
 // ─────────────────────────────────────────────────────────────────────────────
 import Foundation
 
-/// Minimal, dependency-free reader for `SensorPairingManager`'s
-/// (`RoamSwitchHelper`) on-disk Sensor pairing/audit-result store — used by
-/// `RoamSwitchMCPServer`. That target is a separate, unprivileged process
-/// that doesn't link `HelperManager`'s full XPC client (WireGuard/Tailscale/
-/// ARP-lock/... — none of which this minimal tool process needs just to
-/// read audit findings), so this reads the same on-disk JSON files the
-/// helper writes directly off disk instead — the same "minimal
-/// dependency-free reader" convention already used for
-/// `CanaryStatusReader`/`PortAnomalyStatusReader`, just backed by a plain
-/// file rather than shared UserDefaults, since this state originates in a
-/// separate root process rather than the main app. Both files are
-/// deliberately left world-readable by `SensorPairingManager` (unlike its
-/// identity file) since neither trust metadata nor scan findings are
-/// secret.
+/// Minimal, dependency-free reader for the paired Sensors and the audit results that `SensorPairingManager` (`RoamSwitchHelper`) keeps, used
+/// by `RoamSwitchMCPServer`. That target is a separate, unprivileged process that cannot connect to the helper (its code signature is not the
+/// app's). The helper's files are root-only (0600) since 2.2.1: the running app asks the helper and keeps a copy in the account's preferences
+/// (`SensorStateMirror`), and this reads that copy. Without a fresh copy (the app is not running, or the helper does not answer) it reads the
+/// files as this account can: the files of an older helper, which has not narrowed them yet, can be read; those of a current helper cannot,
+/// and that is reported as unreadable, not as "no Sensor paired".
 enum MCPSensorAuditStatusReader {
     private static let stateDir = "/Library/Application Support/RoamSwitch"
     static let trustedSensorsFile = stateDir + "/trusted_sensors.json"
     static let auditResultsFile = stateDir + "/sensor_audit_results.json"
 
-    static func pairedSensorCount() -> Int {
-        pairedSensors().list.count
+    static func pairedSensorCount(defaults: UserDefaults? = nil) -> Int {
+        pairedSensors(defaults: defaults).list.count
     }
 
     /// Newest-last, same order `SensorPairingManager` appends in.
-    static func auditResults() -> [PersistedSensorAuditResult] {
-        auditResultsRead().list
+    static func auditResults(defaults: UserDefaults? = nil) -> [PersistedSensorAuditResult] {
+        auditResultsRead(defaults: defaults).list
     }
 
-    /// The paired Sensors, and `unreadable` when the file is there but could not be read or parsed (the count is
-    /// then not "0 paired").
-    static func pairedSensors(path: String = trustedSensorsFile) -> (list: [PersistedTrustedSensor], unreadable: Bool) {
-        read([PersistedTrustedSensor].self, path: path)
+    /// The paired Sensors, and `unreadable` when the list is there but could not be read or parsed (the count is
+    /// then not "0 paired"). With `defaults` (the app's preferences), the app's fresh copy comes first.
+    static func pairedSensors(defaults: UserDefaults? = nil, now: Date = Date(),
+                              path: String = trustedSensorsFile) -> (list: [PersistedTrustedSensor], unreadable: Bool) {
+        if let defaults, let record = SensorStateMirror.read(defaults: defaults, now: now.timeIntervalSince1970) {
+            if record.trustedUnreadable { return ([], true) }
+            if let data = record.trusted, let list = try? JSONDecoder().decode([PersistedTrustedSensor].self, from: data) { return (list, false) }
+        }
+        return read([PersistedTrustedSensor].self, path: path)
     }
 
-    static func auditResultsRead(path: String = auditResultsFile) -> (list: [PersistedSensorAuditResult], unreadable: Bool) {
-        read([PersistedSensorAuditResult].self, path: path)
+    static func auditResultsRead(defaults: UserDefaults? = nil, now: Date = Date(),
+                                 path: String = auditResultsFile) -> (list: [PersistedSensorAuditResult], unreadable: Bool) {
+        if let defaults, let record = SensorStateMirror.read(defaults: defaults, now: now.timeIntervalSince1970) {
+            if record.auditUnreadable { return ([], true) }
+            if let data = record.audit, let list = try? JSONDecoder().decode([PersistedSensorAuditResult].self, from: data) { return (list, false) }
+        }
+        return read([PersistedSensorAuditResult].self, path: path)
     }
 
     /// A file that is not there is an empty list (nothing paired or pulled yet); one that exists but cannot be read

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.0 (build 224).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.1 (build 225).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -181,9 +181,9 @@ public enum LogAuditNotice {
                     "自分で変えていなければ、システム設定の「プライバシーとセキュリティ」で、許可されているアプリを確かめてください。",
                     "カメラ、マイク、フルディスクアクセスなどの許可が、リセットまたは書き換えられた記録です。")
         case .gatekeeperBlock:
-            return ("Gatekeeper がアプリの実行を %d 件ブロックしました",
-                    "開いた覚えのないアプリなら、実行せずに、入手元を確かめてください。",
-                    "署名がない、または開発元を確認できないアプリの実行を、macOS の Gatekeeper が止めた記録です。")
+            return ("Gatekeeper の判定で「許可」にならなかったプログラムが %d 件ありました",
+                    "開いた覚えのないアプリなら、実行せずに、入手元を確かめてください。ビルドやテストが作るプログラムでも出ます。",
+                    "署名がない、または開発元を確認できないプログラムを、macOS の Gatekeeper が評価した記録です。実際に止められたとは限りません。")
         case .kernelWarning:
             return ("カーネルの警告(パニックやウォッチドッグ)が %d 件ありました",
                     "再起動や固まりが続くときは、macOS を最新に更新し、周辺機器を外して試してください。直らなければ Apple に相談してください。",

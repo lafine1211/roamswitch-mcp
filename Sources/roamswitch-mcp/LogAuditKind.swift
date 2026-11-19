@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.0 (build 224).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.1 (build 225).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -211,8 +211,11 @@ public enum LogAuditKind: String, CaseIterable, Codable {
                   kind: .kernelWarning, category: .system, severity: .critical, stage: .kernel),
         OtherRule(processes: ["kernel"], all: ["watchdog"], any: ["watchdog timeout", "failed to check in"],
                   kind: .kernelWarning, category: .system, severity: nil, stage: .kernel),
-        // Disk and file system: concrete forms (`corruptedStateDetected=NO` is a status line).
-        OtherRule(processes: ["kernel", "diskarbitrationd"], all: [], any: ["i/o error", "is corrupt", "unrecoverable"],
+        // Disk and file system: concrete forms (`corruptedStateDetected=NO` is a status line). "unrecoverable" alone is not one: the
+        // kernel writes `AMFI: '<path>': Unrecoverable CT signature issue, bailing out.` for every unsigned or ad hoc program that is
+        // run (a build, a test), and that was reported as a disk error with First Aid advice (2026-11-19).
+        OtherRule(processes: ["kernel", "diskarbitrationd"], all: [],
+                  any: ["i/o error", "is corrupt", "unrecoverable read", "unrecoverable write", "unrecoverable media", "unrecoverable medium", "unrecoverable disk"],
                   kind: .diskFailure, category: .system, severity: nil, stage: .kernel),
     ]
 
