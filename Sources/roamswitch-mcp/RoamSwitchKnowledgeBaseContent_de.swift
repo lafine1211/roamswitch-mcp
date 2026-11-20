@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.1 (build 225).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.2 (build 226).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -390,12 +390,12 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "feat_runtime_threat_containment",
                 title: "Automatische Netzwerktrennung bei XProtect-Malware-Erkennung (Pro)",
-                summary: "In dem Moment, in dem das in macOS integrierte XProtect tatsächlich Malware erkennt oder entfernt, wird das Netzwerk in einem Notfall-Air-Gap getrennt. Die Trennung erfolgt nur, wenn die Endpoint-Security-Erweiterung von RoamSwitch das Erkennungs- oder Bereinigungsereignis von XProtect erhält. Eine Gatekeeper-Blockierung einer unsignierten App trennt das Netzwerk nicht; sie löst nur eine Benachrichtigung aus.",
+                summary: "In dem Moment, in dem das in macOS integrierte XProtect tatsächlich Malware erkennt oder entfernt, wird das Netzwerk in einem Notfall-Air-Gap getrennt. Die Trennung erfolgt nur, wenn die Endpoint-Security-Erweiterung von RoamSwitch das Erkennungs- oder Bereinigungsereignis von XProtect erhält. Eine Gatekeeper-Blockierung einer unsignierten App trennt das Netzwerk nicht und löst keine Benachrichtigung aus (sie steht im Benachrichtigungsverlauf).",
                 details: """
                 • Signalquelle: das Erkennungs- oder Bereinigungsereignis von XProtect, das die Endpoint-Security-Erweiterung von RoamSwitch empfängt (ein strukturiertes Ereignis mit Malware-Name, Pfad, Signaturversion und Vorfallskennung). Ein Ereignis ohne Malware-Namen trennt das Netzwerk nicht. Ein Vorfall trennt es einmal.
                 • Läuft die Erweiterung nicht (vor der Freigabe, macOS älter als 13): Das Netzwerk wird nicht getrennt. Als Ersatz liest ein `/usr/bin/log stream`-Abonnement das Entscheidungsprotokoll von Gatekeeper; eine XProtect-Ergebniszeile (mit Malware-Name und Datei) löst eine Benachrichtigung hoher Dringlichkeit mit diesem Namen und der Datei aus. Eine einzelne Protokollzeile trennt das Netzwerk nie. Läuft die Erweiterung, wartet eine Protokollzeile 60 Sekunden und löst bei ausbleibendem Ereignis dieselbe Benachrichtigung aus.
                 • Auslöser: Nur wenn das genannte Ereignis eintrifft, greift die Air-Gap-Eindämmung (einschließlich WLAN-Funk aus), unabhängig von der Vertrauensstufe des Netzwerks.
-                • Unterschied zu Gatekeeper: Alltägliche Gatekeeper-Ereignisse, etwa das Blockieren eines eigenen unsignierten Entwickler-Builds, lösen nur die Benachrichtigung „Gatekeeper hat eine unsignierte App am Ausführen gehindert“ aus.
+                • Unterschied zu Gatekeeper: Alltägliche Gatekeeper-Ereignisse, etwa das Blockieren eines eigenen unsignierten Entwickler-Builds, lösen keine Benachrichtigung aus und stehen nur im Benachrichtigungsverlauf.
                 • Konsistenz: Nutzt dieselbe Klassifizierungslogik wie das manuelle Mac-Sicherheitsprotokoll-Audit.
                 • Es handelt sich um unmittelbare Eindämmung nach der Erkennung, nicht um Blockierung vor der Ausführung.
                 • Standard: Wird bei erstmaliger Aktivierung von Pro automatisch eingeschaltet (mit einem einmaligen Hinweis, dass automatische Trennung aktiviert ist). Der Status ist über das MCP-Tool `get_runtime_threat_status` abrufbar; testen Sie mit „Air-Gap-Simulation bei Malware-Erkennung (Test)“. Die dafür genutzte Endpoint-Security-Erweiterung muss in den Systemeinstellungen freigegeben sein.
@@ -1234,10 +1234,10 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "alert_gatekeeper_block",
                 title: "🛡️ Gatekeeper hat eine unsignierte App am Ausführen gehindert",
-                summary: "Eine Benachrichtigung, dass macOS Gatekeeper eine App ohne Signatur oder Notarisierung am Start gehindert hat. Keine automatische Trennung.",
+                summary: "Ein Protokolleintrag, dass macOS Gatekeeper eine App ohne Signatur oder Notarisierung am Start gehindert hat. Es gibt keine Benachrichtigung; der Eintrag steht nur im Benachrichtigungsverlauf (er erschien bei jedem Entwicklungswerkzeug und ließ sich aus dem Inhalt nicht beurteilen). Keine automatische Trennung.",
                 details: """
                 • Ursache: Sie haben versucht, eine unsignierte App aus dem Internet oder Ihren eigenen Entwickler-Build zu öffnen.
-                • Automatische Abwehr: Keine (nur Benachrichtigung). Die XProtect-gebundene Trennung greift nur, wenn XProtect tatsächlich Malware erkennt.
+                • Automatische Abwehr: Keine (nur im Benachrichtigungsverlauf). Die XProtect-gebundene Trennung greift nur, wenn XProtect tatsächlich Malware erkennt.
                 """,
                 recommendation: """
                 1. Kennen Sie die App (z. B. eigener Build), ist keine Aktion nötig.

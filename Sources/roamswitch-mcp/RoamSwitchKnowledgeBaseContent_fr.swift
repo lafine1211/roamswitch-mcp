@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.1 (build 225).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.2 (build 226).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -390,12 +390,12 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "feat_runtime_threat_containment",
                 title: "Déconnexion réseau automatique lors d'une détection de malware par XProtect (Pro)",
-                summary: "Dès l'instant où XProtect, intégré à macOS, détecte ou supprime réellement un malware, le réseau est coupé par un Air-Gap d'urgence. La coupure n'a lieu que lorsque l'extension Endpoint Security de RoamSwitch reçoit l'événement de détection ou de suppression d'XProtect. Un blocage Gatekeeper d'une app non signée ne coupe pas le réseau ; il envoie seulement une notification.",
+                summary: "Dès l'instant où XProtect, intégré à macOS, détecte ou supprime réellement un malware, le réseau est coupé par un Air-Gap d'urgence. La coupure n'a lieu que lorsque l'extension Endpoint Security de RoamSwitch reçoit l'événement de détection ou de suppression d'XProtect. Un blocage Gatekeeper d'une app non signée ne coupe pas le réseau et n'est pas notifié (il reste dans l'historique des notifications).",
                 details: """
                 • Source du signal : l'événement de détection ou de suppression d'XProtect, reçu par l'extension Endpoint Security de RoamSwitch (un événement structuré avec le nom du malware, le chemin, la version des signatures et un identifiant d'incident). Un événement sans nom de malware ne coupe pas le réseau. Un incident le coupe une fois.
                 • Si l'extension ne tourne pas (avant l'approbation, macOS antérieur à 13) : le réseau n'est pas coupé. En secours, un abonnement `/usr/bin/log stream` lit le journal des décisions de Gatekeeper, et une ligne de verdict d'XProtect (avec un nom de malware et un fichier) déclenche une notification de gravité élevée indiquant ce nom et ce fichier. Une seule ligne de journal ne coupe jamais le réseau. Si l'extension tourne, une ligne de journal attend 60 secondes et, si aucun événement n'arrive, déclenche la même notification.
                 • Déclenchement : seul l'événement ci-dessus engage le confinement Air-Gap (y compris la désactivation du Wi-Fi), quel que soit le niveau de confiance du réseau.
-                • Différence avec Gatekeeper : les événements Gatekeeper quotidiens, comme le blocage d'une compilation non signée créée par un développeur lui-même, ne déclenchent que la notification « Gatekeeper a empêché l'exécution d'une app non signée ».
+                • Différence avec Gatekeeper : les événements Gatekeeper quotidiens, comme le blocage d'une compilation non signée créée par un développeur lui-même, ne sont pas notifiés et restent seulement dans l'historique des notifications.
                 • Cohérence : partage la même logique de classification que l'Audit des journaux de sécurité Mac manuel.
                 • Il s'agit d'un confinement immédiat après détection, et non d'un blocage avant exécution.
                 • Par défaut : activé automatiquement lors de la première activation de Pro (avec un avis unique indiquant que la coupure automatique est activée). État disponible via l'outil MCP `get_runtime_threat_status` ; testez avec « Simulation de l'Air-Gap lié à la détection de malware (test) ». L'extension Endpoint Security utilisée doit être approuvée dans Réglages Système.
@@ -1234,10 +1234,10 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "alert_gatekeeper_block",
                 title: "🛡️ Gatekeeper a empêché l'exécution d'une app non signée",
-                summary: "Une notification indiquant que Gatekeeper de macOS a empêché le lancement d'une app sans signature ni notarisation. Pas de coupure automatique.",
+                summary: "Un enregistrement indiquant que Gatekeeper de macOS a empêché le lancement d'une app sans signature ni notarisation. Il n'est pas notifié ; il reste seulement dans l'historique des notifications (il apparaissait à chaque exécution d'un outil de développement et ne pouvait pas être jugé d'après son contenu). Pas de coupure automatique.",
                 details: """
                 • Cause : vous avez tenté d'ouvrir une app non signée provenant d'Internet ou votre propre version de développement.
-                • Défense automatique : aucune (notification uniquement). La coupure liée à XProtect ne s'engage que lorsque XProtect détecte réellement un malware.
+                • Défense automatique : aucune (seulement dans l'historique des notifications). La coupure liée à XProtect ne s'engage que lorsque XProtect détecte réellement un malware.
                 """,
                 recommendation: """
                 1. Si vous la reconnaissez (par exemple votre propre version), aucune action n'est nécessaire.

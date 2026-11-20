@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.1 (build 225).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.2 (build 226).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -390,12 +390,12 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "feat_runtime_threat_containment",
                 title: "XProtectのマルウェア検知に連動した自動ネットワーク遮断 (Pro)",
-                summary: "Apple純正のXProtectが実際にマルウェアを検知・駆除した瞬間に、ネットワークを緊急全遮断します。この遮断は、RoamSwitchのEndpoint Security拡張が、XProtectの検知・駆除のイベントを受け取ったときだけ働きます。Gatekeeperによる未署名アプリのブロックでは遮断せず、通知のみ行います。",
+                summary: "Apple純正のXProtectが実際にマルウェアを検知・駆除した瞬間に、ネットワークを緊急全遮断します。この遮断は、RoamSwitchのEndpoint Security拡張が、XProtectの検知・駆除のイベントを受け取ったときだけ働きます。Gatekeeperによる未署名アプリのブロックでは遮断せず、通知も出しません(通知の履歴に残します)。",
                 details: """
                 • 信号源: RoamSwitchのEndpoint Security拡張が受け取る、XProtectの検知・駆除のイベント(マルウェアの名前、パス、署名の版、事象の識別子を持つ構造化イベント)。マルウェアの名前のないイベントでは遮断しません。同じ事象での遮断は1回です。
                 • 拡張が動いていないとき(承認前、macOS 13より前など): 遮断しません。予備として `/usr/bin/log stream` でGatekeeperの判定のログを読み、XProtectの検知結果の行(マルウェアの名前とファイルが付いたもの)があれば、その名前とファイルを示す高重要度の通知を出します。ログの1行だけでは、遮断しません。拡張が動いているときは、ログの行を60秒待ち、イベントが届かなければ同じ通知を出します。
                 • 遮断条件: 上のイベントがあった場合のみエアギャップ隔離（Wi-Fi無線オフを含む）。ネットワークの信頼レベルに関係なく発動します。
-                • Gatekeeperとの違い: 開発者が自分でビルドした未署名アプリの起動ブロックなど、日常的に起こるGatekeeperイベントは「Gatekeeperが未署名アプリの実行をブロックしました」という通知のみです。
+                • Gatekeeperとの違い: 開発者が自分でビルドした未署名アプリの起動ブロックなど、日常的に起こるGatekeeperイベントは、通知を出さず、通知の履歴にだけ残します。
                 • 判定の一貫性: 手動の「Macセキュリティログ監査」と同じ分類ロジックを共有しています。
                 • 実行前のブロックではなく「検知後の即時隔離」です。
                 • 既定値: Proライセンスの初回有効化時に自動でオン（その際、自動遮断が有効になった旨を1度だけ案内）。状態はMCPの `get_runtime_threat_status` で確認でき、「マルウェア検知連動Air-Gapのシミュレーション (動作確認)」でテストできます。遮断に使うEndpoint Security拡張は、システム設定での承認が要ります。
@@ -1234,10 +1234,10 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "alert_gatekeeper_block",
                 title: "🛡️ Gatekeeperが未署名アプリの実行をブロックしました",
-                summary: "macOSのGatekeeperが、署名や公証のないアプリの起動をブロックしたことを知らせる通知です。自動遮断は行いません。",
+                summary: "macOSのGatekeeperが、署名や公証のないアプリの起動をブロックしたログの記録です。通知は出さず、通知の履歴にだけ残します(開発のツールを動かすたびに出て、内容から判断できないため)。自動遮断は行いません。",
                 details: """
                 • 発生原因: インターネットから入手した未署名アプリや、自分でビルドした開発中のアプリを開こうとした。
-                • 自動防御: なし（通知のみ）。XProtect連動の自動遮断は、XProtectが実際にマルウェアを検知した場合にだけ発動します。
+                • 自動防御: なし（通知の履歴に残すだけ）。XProtect連動の自動遮断は、XProtectが実際にマルウェアを検知した場合にだけ発動します。
                 """,
                 recommendation: """
                 1. 自分でビルドしたアプリなど心当たりがあれば対応は不要です。

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.1 (build 225).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.2 (build 226).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -390,12 +390,12 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "feat_runtime_threat_containment",
                 title: "XProtect 악성코드 탐지 시 자동 네트워크 차단 (Pro)",
-                summary: "Apple의 내장 XProtect가 실제로 악성코드를 탐지하거나 제거하는 순간 긴급 에어갭으로 네트워크를 차단합니다. 이 차단은 RoamSwitch의 Endpoint Security 확장이 XProtect의 탐지·제거 이벤트를 받았을 때만 작동합니다. Gatekeeper가 서명되지 않은 앱을 차단하는 것만으로는 네트워크가 차단되지 않고 알림만 발송됩니다.",
+                summary: "Apple의 내장 XProtect가 실제로 악성코드를 탐지하거나 제거하는 순간 긴급 에어갭으로 네트워크를 차단합니다. 이 차단은 RoamSwitch의 Endpoint Security 확장이 XProtect의 탐지·제거 이벤트를 받았을 때만 작동합니다. Gatekeeper가 서명되지 않은 앱을 차단하는 것만으로는 네트워크가 차단되지 않으며 알림도 보내지 않습니다(알림 기록에 남깁니다).",
                 details: """
                 • 신호 출처: RoamSwitch의 Endpoint Security 확장이 받는 XProtect의 탐지·제거 이벤트(악성코드 이름, 경로, 서명 버전, 사건 식별자를 가진 구조화 이벤트). 악성코드 이름이 없는 이벤트로는 차단하지 않습니다. 같은 사건에서는 한 번만 차단합니다.
                 • 확장이 실행 중이 아닐 때(승인 전, macOS 13 미만 등): 차단하지 않습니다. 대체 수단으로 `/usr/bin/log stream`으로 Gatekeeper의 판정 로그를 읽어, XProtect의 탐지 결과 줄(악성코드 이름과 파일이 붙은 것)이 있으면 그 이름과 파일을 알려 주는 높은 중요도의 알림을 보냅니다. 로그 한 줄만으로는 차단하지 않습니다. 확장이 실행 중일 때는 로그 줄이 60초 기다리고, 이벤트가 오지 않으면 같은 알림을 보냅니다.
                 • 발동 조건: 위의 이벤트가 있을 때만 에어갭 봉쇄(Wi-Fi 무선 끄기 포함)가 작동하며, 네트워크의 신뢰 수준과는 무관합니다.
-                • Gatekeeper와의 차이: 개발자가 자신의 서명되지 않은 빌드를 차단하는 것과 같은 일상적인 Gatekeeper 이벤트는 "Gatekeeper가 서명되지 않은 앱의 실행을 차단했습니다" 알림만 발생시킵니다.
+                • Gatekeeper와의 차이: 개발자가 자신의 서명되지 않은 빌드를 차단하는 것과 같은 일상적인 Gatekeeper 이벤트는 알림을 보내지 않고 알림 기록에만 남깁니다.
                 • 일관성: 수동으로 실행하는 Mac 보안 로그 감사와 동일한 분류 로직을 공유합니다.
                 • 실행 전 차단이 아니라 탐지 직후의 즉각적인 봉쇄입니다.
                 • 기본값: Pro를 처음 활성화할 때 자동으로 켜집니다(자동 차단이 활성화되었다는 일회성 안내와 함께). 상태는 MCP 도구 `get_runtime_threat_status`로 확인할 수 있으며 "멀웨어 감지 연동 Air-Gap 시뮬레이션(동작 확인)"으로 테스트할 수 있습니다. 사용하는 Endpoint Security 확장은 시스템 설정에서 승인해야 합니다.
@@ -1234,10 +1234,10 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "alert_gatekeeper_block",
                 title: "🛡️ Gatekeeper가 서명되지 않은 앱의 실행을 차단함",
-                summary: "macOS Gatekeeper가 서명이나 공증이 없는 앱의 실행을 차단했다는 알림입니다. 자동 차단은 발생하지 않습니다.",
+                summary: "macOS Gatekeeper가 서명이나 공증이 없는 앱의 실행을 차단했다는 로그 기록입니다. 알림은 보내지 않고 알림 기록에만 남깁니다(개발 도구를 실행할 때마다 나타나 내용으로 판단할 수 없기 때문입니다). 자동 차단은 발생하지 않습니다.",
                 details: """
                 • 원인: 인터넷에서 받은 서명되지 않은 앱이나 본인의 개발 중인 빌드를 열려고 시도했습니다.
-                • 자동 방어: 없음(알림만 발송). XProtect 연동 차단은 XProtect가 실제로 악성코드를 탐지했을 때만 작동합니다.
+                • 자동 방어: 없음(알림 기록에만 남김). XProtect 연동 차단은 XProtect가 실제로 악성코드를 탐지했을 때만 작동합니다.
                 """,
                 recommendation: """
                 1. 본인의 빌드처럼 알아볼 수 있다면 별도 조치는 필요 없습니다.

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.1 (build 225).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.2 (build 226).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -389,12 +389,12 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "feat_runtime_threat_containment",
                 title: "Auto-Disconnect Network on XProtect Malware Detection (Pro)",
-                summary: "The moment Apple's built-in XProtect actually detects or removes malware, the network is cut in an emergency air-gap. The cut-off works only when RoamSwitch's Endpoint Security extension receives XProtect's detection or removal event. A Gatekeeper block of an unsigned app does not cut the network; it only sends a notification.",
+                summary: "The moment Apple's built-in XProtect actually detects or removes malware, the network is cut in an emergency air-gap. The cut-off works only when RoamSwitch's Endpoint Security extension receives XProtect's detection or removal event. A Gatekeeper block of an unsigned app does not cut the network, and is not notified (it is kept in the notification history).",
                 details: """
                 • Signal source: XProtect's detection or removal event, received by RoamSwitch's Endpoint Security extension (a structured event with the malware's name, the path, the signature version and an incident identifier). An event without a malware name does not cut the network. One incident cuts it once.
                 • While the extension is not running (before approval, macOS older than 13): the network is not cut. As a fallback, a `/usr/bin/log stream` subscription reads Gatekeeper's decision log, and an XProtect verdict line (one that names a malware and a file) gives a high-severity notification with that name and file. A single log line never cuts the network. While the extension runs, a log line waits 60 seconds, and if no event arrives it gives the same notification.
                 • Trigger: only when the event above arrives does air-gap containment (including Wi-Fi radio off) engage, regardless of the network's trust level.
-                • Versus Gatekeeper: everyday Gatekeeper events, such as blocking a developer's own unsigned build, only raise the notification "Gatekeeper blocked an unsigned app from running".
+                • Versus Gatekeeper: everyday Gatekeeper events, such as blocking a developer's own unsigned build, are not notified and are kept only in the notification history.
                 • Consistency: it shares its classification logic with the manual Mac Security Log Audit.
                 • This is immediate containment after detection, not pre-execution blocking.
                 • Default: turned on automatically the first time Pro is activated (with a one-time notice that automatic cutoff is enabled). Status via the MCP tool `get_runtime_threat_status`; test with "Simulate Malware-Detection Air-Gap (Test)". The Endpoint Security extension it uses must be approved in System Settings.
@@ -1233,10 +1233,10 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "alert_gatekeeper_block",
                 title: "🛡️ Gatekeeper blocked an unsigned app from running",
-                summary: "A notification that macOS Gatekeeper blocked an app without a signature or notarization from launching. No automatic cutoff.",
+                summary: "A log record that macOS Gatekeeper blocked an app without a signature or notarization from launching. It is not notified; it is kept only in the notification history (it appeared whenever a development tool ran and could not be judged from its content). No automatic cutoff.",
                 details: """
                 • Cause: you tried to open an unsigned app from the internet or your own development build.
-                • Automatic defense: none (notification only). The XProtect-linked cutoff engages only when XProtect actually detects malware.
+                • Automatic defense: none (kept only in the notification history). The XProtect-linked cutoff engages only when XProtect actually detects malware.
                 """,
                 recommendation: """
                 1. If you recognize it (e.g. your own build), no action is needed.

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.1 (build 225).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.2 (build 226).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -37,9 +37,11 @@ public enum LogAuditKind: String, CaseIterable, Codable {
     public var severity: LogEventSeverity {
         switch self {
         case .sudoFailure, .remoteLoginFailure: return .critical
-        case .remoteLoginAccepted, .localAuthFailure, .tccChanged, .gatekeeperBlock, .kernelWarning,
+        case .remoteLoginAccepted, .localAuthFailure, .tccChanged, .kernelWarning,
              .diskFailure, .appCrashLoop: return .warning
-        case .privilegeEscalation: return .info
+        // History only (owner, 2026-11-20): the line does not name the program and does not say it was stopped, so a person cannot
+        // judge it. A Mac that builds and tests writes these all day.
+        case .privilegeEscalation, .gatekeeperBlock: return .info
         }
     }
 

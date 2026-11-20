@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.1 (build 225).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.2 (build 226).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -390,12 +390,12 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "feat_runtime_threat_containment",
                 title: "Desconexión de red automática al detectar malware con XProtect (Pro)",
-                summary: "En el momento en que XProtect, integrado en macOS, detecta o elimina realmente malware, se corta la red con un Air-Gap de emergencia. El corte solo se produce cuando la extensión Endpoint Security de RoamSwitch recibe el evento de detección o eliminación de XProtect. Un bloqueo de Gatekeeper a una app sin firmar no corta la red; solo envía una notificación.",
+                summary: "En el momento en que XProtect, integrado en macOS, detecta o elimina realmente malware, se corta la red con un Air-Gap de emergencia. El corte solo se produce cuando la extensión Endpoint Security de RoamSwitch recibe el evento de detección o eliminación de XProtect. Un bloqueo de Gatekeeper a una app sin firmar no corta la red y no se notifica (queda en el historial de notificaciones).",
                 details: """
                 • Origen de la señal: el evento de detección o eliminación de XProtect, recibido por la extensión Endpoint Security de RoamSwitch (un evento estructurado con el nombre del malware, la ruta, la versión de firmas y un identificador de incidente). Un evento sin nombre de malware no corta la red. Un incidente la corta una vez.
                 • Si la extensión no está en ejecución (antes de aprobarla, macOS anterior a 13): no se corta la red. Como alternativa, una suscripción a `/usr/bin/log stream` lee el registro de decisiones de Gatekeeper, y una línea de veredicto de XProtect (con el nombre de un malware y un archivo) genera una notificación de alta gravedad con ese nombre y ese archivo. Una sola línea del registro nunca corta la red. Si la extensión está en ejecución, una línea del registro espera 60 segundos y, si no llega el evento, genera la misma notificación.
                 • Disparador: solo cuando llega el evento anterior se activa la contención Air-Gap (incluido apagar la radio Wi-Fi), con independencia del nivel de confianza de la red.
-                • Diferencia con Gatekeeper: los eventos cotidianos de Gatekeeper, como bloquear una compilación sin firmar del propio desarrollador, solo generan la notificación «Gatekeeper impidió la ejecución de una app sin firmar».
+                • Diferencia con Gatekeeper: los eventos cotidianos de Gatekeeper, como bloquear una compilación sin firmar del propio desarrollador, no se notifican y quedan solo en el historial de notificaciones.
                 • Coherencia: comparte la misma lógica de clasificación que la Auditoría de registros de seguridad Mac manual.
                 • Es una contención inmediata tras la detección, no un bloqueo previo a la ejecución.
                 • Predeterminado: se activa automáticamente al activar Pro por primera vez (con un aviso único de que la desconexión automática está activada). El estado está disponible mediante la herramienta MCP `get_runtime_threat_status`; pruébalo con «Simulación de Air-Gap por detección de malware (prueba)». La extensión Endpoint Security que usa debe estar aprobada en Ajustes del Sistema.
@@ -1234,10 +1234,10 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "alert_gatekeeper_block",
                 title: "🛡️ Gatekeeper impidió la ejecución de una app sin firmar",
-                summary: "Una notificación de que Gatekeeper de macOS impidió el lanzamiento de una app sin firma ni notarización. No hay corte automático.",
+                summary: "Un registro de que Gatekeeper de macOS impidió el lanzamiento de una app sin firma ni notarización. No se notifica; queda solo en el historial de notificaciones (aparecía cada vez que se ejecutaba una herramienta de desarrollo y no se podía juzgar por su contenido). No hay corte automático.",
                 details: """
                 • Causa: intentaste abrir una app sin firmar procedente de internet o tu propia compilación de desarrollo.
-                • Defensa automática: ninguna (solo notificación). La desconexión vinculada a XProtect solo se activa cuando XProtect detecta realmente malware.
+                • Defensa automática: ninguna (solo en el historial de notificaciones). La desconexión vinculada a XProtect solo se activa cuando XProtect detecta realmente malware.
                 """,
                 recommendation: """
                 1. Si la reconoces (por ejemplo tu propia compilación), no hace falta ninguna acción.

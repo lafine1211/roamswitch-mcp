@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.1 (build 225).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.2 (build 226).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -390,12 +390,12 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "feat_runtime_threat_containment",
                 title: "XProtect 偵測到惡意軟體時自動斷網 (Pro)",
-                summary: "當 Apple 內建的 XProtect 實際偵測到或清除惡意軟體時，立即緊急全面斷網。只有當 RoamSwitch 的 Endpoint Security 擴充功能收到 XProtect 的偵測或清除事件時，才會斷網。對於 Gatekeeper 封鎖未簽署 App 的情況不會斷網，僅發出通知。",
+                summary: "當 Apple 內建的 XProtect 實際偵測到或清除惡意軟體時，立即緊急全面斷網。只有當 RoamSwitch 的 Endpoint Security 擴充功能收到 XProtect 的偵測或清除事件時，才會斷網。對於 Gatekeeper 封鎖未簽署 App 的情況不會斷網，也不會發出通知（保留在通知記錄中）。",
                 details: """
                 • 訊號來源：RoamSwitch 的 Endpoint Security 擴充功能收到的 XProtect 偵測或清除事件（帶有惡意軟體名稱、路徑、簽署版本與事件識別碼的結構化事件）。沒有惡意軟體名稱的事件不會斷網。同一事件只斷網一次。
                 • 擴充功能未執行時（尚未核准、macOS 低於 13 等）：不會斷網。作為備用，透過 `/usr/bin/log stream` 讀取 Gatekeeper 的判定記錄，若有 XProtect 的偵測結果行（帶有惡意軟體名稱與檔案），則發出顯示該名稱與檔案的高重要度通知。僅憑記錄中的一行，不會斷網。擴充功能執行時，記錄行會等待 60 秒，若沒有收到事件，則發出同樣的通知。
                 • 阻斷條件：僅當收到上述事件時，才執行氣隙隔離（包括關閉 Wi-Fi 無線）。無論網路的信任等級為何都會觸發。
-                • 與 Gatekeeper 的差異：日常的 Gatekeeper 事件，例如封鎖開發者自己建置的未簽署程式，只會發出「Gatekeeper 已封鎖未簽署應用程式的執行」通知。
+                • 與 Gatekeeper 的差異：日常的 Gatekeeper 事件，例如封鎖開發者自己建置的未簽署程式，不會發出通知，只保留在通知記錄中。
                 • 一致性：與手動的「Mac 安全日誌審計」共用相同的分類邏輯。
                 • 這不是執行前的攔截，而是「偵測後立即隔離」。
                 • 預設值：首次啟用 Pro 時自動開啟（並會顯示一次性提示，說明自動斷網已啟用）。狀態可透過 MCP 工具 `get_runtime_threat_status` 取得，並可用「模擬惡意軟體偵測連動氣隙（測試）」測試。所用的 Endpoint Security 擴充功能需要在系統設定中核准。
@@ -1234,10 +1234,10 @@ extension RoamSwitchKnowledgeBase {
             LocalizedEntry(
                 id: "alert_gatekeeper_block",
                 title: "🛡️ Gatekeeper 已封鎖未簽署應用程式的執行",
-                summary: "macOS Gatekeeper 封鎖了一個沒有簽署或公證的應用程式啟動的通知。不會自動斷網。",
+                summary: "macOS Gatekeeper 封鎖了沒有簽署或公證的應用程式啟動的記錄。不會發出通知，只保留在通知記錄中（每次執行開發工具都會出現，且無法從內容判斷）。不會自動斷網。",
                 details: """
                 • 原因：您嘗試開啟從網際網路下載的未簽署應用程式，或您自己開發中的建置版本。
-                • 自動防禦：無（僅發出通知）。只有在 XProtect 實際偵測到惡意軟體時，才會啟動 XProtect 連動斷網。
+                • 自動防禦：無（僅保留在通知記錄中）。只有在 XProtect 實際偵測到惡意軟體時，才會啟動 XProtect 連動斷網。
                 """,
                 recommendation: """
                 1. 若您認得該應用程式（例如是自己的建置版本），不需要進一步處理。
