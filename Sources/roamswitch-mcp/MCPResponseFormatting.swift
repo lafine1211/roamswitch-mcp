@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.2 (build 226).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.3 (build 227).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -833,6 +833,10 @@ public struct MCPReaderHealthPayload: Codable, Equatable {
     /// True when the last scan left part of what it should watch out because a limit was reached (more working copies
     /// than it keeps, a walk that stopped at its folder limit). nil where the guard has no such limit.
     public var scopeLimited: Bool? = nil
+    /// Why the last read of a log query delivered only part of the window (`timeout`, `output_cap`, `exit_error`), and when
+    /// (`readLimitedAt`); nil when it was whole. The scheduled log audit only.
+    public var readLimited: String? = nil
+    public var readLimitedAt: String? = nil
     /// Examples of what the last scan could not examine, with the reason for each (`permission_denied`, `not_permitted`,
     /// `type_unreadable`, `too_large`, `not_found`, `other`); at most 5, replaced by every scan. The path is on this Mac.
     public var skippedSamples: [GuardSkippedItem]? = nil
@@ -1526,8 +1530,8 @@ public enum MCPResponseFormatting {
                                            linesDropped: $0.linesDropped, oversizeDropped: $0.oversizeDropped,
                                            filesUnreadable: $0.filesUnreadable, filesUnreadableAt: time($0.filesUnreadableAt),
                                            foldersUnreadable: $0.foldersUnreadable, filesTruncated: $0.filesTruncated,
-                                           scopeLimited: $0.scopeLimited, skippedSamples: $0.skippedSamples,
-                                           lastDropAt: time($0.lastDropAt))
+                                           scopeLimited: $0.scopeLimited, readLimited: $0.readLimited, readLimitedAt: time($0.readLimitedAt),
+                                           skippedSamples: $0.skippedSamples, lastDropAt: time($0.lastDropAt))
                 }
             }
         }

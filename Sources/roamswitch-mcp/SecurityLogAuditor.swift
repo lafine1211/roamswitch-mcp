@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.2 (build 226).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.3 (build 227).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -131,6 +131,13 @@ public struct SecurityLogReadStatus: Equatable {
     public var windowClamped: Bool { hoursRequested != 0 && hoursRequested != hoursQueried }
     /// Part of the log was not examined.
     public var limited: Bool { !unreadable && (failureReason != nil || timedOut || outputTruncated) }
+    /// Why only part of the window came back (`GuardReaderHealth.readLimited`), nil for a whole read or one that read nothing.
+    public var limitedReason: String? {
+        guard limited else { return nil }
+        if timedOut { return "timeout" }
+        if outputTruncated { return "output_cap" }
+        return "exit_error"
+    }
     public var kernelWindowShortened: Bool { kernelStageHours != 0 }
     public var skippedAnything: Bool { unreadable || limited || windowClamped || kernelWindowShortened || linesLossy > 0 || linesUnparsable > 0 }
 
@@ -261,7 +268,10 @@ final class SecurityLogAuditor {
                 h.markUnreadable(reason: status.healthReason, now: now)
             } else {
                 h.markStarted(now: now)
-                h.setScanResult(filesUnreadable: 0, foldersUnreadable: 0, filesTruncated: status.limited ? 1 : 0, now: now)
+                // A log query is not a scan of files: a limited read is its own result (it was shown as "1 file read only at
+                // its start and end", with steps about files).
+                h.setScanResult(filesUnreadable: 0, foldersUnreadable: 0, filesTruncated: 0, now: now)
+                h.setReadLimited(status.limitedReason, now: now)
             }
             h.addDropped(status.linesUnparsable, now: now)
         }

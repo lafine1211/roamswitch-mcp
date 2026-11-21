@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.2 (build 226).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.3 (build 227).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -1771,6 +1771,30 @@ extension RoamSwitchKnowledgeBase {
                 • Comprobación de los datos descargados: el feed de amenazas, los mapas de CVE y las reglas web solo se usan tras verificar su manifiesto firmado (manifest). No se usa un manifiesto con fecha de más de 60 días atrás o de más de un día en el futuro, ni una versión más antigua que la instalada. La clave de firma se puede cambiar y revocar mediante el manifiesto, y no se acepta una firma hecha con una clave revocada o caducada. El asistente con privilegios vuelve a comprobar la lista de enlaces con su propio estado. Estas comprobaciones no envían nada.
                 """,
                 recommendation: "Es seguro de usar en entornos empresariales altamente confidenciales y configuraciones de desarrollo personales sin preocuparte por fugas de datos."
+            ),
+            LocalizedEntry(
+                id: "feat_diagnostic_statuses",
+                title: "Estados de los elementos del diagnóstico (superado, no superado, no concluyente, no aplicable) y qué significa la puntuación",
+                summary: "Cada elemento del diagnóstico de seguridad está superado, no superado (a corregir), no concluyente o no aplicable. Los no concluyentes y no aplicables no cuentan como superados ni como no superados y no entran en la puntuación. La puntuación es la proporción de elementos superados entre los que se pudieron juzgar.",
+                details: """
+                • Superado significa que se cumple el estándar; no superado significa que no se cumple, y trae un consejo de mejora.
+                • No concluyente significa que no se pudo emitir un juicio fiable en este Mac; no es un fallo. El motivo se da como un código independiente del idioma (`inconclusiveReason` en get_security_report, `reason` en verify_security_findings). helper_unavailable: el asistente con privilegios no está conectado, por lo que no se puede leer un elemento que requiere root, como la auditoría de sudoers. location_unavailable: la lectura del Wi-Fi requiere el permiso de ubicación. gateway_unknown y no_baseline: la comprobación de ARP no tiene puerta de enlace predeterminada o no tiene una referencia de confianza con la que comparar. tool_failed: falló un comando usado para la comprobación (la lista de puertos abiertos, por ejemplo). not_verifiable: el ajuste no tiene la forma estándar y no se puede decir si está activado o desactivado (una configuración SIP personalizada, por ejemplo). not_measured: aún no medido.
+                • No aplicable significa que el elemento no se aplica en esta situación (una protección desactivada a propósito en una red de confianza, por ejemplo).
+                • Puntuación = elementos superados ÷ elementos juzgados (superados + no superados), más las protecciones que activa el preajuste de los ajustes. Los elementos que no se pudieron leer no aparecen en la puntuación; reduzca primero los no concluyentes antes de leerla.
+                """,
+                recommendation: "Elimine la causa que nombra el código de motivo: conecte el asistente con privilegios, conceda a RoamSwitch el permiso de ubicación para leer el Wi-Fi y actualice el diagnóstico. Con MCP, pase checkIds a verify_security_findings para reevaluar solo esos elementos."
+            ),
+            LocalizedEntry(
+                id: "feat_open_url_check",
+                title: "Comprobación antes de abrir un enlace (cambia el navegador web predeterminado) (Pro)",
+                summary: "Un enlace pulsado en cualquier aplicación (correo, PDF, chat) se comprueba con la URL completa, ruta y consulta incluidas, antes de que el navegador lo abra. Solo un enlace sospechoso muestra antes una ventana; los demás van directamente al navegador que era el predeterminado. Desactivado por defecto.",
+                details: """
+                • Al activarlo, RoamSwitch pasa a ser el navegador web predeterminado (macOS pide confirmación). El navegador anterior se recuerda y se restaura al desactivarlo.
+                • El análisis es el del comprobador manual de enlaces (la lista de amenazas de este Mac, un parecido con una marca conocida, un subdominio engañoso, un dominio de nivel superior de riesgo). Con los mismos veredictos que la protección de enlaces (permitir, advertir, bloquear), solo un enlace con advertencia o bloqueo muestra una ventana. La respuesta por defecto es «No abrir».
+                • Sin Pro (una licencia caducada, por ejemplo) no se pregunta nada y todos los enlaces pasan al navegador anterior.
+                • No se lee el texto de un correo. Un enlace que una aplicación abre en su propio navegador integrado, y el destino de una redirección, no se ven. No abre ninguna conexión.
+                """,
+                recommendation: "Actívelo o desactívelo con «Comprobar un enlace antes de abrirlo (Pro)…» en el menú Protección contra malware. También puede elegir usted mismo el navegador web predeterminado en Ajustes del Sistema > Escritorio y Dock. Un preajuste no cambia este ajuste por sí solo."
             ),
         ]
     }

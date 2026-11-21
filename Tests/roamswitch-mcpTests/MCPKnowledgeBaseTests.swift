@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 2.2.2 (build 226). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 2.2.3 (build 227). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -222,5 +222,75 @@ final class MCPKnowledgeBaseTests: XCTestCase {
             let rules = try XCTUnwrap(items.first { $0.id == "feat_web_rules" })
             XCTAssertFalse(rules.details.contains("feat_php_check"), "\(code): feat_web_rules still points to the removed entry")
         }
+    }
+
+    /// 診断の状態(合格、要対策、確認不能、該当なし)と点数の意味の項目が、10 言語にあり、訳されている。
+    func testDiagnosticStatusesAreExplainedInEveryLanguage() throws {
+        let ja = try XCTUnwrap(kb.items(language: "ja").first { $0.id == "feat_diagnostic_statuses" })
+        let needles = ["helper_unavailable", "location_unavailable", "gateway_unknown", "no_baseline",
+                       "tool_failed", "not_verifiable", "not_measured", "inconclusiveReason", "verify_security_findings"]
+        for code in RoamSwitchKnowledgeBase.supportedLanguageCodes {
+            let item = try XCTUnwrap(kb.items(language: code).first { $0.id == "feat_diagnostic_statuses" }, "missing for \(code)")
+            XCTAssertEqual(item.topic, "feature")
+            if code != "ja" {
+                XCTAssertNotEqual(item.details, ja.details, "\(code): the details are not translated")
+                for text in [item.title, item.summary, item.details, item.recommendation ?? ""] {
+                    XCTAssertNil(text.range(of: "[\\u{3040}-\\u{30FF}]", options: .regularExpression), "\(code): kana in a non-Japanese entry")
+                }
+            }
+            for needle in needles {
+                XCTAssertTrue(item.details.contains(needle), "\(code): the entry does not mention \(needle)")
+            }
+            XCTAssertTrue((item.recommendation ?? "").contains("checkIds"), "\(code): the recommendation does not name checkIds")
+            // Found by a code that is the same in every language, whatever language the answer is in.
+            XCTAssertTrue(kb.search(query: "helper_unavailable", language: code).items.contains { $0.id == "feat_diagnostic_statuses" }, code)
+        }
+        XCTAssertTrue(kb.search(query: "確認不能").items.contains { $0.id == "feat_diagnostic_statuses" })
+        XCTAssertTrue(kb.search(query: "該当なし", language: "ja").items.contains { $0.id == "feat_diagnostic_statuses" })
+        XCTAssertTrue(kb.search(query: "inconclusive", language: "en").items.contains { $0.id == "feat_diagnostic_statuses" })
+    }
+
+    /// 通知やログの 1 行をそのまま貼ると、日本語では 1 つの長い語になり、全体を含む項目が無い。近い項目を返し、近似の印を付ける。
+    func testAPastedNoticeFindsTheClosestEntryAndIsFlagged() throws {
+        let pasted = kb.search(query: "診断の各項目の状態(合格、要対策、確認不能、該当なし)と、点数の意味を教えてください", language: "ja")
+        XCTAssertEqual(pasted.approximate, true)
+        XCTAssertTrue(pasted.items.contains { $0.id == "feat_diagnostic_statuses" }, "\(pasted.items.map(\.id))")
+        XCTAssertLessThanOrEqual(pasted.items.count, 3)
+        let english = kb.search(query: "Diagnostic item states (pass, fail, inconclusive, not applicable) and what the score means exactly", language: "en")
+        XCTAssertEqual(english.approximate, true)
+        XCTAssertTrue(english.items.contains { $0.id == "feat_diagnostic_statuses" }, "\(english.items.map(\.id))")
+    }
+
+    /// 近似は、全語を含む項目が無いときだけ。一致があれば印は付かず、どこにも無い語や弱い一致は何も返さない。
+    func testTheApproximateSearchIsAFallbackOnly() throws {
+        let exact = kb.search(query: "ClamAV", language: "en")
+        XCTAssertFalse(exact.items.isEmpty)
+        XCTAssertNil(exact.approximate)
+        let encoded = try JSONEncoder().encode(exact)
+        XCTAssertFalse(String(decoding: encoded, as: UTF8.self).contains("approximate"))
+        let nothing = kb.search(query: "zzzqqqxxx", language: "en")
+        XCTAssertTrue(nothing.items.isEmpty)
+        XCTAssertNil(nothing.approximate)
+        // One word that the knowledge base has, with words it does not have: not enough.
+        let weak = kb.search(query: "ヘルパー qqqq wwww eeee rrrr tttt yyyy", language: "ja")
+        XCTAssertTrue(weak.items.isEmpty)
+        XCTAssertNil(weak.approximate)
+    }
+
+    /// The check before a link opens (`OpenURLGuard`) is explained in every language, and found by the words people use.
+    func testTheCheckBeforeALinkOpensIsExplainedInEveryLanguage() throws {
+        let ja = try XCTUnwrap(kb.items(language: "ja").first { $0.id == "feat_open_url_check" })
+        for code in RoamSwitchKnowledgeBase.supportedLanguageCodes {
+            let item = try XCTUnwrap(kb.items(language: code).first { $0.id == "feat_open_url_check" }, "missing for \(code)")
+            XCTAssertEqual(item.topic, "feature")
+            if code != "ja" {
+                XCTAssertNotEqual(item.details, ja.details, "\(code): the details are not translated")
+                for text in [item.title, item.summary, item.details, item.recommendation ?? ""] {
+                    XCTAssertNil(text.range(of: "[\\u{3040}-\\u{30FF}]", options: .regularExpression), "\(code): kana in a non-Japanese entry")
+                }
+            }
+            XCTAssertTrue(kb.search(query: "open-url", language: code).items.contains { $0.id == "feat_open_url_check" }, code)
+        }
+        XCTAssertTrue(kb.search(query: "リンクを開く前の確認", language: "ja").items.contains { $0.id == "feat_open_url_check" })
     }
 }

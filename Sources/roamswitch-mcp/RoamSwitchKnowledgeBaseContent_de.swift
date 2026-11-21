@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.2 (build 226).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.3 (build 227).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -1771,6 +1771,30 @@ extension RoamSwitchKnowledgeBase {
                 • Prüfung geladener Daten: Bedrohungsfeed, CVE-Karten und Web-Regeln werden erst nach Prüfung ihres signierten Manifests (manifest) verwendet. Ein Manifest, das mehr als 60 Tage alt oder mehr als einen Tag in der Zukunft datiert ist, und eine Version, die älter als die installierte ist, werden nicht verwendet. Der Signaturschlüssel lässt sich über das Manifest wechseln und widerrufen; eine Signatur mit einem widerrufenen oder abgelaufenen Schlüssel wird nicht angenommen. Der privilegierte Helfer prüft die Linkliste noch einmal gegen seinen eigenen Zustand. Für diese Prüfungen wird nichts gesendet.
                 """,
                 recommendation: "Es ist auch in hochvertraulichen Geschäftsumgebungen und persönlichen Entwicklungsumgebungen bedenkenlos nutzbar, ohne Sorge vor Datenlecks."
+            ),
+            LocalizedEntry(
+                id: "feat_diagnostic_statuses",
+                title: "Zustände der Diagnosepunkte (bestanden, nicht bestanden, nicht feststellbar, nicht zutreffend) und was die Punktzahl bedeutet",
+                summary: "Jeder Punkt der Sicherheitsdiagnose ist bestanden, nicht bestanden (Handlungsbedarf), nicht feststellbar oder nicht zutreffend. Nicht feststellbare und nicht zutreffende Punkte zählen weder als bestanden noch als nicht bestanden und fließen nicht in die Punktzahl ein. Die Punktzahl ist der Anteil der bestandenen Punkte unter den beurteilbaren.",
+                details: """
+                • Bestanden heißt, der Standard ist erfüllt; nicht bestanden heißt, er ist es nicht, und kommt mit einem Verbesserungshinweis.
+                • Nicht feststellbar heißt, dass auf diesem Mac kein verlässliches Urteil möglich war; es ist kein Fehlschlag. Der Grund steht als sprachunabhängiger Code (`inconclusiveReason` in get_security_report, `reason` in verify_security_findings). helper_unavailable: Der privilegierte Helfer ist nicht verbunden, daher lässt sich ein Punkt, der root braucht, etwa die sudoers-Prüfung, nicht lesen. location_unavailable: Das Lesen des WLANs braucht die Ortungsberechtigung. gateway_unknown und no_baseline: Die ARP-Prüfung hat kein Standard-Gateway oder keine vertrauenswürdige Vergleichsbasis. tool_failed: Ein für die Prüfung genutzter Befehl ist fehlgeschlagen (etwa die Liste offener Ports). not_verifiable: Die Einstellung ist nicht die Standardform und lässt sich weder als an noch als aus bezeichnen (etwa eine benutzerdefinierte SIP-Konfiguration). not_measured: noch nicht gemessen.
+                • Nicht zutreffend heißt, der Punkt gilt in dieser Lage nicht (etwa ein absichtlich abgeschalteter Schutz in einem vertrauenswürdigen Netz).
+                • Punktzahl = bestandene Punkte ÷ beurteilte Punkte (bestanden + nicht bestanden), zuzüglich der Schutzfunktionen, die das Einstellungs-Preset schaltet. Nicht lesbare Punkte erscheinen nicht in der Punktzahl; verringern Sie daher zuerst die nicht feststellbaren Punkte, bevor Sie die Punktzahl lesen.
+                """,
+                recommendation: "Beseitigen Sie die Ursache, die der Grundcode nennt: Verbinden Sie den privilegierten Helfer, erteilen Sie RoamSwitch die Ortungsberechtigung für das Lesen des WLANs und aktualisieren Sie dann die Diagnose. Mit MCP geben Sie checkIds an verify_security_findings, um nur diese Punkte neu zu bewerten."
+            ),
+            LocalizedEntry(
+                id: "feat_open_url_check",
+                title: "Prüfung vor dem Öffnen eines Links (wechselt den Standard-Webbrowser) (Pro)",
+                summary: "Ein Link, den Sie in einer beliebigen App (Mail, PDF, Chat) anklicken, wird vor dem Öffnen im Browser mit der ganzen URL, auch Pfad und Query, geprüft. Nur ein verdächtiger Link zeigt vorher ein Fenster; die übrigen gehen sofort an den bisherigen Standardbrowser. Standardmäßig aus.",
+                details: """
+                • Beim Einschalten wird RoamSwitch der Standard-Webbrowser (macOS bittet um Bestätigung). Der bisherige Browser wird gemerkt und beim Ausschalten wiederhergestellt.
+                • Die Prüfung ist dieselbe wie beim manuellen Link-Checker (die Bedrohungsliste dieses Macs, ein Doppelgänger einer bekannten Marke, eine täuschende Subdomain, eine riskante Top-Level-Domain). Mit denselben Urteilen wie der Link-Schutz (erlauben, warnen, sperren) zeigt nur ein Link mit Warnung oder Sperre ein Fenster. Die Standardantwort ist „Nicht öffnen“.
+                • Ohne Pro (etwa bei abgelaufener Lizenz) wird nichts gefragt und jeder Link geht an den bisherigen Browser.
+                • Der Text einer Mail wird nicht gelesen. Ein Link, den eine App in ihrem eigenen eingebetteten Browser öffnet, und das Ziel einer Weiterleitung sind nicht sichtbar. Es baut keine Verbindung auf.
+                """,
+                recommendation: "Ein- und Ausschalten im Menü „Malware-Schutz“ über „Link vor dem Öffnen prüfen (Pro) …“. Den Standard-Webbrowser können Sie auch selbst in den Systemeinstellungen unter „Schreibtisch & Dock“ wählen. Ein Preset schaltet diese Einstellung nicht von selbst um."
             ),
         ]
     }

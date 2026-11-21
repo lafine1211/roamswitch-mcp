@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.2 (build 226).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.3 (build 227).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -1770,6 +1770,30 @@ extension RoamSwitchKnowledgeBase {
                 • Checks on downloaded data: the threat feed, the CVE maps and the web rules are used only after their signed manifest is verified. A manifest dated more than 60 days ago or more than a day ahead, and a version older than the one installed, are not used. The signing key can be rotated and revoked through the manifest, and a signature by a revoked or expired key is not accepted. The privileged helper checks the link list again against its own record. These checks send nothing.
                 """,
                 recommendation: "It's safe to use in highly confidential business environments and personal development setups without worrying about data leaks."
+            ),
+            LocalizedEntry(
+                id: "feat_diagnostic_statuses",
+                title: "Diagnostic item states (pass, fail, inconclusive, not applicable) and what the score means",
+                summary: "Each item of the security diagnosis is pass, fail (action needed), inconclusive or not applicable. Inconclusive and not-applicable items count neither as pass nor as fail and are left out of the score. The score is the share of the judged items that passed.",
+                details: """
+                • Pass means the standard is met; fail means it is not, and comes with improvement advice.
+                • Inconclusive means no reliable judgement could be made on this Mac; it is not a failure. The reason is given as a language-independent code (`inconclusiveReason` in get_security_report, `reason` in verify_security_findings). helper_unavailable: the privileged helper is not connected, so an item that needs root, such as the sudoers audit, cannot be read. location_unavailable: the Wi-Fi reading needs Location permission. gateway_unknown and no_baseline: the ARP check has no default gateway, or no trusted baseline to compare with. tool_failed: a command used for the check failed (the list of open ports, for example). not_verifiable: the setting is not a standard one, so it cannot be called enabled or disabled (a custom SIP configuration, for example). not_measured: not measured yet.
+                • Not applicable means the item does not apply in this situation (protection switched off on purpose on a trusted network, for example).
+                • Score = passed items ÷ judged items (pass + fail), plus the protections the settings preset switches. Items that could not be read do not show in the score, so reduce the inconclusive items before reading the score.
+                """,
+                recommendation: "Remove the cause that the reason code names: connect the privileged helper, give RoamSwitch Location permission for the Wi-Fi reading, then refresh the diagnosis. With MCP, pass checkIds to verify_security_findings to re-evaluate only those items."
+            ),
+            LocalizedEntry(
+                id: "feat_open_url_check",
+                title: "Check before a link opens (switches the default web browser) (Pro)",
+                summary: "A link clicked in any app (a mail program, a PDF viewer, a chat) is checked with the whole URL, path and query included, before the browser opens it. Only a suspicious link shows a window first; the others go straight to the browser that was the default. It is off by default.",
+                details: """
+                • Turning it on makes RoamSwitch the default web browser (macOS asks you to confirm). The earlier browser is kept and put back when you turn it off.
+                • The analysis is the one of the manual link checker (the threat feed on this Mac, a lookalike of a well-known brand, a deceptive subdomain, a risky top-level domain). With the same verdicts as the link guard (allow, warn, block), only a warn or block link shows a window. The default answer is "Do not open".
+                • Without Pro (a lapsed licence, for example) nothing is asked and every link is passed on to the earlier browser.
+                • It does not read the text of a mail. A link an app opens in its own embedded browser, and where a redirect leads, are not seen. It opens no connection.
+                """,
+                recommendation: "Turn it on or off with \"Check a link before it opens (Pro)…\" in the Malware Protection menu. You can also choose the default web browser yourself in System Settings > Desktop & Dock. A preset does not switch this setting by itself."
             ),
         ]
     }

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.2 (build 226).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.3 (build 227).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -135,6 +135,13 @@ public struct GuardReaderHealth: Codable, Equatable {
     /// keeps, a walk that stopped at its folder limit, more files than its list holds). nil where the source has no such
     /// limit. What was left out was not looked at, the same as an unreadable file.
     public var scopeLimited: Bool?
+    /// The last read of a log query (the scheduled log audit) delivered only part of the window, and why: `timeout` (the
+    /// wall-clock ceiling stopped it), `output_cap` (the output went past the byte cap and the oldest part was dropped) or
+    /// `exit_error` (it ended with an error after some output). nil when the last read was whole, or the source is no log
+    /// query. Replaced by every read, so a whole read clears it. It is not a file that was skipped.
+    public var readLimited: String?
+    /// When a read last came back limited (unix seconds).
+    public var readLimitedAt: Double?
     /// Examples of what the last scan could not examine (at most `GuardSkip.sampleCap`), with the reason for each.
     /// Replaced by every scan, so a clean scan clears it. nil where the source does not record examples.
     public var skippedSamples: [GuardSkippedItem]?
@@ -144,7 +151,7 @@ public struct GuardReaderHealth: Codable, Equatable {
 
     private enum CodingKeys: String, CodingKey {
         case active, restarts, lastRestartAt, gaps, lastGapAt, inGap, unreadable, reason, linesDropped, oversizeDropped, lastDropAt
-        case filesUnreadable, filesUnreadableAt, foldersUnreadable, filesTruncated, scopeLimited, skippedSamples, updatedAt
+        case filesUnreadable, filesUnreadableAt, foldersUnreadable, filesTruncated, scopeLimited, readLimited, readLimitedAt, skippedSamples, updatedAt
     }
 
     public init(from decoder: Decoder) throws {
@@ -165,6 +172,8 @@ public struct GuardReaderHealth: Codable, Equatable {
         foldersUnreadable = try c.decodeIfPresent(Int.self, forKey: .foldersUnreadable)
         filesTruncated = try c.decodeIfPresent(Int.self, forKey: .filesTruncated)
         scopeLimited = try c.decodeIfPresent(Bool.self, forKey: .scopeLimited)
+        readLimited = try c.decodeIfPresent(String.self, forKey: .readLimited)
+        readLimitedAt = try c.decodeIfPresent(Double.self, forKey: .readLimitedAt)
         skippedSamples = try c.decodeIfPresent([GuardSkippedItem].self, forKey: .skippedSamples)
         updatedAt = try c.decodeIfPresent(Double.self, forKey: .updatedAt) ?? 0
     }
@@ -278,6 +287,14 @@ public struct GuardReaderHealth: Codable, Equatable {
         updatedAt = now
     }
 
+    /// The result of one read of a log query: `reason` is why only part of the window came back, nil for a whole read. Replaces
+    /// the previous result; the time moves only when the read was limited.
+    public mutating func setReadLimited(_ reason: String?, now: Double) {
+        readLimited = reason
+        if reason != nil { readLimitedAt = now }
+        updatedAt = now
+    }
+
     /// Makes the unreadable-files count exist (as 0) for a source whose scans skip files they cannot read.
     public mutating func enableFileCounter() {
         if filesUnreadable == nil { filesUnreadable = 0 }
@@ -381,6 +398,29 @@ public enum GuardReaderHealthStore {
     public static let helperFile = stateDir + "/reader_health.json"
     public static let appDefaultsKey = "RoamSwitch.GuardReaderHealthV1"
 
+    /// Where the app keeps the health of its readers: the app's preferences, and, while the code runs under XCTest, a
+    /// throwaway domain of its own. The unit tests run inside the app's own bundle id, so the preferences they wrote were
+    /// the installed app's: the guards the tests started and stopped counted 55 restarts and 56 gaps in one afternoon on
+    /// the owner's Mac (2026-11-20, "partial" for 24 hours on the log audit and on the readers beside it).
+    public static var processDefaults: UserDefaults {
+        guard isRunningUnderXCTest else { return .standard }
+        return testDefaults
+    }
+
+    private static var isRunningUnderXCTest: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+            || ProcessInfo.processInfo.environment["XCTestBundlePath"] != nil
+            || NSClassFromString("XCTestCase") != nil
+    }
+
+    /// Emptied the first time a test process asks, so one test run does not see what the run before left.
+    private static let testDefaults: UserDefaults = {
+        let name = "com.tetsuharu.RoamSwitch.XCTestReaderHealth"
+        let d = UserDefaults(suiteName: name) ?? .standard
+        d.removePersistentDomain(forName: name)
+        return d
+    }()
+
     private static let lock = NSLock()
 
     struct File: Codable { var sources: [String: GuardReaderHealth] = [:] }
@@ -408,7 +448,7 @@ public enum GuardReaderHealthStore {
         return file.sources
     }
 
-    public static func writeApp(source: String, health: GuardReaderHealth, defaults: UserDefaults = .standard) {
+    public static func writeApp(source: String, health: GuardReaderHealth, defaults: UserDefaults = GuardReaderHealthStore.processDefaults) {
         lock.lock(); defer { lock.unlock() }
         var file = File(sources: readApp(defaults: defaults))
         file.sources[source] = health
@@ -563,7 +603,7 @@ public enum GuardReaderHealthStore {
             h.inGap || (h.lastGapAt.map { now - $0 <= gapWindowSecs } ?? false)
                 || (h.lastDropAt.map { now - $0 <= gapWindowSecs } ?? false)
                 || (h.filesUnreadable ?? 0) > 0 || (h.foldersUnreadable ?? 0) > 0 || (h.filesTruncated ?? 0) > 0
-                || h.scopeLimited == true
+                || h.scopeLimited == true || h.readLimited != nil
         }
         if healths.contains(where: lostRecently) { return "partial" }
         for id in def.auxiliary {
@@ -601,7 +641,7 @@ public final class GuardReaderHealthRecorder {
     }
 
     /// A recorder for a reader that lives in the app; its record is kept in the shared preferences.
-    public static func forApp(source: String, defaults: UserDefaults = .standard) -> GuardReaderHealthRecorder {
+    public static func forApp(source: String, defaults: UserDefaults = GuardReaderHealthStore.processDefaults) -> GuardReaderHealthRecorder {
         GuardReaderHealthRecorder(source: source, prior: GuardReaderHealthStore.readApp(defaults: defaults)[source],
                                   persist: { GuardReaderHealthStore.writeApp(source: $0, health: $1, defaults: defaults) })
     }

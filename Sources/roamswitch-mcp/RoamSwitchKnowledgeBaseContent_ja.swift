@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.2 (build 226).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.3 (build 227).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -1771,6 +1771,30 @@ extension RoamSwitchKnowledgeBase {
                 • 取得したデータの検査: 脅威フィード、CVEマップ、Webルールは、署名つきの目録（manifest）を確かめてから使います。作成日が60日より古い目録、1日より先の日付の目録、いま入っているものより古い版は使いません。署名の鍵は目録の中で交換と失効ができ、失効した鍵と期限の切れた鍵の署名は受け付けません。特権ヘルパーは、リンク保護の一覧を自分の記録で確かめ直します。この検査のための通信はありません。
                 """,
                 recommendation: "機密性の高い業務環境や個人の開発環境でも、情報流出を心配せずに利用できます。"
+            ),
+            LocalizedEntry(
+                id: "feat_diagnostic_statuses",
+                title: "診断の各項目の状態(合格、要対策、確認不能、該当なし)と、点数の意味",
+                summary: "診断の各項目は、合格、要対策(不合格)、確認不能、該当なしのどれかです。確認不能と該当なしは、合格にも不合格にも数えず、点数にも入りません。点数は、判定できた項目のうち、合格した項目の割合です。",
+                details: """
+                • 合格は基準を満たしている状態、要対策は満たしていない状態で、改善のアドバイスが付きます。
+                • 確認不能は、この Mac からは信頼できる判定ができなかったことを表し、失敗ではありません。理由は、言語に依存しないコードで出ます(get_security_report の inconclusiveReason、verify_security_findings の reason)。helper_unavailable は、特権ヘルパーが接続されておらず、sudoers の監査のように root の権限が要る項目を読めない状態です。location_unavailable は、Wi-Fi の読み取りに位置情報の許可が要る状態です。gateway_unknown と no_baseline は、ARP の監視に、既定ゲートウェイが分からない、または比べる信頼済みの基準が無い状態です。tool_failed は、確認に使うコマンドが失敗した状態(開いているポートの一覧など)です。not_verifiable は、設定が標準の形ではなく、有効とも無効とも言い切れない状態(SIP のカスタム設定など)です。not_measured は、まだ一度も測っていない状態です。
+                • 該当なしは、その状況では当てはまらない項目です(信頼ネットワークで意図的に保護を解除している、など)。
+                • 点数は、合格した項目 ÷ 判定できた項目(合格 + 要対策)に、設定のプリセットで切り替わる保護の合否を加えたものです。確認不能が多いと、読めなかった項目の分は点数に表れないので、確認不能を減らしてから点数を見ます。
+                """,
+                recommendation: "確認不能の項目は、理由のコードに合わせて原因を取り除きます。特権ヘルパーを接続し、Wi-Fi の読み取りには RoamSwitch に位置情報の許可を与えて、診断を更新します。MCP では、verify_security_findings に checkIds を指定すると、その項目だけを再評価できます。"
+            ),
+            LocalizedEntry(
+                id: "feat_open_url_check",
+                title: "リンクを開く前の確認(既定のウェブブラウザの切り替え) (Pro)",
+                summary: "メール、PDF、チャットなど、どのアプリで押したリンクも、ブラウザが開く前に、URL 全体(パスとクエリも)を調べます。疑わしいリンクだけ、開く前に確認の画面を出し、ほかは元の既定のブラウザへすぐ渡します。既定はオフです。",
+                details: """
+                • オンにすると、RoamSwitch が既定のウェブブラウザになります(macOS が確認を出します)。元のブラウザは覚えておき、オフにすると戻します。
+                • 判定は、手動のリンクチェッカーと同じ分析です(この Mac の脅威フィード、ブランドのホモグラフ、サブドメインの偽装、リスクの高い TLD)。リンク保護と同じ基準(許可、警告、遮断)で、警告と遮断のリンクだけ、確認の画面を出します。既定の答えは「開かない」です。
+                • Pro でないとき(ライセンスの失効など)は、確認をせず、すべてのリンクを元のブラウザへ渡します。
+                • メールの本文は読みません。アプリが内蔵のブラウザで開くリンクと、転送の先は見えません。通信もしません。
+                """,
+                recommendation: "メニュー「マルウェア対策」の「リンクを開く前に確かめる (Pro)…」でオン・オフします。macOS の「システム設定」の「デスクトップとDock」で、デフォルトのウェブブラウザを自分で選ぶこともできます。プリセットは、この設定を自動では切り替えません。"
             ),
         ]
     }

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.2 (build 226).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.3 (build 227).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -57,13 +57,17 @@ public struct RoamSwitchKnowledgeBase: Sendable {
         public let items: [KnowledgeItem]
         /// Language code the returned items are written in (e.g. "ja", "en").
         public let language: String?
+        /// `true` when no entry contained every word of the query and the items are the closest ones instead (a whole
+        /// pasted notice or log line). Absent (nil) for an exact search.
+        public let approximate: Bool?
 
-        public init(query: String?, topic: String?, totalResults: Int, items: [KnowledgeItem], language: String? = nil) {
+        public init(query: String?, topic: String?, totalResults: Int, items: [KnowledgeItem], language: String? = nil, approximate: Bool? = nil) {
             self.query = query
             self.topic = topic
             self.totalResults = totalResults
             self.items = items
             self.language = language
+            self.approximate = approximate
         }
     }
 
@@ -261,6 +265,37 @@ public struct RoamSwitchKnowledgeBase: Sendable {
             filtered.append(item)
         }
 
+        // Nothing contained every word: an assistant that pastes a whole notice or log line (one long word in a language
+        // written without spaces) would get nothing. Offer the closest entries, flagged as approximate.
+        if filtered.isEmpty, !tokens.isEmpty {
+            let pieces = Self.queryPieces(tokens)
+            if pieces.count >= Self.approximateMinPieces {
+                var scored: [(hits: Int, index: Int)] = []
+                for (index, item) in localized.enumerated() {
+                    if let t = filterTopic, item.topic.lowercased() != t { continue }
+                    let haystacks = index < searchHaystacks.count ? searchHaystacks[index] : []
+                    let best = haystacks.map { hay in pieces.filter { hay.contains($0) }.count }.max() ?? 0
+                    if best >= Self.approximateMinPieces, best * 2 >= pieces.count {
+                        scored.append((best, index))
+                    }
+                }
+                let top = scored
+                    .sorted { $0.hits != $1.hits ? $0.hits > $1.hits : $0.index < $1.index }
+                    .prefix(Self.approximateMaxItems)
+                    .map { localized[$0.index] }
+                if !top.isEmpty {
+                    return KnowledgeSearchResult(
+                        query: query,
+                        topic: topic,
+                        totalResults: top.count,
+                        items: top,
+                        language: code,
+                        approximate: true
+                    )
+                }
+            }
+        }
+
         return KnowledgeSearchResult(
             query: query,
             topic: topic,
@@ -268,6 +303,32 @@ public struct RoamSwitchKnowledgeBase: Sendable {
             items: filtered,
             language: code
         )
+    }
+
+    /// The closest-entry search needs this many pieces of the query to be present (one shared word is not enough).
+    static let approximateMinPieces = 3
+    /// At most this many closest entries are returned.
+    static let approximateMaxItems = 3
+
+    /// The query cut into pieces (the distinct ones). A word with non-ASCII characters (Japanese and Chinese are written
+    /// without spaces, so a notice or log line is one long word) is cut into overlapping 3-character windows. An ASCII
+    /// word of 4 or more letters or digits is one piece. Same rule as the Linux knowledge base.
+    static func queryPieces(_ tokens: [String]) -> [String] {
+        var out: [String] = []
+        func push(_ piece: String) { if !out.contains(piece) { out.append(piece) } }
+        for token in tokens {
+            if token.allSatisfy({ $0.isASCII }) {
+                for word in token.split(whereSeparator: { !($0.isASCII && ($0.isLetter || $0.isNumber)) }) where word.count >= 4 {
+                    push(String(word))
+                }
+            } else {
+                let chars = Array(token)
+                if chars.count >= 3 {
+                    for start in 0...(chars.count - 3) { push(String(chars[start..<(start + 3)])) }
+                }
+            }
+        }
+        return out
     }
 
     // MARK: - MCP Resource Documents
@@ -462,6 +523,8 @@ public struct RoamSwitchKnowledgeBase: Sendable {
             EntryMeta(id: "feat_mcp_server", topic: t, tags: ["mcp", "ai", "claude", "read-only", "stdio", "tools", "resources", "zerotelemetry"]),
             EntryMeta(id: "feat_license_pro_tier", topic: t, tags: ["license", "pro", "team", "ed25519", "activation", "devices", "lifetime"]),
             EntryMeta(id: "feat_protection_presets", topic: t, tags: ["preset", "protection-preset", "light", "balanced", "standard", "maximum", "default", "undo", "pro"]),
+            EntryMeta(id: "feat_diagnostic_statuses", topic: t, tags: ["diagnosis", "audit", "score", "inconclusive", "not applicable", "pass", "fail", "inconclusiveReason", "get_security_report", "verify_security_findings", "確認不能", "該当なし", "要対策", "helper_unavailable", "location_unavailable", "gateway_unknown", "no_baseline", "tool_failed", "not_verifiable", "not_measured"]),
+            EntryMeta(id: "feat_open_url_check", topic: t, tags: ["open-url", "link", "url", "browser", "default browser", "mail", "pdf", "phishing", "linkguard", "pro", "リンクを開く前の確認", "既定のブラウザ"]),
         ]
     }
 

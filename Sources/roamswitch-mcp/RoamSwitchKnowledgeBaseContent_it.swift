@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.2 (build 226).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.3 (build 227).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -1771,6 +1771,30 @@ extension RoamSwitchKnowledgeBase {
                 • Controllo dei dati scaricati: il feed delle minacce, le mappe CVE e le regole web vengono usati solo dopo la verifica del loro manifest firmato. Non si usa un manifest datato più di 60 giorni fa o più di un giorno nel futuro, né una versione più vecchia di quella installata. La chiave di firma si può cambiare e revocare tramite il manifest, e una firma con una chiave revocata o scaduta non viene accettata. L'helper privilegiato ricontrolla l'elenco dei link con il proprio stato. Questi controlli non inviano nulla.
                 """,
                 recommendation: "È sicuro da usare in ambienti aziendali altamente riservati e configurazioni di sviluppo personali senza preoccuparsi di fughe di dati."
+            ),
+            LocalizedEntry(
+                id: "feat_diagnostic_statuses",
+                title: "Stati delle voci della diagnosi (superata, non superata, non conclusiva, non applicabile) e significato del punteggio",
+                summary: "Ogni voce della diagnosi di sicurezza è superata, non superata (da correggere), non conclusiva o non applicabile. Le voci non conclusive e non applicabili non contano né come superate né come non superate e non entrano nel punteggio. Il punteggio è la quota di voci superate tra quelle che è stato possibile giudicare.",
+                details: """
+                • Superata significa che lo standard è rispettato; non superata significa che non lo è, con un consiglio di miglioramento.
+                • Non conclusiva significa che su questo Mac non è stato possibile dare un giudizio affidabile; non è un fallimento. Il motivo è dato da un codice indipendente dalla lingua (`inconclusiveReason` in get_security_report, `reason` in verify_security_findings). helper_unavailable: l'helper privilegiato non è connesso, quindi una voce che richiede root, come l'audit di sudoers, non può essere letta. location_unavailable: la lettura del Wi-Fi richiede l'autorizzazione di localizzazione. gateway_unknown e no_baseline: il controllo ARP non ha un gateway predefinito o una base attendibile con cui confrontare. tool_failed: un comando usato per il controllo è fallito (l'elenco delle porte aperte, per esempio). not_verifiable: l'impostazione non ha la forma standard e non si può dire se sia attiva o disattiva (una configurazione SIP personalizzata, per esempio). not_measured: non ancora misurato.
+                • Non applicabile significa che la voce non si applica in questa situazione (una protezione disattivata di proposito su una rete attendibile, per esempio).
+                • Punteggio = voci superate ÷ voci giudicate (superate + non superate), più le protezioni che attiva il preset delle impostazioni. Le voci non leggibili non compaiono nel punteggio: riduca prima le voci non conclusive e poi legga il punteggio.
+                """,
+                recommendation: "Elimini la causa indicata dal codice del motivo: connetta l'helper privilegiato, conceda a RoamSwitch l'autorizzazione di localizzazione per leggere il Wi-Fi e poi aggiorni la diagnosi. Con MCP, passi checkIds a verify_security_findings per rivalutare solo quelle voci."
+            ),
+            LocalizedEntry(
+                id: "feat_open_url_check",
+                title: "Controllo prima dell'apertura di un link (cambia il browser web predefinito) (Pro)",
+                summary: "Un link cliccato in qualsiasi app (posta, PDF, chat) viene controllato con l'URL completo, percorso e query inclusi, prima che il browser lo apra. Solo un link sospetto mostra prima una finestra; gli altri vanno subito al browser che era predefinito. Disattivato per impostazione predefinita.",
+                details: """
+                • Attivandolo, RoamSwitch diventa il browser web predefinito (macOS chiede conferma). Il browser precedente viene ricordato e ripristinato alla disattivazione.
+                • L'analisi è quella del verificatore manuale dei link (l'elenco delle minacce di questo Mac, un sosia di un marchio noto, un sottodominio ingannevole, un dominio di primo livello rischioso). Con gli stessi verdetti della protezione dei link (consenti, avvisa, blocca), solo un link da avvisare o bloccare mostra una finestra. La risposta predefinita è «Non aprire».
+                • Senza Pro (una licenza scaduta, per esempio) non viene chiesto nulla e ogni link passa al browser precedente.
+                • Il testo di una mail non viene letto. Un link che un'app apre nel proprio browser integrato e la destinazione di un reindirizzamento non sono visibili. Non apre alcuna connessione.
+                """,
+                recommendation: "Attivalo o disattivalo con «Controllare un link prima di aprirlo (Pro)…» nel menu Protezione dai malware. Puoi anche scegliere tu il browser web predefinito in Impostazioni di Sistema > Scrivania e Dock. Un preset non cambia questa impostazione da solo."
             ),
         ]
     }

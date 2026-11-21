@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.2 (build 226).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.3 (build 227).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -1771,6 +1771,30 @@ extension RoamSwitchKnowledgeBase {
                 • Verificação dos dados descarregados: o feed de ameaças, os mapas de CVE e as regras web só são usados depois de verificado o seu manifesto assinado. Não se usa um manifesto datado de há mais de 60 dias ou de mais de um dia no futuro, nem uma versão mais antiga do que a instalada. A chave de assinatura pode ser trocada e revogada através do manifesto, e não se aceita uma assinatura feita com uma chave revogada ou expirada. O auxiliar com privilégios volta a verificar a lista de ligações com o seu próprio estado. Estas verificações não enviam nada.
                 """,
                 recommendation: "É seguro de usar em ambientes empresariais altamente confidenciais e configurações de desenvolvimento pessoais sem se preocupar com fugas de dados."
+            ),
+            LocalizedEntry(
+                id: "feat_diagnostic_statuses",
+                title: "Estados dos itens do diagnóstico (aprovado, reprovado, inconclusivo, não aplicável) e o significado da pontuação",
+                summary: "Cada item do diagnóstico de segurança está aprovado, reprovado (a corrigir), inconclusivo ou não aplicável. Os inconclusivos e os não aplicáveis não contam como aprovados nem como reprovados e não entram na pontuação. A pontuação é a proporção de itens aprovados entre os que foi possível avaliar.",
+                details: """
+                • Aprovado significa que o padrão é cumprido; reprovado significa que não é, e traz um conselho de melhoria.
+                • Inconclusivo significa que não foi possível emitir um juízo fiável neste Mac; não é uma falha. O motivo é dado por um código independente do idioma (`inconclusiveReason` em get_security_report, `reason` em verify_security_findings). helper_unavailable: o assistente com privilégios não está ligado, pelo que um item que exige root, como a auditoria de sudoers, não pode ser lido. location_unavailable: a leitura do Wi-Fi exige a permissão de localização. gateway_unknown e no_baseline: a verificação ARP não tem gateway predefinido ou não tem uma referência fiável com que comparar. tool_failed: falhou um comando usado na verificação (a lista de portas abertas, por exemplo). not_verifiable: a definição não tem a forma padrão e não se pode dizer se está ativada ou desativada (uma configuração SIP personalizada, por exemplo). not_measured: ainda não medido.
+                • Não aplicável significa que o item não se aplica nesta situação (uma proteção desativada de propósito numa rede de confiança, por exemplo).
+                • Pontuação = itens aprovados ÷ itens avaliados (aprovados + reprovados), mais as proteções que a predefinição das definições ativa. Os itens que não foi possível ler não aparecem na pontuação; reduza primeiro os inconclusivos antes de ler a pontuação.
+                """,
+                recommendation: "Elimine a causa que o código de motivo indica: ligue o assistente com privilégios, conceda ao RoamSwitch a permissão de localização para ler o Wi-Fi e atualize o diagnóstico. Com o MCP, passe checkIds a verify_security_findings para reavaliar só esses itens."
+            ),
+            LocalizedEntry(
+                id: "feat_open_url_check",
+                title: "Verificação antes de abrir um link (muda o navegador Web predefinido) (Pro)",
+                summary: "Um link clicado em qualquer aplicação (correio, PDF, chat) é verificado com o URL completo, caminho e consulta incluídos, antes de o navegador o abrir. Só um link suspeito mostra antes uma janela; os outros seguem logo para o navegador que era o predefinido. Desativado por predefinição.",
+                details: """
+                • Ao ativar, o RoamSwitch passa a ser o navegador Web predefinido (o macOS pede confirmação). O navegador anterior é memorizado e restaurado ao desativar.
+                • A análise é a do verificador manual de links (a lista de ameaças deste Mac, uma imitação de uma marca conhecida, um subdomínio enganador, um domínio de topo arriscado). Com os mesmos veredictos da proteção de links (permitir, avisar, bloquear), só um link com aviso ou bloqueio mostra uma janela. A resposta predefinida é «Não abrir».
+                • Sem Pro (uma licença expirada, por exemplo) nada é perguntado e todos os links seguem para o navegador anterior.
+                • O texto de um correio não é lido. Um link que uma aplicação abre no seu próprio navegador integrado e o destino de um redirecionamento não são vistos. Não abre nenhuma ligação.
+                """,
+                recommendation: "Ative ou desative em «Verificar um link antes de o abrir (Pro)…» no menu Proteção contra malware. Também pode escolher você mesmo o navegador Web predefinido em Definições do Sistema > Secretária e Dock. Uma predefinição não altera esta definição por si."
             ),
         ]
     }

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.2 (build 226).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.3 (build 227).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -1771,6 +1771,30 @@ extension RoamSwitchKnowledgeBase {
                 • 받아 온 데이터의 검사: 위협 피드, CVE 맵, 웹 규칙은 서명된 목록(manifest)을 확인한 뒤에 사용합니다. 작성일이 60일보다 오래된 목록, 하루보다 앞선 날짜의 목록, 지금 설치된 것보다 오래된 버전은 쓰지 않습니다. 서명 키는 목록 안에서 교체와 폐기를 할 수 있으며, 폐기된 키와 기한이 지난 키의 서명은 받지 않습니다. 권한 헬퍼는 링크 보호 목록을 자신의 기록으로 다시 확인합니다. 이 검사를 위한 통신은 없습니다.
                 """,
                 recommendation: "기밀성이 높은 업무 환경이나 개인 개발 환경에서도 데이터 유출 걱정 없이 안심하고 사용할 수 있습니다."
+            ),
+            LocalizedEntry(
+                id: "feat_diagnostic_statuses",
+                title: "진단 항목의 상태(합격, 조치 필요, 확인 불가, 해당 없음)와 점수의 의미",
+                summary: "보안 진단의 각 항목은 합격, 조치 필요(불합격), 확인 불가, 해당 없음 중 하나입니다. 확인 불가와 해당 없음은 합격으로도 불합격으로도 세지 않으며 점수에도 들어가지 않습니다. 점수는 판정할 수 있었던 항목 중 합격한 항목의 비율입니다.",
+                details: """
+                • 합격은 기준을 충족한 상태이고, 조치 필요는 충족하지 못한 상태이며 개선 조언이 붙습니다.
+                • 확인 불가는 이 Mac에서 신뢰할 수 있는 판정을 내리지 못했다는 뜻이며 실패가 아닙니다. 이유는 언어와 무관한 코드로 표시됩니다(get_security_report의 `inconclusiveReason`, verify_security_findings의 `reason`). helper_unavailable: 권한 있는 헬퍼가 연결되어 있지 않아 sudoers 감사처럼 root 권한이 필요한 항목을 읽을 수 없습니다. location_unavailable: Wi-Fi를 읽으려면 위치 권한이 필요합니다. gateway_unknown과 no_baseline: ARP 점검에 기본 게이트웨이가 없거나 비교할 신뢰된 기준이 없습니다. tool_failed: 점검에 쓰는 명령이 실패했습니다(열린 포트 목록 등). not_verifiable: 설정이 표준 형태가 아니어서 켜짐인지 꺼짐인지 단정할 수 없습니다(SIP 사용자 지정 설정 등). not_measured: 아직 측정하지 않았습니다.
+                • 해당 없음은 그 상황에서는 적용되지 않는 항목입니다(신뢰 네트워크에서 의도적으로 보호를 해제한 경우 등).
+                • 점수 = 합격한 항목 ÷ 판정한 항목(합격 + 조치 필요)에, 설정 프리셋으로 전환되는 보호의 합격 여부를 더한 값입니다. 읽지 못한 항목은 점수에 나타나지 않으므로, 확인 불가 항목을 먼저 줄인 뒤 점수를 보세요.
+                """,
+                recommendation: "이유 코드에 맞춰 원인을 제거하세요. 권한 있는 헬퍼를 연결하고, Wi-Fi를 읽을 수 있도록 RoamSwitch에 위치 권한을 허용한 다음 진단을 새로 고칩니다. MCP에서는 verify_security_findings에 checkIds를 지정하면 해당 항목만 다시 평가할 수 있습니다."
+            ),
+            LocalizedEntry(
+                id: "feat_open_url_check",
+                title: "링크를 열기 전의 확인(기본 웹 브라우저 전환) (Pro)",
+                summary: "어떤 앱(메일, PDF, 채팅 등)에서 누른 링크든, 브라우저가 열기 전에 URL 전체(경로와 쿼리 포함)를 확인합니다. 의심스러운 링크만 먼저 확인 창을 띄우고, 나머지는 원래 기본 브라우저로 바로 넘깁니다. 기본값은 꺼짐입니다.",
+                details: """
+                • 켜면 RoamSwitch가 기본 웹 브라우저가 됩니다(macOS가 확인을 요청합니다). 원래 브라우저를 기억해 두었다가 끄면 되돌립니다.
+                • 판정은 수동 링크 검사기와 같은 분석입니다(이 Mac의 위협 목록, 유명 브랜드의 동형 문자 위장, 서브도메인 위장, 위험한 최상위 도메인). 링크 보호와 같은 결론(허용, 경고, 차단) 중 경고와 차단 링크에만 확인 창을 띄웁니다. 기본 답은 '열지 않음'입니다.
+                • Pro가 아닐 때(라이선스 만료 등)는 확인 없이 모든 링크를 원래 브라우저로 넘깁니다.
+                • 메일 본문은 읽지 않습니다. 앱이 내장 브라우저로 여는 링크와 리디렉션 목적지는 볼 수 없습니다. 통신은 하지 않습니다.
+                """,
+                recommendation: "메뉴 '악성코드 방어'의 '링크를 열기 전에 확인 (Pro)…'로 켜고 끕니다. 시스템 설정 > 데스크탑 및 Dock에서 기본 웹 브라우저를 직접 고를 수도 있습니다. 프리셋은 이 설정을 자동으로 바꾸지 않습니다."
             ),
         ]
     }

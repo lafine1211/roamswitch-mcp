@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.2 (build 226).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.3 (build 227).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -1771,6 +1771,30 @@ extension RoamSwitchKnowledgeBase {
                 • 對取得資料的檢查：威脅情報來源、CVE 對照表和 Web 規則，都會先驗證帶簽章的清單（manifest）再使用。產生日期早於 60 天、晚於 1 天之後的清單，以及比目前已安裝版本更舊的版本，都不使用。簽章金鑰可以透過清單進行更換和撤銷，已撤銷或已過期金鑰的簽章不予接受。特權輔助程式會用自己的記錄重新驗證連結保護的清單。這些檢查不進行任何通訊。
                 """,
                 recommendation: "即使在高機密的商業環境或個人開發環境中，也能安心使用而不必擔心資料外洩。"
+            ),
+            LocalizedEntry(
+                id: "feat_diagnostic_statuses",
+                title: "診斷各項目的狀態(合格、需處理、無法確認、不適用)與分數的含義",
+                summary: "安全診斷的每個項目是合格、需處理(不合格)、無法確認或不適用之一。無法確認和不適用的項目既不算合格也不算不合格,不計入分數。分數是在可判定的項目中合格項目所占的比例。",
+                details: """
+                • 合格表示達到標準,需處理表示未達到標準並附有改進建議。
+                • 無法確認表示在這台 Mac 上無法做出可靠的判定,並非失敗。原因以與語言無關的代碼給出(get_security_report 的 `inconclusiveReason`,verify_security_findings 的 `reason`)。helper_unavailable:特權輔助程式未連線,無法讀取 sudoers 稽核這類需要 root 的項目。location_unavailable:讀取 Wi-Fi 需要位置資訊權限。gateway_unknown 和 no_baseline:ARP 檢查沒有預設閘道,或沒有可比較的受信任基準。tool_failed:檢查所用的指令失敗(例如開放連接埠清單)。not_verifiable:設定不是標準形式,無法斷定為啟用或停用(例如 SIP 的自訂設定)。not_measured:尚未測量。
+                • 不適用表示該項目在目前情況下不適用(例如在受信任的網路上刻意關閉了保護)。
+                • 分數 = 合格項目 ÷ 可判定項目(合格 + 需處理),再加上由設定預設切換的各項保護。無法讀取的項目不會反映在分數中,因此請先減少無法確認的項目,再看分數。
+                """,
+                recommendation: "請依原因代碼消除原因:連線特權輔助程式,為讀取 Wi-Fi 授予 RoamSwitch 位置資訊權限,然後重新整理診斷。使用 MCP 時,向 verify_security_findings 指定 checkIds,即可只重新評估這些項目。"
+            ),
+            LocalizedEntry(
+                id: "feat_open_url_check",
+                title: "開啟連結前的檢查(切換預設網頁瀏覽器) (Pro)",
+                summary: "在任何應用程式(郵件、PDF、聊天工具等)中點擊的連結，會在瀏覽器開啟之前，用完整的 URL(包括路徑和查詢)進行檢查。只有可疑的連結會先彈出確認視窗，其餘的直接交給原本的預設瀏覽器。預設關閉。",
+                details: """
+                • 開啟後，RoamSwitch 成為預設網頁瀏覽器(macOS 會請你確認)。會記住原本的瀏覽器，關閉後還原。
+                • 判定與手動連結檢查器的分析相同(這台 Mac 的威脅清單、知名品牌的同形字偽裝、子網域偽裝、高風險頂級網域)。採用與連結防護相同的結論(允許、警告、攔截)，只有警告和攔截的連結才彈出確認視窗。預設回答是「不開啟」。
+                • 沒有 Pro 時(例如授權已失效)，不做確認，所有連結都直接交給原本的瀏覽器。
+                • 不讀取郵件內文。應用程式在內建瀏覽器中開啟的連結以及重新導向的目標看不到。不建立任何連線。
+                """,
+                recommendation: "透過「惡意軟體防護」選單中的「開啟連結前先檢查 (Pro)…」開啟或關閉。也可以在「系統設定」>「桌面與 Dock」中自行選擇預設網頁瀏覽器。預設組合不會自動切換此設定。"
             ),
         ]
     }

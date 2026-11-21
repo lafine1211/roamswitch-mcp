@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.2 (build 226).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.3 (build 227).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -1771,6 +1771,30 @@ extension RoamSwitchKnowledgeBase {
                 • 对获取数据的检查：威胁情报源、CVE 映射和 Web 规则，都会先验证带签名的清单（manifest）再使用。生成日期早于 60 天、晚于 1 天之后的清单，以及比当前已安装版本更旧的版本，都不使用。签名密钥可以通过清单进行更换和吊销，已吊销或已过期密钥的签名不予接受。特权辅助程序会用自己的记录重新验证链接保护的列表。这些检查不进行任何通信。
                 """,
                 recommendation: "即使在高度机密的工作环境或个人开发环境中，也可以放心使用，无需担心信息泄露。"
+            ),
+            LocalizedEntry(
+                id: "feat_diagnostic_statuses",
+                title: "诊断各项目的状态(合格、需处理、无法确认、不适用)与分数的含义",
+                summary: "安全诊断的每个项目是合格、需处理(不合格)、无法确认或不适用之一。无法确认和不适用的项目既不算合格也不算不合格,不计入分数。分数是在可判定的项目中合格项目所占的比例。",
+                details: """
+                • 合格表示达到标准,需处理表示未达到标准并附有改进建议。
+                • 无法确认表示在这台 Mac 上无法做出可靠的判定,并非失败。原因以与语言无关的代码给出(get_security_report 的 `inconclusiveReason`,verify_security_findings 的 `reason`)。helper_unavailable:特权辅助程序未连接,无法读取 sudoers 审计这类需要 root 的项目。location_unavailable:读取 Wi-Fi 需要位置信息权限。gateway_unknown 和 no_baseline:ARP 检查没有默认网关,或没有可比较的受信任基准。tool_failed:检查所用的命令失败(例如开放端口列表)。not_verifiable:设置不是标准形式,无法断定为启用或禁用(例如 SIP 的自定义配置)。not_measured:尚未测量。
+                • 不适用表示该项目在当前情况下不适用(例如在受信任的网络上有意关闭了保护)。
+                • 分数 = 合格项目 ÷ 可判定项目(合格 + 需处理),再加上由设置预设切换的各项保护。无法读取的项目不会体现在分数中,因此请先减少无法确认的项目,再看分数。
+                """,
+                recommendation: "请按原因代码消除原因:连接特权辅助程序,为读取 Wi-Fi 授予 RoamSwitch 位置信息权限,然后刷新诊断。使用 MCP 时,向 verify_security_findings 指定 checkIds,即可只重新评估这些项目。"
+            ),
+            LocalizedEntry(
+                id: "feat_open_url_check",
+                title: "打开链接前的检查(切换默认网页浏览器) (Pro)",
+                summary: "在任何应用(邮件、PDF、聊天工具等)中点击的链接，会在浏览器打开之前，用完整的 URL(包括路径和查询)进行检查。只有可疑的链接会先弹出确认窗口，其余的直接交给原来的默认浏览器。默认关闭。",
+                details: """
+                • 开启后，RoamSwitch 成为默认网页浏览器(macOS 会请你确认)。会记住原来的浏览器，关闭后恢复。
+                • 判定与手动链接检查器的分析相同(这台 Mac 的威胁列表、知名品牌的同形字伪装、子域名伪装、高风险顶级域名)。采用与链接防护相同的结论(允许、警告、拦截)，只有警告和拦截的链接才弹出确认窗口。默认回答是“不打开”。
+                • 没有 Pro 时(例如许可已失效)，不做确认，所有链接都直接交给原来的浏览器。
+                • 不读取邮件正文。应用在内置浏览器中打开的链接以及重定向的目标看不到。不建立任何连接。
+                """,
+                recommendation: "通过“恶意软件防护”菜单中的“打开链接前先检查 (Pro)…”开启或关闭。也可以在“系统设置”>“桌面与程序坞”中自行选择默认网页浏览器。预设不会自动切换此设置。"
             ),
         ]
     }

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.2 (build 226).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.3 (build 227).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -1771,6 +1771,30 @@ extension RoamSwitchKnowledgeBase {
                 • Contrôle des données téléchargées : le flux de menaces, les cartes CVE et les règles web ne sont utilisés qu'après vérification de leur manifeste signé. Un manifeste daté de plus de 60 jours ou de plus d'un jour dans le futur, et une version plus ancienne que celle installée, ne sont pas utilisés. La clé de signature peut être changée et révoquée par le manifeste, et une signature faite avec une clé révoquée ou expirée n'est pas acceptée. L'assistant privilégié revérifie la liste des liens avec son propre état. Ces contrôles n'envoient rien.
                 """,
                 recommendation: "Il est sûr à utiliser dans des environnements professionnels hautement confidentiels et des configurations de développement personnelles sans craindre de fuite de données."
+            ),
+            LocalizedEntry(
+                id: "feat_diagnostic_statuses",
+                title: "États des éléments du diagnostic (réussi, échoué, indéterminé, sans objet) et signification du score",
+                summary: "Chaque élément du diagnostic de sécurité est réussi, échoué (à corriger), indéterminé ou sans objet. Les éléments indéterminés et sans objet ne comptent ni comme réussis ni comme échoués et n'entrent pas dans le score. Le score est la part des éléments réussis parmi ceux qui ont pu être jugés.",
+                details: """
+                • Réussi signifie que la norme est respectée ; échoué signifie qu'elle ne l'est pas, avec un conseil d'amélioration.
+                • Indéterminé signifie qu'aucun jugement fiable n'a pu être rendu sur ce Mac ; ce n'est pas un échec. La raison est donnée sous forme de code indépendant de la langue (`inconclusiveReason` dans get_security_report, `reason` dans verify_security_findings). helper_unavailable : l'assistant privilégié n'est pas connecté, donc un élément qui exige root, comme l'audit de sudoers, ne peut pas être lu. location_unavailable : la lecture du Wi-Fi exige l'autorisation de localisation. gateway_unknown et no_baseline : la vérification ARP n'a pas de passerelle par défaut, ou pas de référence de confiance à comparer. tool_failed : une commande utilisée pour la vérification a échoué (la liste des ports ouverts, par exemple). not_verifiable : le réglage n'est pas de forme standard et ne peut être déclaré ni activé ni désactivé (une configuration SIP personnalisée, par exemple). not_measured : pas encore mesuré.
+                • Sans objet signifie que l'élément ne s'applique pas dans cette situation (une protection désactivée volontairement sur un réseau de confiance, par exemple).
+                • Score = éléments réussis ÷ éléments jugés (réussis + échoués), plus les protections que le préréglage des réglages active. Les éléments non lus n'apparaissent pas dans le score : réduisez d'abord les éléments indéterminés avant de lire le score.
+                """,
+                recommendation: "Supprimez la cause que nomme le code de raison : connectez l'assistant privilégié, accordez à RoamSwitch l'autorisation de localisation pour la lecture du Wi-Fi, puis actualisez le diagnostic. Avec MCP, passez checkIds à verify_security_findings pour réévaluer seulement ces éléments."
+            ),
+            LocalizedEntry(
+                id: "feat_open_url_check",
+                title: "Vérification avant l'ouverture d'un lien (change le navigateur web par défaut) (Pro)",
+                summary: "Un lien cliqué dans n'importe quelle application (messagerie, PDF, messagerie instantanée) est vérifié avec l'URL entière, chemin et requête compris, avant l'ouverture par le navigateur. Seul un lien suspect affiche d'abord une fenêtre ; les autres vont directement au navigateur qui était par défaut. Désactivé par défaut.",
+                details: """
+                • L'activer fait de RoamSwitch le navigateur web par défaut (macOS demande confirmation). Le navigateur précédent est mémorisé et rétabli à la désactivation.
+                • L'analyse est celle du vérificateur de liens manuel (la liste de menaces de ce Mac, un sosie d'une marque connue, un sous-domaine trompeur, un domaine de premier niveau risqué). Avec les mêmes verdicts que la protection des liens (autoriser, avertir, bloquer), seul un lien à avertir ou à bloquer affiche une fenêtre. La réponse par défaut est « Ne pas ouvrir ».
+                • Sans Pro (licence expirée, par exemple), rien n'est demandé et chaque lien est transmis au navigateur précédent.
+                • Le texte d'un courriel n'est pas lu. Un lien qu'une application ouvre dans son propre navigateur intégré, et la destination d'une redirection, ne sont pas vus. Aucune connexion n'est ouverte.
+                """,
+                recommendation: "Activez ou désactivez-le avec « Vérifier un lien avant de l'ouvrir (Pro)… » dans le menu Protection contre les malwares. Vous pouvez aussi choisir vous-même le navigateur web par défaut dans Réglages Système > Bureau et Dock. Un préréglage ne change pas ce réglage de lui-même."
             ),
         ]
     }

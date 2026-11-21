@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.2 (build 226).
+// Mirrored from the RoamSwitch app source tree — RoamSwitch 2.2.3 (build 227).
 // The RoamSwitch app is the source of truth. Do NOT edit this copy: changes here
 // are not compiled into the shipping app and are overwritten on the next sync.
 // Regenerate with ./scripts/sync-from-roamswitch.sh — see SYNC.md.
@@ -165,6 +165,9 @@ public enum ProtectionPresetTable {
               risks: [.falsePositive], warning: "デバッガーや開発の道具の通知は、許可リストで除いています。それ以外の開発の操作でも、通知が出ることがあります。"),
         optIn("esQuarantineWatch", "ESQuarantineWatchEnabled", "隔離属性の剥がしと Gatekeeper の上書きの検知", [false, false, false, true],
               risks: [.falsePositive], warning: "ダウンロードしたものを、開発者が配るためのビルドや、アプリの入れ替えで扱うと、通知が出ることがあります。"),
+        // On in every preset, as the key is on unless switched off: every 30 minutes it compares the extensions of the Chromium
+        // browsers with the state the person accepted, and does nothing until one was accepted (added after the table).
+        onUnlessOff("browserExtensionWatch", "BrowserExtensionWatchEnabled", "ブラウザ拡張の権限(Chromium 系)", [true, true, true, true]),
         proDefault("scheduledLogAudit", "ScheduledLogAuditEnabled", "定期ログ監査", [false, true, true, true]),
         proDefault("criticalPathFim", "CriticalPathFimEnabled", "重要システムファイルの改ざん監視", [true, true, true, true]),
         proDefault("lockfileTamperGuard", "LockfileTamperGuardEnabled", "依存関係ロックファイルの改ざん監視", [true, true, true, true]),
@@ -270,6 +273,9 @@ public enum ProtectionPresetTable {
         // The person's own choice: a preset that turned it on would open a door by its name alone, and one that turned it off would
         // cut the SSH over Tailscale of someone who chose it. The folders the person excluded from ransomware detection are their own list.
         "RoamSwitch.TailscaleInboundAllowed", "RoamSwitch.RansomwareExcludedFolders",
+        // The packet pre-roll writes the headers of the last seconds of the traffic to a folder on this Mac (root only) until a detection
+        // saves them: a choice about what is kept on the disk, which a preset does not make by its name.
+        "RoamSwitch.IncidentPrerollEnabled", "RoamSwitch.IncidentPrerollSeconds",
     ]
 
     // MARK: - Reading and comparing
@@ -478,7 +484,7 @@ public enum ProtectionPresetTable {
 
     /// A permission or an install the app cannot give itself. Listed after a preset is applied, never written.
     public enum Guidance: String, CaseIterable, Sendable {
-        case fullDiskAccess, accessibility, systemExtension, helperApproval, notificationPermission, blueutil, clamav, vpn, sensor, eventForward, sshAllow
+        case fullDiskAccess, accessibility, systemExtension, helperApproval, notificationPermission, blueutil, clamav, vpn, sensor, eventForward, sshAllow, openURLCheck
 
         public var titleKey: String {
             switch self {
@@ -493,6 +499,7 @@ public enum ProtectionPresetTable {
             case .sensor: return "Sensorのペアリング(Sensorのアドレスが要るので、自分で設定します)"
             case .eventForward: return "イベント転送(転送先が要るので、自分で設定します)"
             case .sshAllow: return "SSH接続元の限定(管理者のパスワードが要るので、自分で設定します)"
+            case .openURLCheck: return "リンクを開く前の確認(既定のウェブブラウザを切り替えるので、自分で設定します)"
             }
         }
     }
@@ -508,7 +515,7 @@ public enum ProtectionPresetTable {
             return [.helperApproval, .notificationPermission, .systemExtension, .clamav, .fullDiskAccess, .vpn, .sensor, .eventForward, .sshAllow]
         case .maximum:
             return [.helperApproval, .notificationPermission, .systemExtension, .clamav, .fullDiskAccess, .accessibility, .blueutil,
-                    .vpn, .sensor, .eventForward, .sshAllow]
+                    .vpn, .sensor, .eventForward, .sshAllow, .openURLCheck]
         }
     }
 

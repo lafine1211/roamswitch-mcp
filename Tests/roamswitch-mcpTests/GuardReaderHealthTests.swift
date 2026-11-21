@@ -1,4 +1,4 @@
-// Mirrored from RoamSwitchTests/ — RoamSwitch 2.2.2 (build 226). Do not edit here; see SYNC.md.
+// Mirrored from RoamSwitchTests/ — RoamSwitch 2.2.3 (build 227). Do not edit here; see SYNC.md.
 
 import XCTest
 @testable import roamswitch_mcp
@@ -445,5 +445,19 @@ final class GuardReaderHealthTests: XCTestCase {
         XCTAssertEqual(partialPayload.guards.first { $0.key == "execRecorder" }?.liveState, "partial")
         let partialCoverage = DetectionCoverage.payload(guards: partialPayload.guards)
         XCTAssertEqual(partialCoverage.techniques.first { $0.id == "T1553.001" }?.liveState, "partial")
+    }
+
+    /// The tests run inside the app's own bundle id. What a guard records while a test runs must not reach the installed
+    /// app's preferences (2026-11-20: 55 restarts and 56 gaps on the log audit, and the same burst on fifteen readers).
+    func testTheUnitTestsDoNotWriteTheInstalledAppsReaderHealth() {
+        let before = UserDefaults.standard.data(forKey: GuardReaderHealthStore.appDefaultsKey)
+        let recorder = GuardReaderHealthRecorder.forApp(source: "xctestProbe")
+        recorder.update(force: true) { h, now in
+            h.markUnreadable(reason: "probe", now: now)
+            h.markRestarting(now: now)
+        }
+        XCTAssertEqual(UserDefaults.standard.data(forKey: GuardReaderHealthStore.appDefaultsKey), before)
+        XCTAssertEqual(GuardReaderHealthStore.readApp(defaults: GuardReaderHealthStore.processDefaults)["xctestProbe"]?.restarts, 1,
+                       "the record is kept, in the domain of the test run")
     }
 }
